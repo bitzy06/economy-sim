@@ -40,23 +40,19 @@ namespace StrategyGame
 
             decimal taxRevenue = fs.CalculateTaxRevenue(totalAssessablePopIncome, totalCorporateProfits, totalLandValue, totalConsumptionValue);
             country.Budget += (double)taxRevenue;
-            // fs.AdjustMoneySupply(taxRevenue, false); // Taxes remove money from circulation temporarily, then government spends it
+            // Channel a portion of revenue into reserves
+            fs.AdjustReserves(taxRevenue * 0.05m);
 
-            // 2. Account for National Expenses from the Financial System (e.g., bond interest)
+            // 2. Account for National Expenses from the Financial System
             decimal debtInterestPayment = fs.GetAnnualDebtInterestPayment();
             country.Budget -= (double)debtInterestPayment;
-            // fs.AdjustMoneySupply(-debtInterestPayment, false); // Interest payments inject money if paid to domestic holders
+            fs.AdjustReserves(-(debtInterestPayment * 0.05m));
 
             // 3. Account for other general National Expenses
-            country.Budget -= country.NationalExpenses; 
-            // fs.AdjustMoneySupply((decimal)-country.NationalExpenses, false); // General expenses
+            country.Budget -= country.NationalExpenses;
+            fs.AdjustMoneySupply((decimal)country.NationalExpenses * 0.01m);
 
-            // 4. Process bond maturities (simplified: check daily/per update)
-            var maturedBonds = country.FinancialSystem.OutstandingBonds.Where(b => b.MaturityDate <= DateTime.Now && !b.IsDefaulted).ToList();
-            foreach (var bond in maturedBonds)
-            {
-                country.FinancialSystem.ProcessBondMaturity(bond.Id);
-            }
+            // 4. Bond system removed; no maturities to process
 
             // 5. Update other financial indicators
             decimal currentGdp = totalAssessablePopIncome + totalCorporateProfits; // Highly simplified GDP
@@ -70,7 +66,7 @@ namespace StrategyGame
             {
                 // Trigger events like increasing debt, credit rating hit, etc.
                 // For now, just log or cap it.
-                // fs.IssueBond("CentralBank", (decimal)-country.Budget, 0.05f, 5, BondType.TreasuryBill); // Auto-issue debt to cover deficit (simplification)
+                // fs.IssueBond("CentralBank", (decimal)-country.Budget, 0.05f, 5); // Auto-issue debt to cover deficit (simplification)
             }
         }
 
@@ -261,7 +257,8 @@ namespace StrategyGame
     public static class Market
     {
         public static Dictionary<string, Good> GoodDefinitions { get; private set; } = new Dictionary<string, Good>(); // Keep this for base prices/categories
-        public static List<Corporation> AllCorporations { get; private set; } = new List<Corporation>(); 
+        public static List<Corporation> AllCorporations { get; private set; } = new List<Corporation>();
+        public static List<ConstructionCompany> AllConstructionCompanies { get; private set; } = new List<ConstructionCompany>();
 
         // Call this at the start of each turn for each city to reset its local supply/demand
         public static void ResetCitySupplyDemand(City city)
@@ -667,7 +664,7 @@ namespace StrategyGame
                     {
                         int slots = (int)Math.Ceiling(totalJobSlots * jobSlot.Value);
                         newFactory.JobSlots[jobSlot.Key] = slots;
-                        DebugLogger.Log($"[Factory Creation] {newFactoryName} - Added {slots} slots for {jobSlot.Key}");
+                        DebugLogger.Log($"[Factory Creation] {newFactoryName} - Added {slots} slots for {jobSlot.Key}", DebugLogger.LogCategory.Building);
                     }
 
                     // Set up input/output goods
@@ -711,7 +708,7 @@ namespace StrategyGame
 
             foreach (var pop in city.PopClasses)
             {
-                DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Size: {pop.Size}, Initial Employed: {pop.Employed}");
+                DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Size: {pop.Size}, Initial Employed: {pop.Employed}", DebugLogger.LogCategory.Pop);
                 pop.Size = Math.Max(1, pop.Size); 
                 pop.IncomePerPerson = Math.Max(0.01, pop.IncomePerPerson); 
            //     pop.Employed = 0; 
@@ -721,11 +718,11 @@ namespace StrategyGame
             {
                 if (factory.JobSlots == null || factory.JobSlots.Count == 0)
                 {
-                    DebugLogger.Log($"[Warning] Factory '{factory.Name}' has no job slots defined.");
+                    DebugLogger.Log($"[Warning] Factory '{factory.Name}' has no job slots defined.", DebugLogger.LogCategory.Building);
                     continue;
                 }
 
-                DebugLogger.Log($"[Employment Debug] Factory: {factory.Name}, Job Slots: {string.Join(", ", factory.JobSlots.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}");
+                DebugLogger.Log($"[Employment Debug] Factory: {factory.Name}, Job Slots: {string.Join(", ", factory.JobSlots.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}", DebugLogger.LogCategory.Building);
                 factory.ActualEmployed.Clear();
                 factory.WorkersEmployed = 0; 
             }
@@ -743,7 +740,7 @@ namespace StrategyGame
 
             foreach (var jobType in totalAvailableSlots.Keys)
             {
-                DebugLogger.Log($"[Employment Debug] Job Type: {jobType}, Total Available Slots: {totalAvailableSlots[jobType]}");
+                DebugLogger.Log($"[Employment Debug] Job Type: {jobType}, Total Available Slots: {totalAvailableSlots[jobType]}", DebugLogger.LogCategory.Building);
             }
 
             foreach (string jobType in new List<string>(totalAvailableSlots.Keys)) 
@@ -755,7 +752,7 @@ namespace StrategyGame
                     if (remainingSlotsForJobType == 0) break; 
                     int canBeEmployed = Math.Min(pop.Size - pop.Employed, remainingSlotsForJobType); 
                     pop.Employed += canBeEmployed;
-                    DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Newly Employed: {canBeEmployed}, Total Employed: {pop.Employed}");
+                    DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Newly Employed: {canBeEmployed}, Total Employed: {pop.Employed}", DebugLogger.LogCategory.Pop);
                     remainingSlotsForJobType -= canBeEmployed;
                     int assignedToFactories = canBeEmployed;
                     foreach (var factory in city.Factories.Where(f => f.JobSlots.ContainsKey(jobType)))
@@ -770,7 +767,7 @@ namespace StrategyGame
                                 factory.ActualEmployed[jobType] = 0;
                             factory.ActualEmployed[jobType] += canAssignToFactory;
                             factory.WorkersEmployed += canAssignToFactory; 
-                            DebugLogger.Log($"[Employment Debug] Factory: {factory.Name}, Job Type: {jobType}, Newly Assigned: {canAssignToFactory}, Total Workers Employed: {factory.WorkersEmployed}");
+                            DebugLogger.Log($"[Employment Debug] Factory: {factory.Name}, Job Type: {jobType}, Newly Assigned: {canAssignToFactory}, Total Workers Employed: {factory.WorkersEmployed}", DebugLogger.LogCategory.Building);
                             assignedToFactories -= canAssignToFactory;
                         }
                     }
@@ -778,7 +775,7 @@ namespace StrategyGame
 
                 if (!city.PopClasses.Any(p => p.Name == jobType))
                 {
-                    DebugLogger.Log($"[Warning] No population class matches job type '{jobType}'.");
+                    DebugLogger.Log($"[Warning] No population class matches job type '{jobType}'.", DebugLogger.LogCategory.Building);
                 }
             }
 
@@ -993,11 +990,11 @@ namespace StrategyGame
             double housing = 1.0 - (UnmetNeeds / (Needs.Count > 0 ? Needs.Count : 1)); // Penalize unmet needs
             double employment = Size > 0 ? Employed / (double)Size : 0; // Employment rate, avoid division by zero
 
-            DebugLogger.Log($"[CalculateQualityOfLife] Healthcare: {healthcare}, Education: {education}, Housing: {housing}, Employment: {employment}");
+            DebugLogger.Log($"[CalculateQualityOfLife] Healthcare: {healthcare}, Education: {education}, Housing: {housing}, Employment: {employment}", DebugLogger.LogCategory.Pop);
 
             // Weighted average of factors
             double qualityOfLife = (healthcare * 0.3) + (education * 0.3) + (housing * 0.2) + (employment * 0.2);
-            DebugLogger.Log($"[CalculateQualityOfLife] Calculated QoL: {qualityOfLife}");
+            DebugLogger.Log($"[CalculateQualityOfLife] Calculated QoL: {qualityOfLife}", DebugLogger.LogCategory.Pop);
 
             return qualityOfLife;
         }
