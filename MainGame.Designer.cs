@@ -45,6 +45,9 @@
         private System.Windows.Forms.ComboBox comboBoxCorporationSelection;
         private System.Windows.Forms.Button buttonAssumeRole;
         private System.Windows.Forms.Button buttonRelinquishRole;
+        private System.Windows.Forms.CheckBox checkBoxLogPops;
+        private System.Windows.Forms.CheckBox checkBoxLogBuildings;
+        private System.Windows.Forms.CheckBox checkBoxLogEconomy;
 
         /// <summary>
         /// Clean up any resources being used.
@@ -107,6 +110,9 @@
             this.comboBoxCorporationSelection = new System.Windows.Forms.ComboBox();
             this.buttonAssumeRole = new System.Windows.Forms.Button();
             this.buttonRelinquishRole = new System.Windows.Forms.Button();
+            this.checkBoxLogPops = new System.Windows.Forms.CheckBox();
+            this.checkBoxLogBuildings = new System.Windows.Forms.CheckBox();
+            this.checkBoxLogEconomy = new System.Windows.Forms.CheckBox();
             this.tabControlMain.SuspendLayout();
             this.tabPageCity.SuspendLayout();
             this.tabPageDiplomacy.SuspendLayout(); // Added
@@ -285,6 +291,9 @@
             this.tabPageDebug.Controls.Add(this.comboBoxCorporationSelection);
             this.tabPageDebug.Controls.Add(this.buttonAssumeRole);
             this.tabPageDebug.Controls.Add(this.buttonRelinquishRole);
+            this.tabPageDebug.Controls.Add(this.checkBoxLogPops);
+            this.tabPageDebug.Controls.Add(this.checkBoxLogBuildings);
+            this.tabPageDebug.Controls.Add(this.checkBoxLogEconomy);
             this.tabPageDebug.Location = new System.Drawing.Point(4, 22);
             this.tabPageDebug.Name = "tabPageDebug";
             this.tabPageDebug.Padding = new System.Windows.Forms.Padding(3);
@@ -491,9 +500,42 @@
             this.buttonRelinquishRole.Text = "Relinquish Role";
             this.buttonRelinquishRole.UseVisualStyleBackColor = true;
             this.buttonRelinquishRole.Click += new System.EventHandler(this.ButtonRelinquishRole_Click);
-            // 
+            //
+            // checkBoxLogPops
+            //
+            this.checkBoxLogPops.AutoSize = true;
+            this.checkBoxLogPops.Location = new System.Drawing.Point(150, 280);
+            this.checkBoxLogPops.Name = "checkBoxLogPops";
+            this.checkBoxLogPops.Size = new System.Drawing.Size(95, 17);
+            this.checkBoxLogPops.TabIndex = 10;
+            this.checkBoxLogPops.Text = "Log Pop Stats";
+            this.checkBoxLogPops.UseVisualStyleBackColor = true;
+            this.checkBoxLogPops.CheckedChanged += new System.EventHandler(this.CheckBoxLogPops_CheckedChanged);
+            //
+            // checkBoxLogBuildings
+            //
+            this.checkBoxLogBuildings.AutoSize = true;
+            this.checkBoxLogBuildings.Location = new System.Drawing.Point(150, 300);
+            this.checkBoxLogBuildings.Name = "checkBoxLogBuildings";
+            this.checkBoxLogBuildings.Size = new System.Drawing.Size(111, 17);
+            this.checkBoxLogBuildings.TabIndex = 11;
+            this.checkBoxLogBuildings.Text = "Log Building Stats";
+            this.checkBoxLogBuildings.UseVisualStyleBackColor = true;
+            this.checkBoxLogBuildings.CheckedChanged += new System.EventHandler(this.CheckBoxLogBuildings_CheckedChanged);
+            //
+            // checkBoxLogEconomy
+            //
+            this.checkBoxLogEconomy.AutoSize = true;
+            this.checkBoxLogEconomy.Location = new System.Drawing.Point(150, 320);
+            this.checkBoxLogEconomy.Name = "checkBoxLogEconomy";
+            this.checkBoxLogEconomy.Size = new System.Drawing.Size(121, 17);
+            this.checkBoxLogEconomy.TabIndex = 12;
+            this.checkBoxLogEconomy.Text = "Log Economy Stats";
+            this.checkBoxLogEconomy.UseVisualStyleBackColor = true;
+            this.checkBoxLogEconomy.CheckedChanged += new System.EventHandler(this.CheckBoxLogEconomy_CheckedChanged);
+            //
             // MainGame
-            // 
+            //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(927, 641);

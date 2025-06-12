@@ -157,7 +157,7 @@ real_world_template = [
 ]
 
 def generate_world_data(num_countries=10, num_states_per_country=5, num_cities_per_state_min=3): # Renamed num_cities_per_state to num_cities_per_state_min
-    world = {"Countries": []}
+    world = {"Countries": [], "ConstructionCompanies": []}
 
     # Removed old random name part lists to avoid confusion if not used.
     # If you want hybrid generation (some real, some random), these could be reinstated.
@@ -181,6 +181,7 @@ def generate_world_data(num_countries=10, num_states_per_country=5, num_cities_p
     used_country_names_output = set()
     used_state_names_global_output = set()
     used_city_names_global_output = set()
+    construction_companies = []
 
     for i in range(num_countries):
         country_template = real_world_template[i % len(real_world_template)] # Cycle through templates
@@ -281,6 +282,12 @@ def generate_world_data(num_countries=10, num_states_per_country=5, num_cities_p
                     ),
                     "InitialFactories": []
                 }
+                construction_companies.append({
+                    "Name": f"{city_name} Builders",
+                    "HomeCity": city_name,
+                    "InitialBudget": random.randint(200000, 1000000),
+                    "Workers": random.randint(50, 200)
+                })
                 state_total_population += city_pop
 
                 num_factories = random.randint(1, 5)
@@ -300,6 +307,7 @@ def generate_world_data(num_countries=10, num_states_per_country=5, num_cities_p
         country_data["InitialPopulation"] = country_total_population
         world["Countries"].append(country_data)
 
+    world["ConstructionCompanies"] = construction_companies
     return json.dumps(world, indent=2)
 
 if __name__ == "__main__":
