@@ -114,6 +114,10 @@
     <Compile Include="WorldDataStructures.cs" />
     <Compile Include="TradeDisplayHelper.cs" />
     <Compile Include="ConstructionProject.cs" />
+    <Compile Include="ConstructionCompany.cs" />
+    <Compile Include="ConstructionForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Suburb.cs" />
     <Compile Include="DebugLogger.cs" />
   </ItemGroup>
