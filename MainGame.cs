@@ -939,6 +939,7 @@ namespace economy_sim
             foreach (var country in allCountries)
             {
                 country.FinancialSystem.SimulateMonetaryEffects();
+                DebugLogger.LogFinancialData(country.FinancialSystem, country.Name);
             }
 
             // Refresh finance tab if it's visible so data stays current
