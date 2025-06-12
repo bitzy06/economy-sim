@@ -986,19 +986,20 @@ namespace economy_sim
             UpdateCountryStats();
 
             if (cityCurrentlySelectedForUI != null) // Use the city selected at start of tick for populating forms
-            { 
+            {
                 if (popStatsForm != null && popStatsForm.Visible)
                 {
                     popStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
                 }
-            else if (tabControlMain.SelectedTab == tabPageCompanies)
-            {
-                UpdateCompaniesTab();
-            }
-                if (factoryStatsForm != null && factoryStatsForm.Visible) 
+
+                if (factoryStatsForm != null && factoryStatsForm.Visible)
                 {
                     factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
                 }
+            }
+            else if (tabControlMain.SelectedTab == tabPageCompanies)
+            {
+                UpdateCompaniesTab();
             }
             firstTick = false;
 
@@ -1320,7 +1321,8 @@ namespace economy_sim
             }
 
             UpdateCountryStats();
-            else if (tabControlMain.SelectedTab == tabPageCompanies)
+
+            if (tabControlMain.SelectedTab == tabPageCompanies)
             {
                 UpdateCompaniesTab();
             }
@@ -1779,6 +1781,19 @@ namespace economy_sim
                 item.SubItems.Add(fs.DebtToGdpRatio.ToString("P"));
                 item.SubItems.Add(fs.InflationRate.ToString("P"));
                 item.SubItems.Add(fs.CreditRating.ToString("P"));
+
+                listViewFinance.Items.Add(item);
+
+                // Highlight player's country
+                if (country == playerCountry)
+                {
+                    item.BackColor = Color.LightBlue;
+                }
+            }
+
+            // Bond information no longer displayed
+        }
+
         private void InitializeCompaniesTab()
         {
             listViewCompanies.Columns.Add("Company", 150);
@@ -1807,18 +1822,6 @@ namespace economy_sim
                 item.SubItems.Add(firm.Workers.ToString());
                 listViewCompanies.Items.Add(item);
             }
-        }
-
-                listViewFinance.Items.Add(item);
-                
-                // Highlight player's country
-                if (country == playerCountry)
-                {
-                    item.BackColor = Color.LightBlue;
-                }
-            }
-
-            // Bond information no longer displayed
         }
 
         private void InitializeFinanceTab()
