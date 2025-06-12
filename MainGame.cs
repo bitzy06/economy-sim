@@ -744,7 +744,12 @@ namespace economy_sim
                         factory.Produce(city.Stockpile, city); 
                     }
                     StrategyGame.Economy.UpdateCityEconomy(city); // Populates ImportNeeds and ExportableSurplus
-                    Market.UpdateCityPrices(city); 
+                    city.ProgressConstruction();
+                    if (constructionForm.Visible && constructionForm.CurrentCity == city)
+                    {
+                        constructionForm.UpdateProjects();
+                    }
+                    Market.UpdateCityPrices(city);
                 }
             }
             // --- End City Economies Update Phase ---
