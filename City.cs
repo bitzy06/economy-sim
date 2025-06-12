@@ -179,20 +179,21 @@ namespace StrategyGame
             ActiveProjects.Add(project);
         }
 
-        public void ProgressConstruction(decimal availableBudget)
+        public void ProgressConstruction()
         {
-            foreach (var project in ActiveProjects)
+            foreach (var project in ActiveProjects.ToList())
             {
-                if (project.ProgressProject(1, availableBudget)) // Progress by 1 day
+                decimal dailyCost = project.Cost / project.Duration;
+                if ((decimal)Budget >= dailyCost && project.ProgressProject(1, (decimal)Budget))
                 {
+                    Budget -= (double)dailyCost;
                     if (project.IsComplete())
                     {
                         ApplyProjectEffects(project);
+                        ActiveProjects.Remove(project);
                     }
                 }
             }
-
-            ActiveProjects.RemoveAll(p => p.IsComplete()); // Remove completed projects
         }
 
         private void ApplyProjectEffects(ConstructionProject project)
