@@ -144,6 +144,9 @@ namespace StrategyGame
             Suburbs.Add(suburb);
         }
 
+        public double TotalHousingCapacity => Suburbs.Sum(s => s.HousingCapacity);
+        public double TotalRailwayKilometers => Suburbs.Sum(s => s.RailwayKilometers);
+
         public double CalculateCityQualityOfLife()
         {
             double suburbQoL = 0;
@@ -172,6 +175,41 @@ namespace StrategyGame
             DebugLogger.Log($"[CalculateCityQualityOfLife] Calculated City QoL: {cityQoL}", DebugLogger.LogCategory.Economy);
 
             return cityQoL;
+        }
+
+        // Determine if new construction projects are required and start them automatically
+        public void EvaluateConstructionNeeds()
+        {
+            if (!ActiveProjects.Any(p => p.Type == ProjectType.Housing))
+            {
+                double deficit = Population - TotalHousingCapacity;
+                if (deficit > Population * 0.05)
+                {
+                    int output = (int)Math.Ceiling(deficit);
+                    decimal budget = output * 50m;
+                    int duration = Math.Max(30, output / 50);
+                    decimal minBudget = ConstructionProject.MinimumDailyBudget * duration;
+                    if (budget < minBudget) budget = minBudget;
+                    var proj = new ConstructionProject(ProjectType.Housing, budget, duration, output, "Timber", 5);
+                    StartConstructionProject(proj);
+                }
+            }
+
+            if (!ActiveProjects.Any(p => p.Type == ProjectType.Railway))
+            {
+                double desired = Suburbs.Count * 5.0; // target kilometers
+                double shortfall = desired - TotalRailwayKilometers;
+                if (shortfall > 1.0)
+                {
+                    double output = Math.Min(10.0, shortfall);
+                    int duration = 60;
+                    decimal budget = (decimal)output * 100m;
+                    decimal minBudget = ConstructionProject.MinimumDailyBudget * duration;
+                    if (budget < minBudget) budget = minBudget;
+                    var proj = new ConstructionProject(ProjectType.Railway, budget, duration, output, "Steel", 3);
+                    StartConstructionProject(proj);
+                }
+            }
         }
 
         public void StartConstructionProject(ConstructionProject project)
