@@ -997,7 +997,7 @@ namespace economy_sim
                     factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
                 }
             }
-            else if (tabControlMain.SelectedTab == tabPageCompanies)
+            else if (tabControlMain.SelectedTab == tabControlMain.TabPages["tabPageCompanies"])
             {
                 UpdateCompaniesTab();
             }
@@ -1322,7 +1322,7 @@ namespace economy_sim
 
             UpdateCountryStats();
 
-            if (tabControlMain.SelectedTab == tabPageCompanies)
+            if (tabControlMain.SelectedTab == tabControlMain.TabPages["tabPageCompanies"])
             {
                 UpdateCompaniesTab();
             }
@@ -1796,14 +1796,14 @@ namespace economy_sim
 
         private void InitializeCompaniesTab()
         {
-            listViewCompanies.Columns.Add("Company", 150);
-            listViewCompanies.Columns.Add("Budget", 100);
-            listViewCompanies.Columns.Add("Workers", 80);
+            this.listViewCompanies.Columns.Add("Company", 150);
+            this.listViewCompanies.Columns.Add("Budget", 100);
+            this.listViewCompanies.Columns.Add("Workers", 80);
         }
 
         private void UpdateCompaniesTab()
         {
-            listViewCompanies.Items.Clear();
+            this.listViewCompanies.Items.Clear();
 
             foreach (var corp in Market.AllCorporations)
             {
@@ -1811,7 +1811,7 @@ namespace economy_sim
                 var item = new ListViewItem(corp.Name);
                 item.SubItems.Add(corp.Budget.ToString("C"));
                 item.SubItems.Add(workers.ToString());
-                listViewCompanies.Items.Add(item);
+                this.listViewCompanies.Items.Add(item);
             }
 
             foreach (var firm in Market.AllConstructionCompanies)
@@ -1820,7 +1820,7 @@ namespace economy_sim
                 var item = new ListViewItem(firm.Name);
                 item.SubItems.Add(firm.Budget.ToString("C"));
                 item.SubItems.Add(firm.Workers.ToString());
-                listViewCompanies.Items.Add(item);
+                this.listViewCompanies.Items.Add(item);
             }
         }
 
