@@ -788,6 +788,7 @@ namespace economy_sim
                     }
                     StrategyGame.Economy.UpdateCityEconomy(city); // Populates ImportNeeds and ExportableSurplus
                     city.EvaluateConstructionNeeds();
+
                     city.ProgressConstruction();
                     if (constructionForm.Visible && constructionForm.CurrentCity == city)
                     {
