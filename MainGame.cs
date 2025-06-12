@@ -894,7 +894,20 @@ namespace economy_sim
                 }
             }
 
-            // 4. Refresh UI elements 
+            // Update state and country level economies before refreshing the UI
+            if (allCountries != null)
+            {
+                foreach (var country in allCountries)
+                {
+                    foreach (var state in country.States)
+                    {
+                        StrategyGame.Economy.UpdateStateEconomy(state);
+                    }
+                    StrategyGame.Economy.UpdateCountryEconomy(country);
+                }
+            }
+
+            // 4. Refresh UI elements
             // The GetSelectedCity() here will get the same city as cityCurrentlySelectedForUI,
             // but its data has now been updated by the simulation loop.
             UpdateOrderLists(); 
@@ -927,6 +940,12 @@ namespace economy_sim
             foreach (var country in allCountries)
             {
                 country.FinancialSystem.SimulateMonetaryEffects();
+            }
+
+            // Refresh finance tab if it's visible so data stays current
+            if (tabControlMain.SelectedTab == tabPageFinance)
+            {
+                UpdateFinanceTab();
             }
 
             // Process AI trade proposals (temporary simple logic)
@@ -1778,34 +1797,7 @@ namespace economy_sim
                 }
             }
 
-            // Update bonds ListView if it exists
-            var listViewBonds = tabPageFinance.Controls.OfType<ListView>()
-                                          .FirstOrDefault(lv => lv != listViewFinance);
-            if (listViewBonds != null && playerCountry?.FinancialSystem != null)
-            {
-                listViewBonds.Items.Clear();
-                foreach (var bond in playerCountry.FinancialSystem.OutstandingBonds)
-                {
-                    var bondItem = new ListViewItem(bond.Id.ToString().Substring(0, 8)); // Short GUID
-                    bondItem.SubItems.Add(bond.Type.ToString());
-                    bondItem.SubItems.Add(bond.PrincipalAmount.ToString("C"));
-                    bondItem.SubItems.Add(bond.InterestRate.ToString("P"));
-                    bondItem.SubItems.Add(bond.MaturityDate.ToShortDateString());
-                    bondItem.SubItems.Add(bond.OwnerId);
-                    bondItem.SubItems.Add(bond.IsDefaulted ? "Defaulted" : "Active");
-                    
-                    if (bond.IsDefaulted)
-                    {
-                        bondItem.BackColor = Color.LightPink;
-                    }
-                    else if (bond.MaturityDate <= DateTime.Now)
-                    {
-                        bondItem.BackColor = Color.LightYellow;
-                    }
-                    
-                    listViewBonds.Items.Add(bondItem);
-                }
-            }
+            // Bond information no longer displayed
         }
 
         private void InitializeFinanceTab()
@@ -1819,159 +1811,8 @@ namespace economy_sim
             listViewFinance.Columns.Add("Inflation", 80);
             listViewFinance.Columns.Add("Credit Rating", 80);
 
-            // Add bond management ListView
-            ListView listViewBonds = new ListView();
-            listViewBonds.View = View.Details;
-            listViewBonds.FullRowSelect = true;
-            listViewBonds.GridLines = true;
-            listViewBonds.Location = new Point(10, 180);
-            listViewBonds.Size = new Size(800, 200);
-            listViewBonds.Columns.Add("Bond ID", 100);
-            listViewBonds.Columns.Add("Type", 80);
-            listViewBonds.Columns.Add("Principal", 100);
-            listViewBonds.Columns.Add("Interest Rate", 80);
-            listViewBonds.Columns.Add("Maturity Date", 120);
-            listViewBonds.Columns.Add("Owner", 100);
-            listViewBonds.Columns.Add("Status", 80);
-            tabPageFinance.Controls.Add(listViewBonds);
-
-            // Add bond issuance controls
-            Button buttonIssueBond = new Button
-            {
-                Text = "Issue New Bond",
-                Location = new Point(10, 390),
-                Size = new Size(120, 30)
-            };
-            buttonIssueBond.Click += (s, e) => OpenBondIssuanceDialog();
-            tabPageFinance.Controls.Add(buttonIssueBond);
-
-            Button buttonProcessBonds = new Button
-            {
-                Text = "Process Maturities",
-                Location = new Point(140, 390),
-                Size = new Size(120, 30)
-            };
-            buttonProcessBonds.Click += (s, e) => ProcessBondMaturities();
-            tabPageFinance.Controls.Add(buttonProcessBonds);
+            // Bond UI removed
         }
 
-        private void OpenBondIssuanceDialog()
-        {
-            if (playerCountry?.FinancialSystem == null) return;
-
-            // Create bond issuance form with necessary controls
-            Form bondForm = new Form
-            {
-                Text = "Issue New Bond",
-                Size = new Size(400, 300),
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                StartPosition = FormStartPosition.CenterParent
-            };
-
-            ComboBox bondTypeCombo = new ComboBox
-            {
-                Location = new Point(120, 20),
-                Size = new Size(200, 20)
-            };
-            bondTypeCombo.Items.AddRange(Enum.GetNames(typeof(BondType)));
-            bondTypeCombo.SelectedIndex = 0;
-
-            NumericUpDown principalInput = new NumericUpDown
-            {
-                Location = new Point(120, 60),
-                Size = new Size(200, 20),
-                Maximum = 1000000000,
-                Minimum = 1000,
-                Increment = 1000,
-                Value = 100000
-            };
-
-            NumericUpDown interestInput = new NumericUpDown
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 20),
-                DecimalPlaces = 2,
-                Maximum = 20,
-                Minimum = 0.1m,
-                Increment = 0.25m,
-                Value = 5
-            };
-
-            NumericUpDown maturityInput = new NumericUpDown
-            {
-                Location = new Point(120, 140),
-                Size = new Size(200, 20),
-                Maximum = 30,
-                Minimum = 1,
-                Value = 5
-            };
-
-            bondForm.Controls.AddRange(new Control[] {
-                new Label { Text = "Bond Type:", Location = new Point(20, 23), Size = new Size(100, 20) },
-                new Label { Text = "Principal:", Location = new Point(20, 63), Size = new Size(100, 20) },
-                new Label { Text = "Interest Rate (%):", Location = new Point(20, 103), Size = new Size(100, 20) },
-                new Label { Text = "Maturity (Years):", Location = new Point(20, 143), Size = new Size(100, 20) },
-                bondTypeCombo,
-                principalInput,
-                interestInput,
-                maturityInput
-            });
-
-            Button issueButton = new Button
-            {
-                Text = "Issue Bond",
-                DialogResult = DialogResult.OK,
-                Location = new Point(120, 200),
-                Size = new Size(100, 30)
-            };
-            bondForm.Controls.Add(issueButton);
-
-            Button cancelButton = new Button
-            {
-                Text = "Cancel",
-                DialogResult = DialogResult.Cancel,
-                Location = new Point(230, 200),
-                Size = new Size(100, 30)
-            };
-            bondForm.Controls.Add(cancelButton);
-
-            if (bondForm.ShowDialog() == DialogResult.OK)
-            {
-                try
-                {
-                    var bondType = (BondType)Enum.Parse(typeof(BondType), bondTypeCombo.SelectedItem.ToString());
-                    playerCountry.FinancialSystem.IssueBond(
-                        playerCountry.Name, // Owner is the country itself initially
-                        principalInput.Value,
-                        (float)(interestInput.Value / 100.0m), // Convert percentage to decimal
-                        (int)maturityInput.Value,
-                        bondType
-                    );
-                    UpdateFinanceTab(); // Refresh display
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message, "Bond Issuance Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-        }
-
-        private void ProcessBondMaturities()
-        {
-            if (playerCountry?.FinancialSystem == null) return;
-
-            var fs = playerCountry.FinancialSystem;
-            var bonds = fs.OutstandingBonds.ToList(); // Get snapshot of current bonds
-            
-            foreach (var bond in bonds)
-            {
-                if (bond.MaturityDate <= DateTime.Now && !bond.IsDefaulted)
-                {
-                    fs.ProcessBondMaturity(bond.Id);
-                }
-            }
-
-            UpdateFinanceTab(); // Refresh display after processing
-        }
     }
 }

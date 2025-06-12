@@ -40,23 +40,19 @@ namespace StrategyGame
 
             decimal taxRevenue = fs.CalculateTaxRevenue(totalAssessablePopIncome, totalCorporateProfits, totalLandValue, totalConsumptionValue);
             country.Budget += (double)taxRevenue;
-            // fs.AdjustMoneySupply(taxRevenue, false); // Taxes remove money from circulation temporarily, then government spends it
+            // Channel a portion of revenue into reserves
+            fs.AdjustReserves(taxRevenue * 0.05m);
 
-            // 2. Account for National Expenses from the Financial System (e.g., bond interest)
+            // 2. Account for National Expenses from the Financial System
             decimal debtInterestPayment = fs.GetAnnualDebtInterestPayment();
             country.Budget -= (double)debtInterestPayment;
-            // fs.AdjustMoneySupply(-debtInterestPayment, false); // Interest payments inject money if paid to domestic holders
+            fs.AdjustReserves(-(debtInterestPayment * 0.05m));
 
             // 3. Account for other general National Expenses
-            country.Budget -= country.NationalExpenses; 
-            // fs.AdjustMoneySupply((decimal)-country.NationalExpenses, false); // General expenses
+            country.Budget -= country.NationalExpenses;
+            fs.AdjustMoneySupply((decimal)country.NationalExpenses * 0.01m);
 
-            // 4. Process bond maturities (simplified: check daily/per update)
-            var maturedBonds = country.FinancialSystem.OutstandingBonds.Where(b => b.MaturityDate <= DateTime.Now && !b.IsDefaulted).ToList();
-            foreach (var bond in maturedBonds)
-            {
-                country.FinancialSystem.ProcessBondMaturity(bond.Id);
-            }
+            // 4. Bond system removed; no maturities to process
 
             // 5. Update other financial indicators
             decimal currentGdp = totalAssessablePopIncome + totalCorporateProfits; // Highly simplified GDP
@@ -70,7 +66,7 @@ namespace StrategyGame
             {
                 // Trigger events like increasing debt, credit rating hit, etc.
                 // For now, just log or cap it.
-                // fs.IssueBond("CentralBank", (decimal)-country.Budget, 0.05f, 5, BondType.TreasuryBill); // Auto-issue debt to cover deficit (simplification)
+                // fs.IssueBond("CentralBank", (decimal)-country.Budget, 0.05f, 5); // Auto-issue debt to cover deficit (simplification)
             }
         }
 
