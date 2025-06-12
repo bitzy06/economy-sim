@@ -894,7 +894,20 @@ namespace economy_sim
                 }
             }
 
-            // 4. Refresh UI elements 
+            // Update state and country level economies before refreshing the UI
+            if (allCountries != null)
+            {
+                foreach (var country in allCountries)
+                {
+                    foreach (var state in country.States)
+                    {
+                        StrategyGame.Economy.UpdateStateEconomy(state);
+                    }
+                    StrategyGame.Economy.UpdateCountryEconomy(country);
+                }
+            }
+
+            // 4. Refresh UI elements
             // The GetSelectedCity() here will get the same city as cityCurrentlySelectedForUI,
             // but its data has now been updated by the simulation loop.
             UpdateOrderLists(); 
@@ -927,6 +940,12 @@ namespace economy_sim
             foreach (var country in allCountries)
             {
                 country.FinancialSystem.SimulateMonetaryEffects();
+            }
+
+            // Refresh finance tab if it's visible so data stays current
+            if (tabControlMain.SelectedTab == tabPageFinance)
+            {
+                UpdateFinanceTab();
             }
 
             // Process AI trade proposals (temporary simple logic)
