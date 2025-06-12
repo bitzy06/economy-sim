@@ -942,6 +942,12 @@ namespace economy_sim
                 country.FinancialSystem.SimulateMonetaryEffects();
             }
 
+            // Refresh finance tab if it's visible so data stays current
+            if (tabControlMain.SelectedTab == tabPageFinance)
+            {
+                UpdateFinanceTab();
+            }
+
             // Process AI trade proposals (temporary simple logic)
             if (diplomacyManager != null && playerCountry != null && random.Next(100) < 20) // 20% chance each turn
             {
