@@ -221,11 +221,13 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         // Simulate the impact of current monetary policy and economic conditions
         public void SimulateMonetaryEffects()
         {
-            // Inflation effects
+            // Money supply changes each tick based on current inflation
+            MoneySupply *= (1.0m + InflationRate);
+
+            // Inflation effects on credit rating when it gets high
             if (InflationRate > 0.1m) // High inflation scenario
             {
                 CreditRating = Math.Max(0.1f, CreditRating - 0.005f); // High inflation hurts credit rating
-                MoneySupply *= (1.0m + InflationRate); // Money supply naturally expands with inflation
             }
 
             // Interest rate effects on debt
@@ -245,6 +247,11 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
             if (NationalReserves < MoneySupply * 0.1m) // Low reserves scenario
             {
                 CreditRating = Math.Max(0.1f, CreditRating - 0.01f); // Low reserves hurt credit rating
+            }
+            else
+            {
+                // Very small passive increase to represent investment returns
+                NationalReserves *= 1.001m;
             }
         }
 
@@ -368,9 +375,17 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
             if (currentGdp > 0)
             {
                 DebtToGdpRatio = GetTotalOutstandingDebt() / currentGdp;
+
+                // Simple inflation model based on money supply relative to GDP
+                decimal moneyRatio = MoneySupply / currentGdp;
+                InflationRate = Clamp(0.02m + (moneyRatio - 1m) * 0.02m, 0m, 0.5m);
+
+                // Adjust credit rating based on debt burden
+                if (DebtToGdpRatio > 1m)
+                    CreditRating = Math.Max(0.1f, CreditRating - 0.01f);
+                else if (DebtToGdpRatio < 0.5m)
+                    CreditRating = Math.Min(1.0f, CreditRating + 0.005f);
             }
-            // TODO: Update inflation based on money supply, velocity, output
-            // TODO: Update credit rating based on debt, defaults, economic stability
         }
     }
 }

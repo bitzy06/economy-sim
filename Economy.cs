@@ -40,16 +40,17 @@ namespace StrategyGame
 
             decimal taxRevenue = fs.CalculateTaxRevenue(totalAssessablePopIncome, totalCorporateProfits, totalLandValue, totalConsumptionValue);
             country.Budget += (double)taxRevenue;
-            // fs.AdjustMoneySupply(taxRevenue, false); // Taxes remove money from circulation temporarily, then government spends it
+            // Channel a portion of revenue into reserves
+            fs.AdjustReserves(taxRevenue * 0.05m);
 
             // 2. Account for National Expenses from the Financial System (e.g., bond interest)
             decimal debtInterestPayment = fs.GetAnnualDebtInterestPayment();
             country.Budget -= (double)debtInterestPayment;
-            // fs.AdjustMoneySupply(-debtInterestPayment, false); // Interest payments inject money if paid to domestic holders
+            fs.AdjustReserves(-(debtInterestPayment * 0.05m));
 
             // 3. Account for other general National Expenses
-            country.Budget -= country.NationalExpenses; 
-            // fs.AdjustMoneySupply((decimal)-country.NationalExpenses, false); // General expenses
+            country.Budget -= country.NationalExpenses;
+            fs.AdjustMoneySupply((decimal)country.NationalExpenses * 0.01m);
 
             // 4. Process bond maturities (simplified: check daily/per update)
             var maturedBonds = country.FinancialSystem.OutstandingBonds.Where(b => b.MaturityDate <= DateTime.Now && !b.IsDefaulted).ToList();
