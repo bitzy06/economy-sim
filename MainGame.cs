@@ -107,6 +107,8 @@ namespace economy_sim
             // Initialize and populate Finance tab
             InitializeFinanceTab();
             UpdateFinanceTab();
+            InitializeCompaniesTab();
+            UpdateCompaniesTab();
 
             UpdateOrderLists();
             timerSim.Tick += TimerSim_Tick;
@@ -989,6 +991,10 @@ namespace economy_sim
                 {
                     popStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
                 }
+            else if (tabControlMain.SelectedTab == tabPageCompanies)
+            {
+                UpdateCompaniesTab();
+            }
                 if (factoryStatsForm != null && factoryStatsForm.Visible) 
                 {
                     factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
@@ -1314,6 +1320,10 @@ namespace economy_sim
             }
 
             UpdateCountryStats();
+            else if (tabControlMain.SelectedTab == tabPageCompanies)
+            {
+                UpdateCompaniesTab();
+            }
         }
 
         private void TabControlMain_SelectedIndexChanged(object sender, EventArgs e)
@@ -1769,6 +1779,36 @@ namespace economy_sim
                 item.SubItems.Add(fs.DebtToGdpRatio.ToString("P"));
                 item.SubItems.Add(fs.InflationRate.ToString("P"));
                 item.SubItems.Add(fs.CreditRating.ToString("P"));
+        private void InitializeCompaniesTab()
+        {
+            listViewCompanies.Columns.Add("Company", 150);
+            listViewCompanies.Columns.Add("Budget", 100);
+            listViewCompanies.Columns.Add("Workers", 80);
+        }
+
+        private void UpdateCompaniesTab()
+        {
+            listViewCompanies.Items.Clear();
+
+            foreach (var corp in Market.AllCorporations)
+            {
+                int workers = corp.OwnedFactories.Sum(f => f.WorkersEmployed);
+                var item = new ListViewItem(corp.Name);
+                item.SubItems.Add(corp.Budget.ToString("C"));
+                item.SubItems.Add(workers.ToString());
+                listViewCompanies.Items.Add(item);
+            }
+
+            foreach (var firm in Market.AllConstructionCompanies)
+            {
+                if (Market.AllCorporations.Contains(firm)) continue; // avoid duplication
+                var item = new ListViewItem(firm.Name);
+                item.SubItems.Add(firm.Budget.ToString("C"));
+                item.SubItems.Add(firm.Workers.ToString());
+                listViewCompanies.Items.Add(item);
+            }
+        }
+
                 listViewFinance.Items.Add(item);
                 
                 // Highlight player's country

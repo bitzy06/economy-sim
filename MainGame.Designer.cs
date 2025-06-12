@@ -25,6 +25,8 @@
         private System.Windows.Forms.TabPage tabPageDiplomacy; // Added
         private System.Windows.Forms.TabPage tabPageDebug; // Debug tab for role switching
         private System.Windows.Forms.TabPage tabPageFinance;
+        private System.Windows.Forms.TabPage tabPageCompanies;
+        private System.Windows.Forms.ListView listViewCompanies;
         private System.Windows.Forms.ListView listViewFinance;
         // private System.Windows.Forms.ListBox listBoxActiveTradeAgreements; // REMOVED by commenting
         private System.Windows.Forms.ListBox listBoxProposedTradeAgreements; // Added
@@ -91,6 +93,8 @@
             this.tabPageDebug = new System.Windows.Forms.TabPage(); // Debug tab for role switching
             this.tabPageFinance = new System.Windows.Forms.TabPage();
             this.listViewFinance = new System.Windows.Forms.ListView();
+            this.tabPageCompanies = new System.Windows.Forms.TabPage();
+            this.listViewCompanies = new System.Windows.Forms.ListView();
             // this.listBoxActiveTradeAgreements = new System.Windows.Forms.ListBox(); // REMOVED by commenting
             this.listBoxProposedTradeAgreements = new System.Windows.Forms.ListBox(); // Added
             this.buttonAcceptTrade = new System.Windows.Forms.Button(); // Added
@@ -118,6 +122,7 @@
             this.tabPageDiplomacy.SuspendLayout(); // Added
             this.tabPageDebug.SuspendLayout(); // Debug tab for role switching
             this.tabPageFinance.SuspendLayout();
+            this.tabPageCompanies.SuspendLayout();
             this.SuspendLayout();
             // 
             // comboBoxCountry
@@ -221,6 +226,7 @@
             this.tabControlMain.Controls.Add(this.tabPageDiplomacy); // Added
             this.tabControlMain.Controls.Add(this.tabPageDebug); // Debug tab for role switching
             this.tabControlMain.Controls.Add(this.tabPageFinance);
+            this.tabControlMain.Controls.Add(this.tabPageCompanies);
             this.tabControlMain.Location = new System.Drawing.Point(10, 10);
             this.tabControlMain.Name = "tabControlMain";
             this.tabControlMain.SelectedIndex = 0;
@@ -321,6 +327,26 @@
             this.listViewFinance.View = System.Windows.Forms.View.Details;
             this.listViewFinance.FullRowSelect = true;
             this.listViewFinance.GridLines = true;
+            //
+            // tabPageCompanies
+            //
+            this.tabPageCompanies.Location = new System.Drawing.Point(4, 22);
+            this.tabPageCompanies.Name = "tabPageCompanies";
+            this.tabPageCompanies.Size = new System.Drawing.Size(822, 454);
+            this.tabPageCompanies.TabIndex = 6;
+            this.tabPageCompanies.Text = "Companies";
+            this.tabPageCompanies.UseVisualStyleBackColor = true;
+            this.tabPageCompanies.Controls.Add(this.listViewCompanies);
+            //
+            // listViewCompanies
+            //
+            this.listViewCompanies.Location = new System.Drawing.Point(10, 10);
+            this.listViewCompanies.Name = "listViewCompanies";
+            this.listViewCompanies.Size = new System.Drawing.Size(800, 430);
+            this.listViewCompanies.TabIndex = 0;
+            this.listViewCompanies.View = System.Windows.Forms.View.Details;
+            this.listViewCompanies.FullRowSelect = true;
+            this.listViewCompanies.GridLines = true;
             // 
             // labelActiveTrades
             // 
@@ -551,6 +577,7 @@
             this.tabPageDebug.ResumeLayout(false); // Debug tab for role switching
             this.tabPageDebug.PerformLayout(); // Added for labels
             this.tabPageFinance.ResumeLayout(false);
+            this.tabPageCompanies.ResumeLayout(false);
             this.ResumeLayout(false);
 
         }
