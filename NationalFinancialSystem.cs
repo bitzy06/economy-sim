@@ -1,20 +1,63 @@
 // NationalFinancialSystem.cs
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace StrategyGame // Changed from EconomySim to StrategyGame
 {
+    // Core finance enums and structures consolidated here
+    public enum CurrencyStandard
+    {
+        Fiat,
+        GoldBacked,
+        SilverBacked
+    }
+
+    public enum TaxType
+    {
+        IncomeTax,
+        CorporateTax,
+        LandTax,
+        ConsumptionTax, // Sales Tax / VAT
+        PollTax
+    }
+
+    public enum TaxProgressivity
+    {
+        Progressive,
+        Flat,
+        Regressive
+    }
+
+    public struct TaxPolicy
+    {
+        public Guid Id { get; }
+        public TaxType Type { get; set; }
+        public decimal Rate { get; set; } // Flat rate or base rate for progressive
+        public TaxProgressivity Progressivity { get; set; } // For income tax mainly
+        public Dictionary<decimal, decimal> ProgressiveBrackets { get; set; } // Income threshold -> Rate for that bracket
+        public string AppliesToSector { get; set; } // Optional: for sector-specific taxes/breaks
+        public string AppliesToPopGroup { get; set; } // Optional: for POP group specific taxes
+
+        public TaxPolicy(TaxType type, decimal rate, TaxProgressivity progressivity = TaxProgressivity.Flat)
+        {
+            Id = Guid.NewGuid();
+            Type = type;
+            Rate = rate;
+            Progressivity = progressivity;
+            ProgressiveBrackets = new Dictionary<decimal, decimal>();
+            AppliesToSector = null;
+            AppliesToPopGroup = null;
+        }
+    }
+
     public class NationalFinancialSystem
     {
         public string CountryId { get; }
-        private List<Bond> outstandingBonds;
-        public IReadOnlyList<Bond> OutstandingBonds => outstandingBonds.AsReadOnly(); // Public accessor
+        // Bond system removed
         private List<TaxPolicy> taxPolicies;
         public IReadOnlyList<TaxPolicy> TaxPolicies => taxPolicies.AsReadOnly(); // Public accessor for tax policies
-        private List<Subsidy> activeSubsidies;
-        private List<Tariff> activeTariffs;
 
+        // Simplified system: subsidies, tariffs, and stock market removed
         // Central Bank related properties
         public decimal BaseInterestRate { get; private set; }
         public decimal MoneySupply { get; private set; }
@@ -25,17 +68,11 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         public decimal InflationRate { get; private set; } // Percentage
         public decimal TaxEfficiency { get; private set; } // 0.0 to 1.0
 
-        // Stock Market related (simplified)
-        private Dictionary<string, CorporationFinancials> listedCorporations;
 
         public NationalFinancialSystem(string countryId, decimal initialMoneySupply, decimal initialReserves, CurrencyStandard standard = CurrencyStandard.Fiat)
         {
             CountryId = countryId;
-            outstandingBonds = new List<Bond>();
             taxPolicies = new List<TaxPolicy>();
-            activeSubsidies = new List<Subsidy>();
-            activeTariffs = new List<Tariff>();
-            listedCorporations = new Dictionary<string, CorporationFinancials>();
 
             MoneySupply = initialMoneySupply;
             NationalReserves = initialReserves;
@@ -48,112 +85,18 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         }
 
         #region Debt and Bonds
-        public Bond IssueBond(string ownerId, decimal principal, float interestRate, int maturityYears, BondType type)
-        {
-            // Calculate risk-adjusted interest rate based on credit rating
-            float adjustedInterestRate = interestRate + ((1.0f - CreditRating) * 0.1f);
-            
-            // Check debt capacity 
-            decimal projectedDebtRatio = (GetTotalOutstandingDebt() + principal) / (MoneySupply * 2.0m);
-            if (projectedDebtRatio > 1.5m) // Over 150% debt-to-GDP ratio
-            {
-                throw new InvalidOperationException("Bond issuance would exceed safe debt capacity.");
-            }
+        // Bond mechanics removed for now. The game no longer models national debt via
+        // individual bond instruments, so these methods have been trimmed.
 
-            var maturityDate = DateTime.Now.AddYears(maturityYears);
-            var bond = new Bond(CountryId, ownerId, principal, adjustedInterestRate, DateTime.Now, maturityDate, type);
-            
-            outstandingBonds.Add(bond);
-            MoneySupply += principal; // Money supply increases when government sells bonds
-            NationalReserves += principal * 0.1m; // Some bonds proceeds go to reserves
-            
-            // Update debt ratio
-            UpdateDebtToGdpRatio();
+        public decimal GetTotalOutstandingDebt() => 0m;
 
-            // If debt ratio is getting high, credit rating takes a small hit
-            if (DebtToGdpRatio > 0.8m)
-            {
-                CreditRating = Math.Max(0.1f, CreditRating - 0.01f);
-            }
+        public decimal GetAnnualDebtInterestPayment() => 0m;
 
-            return bond;
-        }
+        public void ProcessBondMaturity(Guid bondId) { }
 
-        public decimal GetTotalOutstandingDebt()
-        {
-            return outstandingBonds.Where(b => !b.IsDefaulted).Sum(b => b.PrincipalAmount);
-        }
+        private void UpdateDebtToGdpRatio() => DebtToGdpRatio = 0m;
 
-        public decimal GetAnnualDebtInterestPayment()
-        {
-            return outstandingBonds.Where(b => !b.IsDefaulted).Sum(b => b.GetAnnualInterestPayment());
-        }
-
-        public void ProcessBondMaturity(Guid bondId)
-        {
-            // Find the bond. Since bonds are structs, we need to be careful with modifications.
-            int bondIndex = outstandingBonds.FindIndex(b => b.Id == bondId);
-            if (bondIndex == -1) return;
-
-            Bond bond = outstandingBonds[bondIndex];
-
-            if (bond.MaturityDate <= DateTime.Now && !bond.IsDefaulted)
-            {
-                // Calculate payment due (principal + final interest)
-                decimal paymentDue = bond.PrincipalAmount + bond.GetAnnualInterestPayment(); 
-                
-                // Check country's ability to pay
-                if (MoneySupply >= paymentDue && NationalReserves > 0) 
-                {
-                    // Process payment
-                    MoneySupply -= paymentDue; // Reduce money supply
-                    NationalReserves -= paymentDue * 0.1m; // Use some reserves
-                    outstandingBonds.RemoveAt(bondIndex); // Remove matured bond
-
-                    // Update credit rating positively for successful bond repayment
-                    CreditRating = Math.Min(1.0f, CreditRating + 0.02f);
-
-                    // Update country's debt ratio
-                    UpdateDebtToGdpRatio();
-                }
-                else
-                {
-                    DefaultOnBond(bondId);
-                }
-            }
-        }
-
-        private void UpdateDebtToGdpRatio()
-        {
-            // Calculate total outstanding debt
-            decimal totalDebt = GetTotalOutstandingDebt();
-            // Simplified GDP calculation - in a real implementation this would come from economic data
-            decimal estimatedGDP = MoneySupply * 2.0m; // Simplified assumption that GDP is roughly 2x money supply
-            DebtToGdpRatio = totalDebt / Math.Max(1, estimatedGDP); // Avoid division by zero
-        }
-
-        public void DefaultOnBond(Guid bondId)
-        {
-            int index = outstandingBonds.FindIndex(b => b.Id == bondId);
-            if (index != -1)
-            {
-                Bond bondToDefault = outstandingBonds[index];
-                bondToDefault.IsDefaulted = true;
-                outstandingBonds[index] = bondToDefault;
-
-                // Severe consequences for defaulting
-                CreditRating *= 0.5f; // Drastic reduction in credit rating
-                MoneySupply *= 0.9m; // Currency value drops
-                BaseInterestRate += 0.05m; // Interest rates spike
-                
-                // Impact on future borrowing costs is reflected in credit rating
-                // The low credit rating will result in higher interest rates on future bonds
-                
-                // Notify any observers about the default
-                // In a full implementation, this would trigger diplomatic penalties
-                // and potential economic sanctions
-            }
-        }
+        public void DefaultOnBond(Guid bondId) { }
         #endregion
 
         #region Central Bank
@@ -221,30 +164,26 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         // Simulate the impact of current monetary policy and economic conditions
         public void SimulateMonetaryEffects()
         {
-            // Inflation effects
+            // Money supply changes each tick based on current inflation
+            MoneySupply *= (1.0m + InflationRate);
+
+            // Inflation effects on credit rating when it gets high
             if (InflationRate > 0.1m) // High inflation scenario
             {
                 CreditRating = Math.Max(0.1f, CreditRating - 0.005f); // High inflation hurts credit rating
-                MoneySupply *= (1.0m + InflationRate); // Money supply naturally expands with inflation
             }
 
-            // Interest rate effects on debt
-            if (BaseInterestRate > 0.15m) // High interest rate scenario
-            {
-                // High rates make debt more expensive
-                foreach (var bond in outstandingBonds.Where(b => !b.IsDefaulted))
-                {
-                    if ((decimal)bond.InterestRate < BaseInterestRate)
-                    {
-                        AdjustMoneySupply(-bond.PrincipalAmount * 0.01m); // Reduce money supply as debt servicing increases
-                    }
-                }
-            }
+            // Interest rate effects no longer account for bonds since the bond system was removed
 
             // Reserve effects
             if (NationalReserves < MoneySupply * 0.1m) // Low reserves scenario
             {
                 CreditRating = Math.Max(0.1f, CreditRating - 0.01f); // Low reserves hurt credit rating
+            }
+            else
+            {
+                // Very small passive increase to represent investment returns
+                NationalReserves *= 1.001m;
             }
         }
 
@@ -307,70 +246,24 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         }
         #endregion
 
-        #region Stock Market (Conceptual)
-        public void ListCorporation(CorporationFinancials corp)
-        {
-            if (!listedCorporations.ContainsKey(corp.CorporationId))
-            {
-                listedCorporations.Add(corp.CorporationId, corp);
-            }
-        }
-
-        public void UpdateSharePrice(string corporationId, decimal newPrice)
-        {
-            if (listedCorporations.TryGetValue(corporationId, out var corp))
-            {
-                corp.SharePrice = newPrice;
-            }
-        }
-        #endregion
-
-        #region Subsidies and Tariffs
-        public void AddSubsidy(Subsidy subsidy)
-        {
-            activeSubsidies.Add(subsidy);
-        }
-
-        public void RemoveSubsidy(Guid subsidyId)
-        {
-            activeSubsidies.RemoveAll(s => s.Id == subsidyId);
-        }
-
-        public decimal GetTotalSubsidyCost()
-        {
-            // This is simplified. Actual cost depends on industry size/output for percentage subsidies.
-            return activeSubsidies.Where(s => !s.IsPercentage).Sum(s => s.AmountOrPercentage);
-        }
-
-        public void AddTariff(Tariff tariff)
-        {
-            activeTariffs.Add(tariff);
-        }
-
-        public void RemoveTariff(Guid tariffId)
-        {
-            activeTariffs.RemoveAll(t => t.Id == tariffId);
-        }
-
-        public decimal CalculateTariffRevenueOnTrade(string productOrCategory, decimal tradeValue, bool isImport)
-        {
-            var applicableTariff = activeTariffs.FirstOrDefault(t => t.ProductOrCategory == productOrCategory && t.IsImportTariff == isImport);
-            if (applicableTariff.Id != Guid.Empty) // Check if a tariff was found
-            {
-                return tradeValue * applicableTariff.Rate;
-            }
-            return 0;
-        }
-        #endregion
-
+        
+        
         public void UpdateFinancialIndicators(decimal currentGdp) // Called periodically
         {
             if (currentGdp > 0)
             {
                 DebtToGdpRatio = GetTotalOutstandingDebt() / currentGdp;
+
+                // Simple inflation model based on money supply relative to GDP
+                decimal moneyRatio = MoneySupply / currentGdp;
+                InflationRate = Clamp(0.02m + (moneyRatio - 1m) * 0.02m, 0m, 0.5m);
+
+                // Adjust credit rating based on debt burden
+                if (DebtToGdpRatio > 1m)
+                    CreditRating = Math.Max(0.1f, CreditRating - 0.01f);
+                else if (DebtToGdpRatio < 0.5m)
+                    CreditRating = Math.Min(1.0f, CreditRating + 0.005f);
             }
-            // TODO: Update inflation based on money supply, velocity, output
-            // TODO: Update credit rating based on debt, defaults, economic stability
         }
     }
 }

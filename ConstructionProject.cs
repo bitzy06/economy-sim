@@ -12,27 +12,41 @@ namespace StrategyGame
     public class ConstructionProject
     {
         public ProjectType Type { get; private set; }
-        public decimal Cost { get; private set; } // Total cost in money
+        // Budget is the total amount allocated for the project. It is spent
+        // gradually during construction rather than paid up front.
+        public decimal Budget { get; private set; }
+        public decimal BudgetRemaining { get; private set; }
         public int Duration { get; private set; } // Duration in days
         public int Progress { get; private set; } // Progress in days completed
         public double Output { get; private set; } // Output (e.g., housing units or kilometers of railway)
 
-        public ConstructionProject(ProjectType type, decimal cost, int duration, double output)
+        public string RequiredResource { get; private set; }
+        public int ResourcePerDay { get; private set; }
+
+        public ConstructionCompany AssignedCompany { get; set; }
+
+        public const decimal MinimumDailyBudget = 100m;
+
+        public ConstructionProject(ProjectType type, decimal budget, int duration, double output, string requiredResource, int resourcePerDay)
         {
             Type = type;
-            Cost = cost;
+            Budget = budget;
+            BudgetRemaining = budget;
             Duration = duration;
             Output = output;
+            RequiredResource = requiredResource;
+            ResourcePerDay = resourcePerDay;
             Progress = 0;
         }
 
-        public bool ProgressProject(int days, decimal availableBudget)
+        public bool ProgressProject(int days, decimal dailyCost)
         {
-            if (availableBudget < Cost / Duration * days)
+            if (BudgetRemaining < dailyCost * days)
             {
-                return false; // Not enough budget to progress
+                return false; // Not enough project budget
             }
 
+            BudgetRemaining -= dailyCost * days;
             Progress += days;
             return true;
         }
