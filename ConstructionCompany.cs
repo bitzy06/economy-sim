@@ -53,23 +53,25 @@ namespace StrategyGame
 
                 if (!string.IsNullOrEmpty(project.RequiredResource) && project.ResourcePerDay > 0)
                 {
-                    if (!city.LocalPrices.ContainsKey(project.RequiredResource))
-                        continue;
+                    double price = city.LocalPrices.ContainsKey(project.RequiredResource)
+                        ? city.LocalPrices[project.RequiredResource]
+                        : (Market.GoodDefinitions.ContainsKey(project.RequiredResource)
+                            ? Market.GoodDefinitions[project.RequiredResource].BasePrice
+                            : 10.0);
 
-                    double price = city.LocalPrices[project.RequiredResource];
                     resourceCost = (decimal)(price * project.ResourcePerDay);
 
-                    if (Budget < (double)resourceCost || project.BudgetRemaining < resourceCost)
-
-                        continue;
-
-                    bool bought = Market.BuyFromCityMarket(city, project.RequiredResource, project.ResourcePerDay, buyerCorp: this);
-                    if (!bought) continue;
-                    
-                    project.BudgetRemaining -= resourceCost;
+                    if (Budget >= (double)resourceCost && project.TrySpendBudget(resourceCost))
+                    {
+                        // Attempt to purchase locally, but allow progress even if not available
+                        Market.BuyFromCityMarket(city, project.RequiredResource, project.ResourcePerDay, buyerCorp: this);
+                        Budget -= (double)resourceCost;
+                    }
                 }
 
-                if (Budget < (double)dailyBaseCost || project.BudgetRemaining < dailyBaseCost)
+                decimal totalDailyCost = dailyBaseCost;
+
+                if (Budget < (double)totalDailyCost || project.BudgetRemaining < totalDailyCost)
                     continue;
 
                 if (project.ProgressProject(1, dailyBaseCost))
