@@ -9,11 +9,11 @@ namespace economy_sim
     {
         private ListBox listBoxProjects;
         private ComboBox comboBoxType;
-        private NumericUpDown numericCost;
+        private NumericUpDown numericBudget;
         private NumericUpDown numericDuration;
         private NumericUpDown numericOutput;
         private Label labelType;
-        private Label labelCost;
+        private Label labelBudget;
         private Label labelDuration;
         private Label labelOutput;
         private Button buttonStart;
@@ -39,15 +39,15 @@ namespace economy_sim
             comboBoxType.SelectedIndex = 0;
             comboBoxType.Location = new System.Drawing.Point(120, 188);
 
-            labelCost = new Label();
-            labelCost.Text = "Cost:";
-            labelCost.Location = new System.Drawing.Point(10, 220);
+            labelBudget = new Label();
+            labelBudget.Text = "Budget:";
+            labelBudget.Location = new System.Drawing.Point(10, 220);
 
-            numericCost = new NumericUpDown();
-            numericCost.Minimum = 0;
-            numericCost.Maximum = 1000000;
-            numericCost.Value = 1000;
-            numericCost.Location = new System.Drawing.Point(120, 218);
+            numericBudget = new NumericUpDown();
+            numericBudget.Minimum = 0;
+            numericBudget.Maximum = 1000000;
+            numericBudget.Value = 1000;
+            numericBudget.Location = new System.Drawing.Point(120, 218);
 
             labelDuration = new Label();
             labelDuration.Text = "Duration (days):";
@@ -77,8 +77,8 @@ namespace economy_sim
             this.Controls.Add(listBoxProjects);
             this.Controls.Add(labelType);
             this.Controls.Add(comboBoxType);
-            this.Controls.Add(labelCost);
-            this.Controls.Add(numericCost);
+            this.Controls.Add(labelBudget);
+            this.Controls.Add(numericBudget);
             this.Controls.Add(labelDuration);
             this.Controls.Add(numericDuration);
             this.Controls.Add(labelOutput);
@@ -108,7 +108,7 @@ namespace economy_sim
             }
             foreach (var p in currentCity.ActiveProjects)
             {
-                listBoxProjects.Items.Add($"{p.Type} - {p.Progress}/{p.Duration} days, Cost {p.Cost}, Output {p.Output}");
+                listBoxProjects.Items.Add($"{p.Type} - {p.Progress}/{p.Duration} days, Budget Left {p.BudgetRemaining}, Output {p.Output}");
             }
         }
 
@@ -116,10 +116,20 @@ namespace economy_sim
         {
             if (currentCity == null) return;
             var type = (ProjectType)Enum.Parse(typeof(ProjectType), comboBoxType.SelectedItem.ToString());
-            decimal cost = numericCost.Value;
+            decimal budget = numericBudget.Value;
             int dur = (int)numericDuration.Value;
             double output = (double)numericOutput.Value;
-            var proj = new ConstructionProject(type, cost, dur, output);
+            decimal minBudget = ConstructionProject.MinimumDailyBudget * dur;
+            if (budget < minBudget)
+            {
+                MessageBox.Show($"Budget must be at least {minBudget}", "Invalid Budget", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            string resource = type == ProjectType.Housing ? "Timber" : "Steel";
+            int resPerDay = type == ProjectType.Housing ? 5 : 3;
+
+            var proj = new ConstructionProject(type, budget, dur, output, resource, resPerDay);
             currentCity.StartConstructionProject(proj);
             UpdateProjects();
         }

@@ -20,13 +20,13 @@ namespace StrategyGame
 
         public bool StartProject(ConstructionProject project)
         {
-            if (Budget < project.Cost)
+            if (Budget < project.Budget)
             {
                 return false; // Not enough budget to start the project
             }
 
             Projects.Add(project);
-            Budget -= project.Cost; // Deduct the cost upfront
+            Budget -= project.Budget; // Deduct the cost upfront
             return true;
         }
 
@@ -34,9 +34,9 @@ namespace StrategyGame
         {
             foreach (var project in Projects.ToList())
             {
-                if (project.ProgressProject(days, Budget))
+                if (project.ProgressProject(days, project.Budget / project.Duration))
                 {
-                    Budget -= project.Cost / project.Duration * days; // Deduct cost for the progress made
+                    Budget -= project.Budget / project.Duration * days; // Deduct cost for the progress made
 
                     if (project.IsComplete())
                     {
