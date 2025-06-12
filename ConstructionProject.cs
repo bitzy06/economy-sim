@@ -15,7 +15,10 @@ namespace StrategyGame
         // Budget is the total amount allocated for the project. It is spent
         // gradually during construction rather than paid up front.
         public decimal Budget { get; private set; }
-        public decimal BudgetRemaining { get; private set; }
+        // Allow other classes to update the remaining budget as costs are paid
+        // over time. Previously the setter was private which caused a compiler
+        // error when other classes attempted to deduct costs.
+        public decimal BudgetRemaining { get; set; }
         public int Duration { get; private set; } // Duration in days
         public int Progress { get; private set; } // Progress in days completed
         public double Output { get; private set; } // Output (e.g., housing units or kilometers of railway)
