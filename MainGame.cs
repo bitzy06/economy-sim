@@ -107,6 +107,8 @@ namespace economy_sim
             // Initialize and populate Finance tab
             InitializeFinanceTab();
             UpdateFinanceTab();
+            InitializeCompaniesTab();
+            UpdateCompaniesTab();
 
             UpdateOrderLists();
             timerSim.Tick += TimerSim_Tick;
@@ -326,6 +328,10 @@ namespace economy_sim
                                 currentCity.Budget = cityData.InitialBudget;
                                 currentCity.TaxRate = cityData.TaxRate;
                                 currentCity.CityExpenses = cityData.CityExpenses;
+                                // Add a basic suburb so housing and rail infrastructure exist
+                                var suburb = new Suburb($"{cityData.Name} Center", cityData.InitialPopulation,
+                                    cityData.InitialPopulation * 1.2, 0.75);
+                                currentCity.AddSuburb(suburb);
                                 // City constructor handles PopClasses and initial market dicts.
 
                                 if (cityData.InitialFactories != null)
@@ -480,6 +486,9 @@ namespace economy_sim
             defaultCity.Budget = defaultState.Budget * 0.2; // Example budget portion
             defaultCity.TaxRate = 0.05;
             defaultCity.CityExpenses = 1000;
+            var defaultSuburb = new Suburb($"{defaultCity.Name} Center", defaultCity.Population,
+                defaultCity.Population * 1.2, 0.75);
+            defaultCity.AddSuburb(defaultSuburb);
             
             // Add a basic farm to the default city
             StrategyGame.FactoryBlueprint farmBlueprint = StrategyGame.FactoryBlueprints.AllBlueprints.FirstOrDefault(bp => bp.FactoryTypeName == "Grain Farm");
@@ -780,6 +789,8 @@ namespace economy_sim
                         factory.Produce(city.Stockpile, city); 
                     }
                     StrategyGame.Economy.UpdateCityEconomy(city); // Populates ImportNeeds and ExportableSurplus
+                    city.EvaluateConstructionNeeds();
+
                     city.ProgressConstruction();
                     if (constructionForm.Visible && constructionForm.CurrentCity == city)
                     {
@@ -975,15 +986,20 @@ namespace economy_sim
             UpdateCountryStats();
 
             if (cityCurrentlySelectedForUI != null) // Use the city selected at start of tick for populating forms
-            { 
+            {
                 if (popStatsForm != null && popStatsForm.Visible)
                 {
                     popStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
                 }
-                if (factoryStatsForm != null && factoryStatsForm.Visible) 
+
+                if (factoryStatsForm != null && factoryStatsForm.Visible)
                 {
                     factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
                 }
+            }
+            else if (tabControlMain.SelectedTab == tabPageCompanies)
+            {
+                UpdateCompaniesTab();
             }
             firstTick = false;
 
@@ -999,12 +1015,6 @@ namespace economy_sim
             {
                 country.FinancialSystem.SimulateMonetaryEffects();
                 DebugLogger.LogFinancialData(country.FinancialSystem, country.Name);
-            }
-
-            // Refresh finance tab if it's visible so data stays current
-            if (tabControlMain.SelectedTab == tabPageFinance)
-            {
-                UpdateFinanceTab();
             }
 
             // Refresh finance tab if it's visible so data stays current
@@ -1311,6 +1321,11 @@ namespace economy_sim
             }
 
             UpdateCountryStats();
+
+            if (tabControlMain.SelectedTab == tabPageCompanies)
+            {
+                UpdateCompaniesTab();
+            }
         }
 
         private void TabControlMain_SelectedIndexChanged(object sender, EventArgs e)
@@ -1766,8 +1781,9 @@ namespace economy_sim
                 item.SubItems.Add(fs.DebtToGdpRatio.ToString("P"));
                 item.SubItems.Add(fs.InflationRate.ToString("P"));
                 item.SubItems.Add(fs.CreditRating.ToString("P"));
+
                 listViewFinance.Items.Add(item);
-                
+
                 // Highlight player's country
                 if (country == playerCountry)
                 {
@@ -1776,6 +1792,36 @@ namespace economy_sim
             }
 
             // Bond information no longer displayed
+        }
+
+        private void InitializeCompaniesTab()
+        {
+            listViewCompanies.Columns.Add("Company", 150);
+            listViewCompanies.Columns.Add("Budget", 100);
+            listViewCompanies.Columns.Add("Workers", 80);
+        }
+
+        private void UpdateCompaniesTab()
+        {
+            listViewCompanies.Items.Clear();
+
+            foreach (var corp in Market.AllCorporations)
+            {
+                int workers = corp.OwnedFactories.Sum(f => f.WorkersEmployed);
+                var item = new ListViewItem(corp.Name);
+                item.SubItems.Add(corp.Budget.ToString("C"));
+                item.SubItems.Add(workers.ToString());
+                listViewCompanies.Items.Add(item);
+            }
+
+            foreach (var firm in Market.AllConstructionCompanies)
+            {
+                if (Market.AllCorporations.Contains(firm)) continue; // avoid duplication
+                var item = new ListViewItem(firm.Name);
+                item.SubItems.Add(firm.Budget.ToString("C"));
+                item.SubItems.Add(firm.Workers.ToString());
+                listViewCompanies.Items.Add(item);
+            }
         }
 
         private void InitializeFinanceTab()
