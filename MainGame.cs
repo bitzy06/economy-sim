@@ -51,7 +51,6 @@ namespace economy_sim
         public MainGame()
         {
             InitializeComponent();
-            // Removed call to non-existent InitializeDebugControls()
             playerRoleManager = new PlayerRoleManager();
             allCitiesInWorld = new List<StrategyGame.City>();
             allCountries = new List<StrategyGame.Country>();
@@ -1406,148 +1405,34 @@ namespace economy_sim
         // Initialize Debug tab UI
         private void InitializeDebugTab()
         {
-            // Debug logging toggle button
-            Button buttonToggleDebug = new Button
-            {
-                Location = new Point(20, 20),
-                Size = new Size(150, 30),
-                Text = "Toggle Debug Logging: ON"
-            };
-            buttonToggleDebug.Click += (s, e) => {
-                bool isEnabled = DebugLogger.ToggleLogging();
-                buttonToggleDebug.Text = $"Toggle Debug Logging: {(isEnabled ? "ON" : "OFF")}";
-                DebugLogger.Log($"Debug logging has been {(isEnabled ? "enabled" : "disabled")}");
-            };
-            tabPageDebug.Controls.Add(buttonToggleDebug);
+            // Hide entity selection boxes until a role is chosen
+            comboBoxCountrySelection.Visible = false;
+            comboBoxStateSelection.Visible = false;
+            comboBoxCorporationSelection.Visible = false;
 
-            // Current role status (moved down)
-            labelCurrentRole = new Label
-            {
-                Location = new Point(20, 60),
-                AutoSize = true,
-                Text = "Current Role: None"
-            };
-            tabPageDebug.Controls.Add(labelCurrentRole);
-            
-            // Role type selection
-            Label labelRoleType = new Label
-            {
-                Location = new Point(20, 100),
-                AutoSize = true,
-                Text = "Select Role:"
-            };
-            tabPageDebug.Controls.Add(labelRoleType);
-            
-            comboBoxRoleType = new ComboBox
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 21),
-                DropDownStyle = ComboBoxStyle.DropDownList
-            };
-            comboBoxRoleType.Items.AddRange(new object[] { "Prime Minister", "Governor", "CEO" });
-            comboBoxRoleType.SelectedIndexChanged += ComboBoxRoleType_SelectedIndexChanged;
-            tabPageDebug.Controls.Add(comboBoxRoleType);
-            
-            // Entity selection (country, state, corporation)
-            labelEntitySelection = new Label
-            {
-                Location = new Point(20, 100),
-                AutoSize = true,
-                Text = "Select Entity:"
-            };
-            tabPageDebug.Controls.Add(labelEntitySelection);
-            
-            // Country selection for Prime Minister role
-            comboBoxCountrySelection = new ComboBox
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 21),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Visible = false // Initially hidden
-            };
-            tabPageDebug.Controls.Add(comboBoxCountrySelection);
-            
-            // State selection for Governor role
-            comboBoxStateSelection = new ComboBox
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 21),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Visible = false // Initially hidden
-            };
-            tabPageDebug.Controls.Add(comboBoxStateSelection);
-            
-            // Corporation selection for CEO role
-            comboBoxCorporationSelection = new ComboBox
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 21),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Visible = false // Initially hidden
-            };
-            tabPageDebug.Controls.Add(comboBoxCorporationSelection);
-            
-            // Buttons for role management
-            buttonAssumeRole = new Button
-            {
-                Location = new Point(120, 140),
-                Size = new Size(100, 30),
-                Text = "Assume Role",
-                Enabled = false // Initially disabled until a selection is made
-            };
-            buttonAssumeRole.Click += ButtonAssumeRole_Click;
-            tabPageDebug.Controls.Add(buttonAssumeRole);
-            
-            buttonRelinquishRole = new Button
-            {
-                Location = new Point(230, 140),
-                Size = new Size(120, 30),
-                Text = "Relinquish Role"
-            };
-            buttonRelinquishRole.Click += ButtonRelinquishRole_Click;
-            tabPageDebug.Controls.Add(buttonRelinquishRole);
-            
-            // Add additional role-specific information panel
-            Label labelRoleInfo = new Label
-            {
-                Location = new Point(20, 190),
-                Size = new Size(400, 200),
-                Text = "Debug Information:\nUse this panel to switch between different roles and countries/states/corporations for testing purposes.",
-                BorderStyle = BorderStyle.FixedSingle,
-                BackColor = Color.LightYellow
-            };
-            tabPageDebug.Controls.Add(labelRoleInfo);
-            
-            // Initial population of comboboxes
+            // Populate selection lists
             PopulateCountrySelectionComboBox();
             PopulateStateSelectionComboBox();
             PopulateCorporationSelectionComboBox();
-            
-            // Update current role display
+
+            // Show initial role text
             UpdateCurrentRoleDisplay();
 
-            // Debug mode toggle button
+            // Extra toggle for detailed debug output
             Button buttonToggleDebugMode = new Button
             {
-                Location = new Point(20, 100),
-                Size = new Size(200, 30),
+                Location = new Point(10, 280),
+                Size = new Size(120, 23),
                 Text = "Toggle Debug Mode"
             };
             buttonToggleDebugMode.Click += (sender, e) =>
             {
                 isDetailedDebugMode = !isDetailedDebugMode;
-                MessageBox.Show(isDetailedDebugMode ? "Detailed Debug Mode Enabled" : "General Debug Mode Enabled", "Debug Mode Toggled");
+                MessageBox.Show(
+                    isDetailedDebugMode ? "Detailed Debug Mode Enabled" : "General Debug Mode Enabled",
+                    "Debug Mode Toggled");
             };
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
-
-            // Finance ListView setup
-            listViewFinance.Columns.Add("Country", 120);
-            listViewFinance.Columns.Add("Money Supply", 100);
-            listViewFinance.Columns.Add("Reserves", 100);
-            listViewFinance.Columns.Add("Base Rate", 80);
-            listViewFinance.Columns.Add("Debt/GDP", 80);
-            listViewFinance.Columns.Add("Inflation", 80);
-            listViewFinance.Columns.Add("Credit Rating", 80);
         }
     
         // Populate the country selection combobox
