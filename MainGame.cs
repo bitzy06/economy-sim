@@ -25,6 +25,7 @@ namespace economy_sim
         private Button buttonShowPopStats;
         private PopStatsForm popStatsForm;
         private FactoryStatsForm factoryStatsForm;
+        private ConstructionForm constructionForm;
         private List<State> states;
         private PlayerRoleManager playerRoleManager;
         private Random random = new Random(); // Add a Random instance for AI and other uses
@@ -132,7 +133,8 @@ namespace economy_sim
             }
             
             popStatsForm = new PopStatsForm();
-            factoryStatsForm = new FactoryStatsForm(); 
+            factoryStatsForm = new FactoryStatsForm();
+            constructionForm = new ConstructionForm();
             tabControlMain.SelectedIndexChanged += TabControlMain_SelectedIndexChanged;
 
             // Setup ListBoxes for owner-drawing
@@ -158,6 +160,22 @@ namespace economy_sim
             {
                  this.tabPageCity.Controls.Add(buttonShowFactoryStats);
                  buttonShowFactoryStats.BringToFront(); // Ensure it's on top
+            }
+
+            Button buttonShowConstruction = new Button();
+            buttonShowConstruction.Text = "Construction";
+            buttonShowConstruction.Location = new System.Drawing.Point(buttonShowFactoryStats.Right + 10, buttonsTargetY);
+            buttonShowConstruction.Size = new System.Drawing.Size(120, 23);
+            buttonShowConstruction.Click += ButtonShowConstruction_Click;
+            if (this.tabControlMain.TabPages.ContainsKey("tabPageCity"))
+            {
+                this.tabControlMain.TabPages["tabPageCity"].Controls.Add(buttonShowConstruction);
+                buttonShowConstruction.BringToFront();
+            }
+            else if (this.tabPageCity != null)
+            {
+                 this.tabPageCity.Controls.Add(buttonShowConstruction);
+                 buttonShowConstruction.BringToFront();
             }
             
             // Example: Assign player a starting role for testing
@@ -1116,6 +1134,18 @@ namespace economy_sim
                 factoryStatsForm.UpdateStats(city);
                 factoryStatsForm.Show();
                 factoryStatsForm.BringToFront();
+            }
+        }
+
+        private void ButtonShowConstruction_Click(object sender, EventArgs e)
+        {
+            var city = GetSelectedCity();
+            if (city != null)
+            {
+                constructionForm.SetCity(city);
+                constructionForm.UpdateProjects();
+                constructionForm.Show();
+                constructionForm.BringToFront();
             }
         }
 
