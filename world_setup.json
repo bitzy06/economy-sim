@@ -1,0 +1,6870 @@
+{
+  "Countries": [
+    {
+      "Name": "United States of America",
+      "TaxRate": 0.22,
+      "NationalExpenses": 4930768,
+      "InitialPopulation": 35854996,
+      "InitialBudget": 55212124,
+      "IsPlayerControlled": true,
+      "States": [
+        {
+          "Name": "New York",
+          "TaxRate": 0.04,
+          "StateExpenses": 474055,
+          "InitialPopulation": 4178305,
+          "InitialBudget": 2952435,
+          "Cities": [
+            {
+              "Name": "New York City",
+              "InitialPopulation": 2080906,
+              "InitialBudget": 566352,
+              "TaxRate": 0.03,
+              "CityExpenses": 20737,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Albany",
+              "InitialPopulation": 335446,
+              "InitialBudget": 367819,
+              "TaxRate": 0.03,
+              "CityExpenses": 80016,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Buffalo",
+              "InitialPopulation": 1761953,
+              "InitialBudget": 202243,
+              "TaxRate": 0.02,
+              "CityExpenses": 94485,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "California",
+          "TaxRate": 0.16,
+          "StateExpenses": 354858,
+          "InitialPopulation": 9295622,
+          "InitialBudget": 5110368,
+          "Cities": [
+            {
+              "Name": "San Diego",
+              "InitialPopulation": 4448528,
+              "InitialBudget": 327571,
+              "TaxRate": 0.11,
+              "CityExpenses": 23564,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Los Angeles",
+              "InitialPopulation": 1780303,
+              "InitialBudget": 543461,
+              "TaxRate": 0.06,
+              "CityExpenses": 86084,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Sulphur Mine",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Paper Mill",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "San Francisco",
+              "InitialPopulation": 3066791,
+              "InitialBudget": 474016,
+              "TaxRate": 0.05,
+              "CityExpenses": 26188,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Salt Mine",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Texas",
+          "TaxRate": 0.07,
+          "StateExpenses": 545644,
+          "InitialPopulation": 5391195,
+          "InitialBudget": 6935440,
+          "Cities": [
+            {
+              "Name": "Austin",
+              "InitialPopulation": 118717,
+              "InitialBudget": 298866,
+              "TaxRate": 0.04,
+              "CityExpenses": 25072,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Houston",
+              "InitialPopulation": 4079454,
+              "InitialBudget": 1018605,
+              "TaxRate": 0.03,
+              "CityExpenses": 121640,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Dallas",
+              "InitialPopulation": 1193024,
+              "InitialBudget": 882071,
+              "TaxRate": 0.03,
+              "CityExpenses": 99749,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Illinois",
+          "TaxRate": 0.11,
+          "StateExpenses": 400264,
+          "InitialPopulation": 7617560,
+          "InitialBudget": 4264517,
+          "Cities": [
+            {
+              "Name": "Peoria",
+              "InitialPopulation": 590361,
+              "InitialBudget": 859865,
+              "TaxRate": 0.06,
+              "CityExpenses": 44372,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Springfield",
+              "InitialPopulation": 3053809,
+              "InitialBudget": 651145,
+              "TaxRate": 0.05,
+              "CityExpenses": 16046,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Chicago",
+              "InitialPopulation": 3973390,
+              "InitialBudget": 775000,
+              "TaxRate": 0.08,
+              "CityExpenses": 59988,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pennsylvania",
+          "TaxRate": 0.15,
+          "StateExpenses": 568140,
+          "InitialPopulation": 9372314,
+          "InitialBudget": 2210804,
+          "Cities": [
+            {
+              "Name": "Harrisburg",
+              "InitialPopulation": 1380222,
+              "InitialBudget": 257312,
+              "TaxRate": 0.13,
+              "CityExpenses": 32995,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Pittsburgh",
+              "InitialPopulation": 3330195,
+              "InitialBudget": 310594,
+              "TaxRate": 0.06,
+              "CityExpenses": 67981,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Philadelphia",
+              "InitialPopulation": 4661897,
+              "InitialBudget": 109370,
+              "TaxRate": 0.04,
+              "CityExpenses": 98660,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "German Empire",
+      "TaxRate": 0.11,
+      "NationalExpenses": 17373966,
+      "InitialPopulation": 27537869,
+      "InitialBudget": 65237244,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Prussia",
+          "TaxRate": 0.06,
+          "StateExpenses": 1173145,
+          "InitialPopulation": 5509189,
+          "InitialBudget": 3771934,
+          "Cities": [
+            {
+              "Name": "Berlin",
+              "InitialPopulation": 1861179,
+              "InitialBudget": 396692,
+              "TaxRate": 0.02,
+              "CityExpenses": 107620,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Konigsberg",
+              "InitialPopulation": 2944696,
+              "InitialBudget": 281151,
+              "TaxRate": 0.04,
+              "CityExpenses": 147388,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Danzig",
+              "InitialPopulation": 703314,
+              "InitialBudget": 522735,
+              "TaxRate": 0.02,
+              "CityExpenses": 162362,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Salt Mine",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Bavaria",
+          "TaxRate": 0.08,
+          "StateExpenses": 874663,
+          "InitialPopulation": 5324290,
+          "InitialBudget": 7691703,
+          "Cities": [
+            {
+              "Name": "Augsburg",
+              "InitialPopulation": 1780117,
+              "InitialBudget": 190174,
+              "TaxRate": 0.06,
+              "CityExpenses": 94970,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Munich",
+              "InitialPopulation": 3280775,
+              "InitialBudget": 868417,
+              "TaxRate": 0.04,
+              "CityExpenses": 44198,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Nuremberg",
+              "InitialPopulation": 263398,
+              "InitialBudget": 441200,
+              "TaxRate": 0.04,
+              "CityExpenses": 18533,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Saxony",
+          "TaxRate": 0.07,
+          "StateExpenses": 1606772,
+          "InitialPopulation": 4601644,
+          "InitialBudget": 6923100,
+          "Cities": [
+            {
+              "Name": "Chemnitz",
+              "InitialPopulation": 3278628,
+              "InitialBudget": 1428307,
+              "TaxRate": 0.05,
+              "CityExpenses": 377564,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Dresden",
+              "InitialPopulation": 369833,
+              "InitialBudget": 517608,
+              "TaxRate": 0.03,
+              "CityExpenses": 151269,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Leipzig",
+              "InitialPopulation": 953183,
+              "InitialBudget": 1013993,
+              "TaxRate": 0.05,
+              "CityExpenses": 93979,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "W\u00fcrttemberg",
+          "TaxRate": 0.07,
+          "StateExpenses": 1606672,
+          "InitialPopulation": 4935625,
+          "InitialBudget": 4187153,
+          "Cities": [
+            {
+              "Name": "Ulm",
+              "InitialPopulation": 909237,
+              "InitialBudget": 363320,
+              "TaxRate": 0.05,
+              "CityExpenses": 224357,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Heilbronn",
+              "InitialPopulation": 3584535,
+              "InitialBudget": 651452,
+              "TaxRate": 0.05,
+              "CityExpenses": 127633,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Stuttgart",
+              "InitialPopulation": 441853,
+              "InitialBudget": 496328,
+              "TaxRate": 0.04,
+              "CityExpenses": 244344,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Alsace-Lorraine",
+          "TaxRate": 0.04,
+          "StateExpenses": 909270,
+          "InitialPopulation": 7167121,
+          "InitialBudget": 3874807,
+          "Cities": [
+            {
+              "Name": "Metz",
+              "InitialPopulation": 688593,
+              "InitialBudget": 118647,
+              "TaxRate": 0.02,
+              "CityExpenses": 89965,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Mulhouse",
+              "InitialPopulation": 3148806,
+              "InitialBudget": 524653,
+              "TaxRate": 0.03,
+              "CityExpenses": 28127,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Explosives Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Strasbourg",
+              "InitialPopulation": 3329722,
+              "InitialBudget": 119101,
+              "TaxRate": 0.02,
+              "CityExpenses": 137964,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Cotton Plantation",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Empire of Japan",
+      "TaxRate": 0.08,
+      "NationalExpenses": 5288580,
+      "InitialPopulation": 31476227,
+      "InitialBudget": 59260588,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Kanto",
+          "TaxRate": 0.05,
+          "StateExpenses": 309569,
+          "InitialPopulation": 4325755,
+          "InitialBudget": 6298260,
+          "Cities": [
+            {
+              "Name": "Yokohama",
+              "InitialPopulation": 1050533,
+              "InitialBudget": 519330,
+              "TaxRate": 0.03,
+              "CityExpenses": 43639,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Chiba",
+              "InitialPopulation": 1257837,
+              "InitialBudget": 1010118,
+              "TaxRate": 0.02,
+              "CityExpenses": 31163,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Tokyo",
+              "InitialPopulation": 2017385,
+              "InitialBudget": 152998,
+              "TaxRate": 0.02,
+              "CityExpenses": 34687,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Kansai",
+          "TaxRate": 0.05,
+          "StateExpenses": 472177,
+          "InitialPopulation": 3777652,
+          "InitialBudget": 4132479,
+          "Cities": [
+            {
+              "Name": "Kyoto",
+              "InitialPopulation": 1856907,
+              "InitialBudget": 822609,
+              "TaxRate": 0.02,
+              "CityExpenses": 60674,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Kobe",
+              "InitialPopulation": 1331057,
+              "InitialBudget": 305062,
+              "TaxRate": 0.03,
+              "CityExpenses": 16255,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Explosives Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Osaka",
+              "InitialPopulation": 589688,
+              "InitialBudget": 551669,
+              "TaxRate": 0.04,
+              "CityExpenses": 16624,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cotton Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Kyushu",
+          "TaxRate": 0.05,
+          "StateExpenses": 464362,
+          "InitialPopulation": 9345754,
+          "InitialBudget": 8436641,
+          "Cities": [
+            {
+              "Name": "Fukuoka",
+              "InitialPopulation": 1973507,
+              "InitialBudget": 1204393,
+              "TaxRate": 0.04,
+              "CityExpenses": 34512,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Nagasaki",
+              "InitialPopulation": 2873300,
+              "InitialBudget": 202977,
+              "TaxRate": 0.03,
+              "CityExpenses": 66286,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Kumamoto",
+              "InitialPopulation": 4498947,
+              "InitialBudget": 98355,
+              "TaxRate": 0.03,
+              "CityExpenses": 60472,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Brass Foundry",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Hokkaido",
+          "TaxRate": 0.04,
+          "StateExpenses": 434383,
+          "InitialPopulation": 5936037,
+          "InitialBudget": 1599479,
+          "Cities": [
+            {
+              "Name": "Asahikawa",
+              "InitialPopulation": 531997,
+              "InitialBudget": 94432,
+              "TaxRate": 0.03,
+              "CityExpenses": 83002,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cotton Plantation",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Sapporo",
+              "InitialPopulation": 4040361,
+              "InitialBudget": 210766,
+              "TaxRate": 0.02,
+              "CityExpenses": 11622,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Brass Foundry",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Hakodate",
+              "InitialPopulation": 1363679,
+              "InitialBudget": 135531,
+              "TaxRate": 0.02,
+              "CityExpenses": 31930,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Rubber Plantation",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Chugoku",
+          "TaxRate": 0.05,
+          "StateExpenses": 353591,
+          "InitialPopulation": 8091029,
+          "InitialBudget": 4332896,
+          "Cities": [
+            {
+              "Name": "Yamaguchi",
+              "InitialPopulation": 568413,
+              "InitialBudget": 222158,
+              "TaxRate": 0.03,
+              "CityExpenses": 53141,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Okayama",
+              "InitialPopulation": 4136552,
+              "InitialBudget": 721697,
+              "TaxRate": 0.03,
+              "CityExpenses": 55925,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Sulphur Mine",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Hiroshima",
+              "InitialPopulation": 3386064,
+              "InitialBudget": 325538,
+              "TaxRate": 0.04,
+              "CityExpenses": 36040,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Paper Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Republic of Brazil",
+      "TaxRate": 0.18,
+      "NationalExpenses": 18907454,
+      "InitialPopulation": 42778873,
+      "InitialBudget": 98551938,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Rio de Janeiro State",
+          "TaxRate": 0.06,
+          "StateExpenses": 1742320,
+          "InitialPopulation": 6278610,
+          "InitialBudget": 13335717,
+          "Cities": [
+            {
+              "Name": "Petr\u00f3polis",
+              "InitialPopulation": 2640508,
+              "InitialBudget": 2010623,
+              "TaxRate": 0.03,
+              "CityExpenses": 159232,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Meat Packing Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Explosives Factory",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Niter\u00f3i",
+              "InitialPopulation": 2140053,
+              "InitialBudget": 578848,
+              "TaxRate": 0.04,
+              "CityExpenses": 207268,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Rio de Janeiro City",
+              "InitialPopulation": 1498049,
+              "InitialBudget": 1961959,
+              "TaxRate": 0.02,
+              "CityExpenses": 258548,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coal Mine",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "S\u00e3o Paulo State",
+          "TaxRate": 0.09,
+          "StateExpenses": 483411,
+          "InitialPopulation": 8598905,
+          "InitialBudget": 8939917,
+          "Cities": [
+            {
+              "Name": "S\u00e3o Paulo City",
+              "InitialPopulation": 2727934,
+              "InitialBudget": 370463,
+              "TaxRate": 0.03,
+              "CityExpenses": 86395,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Explosives Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Campinas",
+              "InitialPopulation": 3619366,
+              "InitialBudget": 783302,
+              "TaxRate": 0.03,
+              "CityExpenses": 21064,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Santos",
+              "InitialPopulation": 2251605,
+              "InitialBudget": 707352,
+              "TaxRate": 0.06,
+              "CityExpenses": 52152,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Minas Gerais",
+          "TaxRate": 0.14,
+          "StateExpenses": 214073,
+          "InitialPopulation": 9946204,
+          "InitialBudget": 5425960,
+          "Cities": [
+            {
+              "Name": "Ouro Preto",
+              "InitialPopulation": 2671496,
+              "InitialBudget": 841152,
+              "TaxRate": 0.13,
+              "CityExpenses": 51137,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Plantation",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Belo Horizonte",
+              "InitialPopulation": 2467179,
+              "InitialBudget": 283160,
+              "TaxRate": 0.04,
+              "CityExpenses": 35438,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Juiz de Fora",
+              "InitialPopulation": 4807529,
+              "InitialBudget": 1240966,
+              "TaxRate": 0.13,
+              "CityExpenses": 16129,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Bahia",
+          "TaxRate": 0.09,
+          "StateExpenses": 2456328,
+          "InitialPopulation": 7621074,
+          "InitialBudget": 9602878,
+          "Cities": [
+            {
+              "Name": "Salvador",
+              "InitialPopulation": 3644463,
+              "InitialBudget": 1501550,
+              "TaxRate": 0.03,
+              "CityExpenses": 217599,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Feira de Santana",
+              "InitialPopulation": 460499,
+              "InitialBudget": 1427030,
+              "TaxRate": 0.07,
+              "CityExpenses": 82733,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Vit\u00f3ria da Conquista",
+              "InitialPopulation": 3516112,
+              "InitialBudget": 834785,
+              "TaxRate": 0.08,
+              "CityExpenses": 280346,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Pernambuco",
+          "TaxRate": 0.05,
+          "StateExpenses": 521835,
+          "InitialPopulation": 10334080,
+          "InitialBudget": 10260938,
+          "Cities": [
+            {
+              "Name": "Caruaru",
+              "InitialPopulation": 4178297,
+              "InitialBudget": 427517,
+              "TaxRate": 0.03,
+              "CityExpenses": 24153,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Olinda",
+              "InitialPopulation": 2518499,
+              "InitialBudget": 689471,
+              "TaxRate": 0.03,
+              "CityExpenses": 38745,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sulphur Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Recife",
+              "InitialPopulation": 3637284,
+              "InitialBudget": 319303,
+              "TaxRate": 0.03,
+              "CityExpenses": 70324,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "United Kingdom",
+      "TaxRate": 0.05,
+      "NationalExpenses": 10292189,
+      "InitialPopulation": 36559952,
+      "InitialBudget": 34768588,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "England",
+          "TaxRate": 0.04,
+          "StateExpenses": 109095,
+          "InitialPopulation": 6741956,
+          "InitialBudget": 978919,
+          "Cities": [
+            {
+              "Name": "London",
+              "InitialPopulation": 725409,
+              "InitialBudget": 112260,
+              "TaxRate": 0.03,
+              "CityExpenses": 17273,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Birmingham",
+              "InitialPopulation": 1266861,
+              "InitialBudget": 71734,
+              "TaxRate": 0.03,
+              "CityExpenses": 11793,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Manchester",
+              "InitialPopulation": 4749686,
+              "InitialBudget": 135192,
+              "TaxRate": 0.02,
+              "CityExpenses": 12376,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Scotland",
+          "TaxRate": 0.04,
+          "StateExpenses": 463429,
+          "InitialPopulation": 8106967,
+          "InitialBudget": 2489569,
+          "Cities": [
+            {
+              "Name": "Glasgow",
+              "InitialPopulation": 357883,
+              "InitialBudget": 343452,
+              "TaxRate": 0.03,
+              "CityExpenses": 34657,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Edinburgh",
+              "InitialPopulation": 4117155,
+              "InitialBudget": 329337,
+              "TaxRate": 0.02,
+              "CityExpenses": 12366,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Aberdeen",
+              "InitialPopulation": 3631929,
+              "InitialBudget": 60013,
+              "TaxRate": 0.02,
+              "CityExpenses": 14502,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Wales",
+          "TaxRate": 0.04,
+          "StateExpenses": 866137,
+          "InitialPopulation": 7235060,
+          "InitialBudget": 1294717,
+          "Cities": [
+            {
+              "Name": "Newport",
+              "InitialPopulation": 2009015,
+              "InitialBudget": 111728,
+              "TaxRate": 0.03,
+              "CityExpenses": 125055,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Swansea",
+              "InitialPopulation": 2889134,
+              "InitialBudget": 241786,
+              "TaxRate": 0.03,
+              "CityExpenses": 82832,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Cardiff",
+              "InitialPopulation": 2336911,
+              "InitialBudget": 96694,
+              "TaxRate": 0.03,
+              "CityExpenses": 64384,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Ireland (Whole Island)",
+          "TaxRate": 0.04,
+          "StateExpenses": 1395255,
+          "InitialPopulation": 5941992,
+          "InitialBudget": 1876482,
+          "Cities": [
+            {
+              "Name": "Dublin",
+              "InitialPopulation": 491495,
+              "InitialBudget": 62159,
+              "TaxRate": 0.02,
+              "CityExpenses": 257585,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Belfast",
+              "InitialPopulation": 3095538,
+              "InitialBudget": 398384,
+              "TaxRate": 0.02,
+              "CityExpenses": 127472,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Cork",
+              "InitialPopulation": 2354959,
+              "InitialBudget": 349531,
+              "TaxRate": 0.03,
+              "CityExpenses": 310793,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Northumbria",
+          "TaxRate": 0.04,
+          "StateExpenses": 764527,
+          "InitialPopulation": 8533977,
+          "InitialBudget": 1176950,
+          "Cities": [
+            {
+              "Name": "Sunderland",
+              "InitialPopulation": 3275562,
+              "InitialBudget": 204463,
+              "TaxRate": 0.02,
+              "CityExpenses": 139635,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Durham",
+              "InitialPopulation": 3978071,
+              "InitialBudget": 146936,
+              "TaxRate": 0.03,
+              "CityExpenses": 150141,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Newcastle",
+              "InitialPopulation": 1280344,
+              "InitialBudget": 187200,
+              "TaxRate": 0.02,
+              "CityExpenses": 42272,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "French Republic",
+      "TaxRate": 0.13,
+      "NationalExpenses": 12330892,
+      "InitialPopulation": 34075718,
+      "InitialBudget": 74726997,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "\u00cele-de-France",
+          "TaxRate": 0.11,
+          "StateExpenses": 492913,
+          "InitialPopulation": 4331382,
+          "InitialBudget": 9848419,
+          "Cities": [
+            {
+              "Name": "Paris",
+              "InitialPopulation": 390310,
+              "InitialBudget": 1468046,
+              "TaxRate": 0.05,
+              "CityExpenses": 71127,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Versailles",
+              "InitialPopulation": 3541757,
+              "InitialBudget": 1008782,
+              "TaxRate": 0.09,
+              "CityExpenses": 70756,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Saint-Denis",
+              "InitialPopulation": 399315,
+              "InitialBudget": 334755,
+              "TaxRate": 0.1,
+              "CityExpenses": 81885,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Provence-Alpes-C\u00f4te d'Azur",
+          "TaxRate": 0.07,
+          "StateExpenses": 1563313,
+          "InitialPopulation": 3066346,
+          "InitialBudget": 6488735,
+          "Cities": [
+            {
+              "Name": "Nice",
+              "InitialPopulation": 1110933,
+              "InitialBudget": 362646,
+              "TaxRate": 0.06,
+              "CityExpenses": 196514,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Salt Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Marseille",
+              "InitialPopulation": 1808230,
+              "InitialBudget": 517146,
+              "TaxRate": 0.05,
+              "CityExpenses": 35108,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Paper Mill",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Toulon",
+              "InitialPopulation": 147183,
+              "InitialBudget": 744959,
+              "TaxRate": 0.02,
+              "CityExpenses": 223605,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Occitanie",
+          "TaxRate": 0.08,
+          "StateExpenses": 398256,
+          "InitialPopulation": 10573763,
+          "InitialBudget": 10020337,
+          "Cities": [
+            {
+              "Name": "N\u00eemes",
+              "InitialPopulation": 2143658,
+              "InitialBudget": 812712,
+              "TaxRate": 0.03,
+              "CityExpenses": 30514,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Toulouse",
+              "InitialPopulation": 3793080,
+              "InitialBudget": 1242156,
+              "TaxRate": 0.05,
+              "CityExpenses": 37874,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Plantation",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Montpellier",
+              "InitialPopulation": 4637025,
+              "InitialBudget": 777922,
+              "TaxRate": 0.04,
+              "CityExpenses": 48053,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Auvergne-Rh\u00f4ne-Alpes",
+          "TaxRate": 0.09,
+          "StateExpenses": 56654,
+          "InitialPopulation": 10521592,
+          "InitialBudget": 7105316,
+          "Cities": [
+            {
+              "Name": "Grenoble",
+              "InitialPopulation": 3358174,
+              "InitialBudget": 1017111,
+              "TaxRate": 0.04,
+              "CityExpenses": 12769,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Saint-\u00c9tienne",
+              "InitialPopulation": 2311906,
+              "InitialBudget": 574804,
+              "TaxRate": 0.03,
+              "CityExpenses": 10443,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Lyon",
+              "InitialPopulation": 4851512,
+              "InitialBudget": 1773363,
+              "TaxRate": 0.04,
+              "CityExpenses": 12609,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Explosives Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Brittany",
+          "TaxRate": 0.07,
+          "StateExpenses": 510918,
+          "InitialPopulation": 5582635,
+          "InitialBudget": 5000244,
+          "Cities": [
+            {
+              "Name": "Nantes",
+              "InitialPopulation": 1323641,
+              "InitialBudget": 346595,
+              "TaxRate": 0.05,
+              "CityExpenses": 124223,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Brest",
+              "InitialPopulation": 3788084,
+              "InitialBudget": 837952,
+              "TaxRate": 0.03,
+              "CityExpenses": 82450,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Rennes",
+              "InitialPopulation": 470910,
+              "InitialBudget": 575047,
+              "TaxRate": 0.05,
+              "CityExpenses": 104381,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Russian Empire",
+      "TaxRate": 0.12,
+      "NationalExpenses": 6965836,
+      "InitialPopulation": 27881047,
+      "InitialBudget": 28137763,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Moscow Governorate",
+          "TaxRate": 0.09,
+          "StateExpenses": 774287,
+          "InitialPopulation": 4995304,
+          "InitialBudget": 2900330,
+          "Cities": [
+            {
+              "Name": "Ryazan",
+              "InitialPopulation": 180477,
+              "InitialBudget": 621071,
+              "TaxRate": 0.06,
+              "CityExpenses": 25398,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Moscow",
+              "InitialPopulation": 1072410,
+              "InitialBudget": 196463,
+              "TaxRate": 0.03,
+              "CityExpenses": 90344,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Tver",
+              "InitialPopulation": 3742417,
+              "InitialBudget": 211131,
+              "TaxRate": 0.03,
+              "CityExpenses": 32206,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Saint Petersburg Governorate",
+          "TaxRate": 0.06,
+          "StateExpenses": 753026,
+          "InitialPopulation": 6069653,
+          "InitialBudget": 839366,
+          "Cities": [
+            {
+              "Name": "Pskov",
+              "InitialPopulation": 2752475,
+              "InitialBudget": 96915,
+              "TaxRate": 0.05,
+              "CityExpenses": 99535,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Novgorod",
+              "InitialPopulation": 3143279,
+              "InitialBudget": 92795,
+              "TaxRate": 0.04,
+              "CityExpenses": 103658,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Saint Petersburg",
+              "InitialPopulation": 173899,
+              "InitialBudget": 153491,
+              "TaxRate": 0.05,
+              "CityExpenses": 130874,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Paper Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Kiev Governorate",
+          "TaxRate": 0.09,
+          "StateExpenses": 880375,
+          "InitialPopulation": 6935494,
+          "InitialBudget": 657390,
+          "Cities": [
+            {
+              "Name": "Poltava",
+              "InitialPopulation": 2779214,
+              "InitialBudget": 121172,
+              "TaxRate": 0.05,
+              "CityExpenses": 58665,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Kiev",
+              "InitialPopulation": 1946356,
+              "InitialBudget": 78450,
+              "TaxRate": 0.08,
+              "CityExpenses": 85087,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Meat Packing Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Chernigov",
+              "InitialPopulation": 2209924,
+              "InitialBudget": 126330,
+              "TaxRate": 0.03,
+              "CityExpenses": 64034,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Siberia General Governorate",
+          "TaxRate": 0.04,
+          "StateExpenses": 82835,
+          "InitialPopulation": 6482247,
+          "InitialBudget": 1782673,
+          "Cities": [
+            {
+              "Name": "Tomsk",
+              "InitialPopulation": 2475612,
+              "InitialBudget": 134595,
+              "TaxRate": 0.03,
+              "CityExpenses": 11811,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Omsk",
+              "InitialPopulation": 1800482,
+              "InitialBudget": 257698,
+              "TaxRate": 0.03,
+              "CityExpenses": 10099,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Irkutsk",
+              "InitialPopulation": 2206153,
+              "InitialBudget": 138920,
+              "TaxRate": 0.03,
+              "CityExpenses": 11330,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Caucasus Viceroyalty",
+          "TaxRate": 0.1,
+          "StateExpenses": 860907,
+          "InitialPopulation": 3398349,
+          "InitialBudget": 1865754,
+          "Cities": [
+            {
+              "Name": "Yerevan",
+              "InitialPopulation": 1283738,
+              "InitialBudget": 90576,
+              "TaxRate": 0.04,
+              "CityExpenses": 117429,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Cotton Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Baku",
+              "InitialPopulation": 881249,
+              "InitialBudget": 86616,
+              "TaxRate": 0.06,
+              "CityExpenses": 106837,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Tiflis (Tbilisi)",
+              "InitialPopulation": 1233362,
+              "InitialBudget": 197866,
+              "TaxRate": 0.02,
+              "CityExpenses": 79881,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Paper Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Coal Mine",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Austro-Hungarian Empire",
+      "TaxRate": 0.1,
+      "NationalExpenses": 7219205,
+      "InitialPopulation": 39804643,
+      "InitialBudget": 81155157,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Austria Proper",
+          "TaxRate": 0.09,
+          "StateExpenses": 553443,
+          "InitialPopulation": 4851900,
+          "InitialBudget": 11109110,
+          "Cities": [
+            {
+              "Name": "Vienna",
+              "InitialPopulation": 1417263,
+              "InitialBudget": 512873,
+              "TaxRate": 0.03,
+              "CityExpenses": 12809,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Plantation",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Sulphur Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Linz",
+              "InitialPopulation": 1008971,
+              "InitialBudget": 880896,
+              "TaxRate": 0.05,
+              "CityExpenses": 20509,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Salzburg",
+              "InitialPopulation": 2425666,
+              "InitialBudget": 1744569,
+              "TaxRate": 0.03,
+              "CityExpenses": 52365,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Kingdom of Hungary",
+          "TaxRate": 0.08,
+          "StateExpenses": 915166,
+          "InitialPopulation": 6630902,
+          "InitialBudget": 10865216,
+          "Cities": [
+            {
+              "Name": "Budapest",
+              "InitialPopulation": 159620,
+              "InitialBudget": 200691,
+              "TaxRate": 0.03,
+              "CityExpenses": 106213,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Debrecen",
+              "InitialPopulation": 4782022,
+              "InitialBudget": 399444,
+              "TaxRate": 0.03,
+              "CityExpenses": 92759,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sulphur Mine",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Szeged",
+              "InitialPopulation": 1689260,
+              "InitialBudget": 671340,
+              "TaxRate": 0.06,
+              "CityExpenses": 71548,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Kingdom of Bohemia",
+          "TaxRate": 0.09,
+          "StateExpenses": 484807,
+          "InitialPopulation": 4617040,
+          "InitialBudget": 4912911,
+          "Cities": [
+            {
+              "Name": "Brno",
+              "InitialPopulation": 3689835,
+              "InitialBudget": 617269,
+              "TaxRate": 0.06,
+              "CityExpenses": 52083,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Meat Packing Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Prague",
+              "InitialPopulation": 495770,
+              "InitialBudget": 125292,
+              "TaxRate": 0.07,
+              "CityExpenses": 37567,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Pilsen",
+              "InitialPopulation": 431435,
+              "InitialBudget": 511655,
+              "TaxRate": 0.07,
+              "CityExpenses": 74951,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Galicia and Lodomeria",
+          "TaxRate": 0.08,
+          "StateExpenses": 890960,
+          "InitialPopulation": 12248335,
+          "InitialBudget": 6084659,
+          "Cities": [
+            {
+              "Name": "Lviv (Lemberg)",
+              "InitialPopulation": 3684386,
+              "InitialBudget": 880348,
+              "TaxRate": 0.02,
+              "CityExpenses": 168319,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Ternopil",
+              "InitialPopulation": 4999413,
+              "InitialBudget": 201097,
+              "TaxRate": 0.04,
+              "CityExpenses": 50005,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Krakow",
+              "InitialPopulation": 3564536,
+              "InitialBudget": 669273,
+              "TaxRate": 0.04,
+              "CityExpenses": 41013,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Croatia-Slavonia",
+          "TaxRate": 0.09,
+          "StateExpenses": 117464,
+          "InitialPopulation": 11456466,
+          "InitialBudget": 2545125,
+          "Cities": [
+            {
+              "Name": "Osijek",
+              "InitialPopulation": 3924094,
+              "InitialBudget": 172555,
+              "TaxRate": 0.04,
+              "CityExpenses": 13490,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Zagreb (Agram)",
+              "InitialPopulation": 4475588,
+              "InitialBudget": 94463,
+              "TaxRate": 0.06,
+              "CityExpenses": 14058,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Rijeka (Fiume)",
+              "InitialPopulation": 3056784,
+              "InitialBudget": 224702,
+              "TaxRate": 0.02,
+              "CityExpenses": 20549,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sulphur Mine",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Ottoman Empire",
+      "TaxRate": 0.06,
+      "NationalExpenses": 14257438,
+      "InitialPopulation": 33337631,
+      "InitialBudget": 88474403,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Constantinople Vilayet",
+          "TaxRate": 0.05,
+          "StateExpenses": 1347732,
+          "InitialPopulation": 7341088,
+          "InitialBudget": 4231886,
+          "Cities": [
+            {
+              "Name": "Adrianople (Edirne)",
+              "InitialPopulation": 2841459,
+              "InitialBudget": 833311,
+              "TaxRate": 0.04,
+              "CityExpenses": 170066,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Gallipoli",
+              "InitialPopulation": 1795244,
+              "InitialBudget": 820151,
+              "TaxRate": 0.03,
+              "CityExpenses": 212605,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Constantinople (Istanbul)",
+              "InitialPopulation": 2704385,
+              "InitialBudget": 133566,
+              "TaxRate": 0.04,
+              "CityExpenses": 170103,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Anatolia Vilayet",
+          "TaxRate": 0.04,
+          "StateExpenses": 344377,
+          "InitialPopulation": 6439655,
+          "InitialBudget": 7463953,
+          "Cities": [
+            {
+              "Name": "Konya",
+              "InitialPopulation": 4081922,
+              "InitialBudget": 725275,
+              "TaxRate": 0.02,
+              "CityExpenses": 41973,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Ankara",
+              "InitialPopulation": 1181002,
+              "InitialBudget": 337431,
+              "TaxRate": 0.02,
+              "CityExpenses": 21584,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Smyrna (Izmir)",
+              "InitialPopulation": 1176731,
+              "InitialBudget": 151048,
+              "TaxRate": 0.03,
+              "CityExpenses": 11606,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Syria Vilayet",
+          "TaxRate": 0.05,
+          "StateExpenses": 484423,
+          "InitialPopulation": 6579235,
+          "InitialBudget": 9252277,
+          "Cities": [
+            {
+              "Name": "Aleppo",
+              "InitialPopulation": 2102213,
+              "InitialBudget": 306530,
+              "TaxRate": 0.03,
+              "CityExpenses": 46978,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Beirut",
+              "InitialPopulation": 1395459,
+              "InitialBudget": 373391,
+              "TaxRate": 0.04,
+              "CityExpenses": 78291,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Damascus",
+              "InitialPopulation": 3081563,
+              "InitialBudget": 160758,
+              "TaxRate": 0.03,
+              "CityExpenses": 80424,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Egypt Khedivate",
+          "TaxRate": 0.04,
+          "StateExpenses": 323181,
+          "InitialPopulation": 4255986,
+          "InitialBudget": 5543578,
+          "Cities": [
+            {
+              "Name": "Port Said",
+              "InitialPopulation": 329187,
+              "InitialBudget": 879166,
+              "TaxRate": 0.03,
+              "CityExpenses": 44136,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Alexandria",
+              "InitialPopulation": 161597,
+              "InitialBudget": 709933,
+              "TaxRate": 0.02,
+              "CityExpenses": 19686,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Cairo",
+              "InitialPopulation": 3765202,
+              "InitialBudget": 620869,
+              "TaxRate": 0.03,
+              "CityExpenses": 44806,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Rumelia Eyalet",
+          "TaxRate": 0.05,
+          "StateExpenses": 1909322,
+          "InitialPopulation": 8721667,
+          "InitialBudget": 7649767,
+          "Cities": [
+            {
+              "Name": "Monastir (Bitola)",
+              "InitialPopulation": 4573642,
+              "InitialBudget": 210124,
+              "TaxRate": 0.04,
+              "CityExpenses": 177588,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Thessaloniki (Salonica)",
+              "InitialPopulation": 97443,
+              "InitialBudget": 455983,
+              "TaxRate": 0.03,
+              "CityExpenses": 135075,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Skopje (\u00dcsk\u00fcp)",
+              "InitialPopulation": 4050582,
+              "InitialBudget": 1005009,
+              "TaxRate": 0.03,
+              "CityExpenses": 285028,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Meat Packing Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Kingdom of Italy",
+      "TaxRate": 0.13,
+      "NationalExpenses": 8363957,
+      "InitialPopulation": 43177809,
+      "InitialBudget": 67254204,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Piedmont",
+          "TaxRate": 0.06,
+          "StateExpenses": 662541,
+          "InitialPopulation": 8493407,
+          "InitialBudget": 7349825,
+          "Cities": [
+            {
+              "Name": "Alessandria",
+              "InitialPopulation": 4947490,
+              "InitialBudget": 625827,
+              "TaxRate": 0.03,
+              "CityExpenses": 84086,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Turin",
+              "InitialPopulation": 2485536,
+              "InitialBudget": 855595,
+              "TaxRate": 0.04,
+              "CityExpenses": 120410,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Novara",
+              "InitialPopulation": 1060381,
+              "InitialBudget": 573606,
+              "TaxRate": 0.03,
+              "CityExpenses": 90830,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Lombardy",
+          "TaxRate": 0.06,
+          "StateExpenses": 531576,
+          "InitialPopulation": 9379825,
+          "InitialBudget": 8176690,
+          "Cities": [
+            {
+              "Name": "Brescia",
+              "InitialPopulation": 4915977,
+              "InitialBudget": 705624,
+              "TaxRate": 0.05,
+              "CityExpenses": 54091,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Milan",
+              "InitialPopulation": 4302634,
+              "InitialBudget": 732588,
+              "TaxRate": 0.04,
+              "CityExpenses": 31711,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Bergamo",
+              "InitialPopulation": 161214,
+              "InitialBudget": 907271,
+              "TaxRate": 0.05,
+              "CityExpenses": 79730,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Kingdom of Naples (Two Sicilies)",
+          "TaxRate": 0.08,
+          "StateExpenses": 406833,
+          "InitialPopulation": 11238371,
+          "InitialBudget": 3649318,
+          "Cities": [
+            {
+              "Name": "Palermo",
+              "InitialPopulation": 3383954,
+              "InitialBudget": 690041,
+              "TaxRate": 0.05,
+              "CityExpenses": 72451,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Bari",
+              "InitialPopulation": 3258595,
+              "InitialBudget": 904145,
+              "TaxRate": 0.06,
+              "CityExpenses": 95089,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Naples",
+              "InitialPopulation": 4595822,
+              "InitialBudget": 126758,
+              "TaxRate": 0.05,
+              "CityExpenses": 56912,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Tuscany",
+          "TaxRate": 0.05,
+          "StateExpenses": 670194,
+          "InitialPopulation": 8351653,
+          "InitialBudget": 6106224,
+          "Cities": [
+            {
+              "Name": "Florence",
+              "InitialPopulation": 2003693,
+              "InitialBudget": 1156020,
+              "TaxRate": 0.03,
+              "CityExpenses": 124272,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Siena",
+              "InitialPopulation": 4840058,
+              "InitialBudget": 716225,
+              "TaxRate": 0.03,
+              "CityExpenses": 114319,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Salt Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Pisa",
+              "InitialPopulation": 1507902,
+              "InitialBudget": 947858,
+              "TaxRate": 0.04,
+              "CityExpenses": 123173,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Venetia",
+          "TaxRate": 0.06,
+          "StateExpenses": 311069,
+          "InitialPopulation": 5714553,
+          "InitialBudget": 8109461,
+          "Cities": [
+            {
+              "Name": "Verona",
+              "InitialPopulation": 47624,
+              "InitialBudget": 1530725,
+              "TaxRate": 0.02,
+              "CityExpenses": 45089,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Explosives Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Cotton Plantation",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Venice",
+              "InitialPopulation": 2023599,
+              "InitialBudget": 267367,
+              "TaxRate": 0.03,
+              "CityExpenses": 46770,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Paper Mill",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Padua",
+              "InitialPopulation": 3643330,
+              "InitialBudget": 1505975,
+              "TaxRate": 0.02,
+              "CityExpenses": 19146,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Qing China",
+      "TaxRate": 0.12,
+      "NationalExpenses": 2877851,
+      "InitialPopulation": 44810703,
+      "InitialBudget": 29629188,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Zhili Province",
+          "TaxRate": 0.08,
+          "StateExpenses": 134778,
+          "InitialPopulation": 6492786,
+          "InitialBudget": 2511557,
+          "Cities": [
+            {
+              "Name": "Peking (Beijing)",
+              "InitialPopulation": 1023038,
+              "InitialBudget": 492439,
+              "TaxRate": 0.05,
+              "CityExpenses": 14592,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Tianjin",
+              "InitialPopulation": 2373634,
+              "InitialBudget": 488197,
+              "TaxRate": 0.05,
+              "CityExpenses": 18267,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Chemicals Plant",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Baoding",
+              "InitialPopulation": 3096114,
+              "InitialBudget": 495730,
+              "TaxRate": 0.02,
+              "CityExpenses": 12723,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Jiangsu Province",
+          "TaxRate": 0.08,
+          "StateExpenses": 382097,
+          "InitialPopulation": 9451031,
+          "InitialBudget": 502997,
+          "Cities": [
+            {
+              "Name": "Nanking (Nanjing)",
+              "InitialPopulation": 367359,
+              "InitialBudget": 56202,
+              "TaxRate": 0.03,
+              "CityExpenses": 25656,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Salt Mine",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Shanghai",
+              "InitialPopulation": 4568635,
+              "InitialBudget": 57142,
+              "TaxRate": 0.05,
+              "CityExpenses": 57792,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Suzhou",
+              "InitialPopulation": 4515037,
+              "InitialBudget": 69609,
+              "TaxRate": 0.05,
+              "CityExpenses": 25697,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Salt Mine",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Guangdong Province",
+          "TaxRate": 0.05,
+          "StateExpenses": 231617,
+          "InitialPopulation": 11046840,
+          "InitialBudget": 946539,
+          "Cities": [
+            {
+              "Name": "Canton (Guangzhou)",
+              "InitialPopulation": 4103471,
+              "InitialBudget": 51187,
+              "TaxRate": 0.03,
+              "CityExpenses": 21646,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Shenzhen",
+              "InitialPopulation": 3150744,
+              "InitialBudget": 152028,
+              "TaxRate": 0.02,
+              "CityExpenses": 33866,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Cotton Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Foshan",
+              "InitialPopulation": 3792625,
+              "InitialBudget": 76231,
+              "TaxRate": 0.03,
+              "CityExpenses": 11348,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Salt Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Meat Packing Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Sichuan Province",
+          "TaxRate": 0.04,
+          "StateExpenses": 148028,
+          "InitialPopulation": 8970128,
+          "InitialBudget": 3288980,
+          "Cities": [
+            {
+              "Name": "Chengdu",
+              "InitialPopulation": 2467947,
+              "InitialBudget": 68853,
+              "TaxRate": 0.02,
+              "CityExpenses": 15869,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Zigong",
+              "InitialPopulation": 3370237,
+              "InitialBudget": 522527,
+              "TaxRate": 0.03,
+              "CityExpenses": 26290,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Chongqing",
+              "InitialPopulation": 3131944,
+              "InitialBudget": 218022,
+              "TaxRate": 0.03,
+              "CityExpenses": 27926,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Salt Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Shandong Province",
+          "TaxRate": 0.05,
+          "StateExpenses": 328919,
+          "InitialPopulation": 8849918,
+          "InitialBudget": 3978342,
+          "Cities": [
+            {
+              "Name": "Jinan",
+              "InitialPopulation": 3894155,
+              "InitialBudget": 83690,
+              "TaxRate": 0.03,
+              "CityExpenses": 23231,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Yantai",
+              "InitialPopulation": 3918664,
+              "InitialBudget": 633468,
+              "TaxRate": 0.03,
+              "CityExpenses": 61784,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Rubber Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Qingdao",
+              "InitialPopulation": 1037099,
+              "InitialBudget": 286299,
+              "TaxRate": 0.03,
+              "CityExpenses": 57870,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Cotton Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Kingdom of Spain",
+      "TaxRate": 0.16,
+      "NationalExpenses": 2665580,
+      "InitialPopulation": 39387844,
+      "InitialBudget": 19981957,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "New Castile",
+          "TaxRate": 0.08,
+          "StateExpenses": 90623,
+          "InitialPopulation": 7333863,
+          "InitialBudget": 2178241,
+          "Cities": [
+            {
+              "Name": "Guadalajara",
+              "InitialPopulation": 4754761,
+              "InitialBudget": 440723,
+              "TaxRate": 0.04,
+              "CityExpenses": 21723,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Brass Foundry",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Madrid",
+              "InitialPopulation": 1988704,
+              "InitialBudget": 67640,
+              "TaxRate": 0.05,
+              "CityExpenses": 21262,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Toledo",
+              "InitialPopulation": 590398,
+              "InitialBudget": 515989,
+              "TaxRate": 0.03,
+              "CityExpenses": 13105,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Automobile Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Old Castile and Le\u00f3n",
+          "TaxRate": 0.05,
+          "StateExpenses": 286257,
+          "InitialPopulation": 7509269,
+          "InitialBudget": 1170769,
+          "Cities": [
+            {
+              "Name": "Salamanca",
+              "InitialPopulation": 4480553,
+              "InitialBudget": 71193,
+              "TaxRate": 0.03,
+              "CityExpenses": 27613,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Burgos",
+              "InitialPopulation": 3015681,
+              "InitialBudget": 90619,
+              "TaxRate": 0.03,
+              "CityExpenses": 13777,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Meat Packing Plant",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Valladolid",
+              "InitialPopulation": 13035,
+              "InitialBudget": 145928,
+              "TaxRate": 0.02,
+              "CityExpenses": 20312,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Catalonia",
+          "TaxRate": 0.14,
+          "StateExpenses": 236911,
+          "InitialPopulation": 9375948,
+          "InitialBudget": 2657038,
+          "Cities": [
+            {
+              "Name": "Tarragona",
+              "InitialPopulation": 4269894,
+              "InitialBudget": 535045,
+              "TaxRate": 0.12,
+              "CityExpenses": 11016,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Sugar Plantation",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Barcelona",
+              "InitialPopulation": 908622,
+              "InitialBudget": 538575,
+              "TaxRate": 0.11,
+              "CityExpenses": 40463,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Girona",
+              "InitialPopulation": 4197432,
+              "InitialBudget": 95413,
+              "TaxRate": 0.09,
+              "CityExpenses": 42326,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Andalusia",
+          "TaxRate": 0.07,
+          "StateExpenses": 203634,
+          "InitialPopulation": 7110630,
+          "InitialBudget": 2286912,
+          "Cities": [
+            {
+              "Name": "Granada",
+              "InitialPopulation": 2418042,
+              "InitialBudget": 401848,
+              "TaxRate": 0.03,
+              "CityExpenses": 17714,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "M\u00e1laga",
+              "InitialPopulation": 3783207,
+              "InitialBudget": 168249,
+              "TaxRate": 0.04,
+              "CityExpenses": 12331,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Seville",
+              "InitialPopulation": 909381,
+              "InitialBudget": 132948,
+              "TaxRate": 0.04,
+              "CityExpenses": 20026,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Aragon",
+          "TaxRate": 0.05,
+          "StateExpenses": 167852,
+          "InitialPopulation": 8058134,
+          "InitialBudget": 1627958,
+          "Cities": [
+            {
+              "Name": "Zaragoza",
+              "InitialPopulation": 4221897,
+              "InitialBudget": 81313,
+              "TaxRate": 0.02,
+              "CityExpenses": 13347,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Textile Mill",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Cotton Plantation",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Teruel",
+              "InitialPopulation": 1317635,
+              "InitialBudget": 174018,
+              "TaxRate": 0.03,
+              "CityExpenses": 18940,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Huesca",
+              "InitialPopulation": 2518602,
+              "InitialBudget": 282984,
+              "TaxRate": 0.02,
+              "CityExpenses": 30446,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Meat Packing Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Dominion of Canada",
+      "TaxRate": 0.07,
+      "NationalExpenses": 16033238,
+      "InitialPopulation": 37806898,
+      "InitialBudget": 89722890,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Ontario",
+          "TaxRate": 0.05,
+          "StateExpenses": 1462738,
+          "InitialPopulation": 8775156,
+          "InitialBudget": 10867202,
+          "Cities": [
+            {
+              "Name": "Hamilton",
+              "InitialPopulation": 427652,
+              "InitialBudget": 1006506,
+              "TaxRate": 0.02,
+              "CityExpenses": 184582,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Ottawa",
+              "InitialPopulation": 3941186,
+              "InitialBudget": 1184485,
+              "TaxRate": 0.04,
+              "CityExpenses": 28088,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Toronto",
+              "InitialPopulation": 4406318,
+              "InitialBudget": 257773,
+              "TaxRate": 0.04,
+              "CityExpenses": 202045,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Brass Foundry",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Sulphur Mine",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Quebec",
+          "TaxRate": 0.04,
+          "StateExpenses": 2067492,
+          "InitialPopulation": 8541265,
+          "InitialBudget": 8480788,
+          "Cities": [
+            {
+              "Name": "Sherbrooke",
+              "InitialPopulation": 2958228,
+              "InitialBudget": 94452,
+              "TaxRate": 0.03,
+              "CityExpenses": 176339,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Coal Mine",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Quebec City",
+              "InitialPopulation": 2133766,
+              "InitialBudget": 1363482,
+              "TaxRate": 0.03,
+              "CityExpenses": 173263,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tool Factory",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Montreal",
+              "InitialPopulation": 3449271,
+              "InitialBudget": 351126,
+              "TaxRate": 0.03,
+              "CityExpenses": 341693,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Printing Press",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Nova Scotia",
+          "TaxRate": 0.04,
+          "StateExpenses": 669770,
+          "InitialPopulation": 9637712,
+          "InitialBudget": 8120794,
+          "Cities": [
+            {
+              "Name": "Halifax",
+              "InitialPopulation": 3356601,
+              "InitialBudget": 550915,
+              "TaxRate": 0.03,
+              "CityExpenses": 114981,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Sydney",
+              "InitialPopulation": 3059138,
+              "InitialBudget": 1969237,
+              "TaxRate": 0.03,
+              "CityExpenses": 150417,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cement Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Dartmouth",
+              "InitialPopulation": 3221973,
+              "InitialBudget": 1116984,
+              "TaxRate": 0.02,
+              "CityExpenses": 136465,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Machine Parts Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Coal Mine",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "British Columbia",
+          "TaxRate": 0.05,
+          "StateExpenses": 657738,
+          "InitialPopulation": 5237965,
+          "InitialBudget": 1636622,
+          "Cities": [
+            {
+              "Name": "Victoria",
+              "InitialPopulation": 455795,
+              "InitialBudget": 214644,
+              "TaxRate": 0.04,
+              "CityExpenses": 31202,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "New Westminster",
+              "InitialPopulation": 2038506,
+              "InitialBudget": 222010,
+              "TaxRate": 0.02,
+              "CityExpenses": 105682,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Vancouver",
+              "InitialPopulation": 2743664,
+              "InitialBudget": 204899,
+              "TaxRate": 0.02,
+              "CityExpenses": 51016,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Paper Mill",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Manitoba",
+          "TaxRate": 0.06,
+          "StateExpenses": 1191606,
+          "InitialPopulation": 5614800,
+          "InitialBudget": 11521949,
+          "Cities": [
+            {
+              "Name": "Brandon",
+              "InitialPopulation": 4517755,
+              "InitialBudget": 2014070,
+              "TaxRate": 0.02,
+              "CityExpenses": 90718,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Winnipeg",
+              "InitialPopulation": 506545,
+              "InitialBudget": 323606,
+              "TaxRate": 0.04,
+              "CityExpenses": 136414,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Portage la Prairie",
+              "InitialPopulation": 590500,
+              "InitialBudget": 2142400,
+              "TaxRate": 0.02,
+              "CityExpenses": 84305,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 1
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Argentine Republic",
+      "TaxRate": 0.17,
+      "NationalExpenses": 5781517,
+      "InitialPopulation": 41386004,
+      "InitialBudget": 19528683,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Buenos Aires Province",
+          "TaxRate": 0.04,
+          "StateExpenses": 447567,
+          "InitialPopulation": 7860156,
+          "InitialBudget": 2171240,
+          "Cities": [
+            {
+              "Name": "Buenos Aires City",
+              "InitialPopulation": 2851500,
+              "InitialBudget": 346530,
+              "TaxRate": 0.03,
+              "CityExpenses": 92284,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Mar del Plata",
+              "InitialPopulation": 4111529,
+              "InitialBudget": 430541,
+              "TaxRate": 0.03,
+              "CityExpenses": 71679,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coal Mine",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Zinc Mine",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "La Plata",
+              "InitialPopulation": 897127,
+              "InitialBudget": 416057,
+              "TaxRate": 0.02,
+              "CityExpenses": 66645,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "C\u00f3rdoba Province",
+          "TaxRate": 0.13,
+          "StateExpenses": 405023,
+          "InitialPopulation": 8610173,
+          "InitialBudget": 1216173,
+          "Cities": [
+            {
+              "Name": "C\u00f3rdoba City",
+              "InitialPopulation": 1167434,
+              "InitialBudget": 50314,
+              "TaxRate": 0.09,
+              "CityExpenses": 37105,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Plantation",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Arms Factory",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "R\u00edo Cuarto",
+              "InitialPopulation": 3452510,
+              "InitialBudget": 182255,
+              "TaxRate": 0.03,
+              "CityExpenses": 18446,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Clothing Factory",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Villa Mar\u00eda",
+              "InitialPopulation": 3990229,
+              "InitialBudget": 107959,
+              "TaxRate": 0.09,
+              "CityExpenses": 19813,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Santa Fe Province",
+          "TaxRate": 0.15,
+          "StateExpenses": 396156,
+          "InitialPopulation": 6581495,
+          "InitialBudget": 2176188,
+          "Cities": [
+            {
+              "Name": "Santa Fe City",
+              "InitialPopulation": 3294975,
+              "InitialBudget": 352275,
+              "TaxRate": 0.11,
+              "CityExpenses": 19100,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Brass Foundry",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Rosario",
+              "InitialPopulation": 2782087,
+              "InitialBudget": 348385,
+              "TaxRate": 0.04,
+              "CityExpenses": 44483,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Fishing Wharf",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Rafaela",
+              "InitialPopulation": 504433,
+              "InitialBudget": 268360,
+              "TaxRate": 0.12,
+              "CityExpenses": 32203,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Mendoza Province",
+          "TaxRate": 0.11,
+          "StateExpenses": 165806,
+          "InitialPopulation": 7355553,
+          "InitialBudget": 1089911,
+          "Cities": [
+            {
+              "Name": "San Rafael",
+              "InitialPopulation": 124448,
+              "InitialBudget": 51374,
+              "TaxRate": 0.06,
+              "CityExpenses": 20775,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Brass Foundry",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Godoy Cruz",
+              "InitialPopulation": 3721607,
+              "InitialBudget": 58586,
+              "TaxRate": 0.08,
+              "CityExpenses": 22334,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Mine",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Mendoza City",
+              "InitialPopulation": 3509498,
+              "InitialBudget": 139672,
+              "TaxRate": 0.06,
+              "CityExpenses": 28746,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 4
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Tucum\u00e1n Province",
+          "TaxRate": 0.11,
+          "StateExpenses": 408720,
+          "InitialPopulation": 10978627,
+          "InitialBudget": 1358402,
+          "Cities": [
+            {
+              "Name": "Taf\u00ed Viejo",
+              "InitialPopulation": 4956018,
+              "InitialBudget": 85548,
+              "TaxRate": 0.1,
+              "CityExpenses": 31634,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Brass Foundry",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Yerba Buena",
+              "InitialPopulation": 4729987,
+              "InitialBudget": 222870,
+              "TaxRate": 0.07,
+              "CityExpenses": 66976,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Dye Collection Post",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Electronics Plant",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "San Miguel de Tucum\u00e1n",
+              "InitialPopulation": 1292622,
+              "InitialBudget": 105652,
+              "TaxRate": 0.06,
+              "CityExpenses": 18564,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Coffee Plantation",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "United Mexican States",
+      "TaxRate": 0.11,
+      "NationalExpenses": 3953079,
+      "InitialPopulation": 20489575,
+      "InitialBudget": 21700411,
+      "IsPlayerControlled": false,
+      "States": [
+        {
+          "Name": "Federal District",
+          "TaxRate": 0.05,
+          "StateExpenses": 155568,
+          "InitialPopulation": 4788716,
+          "InitialBudget": 1047040,
+          "Cities": [
+            {
+              "Name": "Mexico City",
+              "InitialPopulation": 1349103,
+              "InitialBudget": 78751,
+              "TaxRate": 0.03,
+              "CityExpenses": 15093,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Xochimilco",
+              "InitialPopulation": 1437487,
+              "InitialBudget": 161540,
+              "TaxRate": 0.03,
+              "CityExpenses": 27424,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Tlalpan",
+              "InitialPopulation": 2002126,
+              "InitialBudget": 164920,
+              "TaxRate": 0.03,
+              "CityExpenses": 16541,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Jalisco",
+          "TaxRate": 0.04,
+          "StateExpenses": 546977,
+          "InitialPopulation": 4627269,
+          "InitialBudget": 2661723,
+          "Cities": [
+            {
+              "Name": "Tlaquepaque",
+              "InitialPopulation": 1218209,
+              "InitialBudget": 419381,
+              "TaxRate": 0.02,
+              "CityExpenses": 69765,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Cannery",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Zapopan",
+              "InitialPopulation": 611797,
+              "InitialBudget": 311892,
+              "TaxRate": 0.03,
+              "CityExpenses": 34134,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Lead Mine",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Coal Mine",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Guadalajara (2)",
+              "InitialPopulation": 2797263,
+              "InitialBudget": 416386,
+              "TaxRate": 0.02,
+              "CityExpenses": 69192,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Munitions Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Grain Farm",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Coffee Roastery",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Nuevo Le\u00f3n",
+          "TaxRate": 0.08,
+          "StateExpenses": 453482,
+          "InitialPopulation": 3074079,
+          "InitialBudget": 2824125,
+          "Cities": [
+            {
+              "Name": "Monterrey",
+              "InitialPopulation": 40442,
+              "InitialBudget": 533360,
+              "TaxRate": 0.06,
+              "CityExpenses": 81120,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Luxury Tailor",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Zinc Smelter",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Limestone Quarry",
+                  "Capacity": 2
+                }
+              ]
+            },
+            {
+              "Name": "Apodaca",
+              "InitialPopulation": 2822027,
+              "InitialBudget": 398292,
+              "TaxRate": 0.06,
+              "CityExpenses": 79087,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Lead Smelter",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Rubber Processor",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Meat Packing Plant",
+                  "Capacity": 5
+                }
+              ]
+            },
+            {
+              "Name": "Guadalupe",
+              "InitialPopulation": 211610,
+              "InitialBudget": 153116,
+              "TaxRate": 0.05,
+              "CityExpenses": 109655,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Furniture Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Oil Derrick",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Veracruz",
+          "TaxRate": 0.05,
+          "StateExpenses": 86708,
+          "InitialPopulation": 5344784,
+          "InitialBudget": 2355278,
+          "Cities": [
+            {
+              "Name": "Xalapa",
+              "InitialPopulation": 624494,
+              "InitialBudget": 155968,
+              "TaxRate": 0.02,
+              "CityExpenses": 10356,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Rubber Plantation",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Tea Plantation",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Coatzacoalcos",
+              "InitialPopulation": 761297,
+              "InitialBudget": 198596,
+              "TaxRate": 0.02,
+              "CityExpenses": 12390,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Fertilizer Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Copper Mine",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Bronze Foundry",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Steel Mill",
+                  "Capacity": 1
+                },
+                {
+                  "FactoryTypeName": "Iron Mine",
+                  "Capacity": 4
+                }
+              ]
+            },
+            {
+              "Name": "Veracruz City",
+              "InitialPopulation": 3958993,
+              "InitialBudget": 240454,
+              "TaxRate": 0.03,
+              "CityExpenses": 10491,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tobacco Factory",
+                  "Capacity": 3
+                },
+                {
+                  "FactoryTypeName": "Copper Smelter",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Sawmill",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Artillery Plant",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Coal Mine",
+                  "Capacity": 2
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Name": "Puebla",
+          "TaxRate": 0.08,
+          "StateExpenses": 202344,
+          "InitialPopulation": 2654727,
+          "InitialBudget": 2284245,
+          "Cities": [
+            {
+              "Name": "Cholula",
+              "InitialPopulation": 403453,
+              "InitialBudget": 132100,
+              "TaxRate": 0.07,
+              "CityExpenses": 23346,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Oil Refinery",
+                  "Capacity": 1
+                }
+              ]
+            },
+            {
+              "Name": "Puebla City",
+              "InitialPopulation": 156061,
+              "InitialBudget": 360814,
+              "TaxRate": 0.05,
+              "CityExpenses": 17408,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Logging Camp",
+                  "Capacity": 5
+                },
+                {
+                  "FactoryTypeName": "Bakery",
+                  "Capacity": 2
+                },
+                {
+                  "FactoryTypeName": "Sugar Mill",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Tin Smelter",
+                  "Capacity": 3
+                }
+              ]
+            },
+            {
+              "Name": "Tehuac\u00e1n",
+              "InitialPopulation": 2095213,
+              "InitialBudget": 267468,
+              "TaxRate": 0.03,
+              "CityExpenses": 27805,
+              "InitialFactories": [
+                {
+                  "FactoryTypeName": "Tea Factory",
+                  "Capacity": 4
+                },
+                {
+                  "FactoryTypeName": "Cattle Ranch",
+                  "Capacity": 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "ConstructionCompanies": [
+    {
+      "Name": "New York City Builders",
+      "HomeCity": "New York City",
+      "InitialBudget": 678868,
+      "Workers": 143
+    },
+    {
+      "Name": "Albany Builders",
+      "HomeCity": "Albany",
+      "InitialBudget": 928797,
+      "Workers": 142
+    },
+    {
+      "Name": "Buffalo Builders",
+      "HomeCity": "Buffalo",
+      "InitialBudget": 773216,
+      "Workers": 199
+    },
+    {
+      "Name": "San Diego Builders",
+      "HomeCity": "San Diego",
+      "InitialBudget": 553725,
+      "Workers": 131
+    },
+    {
+      "Name": "Los Angeles Builders",
+      "HomeCity": "Los Angeles",
+      "InitialBudget": 984000,
+      "Workers": 120
+    },
+    {
+      "Name": "San Francisco Builders",
+      "HomeCity": "San Francisco",
+      "InitialBudget": 274778,
+      "Workers": 160
+    },
+    {
+      "Name": "Austin Builders",
+      "HomeCity": "Austin",
+      "InitialBudget": 852734,
+      "Workers": 105
+    },
+    {
+      "Name": "Houston Builders",
+      "HomeCity": "Houston",
+      "InitialBudget": 980175,
+      "Workers": 175
+    },
+    {
+      "Name": "Dallas Builders",
+      "HomeCity": "Dallas",
+      "InitialBudget": 865625,
+      "Workers": 96
+    },
+    {
+      "Name": "Peoria Builders",
+      "HomeCity": "Peoria",
+      "InitialBudget": 233599,
+      "Workers": 68
+    },
+    {
+      "Name": "Springfield Builders",
+      "HomeCity": "Springfield",
+      "InitialBudget": 416862,
+      "Workers": 57
+    },
+    {
+      "Name": "Chicago Builders",
+      "HomeCity": "Chicago",
+      "InitialBudget": 229798,
+      "Workers": 72
+    },
+    {
+      "Name": "Harrisburg Builders",
+      "HomeCity": "Harrisburg",
+      "InitialBudget": 802218,
+      "Workers": 196
+    },
+    {
+      "Name": "Pittsburgh Builders",
+      "HomeCity": "Pittsburgh",
+      "InitialBudget": 724773,
+      "Workers": 101
+    },
+    {
+      "Name": "Philadelphia Builders",
+      "HomeCity": "Philadelphia",
+      "InitialBudget": 769394,
+      "Workers": 195
+    },
+    {
+      "Name": "Berlin Builders",
+      "HomeCity": "Berlin",
+      "InitialBudget": 883523,
+      "Workers": 52
+    },
+    {
+      "Name": "Konigsberg Builders",
+      "HomeCity": "Konigsberg",
+      "InitialBudget": 477061,
+      "Workers": 152
+    },
+    {
+      "Name": "Danzig Builders",
+      "HomeCity": "Danzig",
+      "InitialBudget": 484849,
+      "Workers": 57
+    },
+    {
+      "Name": "Augsburg Builders",
+      "HomeCity": "Augsburg",
+      "InitialBudget": 873293,
+      "Workers": 148
+    },
+    {
+      "Name": "Munich Builders",
+      "HomeCity": "Munich",
+      "InitialBudget": 414341,
+      "Workers": 165
+    },
+    {
+      "Name": "Nuremberg Builders",
+      "HomeCity": "Nuremberg",
+      "InitialBudget": 260201,
+      "Workers": 151
+    },
+    {
+      "Name": "Chemnitz Builders",
+      "HomeCity": "Chemnitz",
+      "InitialBudget": 851278,
+      "Workers": 117
+    },
+    {
+      "Name": "Dresden Builders",
+      "HomeCity": "Dresden",
+      "InitialBudget": 207413,
+      "Workers": 116
+    },
+    {
+      "Name": "Leipzig Builders",
+      "HomeCity": "Leipzig",
+      "InitialBudget": 548565,
+      "Workers": 98
+    },
+    {
+      "Name": "Ulm Builders",
+      "HomeCity": "Ulm",
+      "InitialBudget": 384263,
+      "Workers": 74
+    },
+    {
+      "Name": "Heilbronn Builders",
+      "HomeCity": "Heilbronn",
+      "InitialBudget": 349973,
+      "Workers": 144
+    },
+    {
+      "Name": "Stuttgart Builders",
+      "HomeCity": "Stuttgart",
+      "InitialBudget": 864819,
+      "Workers": 136
+    },
+    {
+      "Name": "Metz Builders",
+      "HomeCity": "Metz",
+      "InitialBudget": 920831,
+      "Workers": 177
+    },
+    {
+      "Name": "Mulhouse Builders",
+      "HomeCity": "Mulhouse",
+      "InitialBudget": 633343,
+      "Workers": 128
+    },
+    {
+      "Name": "Strasbourg Builders",
+      "HomeCity": "Strasbourg",
+      "InitialBudget": 428170,
+      "Workers": 111
+    },
+    {
+      "Name": "Yokohama Builders",
+      "HomeCity": "Yokohama",
+      "InitialBudget": 703361,
+      "Workers": 153
+    },
+    {
+      "Name": "Chiba Builders",
+      "HomeCity": "Chiba",
+      "InitialBudget": 214835,
+      "Workers": 135
+    },
+    {
+      "Name": "Tokyo Builders",
+      "HomeCity": "Tokyo",
+      "InitialBudget": 661514,
+      "Workers": 151
+    },
+    {
+      "Name": "Kyoto Builders",
+      "HomeCity": "Kyoto",
+      "InitialBudget": 978991,
+      "Workers": 102
+    },
+    {
+      "Name": "Kobe Builders",
+      "HomeCity": "Kobe",
+      "InitialBudget": 322553,
+      "Workers": 130
+    },
+    {
+      "Name": "Osaka Builders",
+      "HomeCity": "Osaka",
+      "InitialBudget": 899615,
+      "Workers": 154
+    },
+    {
+      "Name": "Fukuoka Builders",
+      "HomeCity": "Fukuoka",
+      "InitialBudget": 380138,
+      "Workers": 165
+    },
+    {
+      "Name": "Nagasaki Builders",
+      "HomeCity": "Nagasaki",
+      "InitialBudget": 494848,
+      "Workers": 92
+    },
+    {
+      "Name": "Kumamoto Builders",
+      "HomeCity": "Kumamoto",
+      "InitialBudget": 982685,
+      "Workers": 185
+    },
+    {
+      "Name": "Asahikawa Builders",
+      "HomeCity": "Asahikawa",
+      "InitialBudget": 648047,
+      "Workers": 73
+    },
+    {
+      "Name": "Sapporo Builders",
+      "HomeCity": "Sapporo",
+      "InitialBudget": 501973,
+      "Workers": 153
+    },
+    {
+      "Name": "Hakodate Builders",
+      "HomeCity": "Hakodate",
+      "InitialBudget": 721886,
+      "Workers": 112
+    },
+    {
+      "Name": "Yamaguchi Builders",
+      "HomeCity": "Yamaguchi",
+      "InitialBudget": 635234,
+      "Workers": 131
+    },
+    {
+      "Name": "Okayama Builders",
+      "HomeCity": "Okayama",
+      "InitialBudget": 722631,
+      "Workers": 107
+    },
+    {
+      "Name": "Hiroshima Builders",
+      "HomeCity": "Hiroshima",
+      "InitialBudget": 442775,
+      "Workers": 184
+    },
+    {
+      "Name": "Petr\u00f3polis Builders",
+      "HomeCity": "Petr\u00f3polis",
+      "InitialBudget": 604641,
+      "Workers": 194
+    },
+    {
+      "Name": "Niter\u00f3i Builders",
+      "HomeCity": "Niter\u00f3i",
+      "InitialBudget": 684542,
+      "Workers": 153
+    },
+    {
+      "Name": "Rio de Janeiro City Builders",
+      "HomeCity": "Rio de Janeiro City",
+      "InitialBudget": 423134,
+      "Workers": 64
+    },
+    {
+      "Name": "S\u00e3o Paulo City Builders",
+      "HomeCity": "S\u00e3o Paulo City",
+      "InitialBudget": 815196,
+      "Workers": 188
+    },
+    {
+      "Name": "Campinas Builders",
+      "HomeCity": "Campinas",
+      "InitialBudget": 556870,
+      "Workers": 117
+    },
+    {
+      "Name": "Santos Builders",
+      "HomeCity": "Santos",
+      "InitialBudget": 915667,
+      "Workers": 102
+    },
+    {
+      "Name": "Ouro Preto Builders",
+      "HomeCity": "Ouro Preto",
+      "InitialBudget": 652705,
+      "Workers": 98
+    },
+    {
+      "Name": "Belo Horizonte Builders",
+      "HomeCity": "Belo Horizonte",
+      "InitialBudget": 675687,
+      "Workers": 79
+    },
+    {
+      "Name": "Juiz de Fora Builders",
+      "HomeCity": "Juiz de Fora",
+      "InitialBudget": 210148,
+      "Workers": 126
+    },
+    {
+      "Name": "Salvador Builders",
+      "HomeCity": "Salvador",
+      "InitialBudget": 492390,
+      "Workers": 93
+    },
+    {
+      "Name": "Feira de Santana Builders",
+      "HomeCity": "Feira de Santana",
+      "InitialBudget": 996536,
+      "Workers": 95
+    },
+    {
+      "Name": "Vit\u00f3ria da Conquista Builders",
+      "HomeCity": "Vit\u00f3ria da Conquista",
+      "InitialBudget": 818292,
+      "Workers": 127
+    },
+    {
+      "Name": "Caruaru Builders",
+      "HomeCity": "Caruaru",
+      "InitialBudget": 493542,
+      "Workers": 112
+    },
+    {
+      "Name": "Olinda Builders",
+      "HomeCity": "Olinda",
+      "InitialBudget": 683508,
+      "Workers": 189
+    },
+    {
+      "Name": "Recife Builders",
+      "HomeCity": "Recife",
+      "InitialBudget": 976694,
+      "Workers": 120
+    },
+    {
+      "Name": "London Builders",
+      "HomeCity": "London",
+      "InitialBudget": 950588,
+      "Workers": 178
+    },
+    {
+      "Name": "Birmingham Builders",
+      "HomeCity": "Birmingham",
+      "InitialBudget": 742857,
+      "Workers": 54
+    },
+    {
+      "Name": "Manchester Builders",
+      "HomeCity": "Manchester",
+      "InitialBudget": 204516,
+      "Workers": 156
+    },
+    {
+      "Name": "Glasgow Builders",
+      "HomeCity": "Glasgow",
+      "InitialBudget": 858280,
+      "Workers": 148
+    },
+    {
+      "Name": "Edinburgh Builders",
+      "HomeCity": "Edinburgh",
+      "InitialBudget": 976303,
+      "Workers": 126
+    },
+    {
+      "Name": "Aberdeen Builders",
+      "HomeCity": "Aberdeen",
+      "InitialBudget": 390898,
+      "Workers": 56
+    },
+    {
+      "Name": "Newport Builders",
+      "HomeCity": "Newport",
+      "InitialBudget": 782584,
+      "Workers": 95
+    },
+    {
+      "Name": "Swansea Builders",
+      "HomeCity": "Swansea",
+      "InitialBudget": 570323,
+      "Workers": 59
+    },
+    {
+      "Name": "Cardiff Builders",
+      "HomeCity": "Cardiff",
+      "InitialBudget": 371807,
+      "Workers": 109
+    },
+    {
+      "Name": "Dublin Builders",
+      "HomeCity": "Dublin",
+      "InitialBudget": 351968,
+      "Workers": 137
+    },
+    {
+      "Name": "Belfast Builders",
+      "HomeCity": "Belfast",
+      "InitialBudget": 241289,
+      "Workers": 198
+    },
+    {
+      "Name": "Cork Builders",
+      "HomeCity": "Cork",
+      "InitialBudget": 588834,
+      "Workers": 63
+    },
+    {
+      "Name": "Sunderland Builders",
+      "HomeCity": "Sunderland",
+      "InitialBudget": 248433,
+      "Workers": 183
+    },
+    {
+      "Name": "Durham Builders",
+      "HomeCity": "Durham",
+      "InitialBudget": 405581,
+      "Workers": 182
+    },
+    {
+      "Name": "Newcastle Builders",
+      "HomeCity": "Newcastle",
+      "InitialBudget": 585731,
+      "Workers": 61
+    },
+    {
+      "Name": "Paris Builders",
+      "HomeCity": "Paris",
+      "InitialBudget": 714287,
+      "Workers": 128
+    },
+    {
+      "Name": "Versailles Builders",
+      "HomeCity": "Versailles",
+      "InitialBudget": 574464,
+      "Workers": 96
+    },
+    {
+      "Name": "Saint-Denis Builders",
+      "HomeCity": "Saint-Denis",
+      "InitialBudget": 614012,
+      "Workers": 134
+    },
+    {
+      "Name": "Nice Builders",
+      "HomeCity": "Nice",
+      "InitialBudget": 384568,
+      "Workers": 80
+    },
+    {
+      "Name": "Marseille Builders",
+      "HomeCity": "Marseille",
+      "InitialBudget": 432106,
+      "Workers": 96
+    },
+    {
+      "Name": "Toulon Builders",
+      "HomeCity": "Toulon",
+      "InitialBudget": 581982,
+      "Workers": 129
+    },
+    {
+      "Name": "N\u00eemes Builders",
+      "HomeCity": "N\u00eemes",
+      "InitialBudget": 744278,
+      "Workers": 94
+    },
+    {
+      "Name": "Toulouse Builders",
+      "HomeCity": "Toulouse",
+      "InitialBudget": 687351,
+      "Workers": 164
+    },
+    {
+      "Name": "Montpellier Builders",
+      "HomeCity": "Montpellier",
+      "InitialBudget": 631401,
+      "Workers": 110
+    },
+    {
+      "Name": "Grenoble Builders",
+      "HomeCity": "Grenoble",
+      "InitialBudget": 857341,
+      "Workers": 147
+    },
+    {
+      "Name": "Saint-\u00c9tienne Builders",
+      "HomeCity": "Saint-\u00c9tienne",
+      "InitialBudget": 306686,
+      "Workers": 147
+    },
+    {
+      "Name": "Lyon Builders",
+      "HomeCity": "Lyon",
+      "InitialBudget": 255548,
+      "Workers": 160
+    },
+    {
+      "Name": "Nantes Builders",
+      "HomeCity": "Nantes",
+      "InitialBudget": 243378,
+      "Workers": 72
+    },
+    {
+      "Name": "Brest Builders",
+      "HomeCity": "Brest",
+      "InitialBudget": 609787,
+      "Workers": 75
+    },
+    {
+      "Name": "Rennes Builders",
+      "HomeCity": "Rennes",
+      "InitialBudget": 671090,
+      "Workers": 124
+    },
+    {
+      "Name": "Ryazan Builders",
+      "HomeCity": "Ryazan",
+      "InitialBudget": 256365,
+      "Workers": 65
+    },
+    {
+      "Name": "Moscow Builders",
+      "HomeCity": "Moscow",
+      "InitialBudget": 996422,
+      "Workers": 160
+    },
+    {
+      "Name": "Tver Builders",
+      "HomeCity": "Tver",
+      "InitialBudget": 278974,
+      "Workers": 59
+    },
+    {
+      "Name": "Pskov Builders",
+      "HomeCity": "Pskov",
+      "InitialBudget": 409471,
+      "Workers": 65
+    },
+    {
+      "Name": "Novgorod Builders",
+      "HomeCity": "Novgorod",
+      "InitialBudget": 833120,
+      "Workers": 161
+    },
+    {
+      "Name": "Saint Petersburg Builders",
+      "HomeCity": "Saint Petersburg",
+      "InitialBudget": 890412,
+      "Workers": 185
+    },
+    {
+      "Name": "Poltava Builders",
+      "HomeCity": "Poltava",
+      "InitialBudget": 204463,
+      "Workers": 79
+    },
+    {
+      "Name": "Kiev Builders",
+      "HomeCity": "Kiev",
+      "InitialBudget": 698165,
+      "Workers": 193
+    },
+    {
+      "Name": "Chernigov Builders",
+      "HomeCity": "Chernigov",
+      "InitialBudget": 599424,
+      "Workers": 67
+    },
+    {
+      "Name": "Tomsk Builders",
+      "HomeCity": "Tomsk",
+      "InitialBudget": 201029,
+      "Workers": 122
+    },
+    {
+      "Name": "Omsk Builders",
+      "HomeCity": "Omsk",
+      "InitialBudget": 671720,
+      "Workers": 61
+    },
+    {
+      "Name": "Irkutsk Builders",
+      "HomeCity": "Irkutsk",
+      "InitialBudget": 843551,
+      "Workers": 128
+    },
+    {
+      "Name": "Yerevan Builders",
+      "HomeCity": "Yerevan",
+      "InitialBudget": 593702,
+      "Workers": 190
+    },
+    {
+      "Name": "Baku Builders",
+      "HomeCity": "Baku",
+      "InitialBudget": 901817,
+      "Workers": 127
+    },
+    {
+      "Name": "Tiflis (Tbilisi) Builders",
+      "HomeCity": "Tiflis (Tbilisi)",
+      "InitialBudget": 204281,
+      "Workers": 173
+    },
+    {
+      "Name": "Vienna Builders",
+      "HomeCity": "Vienna",
+      "InitialBudget": 286240,
+      "Workers": 168
+    },
+    {
+      "Name": "Linz Builders",
+      "HomeCity": "Linz",
+      "InitialBudget": 943847,
+      "Workers": 87
+    },
+    {
+      "Name": "Salzburg Builders",
+      "HomeCity": "Salzburg",
+      "InitialBudget": 663890,
+      "Workers": 170
+    },
+    {
+      "Name": "Budapest Builders",
+      "HomeCity": "Budapest",
+      "InitialBudget": 858281,
+      "Workers": 66
+    },
+    {
+      "Name": "Debrecen Builders",
+      "HomeCity": "Debrecen",
+      "InitialBudget": 231222,
+      "Workers": 148
+    },
+    {
+      "Name": "Szeged Builders",
+      "HomeCity": "Szeged",
+      "InitialBudget": 809464,
+      "Workers": 104
+    },
+    {
+      "Name": "Brno Builders",
+      "HomeCity": "Brno",
+      "InitialBudget": 790473,
+      "Workers": 57
+    },
+    {
+      "Name": "Prague Builders",
+      "HomeCity": "Prague",
+      "InitialBudget": 556776,
+      "Workers": 171
+    },
+    {
+      "Name": "Pilsen Builders",
+      "HomeCity": "Pilsen",
+      "InitialBudget": 839029,
+      "Workers": 94
+    },
+    {
+      "Name": "Lviv (Lemberg) Builders",
+      "HomeCity": "Lviv (Lemberg)",
+      "InitialBudget": 511426,
+      "Workers": 94
+    },
+    {
+      "Name": "Ternopil Builders",
+      "HomeCity": "Ternopil",
+      "InitialBudget": 737178,
+      "Workers": 109
+    },
+    {
+      "Name": "Krakow Builders",
+      "HomeCity": "Krakow",
+      "InitialBudget": 542261,
+      "Workers": 199
+    },
+    {
+      "Name": "Osijek Builders",
+      "HomeCity": "Osijek",
+      "InitialBudget": 715876,
+      "Workers": 186
+    },
+    {
+      "Name": "Zagreb (Agram) Builders",
+      "HomeCity": "Zagreb (Agram)",
+      "InitialBudget": 621431,
+      "Workers": 190
+    },
+    {
+      "Name": "Rijeka (Fiume) Builders",
+      "HomeCity": "Rijeka (Fiume)",
+      "InitialBudget": 523144,
+      "Workers": 60
+    },
+    {
+      "Name": "Adrianople (Edirne) Builders",
+      "HomeCity": "Adrianople (Edirne)",
+      "InitialBudget": 722762,
+      "Workers": 72
+    },
+    {
+      "Name": "Gallipoli Builders",
+      "HomeCity": "Gallipoli",
+      "InitialBudget": 252429,
+      "Workers": 144
+    },
+    {
+      "Name": "Constantinople (Istanbul) Builders",
+      "HomeCity": "Constantinople (Istanbul)",
+      "InitialBudget": 943065,
+      "Workers": 109
+    },
+    {
+      "Name": "Konya Builders",
+      "HomeCity": "Konya",
+      "InitialBudget": 724207,
+      "Workers": 182
+    },
+    {
+      "Name": "Ankara Builders",
+      "HomeCity": "Ankara",
+      "InitialBudget": 666604,
+      "Workers": 82
+    },
+    {
+      "Name": "Smyrna (Izmir) Builders",
+      "HomeCity": "Smyrna (Izmir)",
+      "InitialBudget": 582498,
+      "Workers": 120
+    },
+    {
+      "Name": "Aleppo Builders",
+      "HomeCity": "Aleppo",
+      "InitialBudget": 864339,
+      "Workers": 190
+    },
+    {
+      "Name": "Beirut Builders",
+      "HomeCity": "Beirut",
+      "InitialBudget": 982165,
+      "Workers": 127
+    },
+    {
+      "Name": "Damascus Builders",
+      "HomeCity": "Damascus",
+      "InitialBudget": 805403,
+      "Workers": 84
+    },
+    {
+      "Name": "Port Said Builders",
+      "HomeCity": "Port Said",
+      "InitialBudget": 925973,
+      "Workers": 140
+    },
+    {
+      "Name": "Alexandria Builders",
+      "HomeCity": "Alexandria",
+      "InitialBudget": 910128,
+      "Workers": 79
+    },
+    {
+      "Name": "Cairo Builders",
+      "HomeCity": "Cairo",
+      "InitialBudget": 689545,
+      "Workers": 58
+    },
+    {
+      "Name": "Monastir (Bitola) Builders",
+      "HomeCity": "Monastir (Bitola)",
+      "InitialBudget": 309731,
+      "Workers": 106
+    },
+    {
+      "Name": "Thessaloniki (Salonica) Builders",
+      "HomeCity": "Thessaloniki (Salonica)",
+      "InitialBudget": 264051,
+      "Workers": 161
+    },
+    {
+      "Name": "Skopje (\u00dcsk\u00fcp) Builders",
+      "HomeCity": "Skopje (\u00dcsk\u00fcp)",
+      "InitialBudget": 972672,
+      "Workers": 164
+    },
+    {
+      "Name": "Alessandria Builders",
+      "HomeCity": "Alessandria",
+      "InitialBudget": 236524,
+      "Workers": 107
+    },
+    {
+      "Name": "Turin Builders",
+      "HomeCity": "Turin",
+      "InitialBudget": 704779,
+      "Workers": 65
+    },
+    {
+      "Name": "Novara Builders",
+      "HomeCity": "Novara",
+      "InitialBudget": 214194,
+      "Workers": 132
+    },
+    {
+      "Name": "Brescia Builders",
+      "HomeCity": "Brescia",
+      "InitialBudget": 331168,
+      "Workers": 138
+    },
+    {
+      "Name": "Milan Builders",
+      "HomeCity": "Milan",
+      "InitialBudget": 901683,
+      "Workers": 68
+    },
+    {
+      "Name": "Bergamo Builders",
+      "HomeCity": "Bergamo",
+      "InitialBudget": 402532,
+      "Workers": 53
+    },
+    {
+      "Name": "Palermo Builders",
+      "HomeCity": "Palermo",
+      "InitialBudget": 707930,
+      "Workers": 180
+    },
+    {
+      "Name": "Bari Builders",
+      "HomeCity": "Bari",
+      "InitialBudget": 864735,
+      "Workers": 85
+    },
+    {
+      "Name": "Naples Builders",
+      "HomeCity": "Naples",
+      "InitialBudget": 757240,
+      "Workers": 63
+    },
+    {
+      "Name": "Florence Builders",
+      "HomeCity": "Florence",
+      "InitialBudget": 759609,
+      "Workers": 61
+    },
+    {
+      "Name": "Siena Builders",
+      "HomeCity": "Siena",
+      "InitialBudget": 575833,
+      "Workers": 160
+    },
+    {
+      "Name": "Pisa Builders",
+      "HomeCity": "Pisa",
+      "InitialBudget": 262636,
+      "Workers": 94
+    },
+    {
+      "Name": "Verona Builders",
+      "HomeCity": "Verona",
+      "InitialBudget": 201418,
+      "Workers": 193
+    },
+    {
+      "Name": "Venice Builders",
+      "HomeCity": "Venice",
+      "InitialBudget": 357359,
+      "Workers": 109
+    },
+    {
+      "Name": "Padua Builders",
+      "HomeCity": "Padua",
+      "InitialBudget": 520217,
+      "Workers": 109
+    },
+    {
+      "Name": "Peking (Beijing) Builders",
+      "HomeCity": "Peking (Beijing)",
+      "InitialBudget": 868672,
+      "Workers": 52
+    },
+    {
+      "Name": "Tianjin Builders",
+      "HomeCity": "Tianjin",
+      "InitialBudget": 374483,
+      "Workers": 165
+    },
+    {
+      "Name": "Baoding Builders",
+      "HomeCity": "Baoding",
+      "InitialBudget": 290869,
+      "Workers": 88
+    },
+    {
+      "Name": "Nanking (Nanjing) Builders",
+      "HomeCity": "Nanking (Nanjing)",
+      "InitialBudget": 468167,
+      "Workers": 177
+    },
+    {
+      "Name": "Shanghai Builders",
+      "HomeCity": "Shanghai",
+      "InitialBudget": 231938,
+      "Workers": 131
+    },
+    {
+      "Name": "Suzhou Builders",
+      "HomeCity": "Suzhou",
+      "InitialBudget": 447081,
+      "Workers": 67
+    },
+    {
+      "Name": "Canton (Guangzhou) Builders",
+      "HomeCity": "Canton (Guangzhou)",
+      "InitialBudget": 839000,
+      "Workers": 142
+    },
+    {
+      "Name": "Shenzhen Builders",
+      "HomeCity": "Shenzhen",
+      "InitialBudget": 904350,
+      "Workers": 169
+    },
+    {
+      "Name": "Foshan Builders",
+      "HomeCity": "Foshan",
+      "InitialBudget": 614227,
+      "Workers": 190
+    },
+    {
+      "Name": "Chengdu Builders",
+      "HomeCity": "Chengdu",
+      "InitialBudget": 572748,
+      "Workers": 94
+    },
+    {
+      "Name": "Zigong Builders",
+      "HomeCity": "Zigong",
+      "InitialBudget": 499630,
+      "Workers": 165
+    },
+    {
+      "Name": "Chongqing Builders",
+      "HomeCity": "Chongqing",
+      "InitialBudget": 766938,
+      "Workers": 108
+    },
+    {
+      "Name": "Jinan Builders",
+      "HomeCity": "Jinan",
+      "InitialBudget": 614504,
+      "Workers": 80
+    },
+    {
+      "Name": "Yantai Builders",
+      "HomeCity": "Yantai",
+      "InitialBudget": 337179,
+      "Workers": 194
+    },
+    {
+      "Name": "Qingdao Builders",
+      "HomeCity": "Qingdao",
+      "InitialBudget": 492026,
+      "Workers": 66
+    },
+    {
+      "Name": "Guadalajara Builders",
+      "HomeCity": "Guadalajara",
+      "InitialBudget": 996345,
+      "Workers": 125
+    },
+    {
+      "Name": "Madrid Builders",
+      "HomeCity": "Madrid",
+      "InitialBudget": 368052,
+      "Workers": 83
+    },
+    {
+      "Name": "Toledo Builders",
+      "HomeCity": "Toledo",
+      "InitialBudget": 371060,
+      "Workers": 68
+    },
+    {
+      "Name": "Salamanca Builders",
+      "HomeCity": "Salamanca",
+      "InitialBudget": 382454,
+      "Workers": 117
+    },
+    {
+      "Name": "Burgos Builders",
+      "HomeCity": "Burgos",
+      "InitialBudget": 683963,
+      "Workers": 118
+    },
+    {
+      "Name": "Valladolid Builders",
+      "HomeCity": "Valladolid",
+      "InitialBudget": 740678,
+      "Workers": 134
+    },
+    {
+      "Name": "Tarragona Builders",
+      "HomeCity": "Tarragona",
+      "InitialBudget": 299735,
+      "Workers": 90
+    },
+    {
+      "Name": "Barcelona Builders",
+      "HomeCity": "Barcelona",
+      "InitialBudget": 423451,
+      "Workers": 158
+    },
+    {
+      "Name": "Girona Builders",
+      "HomeCity": "Girona",
+      "InitialBudget": 871033,
+      "Workers": 77
+    },
+    {
+      "Name": "Granada Builders",
+      "HomeCity": "Granada",
+      "InitialBudget": 644496,
+      "Workers": 192
+    },
+    {
+      "Name": "M\u00e1laga Builders",
+      "HomeCity": "M\u00e1laga",
+      "InitialBudget": 688009,
+      "Workers": 183
+    },
+    {
+      "Name": "Seville Builders",
+      "HomeCity": "Seville",
+      "InitialBudget": 553206,
+      "Workers": 139
+    },
+    {
+      "Name": "Zaragoza Builders",
+      "HomeCity": "Zaragoza",
+      "InitialBudget": 713607,
+      "Workers": 58
+    },
+    {
+      "Name": "Teruel Builders",
+      "HomeCity": "Teruel",
+      "InitialBudget": 206522,
+      "Workers": 128
+    },
+    {
+      "Name": "Huesca Builders",
+      "HomeCity": "Huesca",
+      "InitialBudget": 708809,
+      "Workers": 83
+    },
+    {
+      "Name": "Hamilton Builders",
+      "HomeCity": "Hamilton",
+      "InitialBudget": 298663,
+      "Workers": 198
+    },
+    {
+      "Name": "Ottawa Builders",
+      "HomeCity": "Ottawa",
+      "InitialBudget": 406155,
+      "Workers": 194
+    },
+    {
+      "Name": "Toronto Builders",
+      "HomeCity": "Toronto",
+      "InitialBudget": 223289,
+      "Workers": 134
+    },
+    {
+      "Name": "Sherbrooke Builders",
+      "HomeCity": "Sherbrooke",
+      "InitialBudget": 543888,
+      "Workers": 180
+    },
+    {
+      "Name": "Quebec City Builders",
+      "HomeCity": "Quebec City",
+      "InitialBudget": 264835,
+      "Workers": 165
+    },
+    {
+      "Name": "Montreal Builders",
+      "HomeCity": "Montreal",
+      "InitialBudget": 832614,
+      "Workers": 168
+    },
+    {
+      "Name": "Halifax Builders",
+      "HomeCity": "Halifax",
+      "InitialBudget": 754278,
+      "Workers": 112
+    },
+    {
+      "Name": "Sydney Builders",
+      "HomeCity": "Sydney",
+      "InitialBudget": 500879,
+      "Workers": 193
+    },
+    {
+      "Name": "Dartmouth Builders",
+      "HomeCity": "Dartmouth",
+      "InitialBudget": 364877,
+      "Workers": 67
+    },
+    {
+      "Name": "Victoria Builders",
+      "HomeCity": "Victoria",
+      "InitialBudget": 896435,
+      "Workers": 194
+    },
+    {
+      "Name": "New Westminster Builders",
+      "HomeCity": "New Westminster",
+      "InitialBudget": 671999,
+      "Workers": 160
+    },
+    {
+      "Name": "Vancouver Builders",
+      "HomeCity": "Vancouver",
+      "InitialBudget": 836041,
+      "Workers": 103
+    },
+    {
+      "Name": "Brandon Builders",
+      "HomeCity": "Brandon",
+      "InitialBudget": 872871,
+      "Workers": 132
+    },
+    {
+      "Name": "Winnipeg Builders",
+      "HomeCity": "Winnipeg",
+      "InitialBudget": 451308,
+      "Workers": 69
+    },
+    {
+      "Name": "Portage la Prairie Builders",
+      "HomeCity": "Portage la Prairie",
+      "InitialBudget": 916637,
+      "Workers": 58
+    },
+    {
+      "Name": "Buenos Aires City Builders",
+      "HomeCity": "Buenos Aires City",
+      "InitialBudget": 720905,
+      "Workers": 72
+    },
+    {
+      "Name": "Mar del Plata Builders",
+      "HomeCity": "Mar del Plata",
+      "InitialBudget": 504971,
+      "Workers": 62
+    },
+    {
+      "Name": "La Plata Builders",
+      "HomeCity": "La Plata",
+      "InitialBudget": 373931,
+      "Workers": 158
+    },
+    {
+      "Name": "C\u00f3rdoba City Builders",
+      "HomeCity": "C\u00f3rdoba City",
+      "InitialBudget": 601886,
+      "Workers": 129
+    },
+    {
+      "Name": "R\u00edo Cuarto Builders",
+      "HomeCity": "R\u00edo Cuarto",
+      "InitialBudget": 630384,
+      "Workers": 70
+    },
+    {
+      "Name": "Villa Mar\u00eda Builders",
+      "HomeCity": "Villa Mar\u00eda",
+      "InitialBudget": 399196,
+      "Workers": 134
+    },
+    {
+      "Name": "Santa Fe City Builders",
+      "HomeCity": "Santa Fe City",
+      "InitialBudget": 376445,
+      "Workers": 66
+    },
+    {
+      "Name": "Rosario Builders",
+      "HomeCity": "Rosario",
+      "InitialBudget": 292020,
+      "Workers": 56
+    },
+    {
+      "Name": "Rafaela Builders",
+      "HomeCity": "Rafaela",
+      "InitialBudget": 667010,
+      "Workers": 95
+    },
+    {
+      "Name": "San Rafael Builders",
+      "HomeCity": "San Rafael",
+      "InitialBudget": 570623,
+      "Workers": 91
+    },
+    {
+      "Name": "Godoy Cruz Builders",
+      "HomeCity": "Godoy Cruz",
+      "InitialBudget": 380765,
+      "Workers": 181
+    },
+    {
+      "Name": "Mendoza City Builders",
+      "HomeCity": "Mendoza City",
+      "InitialBudget": 854662,
+      "Workers": 112
+    },
+    {
+      "Name": "Taf\u00ed Viejo Builders",
+      "HomeCity": "Taf\u00ed Viejo",
+      "InitialBudget": 407174,
+      "Workers": 145
+    },
+    {
+      "Name": "Yerba Buena Builders",
+      "HomeCity": "Yerba Buena",
+      "InitialBudget": 851054,
+      "Workers": 127
+    },
+    {
+      "Name": "San Miguel de Tucum\u00e1n Builders",
+      "HomeCity": "San Miguel de Tucum\u00e1n",
+      "InitialBudget": 549178,
+      "Workers": 101
+    },
+    {
+      "Name": "Mexico City Builders",
+      "HomeCity": "Mexico City",
+      "InitialBudget": 741474,
+      "Workers": 179
+    },
+    {
+      "Name": "Xochimilco Builders",
+      "HomeCity": "Xochimilco",
+      "InitialBudget": 777883,
+      "Workers": 79
+    },
+    {
+      "Name": "Tlalpan Builders",
+      "HomeCity": "Tlalpan",
+      "InitialBudget": 645678,
+      "Workers": 195
+    },
+    {
+      "Name": "Tlaquepaque Builders",
+      "HomeCity": "Tlaquepaque",
+      "InitialBudget": 568926,
+      "Workers": 107
+    },
+    {
+      "Name": "Zapopan Builders",
+      "HomeCity": "Zapopan",
+      "InitialBudget": 513008,
+      "Workers": 68
+    },
+    {
+      "Name": "Guadalajara (2) Builders",
+      "HomeCity": "Guadalajara (2)",
+      "InitialBudget": 669988,
+      "Workers": 127
+    },
+    {
+      "Name": "Monterrey Builders",
+      "HomeCity": "Monterrey",
+      "InitialBudget": 517930,
+      "Workers": 54
+    },
+    {
+      "Name": "Apodaca Builders",
+      "HomeCity": "Apodaca",
+      "InitialBudget": 563449,
+      "Workers": 169
+    },
+    {
+      "Name": "Guadalupe Builders",
+      "HomeCity": "Guadalupe",
+      "InitialBudget": 615817,
+      "Workers": 108
+    },
+    {
+      "Name": "Xalapa Builders",
+      "HomeCity": "Xalapa",
+      "InitialBudget": 438227,
+      "Workers": 74
+    },
+    {
+      "Name": "Coatzacoalcos Builders",
+      "HomeCity": "Coatzacoalcos",
+      "InitialBudget": 816913,
+      "Workers": 77
+    },
+    {
+      "Name": "Veracruz City Builders",
+      "HomeCity": "Veracruz City",
+      "InitialBudget": 747681,
+      "Workers": 63
+    },
+    {
+      "Name": "Cholula Builders",
+      "HomeCity": "Cholula",
+      "InitialBudget": 767756,
+      "Workers": 101
+    },
+    {
+      "Name": "Puebla City Builders",
+      "HomeCity": "Puebla City",
+      "InitialBudget": 396453,
+      "Workers": 194
+    },
+    {
+      "Name": "Tehuac\u00e1n Builders",
+      "HomeCity": "Tehuac\u00e1n",
+      "InitialBudget": 224080,
+      "Workers": 184
+    }
+  ]
+}
