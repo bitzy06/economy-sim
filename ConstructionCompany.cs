@@ -59,14 +59,14 @@ namespace StrategyGame
                     double price = city.LocalPrices[project.RequiredResource];
                     resourceCost = (decimal)(price * project.ResourcePerDay);
 
-                    if (Budget < (double)resourceCost)
+                    if (Budget < (double)resourceCost || project.BudgetRemaining < resourceCost)
+
                         continue;
 
                     bool bought = Market.BuyFromCityMarket(city, project.RequiredResource, project.ResourcePerDay, buyerCorp: this);
                     if (!bought) continue;
-
-                    if (!project.TrySpendBudget(resourceCost))
-                        continue;
+                    
+                    project.BudgetRemaining -= resourceCost;
                 }
 
                 if (Budget < (double)dailyBaseCost || project.BudgetRemaining < dailyBaseCost)
