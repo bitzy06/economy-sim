@@ -1658,6 +1658,21 @@ namespace economy_sim
             DebugLogger.Log($"Debug logging has been {(isEnabled ? "enabled" : "disabled")}");
         }
 
+        private void CheckBoxLogPops_CheckedChanged(object sender, EventArgs e)
+        {
+            DebugLogger.EnablePopLogging(checkBoxLogPops.Checked);
+        }
+
+        private void CheckBoxLogBuildings_CheckedChanged(object sender, EventArgs e)
+        {
+            DebugLogger.EnableBuildingLogging(checkBoxLogBuildings.Checked);
+        }
+
+        private void CheckBoxLogEconomy_CheckedChanged(object sender, EventArgs e)
+        {
+            DebugLogger.EnableEconomyLogging(checkBoxLogEconomy.Checked);
+        }
+
         // Update the Finance tab UI
         private void UpdateFinanceTab()
         {
