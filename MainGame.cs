@@ -25,6 +25,7 @@ namespace economy_sim
         private Button buttonShowPopStats;
         private PopStatsForm popStatsForm;
         private FactoryStatsForm factoryStatsForm;
+        private ConstructionForm constructionForm;
         private List<State> states;
         private PlayerRoleManager playerRoleManager;
         private Random random = new Random(); // Add a Random instance for AI and other uses
@@ -51,7 +52,6 @@ namespace economy_sim
         public MainGame()
         {
             InitializeComponent();
-            // Removed call to non-existent InitializeDebugControls()
             playerRoleManager = new PlayerRoleManager();
             allCitiesInWorld = new List<StrategyGame.City>();
             allCountries = new List<StrategyGame.Country>();
@@ -133,7 +133,8 @@ namespace economy_sim
             }
             
             popStatsForm = new PopStatsForm();
-            factoryStatsForm = new FactoryStatsForm(); 
+            factoryStatsForm = new FactoryStatsForm();
+            constructionForm = new ConstructionForm();
             tabControlMain.SelectedIndexChanged += TabControlMain_SelectedIndexChanged;
 
             // Setup ListBoxes for owner-drawing
@@ -159,6 +160,22 @@ namespace economy_sim
             {
                  this.tabPageCity.Controls.Add(buttonShowFactoryStats);
                  buttonShowFactoryStats.BringToFront(); // Ensure it's on top
+            }
+
+            Button buttonShowConstruction = new Button();
+            buttonShowConstruction.Text = "Construction";
+            buttonShowConstruction.Location = new System.Drawing.Point(buttonShowFactoryStats.Right + 10, buttonsTargetY);
+            buttonShowConstruction.Size = new System.Drawing.Size(120, 23);
+            buttonShowConstruction.Click += ButtonShowConstruction_Click;
+            if (this.tabControlMain.TabPages.ContainsKey("tabPageCity"))
+            {
+                this.tabControlMain.TabPages["tabPageCity"].Controls.Add(buttonShowConstruction);
+                buttonShowConstruction.BringToFront();
+            }
+            else if (this.tabPageCity != null)
+            {
+                 this.tabPageCity.Controls.Add(buttonShowConstruction);
+                 buttonShowConstruction.BringToFront();
             }
             
             // Example: Assign player a starting role for testing
@@ -309,6 +326,10 @@ namespace economy_sim
                                 currentCity.Budget = cityData.InitialBudget;
                                 currentCity.TaxRate = cityData.TaxRate;
                                 currentCity.CityExpenses = cityData.CityExpenses;
+                                // Add a basic suburb so housing and rail infrastructure exist
+                                var suburb = new Suburb($"{cityData.Name} Center", cityData.InitialPopulation,
+                                    cityData.InitialPopulation * 1.2, 0.75);
+                                currentCity.AddSuburb(suburb);
                                 // City constructor handles PopClasses and initial market dicts.
 
                                 if (cityData.InitialFactories != null)
@@ -370,11 +391,41 @@ namespace economy_sim
                 }
             }
             
+
             if (playerCountry == null && allCountries.Any())
             {
                 playerCountry = allCountries.First();
                 Console.WriteLine($"No player-controlled country explicitly set in JSON, defaulting to: {playerCountry.Name}");
             }
+
+            // Initialize construction companies from JSON data if present
+            Market.AllConstructionCompanies.Clear();
+            if (worldData.ConstructionCompanies != null)
+            {
+                foreach (var compData in worldData.ConstructionCompanies)
+                {
+                    var home = allCitiesInWorld.FirstOrDefault(c => c.Name == compData.HomeCity);
+                    var firm = new ConstructionCompany(compData.Name, compData.Workers, (decimal)compData.InitialBudget)
+                    {
+                        HomeCity = home
+                    };
+                    Market.AllConstructionCompanies.Add(firm);
+                }
+            }
+            else
+            {
+                // Create a basic firm in each of the first few cities as a fallback
+                foreach (var city in allCitiesInWorld.Take(3))
+                {
+                    var firm = new ConstructionCompany($"{city.Name} Builders", 100, 500000m)
+                    {
+                        HomeCity = city
+                    };
+                    Market.AllConstructionCompanies.Add(firm);
+                }
+            }
+
+            InitializeCorporationsAndAssignFactories();
 
             // Initialize DiplomacyManager after countries are loaded
             diplomacyManager = new StrategyGame.DiplomacyManager(allCountries);
@@ -433,6 +484,9 @@ namespace economy_sim
             defaultCity.Budget = defaultState.Budget * 0.2; // Example budget portion
             defaultCity.TaxRate = 0.05;
             defaultCity.CityExpenses = 1000;
+            var defaultSuburb = new Suburb($"{defaultCity.Name} Center", defaultCity.Population,
+                defaultCity.Population * 1.2, 0.75);
+            defaultCity.AddSuburb(defaultSuburb);
             
             // Add a basic farm to the default city
             StrategyGame.FactoryBlueprint farmBlueprint = StrategyGame.FactoryBlueprints.AllBlueprints.FirstOrDefault(bp => bp.FactoryTypeName == "Grain Farm");
@@ -467,7 +521,13 @@ namespace economy_sim
             comboBoxCountry.Items.Add(defaultCountry.Name);
             playerCountry = defaultCountry; // Assign this as the player country
             // UI should be updated after this returns to InitializeGameData by the existing logic there
-            
+            Market.AllConstructionCompanies.Clear();
+            var defaultFirm = new ConstructionCompany("Default Builders", 100, 500000m)
+            {
+                HomeCity = defaultCity
+            };
+            Market.AllConstructionCompanies.Add(defaultFirm);
+
             InitializeCorporationsAndAssignFactories(); // Critical to call this for fallback world too
         }
 
@@ -727,7 +787,13 @@ namespace economy_sim
                         factory.Produce(city.Stockpile, city); 
                     }
                     StrategyGame.Economy.UpdateCityEconomy(city); // Populates ImportNeeds and ExportableSurplus
-                    Market.UpdateCityPrices(city); 
+                    city.EvaluateConstructionNeeds();
+                    city.ProgressConstruction();
+                    if (constructionForm.Visible && constructionForm.CurrentCity == city)
+                    {
+                        constructionForm.UpdateProjects();
+                    }
+                    Market.UpdateCityPrices(city);
                 }
             }
             // --- End City Economies Update Phase ---
@@ -894,7 +960,20 @@ namespace economy_sim
                 }
             }
 
-            // 4. Refresh UI elements 
+            // Update state and country level economies before refreshing the UI
+            if (allCountries != null)
+            {
+                foreach (var country in allCountries)
+                {
+                    foreach (var state in country.States)
+                    {
+                        StrategyGame.Economy.UpdateStateEconomy(state);
+                    }
+                    StrategyGame.Economy.UpdateCountryEconomy(country);
+                }
+            }
+
+            // 4. Refresh UI elements
             // The GetSelectedCity() here will get the same city as cityCurrentlySelectedForUI,
             // but its data has now been updated by the simulation loop.
             UpdateOrderLists(); 
@@ -927,6 +1006,13 @@ namespace economy_sim
             foreach (var country in allCountries)
             {
                 country.FinancialSystem.SimulateMonetaryEffects();
+                DebugLogger.LogFinancialData(country.FinancialSystem, country.Name);
+            }
+
+            // Refresh finance tab if it's visible so data stays current
+            if (tabControlMain.SelectedTab == tabPageFinance)
+            {
+                UpdateFinanceTab();
             }
 
             // Process AI trade proposals (temporary simple logic)
@@ -1097,6 +1183,18 @@ namespace economy_sim
                 factoryStatsForm.UpdateStats(city);
                 factoryStatsForm.Show();
                 factoryStatsForm.BringToFront();
+            }
+        }
+
+        private void ButtonShowConstruction_Click(object sender, EventArgs e)
+        {
+            var city = GetSelectedCity();
+            if (city != null)
+            {
+                constructionForm.SetCity(city);
+                constructionForm.UpdateProjects();
+                constructionForm.Show();
+                constructionForm.BringToFront();
             }
         }
 
@@ -1387,148 +1485,34 @@ namespace economy_sim
         // Initialize Debug tab UI
         private void InitializeDebugTab()
         {
-            // Debug logging toggle button
-            Button buttonToggleDebug = new Button
-            {
-                Location = new Point(20, 20),
-                Size = new Size(150, 30),
-                Text = "Toggle Debug Logging: ON"
-            };
-            buttonToggleDebug.Click += (s, e) => {
-                bool isEnabled = DebugLogger.ToggleLogging();
-                buttonToggleDebug.Text = $"Toggle Debug Logging: {(isEnabled ? "ON" : "OFF")}";
-                DebugLogger.Log($"Debug logging has been {(isEnabled ? "enabled" : "disabled")}");
-            };
-            tabPageDebug.Controls.Add(buttonToggleDebug);
+            // Hide entity selection boxes until a role is chosen
+            comboBoxCountrySelection.Visible = false;
+            comboBoxStateSelection.Visible = false;
+            comboBoxCorporationSelection.Visible = false;
 
-            // Current role status (moved down)
-            labelCurrentRole = new Label
-            {
-                Location = new Point(20, 60),
-                AutoSize = true,
-                Text = "Current Role: None"
-            };
-            tabPageDebug.Controls.Add(labelCurrentRole);
-            
-            // Role type selection
-            Label labelRoleType = new Label
-            {
-                Location = new Point(20, 100),
-                AutoSize = true,
-                Text = "Select Role:"
-            };
-            tabPageDebug.Controls.Add(labelRoleType);
-            
-            comboBoxRoleType = new ComboBox
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 21),
-                DropDownStyle = ComboBoxStyle.DropDownList
-            };
-            comboBoxRoleType.Items.AddRange(new object[] { "Prime Minister", "Governor", "CEO" });
-            comboBoxRoleType.SelectedIndexChanged += ComboBoxRoleType_SelectedIndexChanged;
-            tabPageDebug.Controls.Add(comboBoxRoleType);
-            
-            // Entity selection (country, state, corporation)
-            labelEntitySelection = new Label
-            {
-                Location = new Point(20, 100),
-                AutoSize = true,
-                Text = "Select Entity:"
-            };
-            tabPageDebug.Controls.Add(labelEntitySelection);
-            
-            // Country selection for Prime Minister role
-            comboBoxCountrySelection = new ComboBox
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 21),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Visible = false // Initially hidden
-            };
-            tabPageDebug.Controls.Add(comboBoxCountrySelection);
-            
-            // State selection for Governor role
-            comboBoxStateSelection = new ComboBox
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 21),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Visible = false // Initially hidden
-            };
-            tabPageDebug.Controls.Add(comboBoxStateSelection);
-            
-            // Corporation selection for CEO role
-            comboBoxCorporationSelection = new ComboBox
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 21),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Visible = false // Initially hidden
-            };
-            tabPageDebug.Controls.Add(comboBoxCorporationSelection);
-            
-            // Buttons for role management
-            buttonAssumeRole = new Button
-            {
-                Location = new Point(120, 140),
-                Size = new Size(100, 30),
-                Text = "Assume Role",
-                Enabled = false // Initially disabled until a selection is made
-            };
-            buttonAssumeRole.Click += ButtonAssumeRole_Click;
-            tabPageDebug.Controls.Add(buttonAssumeRole);
-            
-            buttonRelinquishRole = new Button
-            {
-                Location = new Point(230, 140),
-                Size = new Size(120, 30),
-                Text = "Relinquish Role"
-            };
-            buttonRelinquishRole.Click += ButtonRelinquishRole_Click;
-            tabPageDebug.Controls.Add(buttonRelinquishRole);
-            
-            // Add additional role-specific information panel
-            Label labelRoleInfo = new Label
-            {
-                Location = new Point(20, 190),
-                Size = new Size(400, 200),
-                Text = "Debug Information:\nUse this panel to switch between different roles and countries/states/corporations for testing purposes.",
-                BorderStyle = BorderStyle.FixedSingle,
-                BackColor = Color.LightYellow
-            };
-            tabPageDebug.Controls.Add(labelRoleInfo);
-            
-            // Initial population of comboboxes
+            // Populate selection lists
             PopulateCountrySelectionComboBox();
             PopulateStateSelectionComboBox();
             PopulateCorporationSelectionComboBox();
-            
-            // Update current role display
+
+            // Show initial role text
             UpdateCurrentRoleDisplay();
 
-            // Debug mode toggle button
+            // Extra toggle for detailed debug output
             Button buttonToggleDebugMode = new Button
             {
-                Location = new Point(20, 100),
-                Size = new Size(200, 30),
+                Location = new Point(10, 280),
+                Size = new Size(120, 23),
                 Text = "Toggle Debug Mode"
             };
             buttonToggleDebugMode.Click += (sender, e) =>
             {
                 isDetailedDebugMode = !isDetailedDebugMode;
-                MessageBox.Show(isDetailedDebugMode ? "Detailed Debug Mode Enabled" : "General Debug Mode Enabled", "Debug Mode Toggled");
+                MessageBox.Show(
+                    isDetailedDebugMode ? "Detailed Debug Mode Enabled" : "General Debug Mode Enabled",
+                    "Debug Mode Toggled");
             };
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
-
-            // Finance ListView setup
-            listViewFinance.Columns.Add("Country", 120);
-            listViewFinance.Columns.Add("Money Supply", 100);
-            listViewFinance.Columns.Add("Reserves", 100);
-            listViewFinance.Columns.Add("Base Rate", 80);
-            listViewFinance.Columns.Add("Debt/GDP", 80);
-            listViewFinance.Columns.Add("Inflation", 80);
-            listViewFinance.Columns.Add("Credit Rating", 80);
         }
     
         // Populate the country selection combobox
@@ -1754,6 +1738,21 @@ namespace economy_sim
             DebugLogger.Log($"Debug logging has been {(isEnabled ? "enabled" : "disabled")}");
         }
 
+        private void CheckBoxLogPops_CheckedChanged(object sender, EventArgs e)
+        {
+            DebugLogger.EnablePopLogging(checkBoxLogPops.Checked);
+        }
+
+        private void CheckBoxLogBuildings_CheckedChanged(object sender, EventArgs e)
+        {
+            DebugLogger.EnableBuildingLogging(checkBoxLogBuildings.Checked);
+        }
+
+        private void CheckBoxLogEconomy_CheckedChanged(object sender, EventArgs e)
+        {
+            DebugLogger.EnableEconomyLogging(checkBoxLogEconomy.Checked);
+        }
+
         // Update the Finance tab UI
         private void UpdateFinanceTab()
         {
@@ -1778,34 +1777,7 @@ namespace economy_sim
                 }
             }
 
-            // Update bonds ListView if it exists
-            var listViewBonds = tabPageFinance.Controls.OfType<ListView>()
-                                          .FirstOrDefault(lv => lv != listViewFinance);
-            if (listViewBonds != null && playerCountry?.FinancialSystem != null)
-            {
-                listViewBonds.Items.Clear();
-                foreach (var bond in playerCountry.FinancialSystem.OutstandingBonds)
-                {
-                    var bondItem = new ListViewItem(bond.Id.ToString().Substring(0, 8)); // Short GUID
-                    bondItem.SubItems.Add(bond.Type.ToString());
-                    bondItem.SubItems.Add(bond.PrincipalAmount.ToString("C"));
-                    bondItem.SubItems.Add(bond.InterestRate.ToString("P"));
-                    bondItem.SubItems.Add(bond.MaturityDate.ToShortDateString());
-                    bondItem.SubItems.Add(bond.OwnerId);
-                    bondItem.SubItems.Add(bond.IsDefaulted ? "Defaulted" : "Active");
-                    
-                    if (bond.IsDefaulted)
-                    {
-                        bondItem.BackColor = Color.LightPink;
-                    }
-                    else if (bond.MaturityDate <= DateTime.Now)
-                    {
-                        bondItem.BackColor = Color.LightYellow;
-                    }
-                    
-                    listViewBonds.Items.Add(bondItem);
-                }
-            }
+            // Bond information no longer displayed
         }
 
         private void InitializeFinanceTab()
@@ -1819,159 +1791,8 @@ namespace economy_sim
             listViewFinance.Columns.Add("Inflation", 80);
             listViewFinance.Columns.Add("Credit Rating", 80);
 
-            // Add bond management ListView
-            ListView listViewBonds = new ListView();
-            listViewBonds.View = View.Details;
-            listViewBonds.FullRowSelect = true;
-            listViewBonds.GridLines = true;
-            listViewBonds.Location = new Point(10, 180);
-            listViewBonds.Size = new Size(800, 200);
-            listViewBonds.Columns.Add("Bond ID", 100);
-            listViewBonds.Columns.Add("Type", 80);
-            listViewBonds.Columns.Add("Principal", 100);
-            listViewBonds.Columns.Add("Interest Rate", 80);
-            listViewBonds.Columns.Add("Maturity Date", 120);
-            listViewBonds.Columns.Add("Owner", 100);
-            listViewBonds.Columns.Add("Status", 80);
-            tabPageFinance.Controls.Add(listViewBonds);
-
-            // Add bond issuance controls
-            Button buttonIssueBond = new Button
-            {
-                Text = "Issue New Bond",
-                Location = new Point(10, 390),
-                Size = new Size(120, 30)
-            };
-            buttonIssueBond.Click += (s, e) => OpenBondIssuanceDialog();
-            tabPageFinance.Controls.Add(buttonIssueBond);
-
-            Button buttonProcessBonds = new Button
-            {
-                Text = "Process Maturities",
-                Location = new Point(140, 390),
-                Size = new Size(120, 30)
-            };
-            buttonProcessBonds.Click += (s, e) => ProcessBondMaturities();
-            tabPageFinance.Controls.Add(buttonProcessBonds);
+            // Bond UI removed
         }
 
-        private void OpenBondIssuanceDialog()
-        {
-            if (playerCountry?.FinancialSystem == null) return;
-
-            // Create bond issuance form with necessary controls
-            Form bondForm = new Form
-            {
-                Text = "Issue New Bond",
-                Size = new Size(400, 300),
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                StartPosition = FormStartPosition.CenterParent
-            };
-
-            ComboBox bondTypeCombo = new ComboBox
-            {
-                Location = new Point(120, 20),
-                Size = new Size(200, 20)
-            };
-            bondTypeCombo.Items.AddRange(Enum.GetNames(typeof(BondType)));
-            bondTypeCombo.SelectedIndex = 0;
-
-            NumericUpDown principalInput = new NumericUpDown
-            {
-                Location = new Point(120, 60),
-                Size = new Size(200, 20),
-                Maximum = 1000000000,
-                Minimum = 1000,
-                Increment = 1000,
-                Value = 100000
-            };
-
-            NumericUpDown interestInput = new NumericUpDown
-            {
-                Location = new Point(120, 100),
-                Size = new Size(200, 20),
-                DecimalPlaces = 2,
-                Maximum = 20,
-                Minimum = 0.1m,
-                Increment = 0.25m,
-                Value = 5
-            };
-
-            NumericUpDown maturityInput = new NumericUpDown
-            {
-                Location = new Point(120, 140),
-                Size = new Size(200, 20),
-                Maximum = 30,
-                Minimum = 1,
-                Value = 5
-            };
-
-            bondForm.Controls.AddRange(new Control[] {
-                new Label { Text = "Bond Type:", Location = new Point(20, 23), Size = new Size(100, 20) },
-                new Label { Text = "Principal:", Location = new Point(20, 63), Size = new Size(100, 20) },
-                new Label { Text = "Interest Rate (%):", Location = new Point(20, 103), Size = new Size(100, 20) },
-                new Label { Text = "Maturity (Years):", Location = new Point(20, 143), Size = new Size(100, 20) },
-                bondTypeCombo,
-                principalInput,
-                interestInput,
-                maturityInput
-            });
-
-            Button issueButton = new Button
-            {
-                Text = "Issue Bond",
-                DialogResult = DialogResult.OK,
-                Location = new Point(120, 200),
-                Size = new Size(100, 30)
-            };
-            bondForm.Controls.Add(issueButton);
-
-            Button cancelButton = new Button
-            {
-                Text = "Cancel",
-                DialogResult = DialogResult.Cancel,
-                Location = new Point(230, 200),
-                Size = new Size(100, 30)
-            };
-            bondForm.Controls.Add(cancelButton);
-
-            if (bondForm.ShowDialog() == DialogResult.OK)
-            {
-                try
-                {
-                    var bondType = (BondType)Enum.Parse(typeof(BondType), bondTypeCombo.SelectedItem.ToString());
-                    playerCountry.FinancialSystem.IssueBond(
-                        playerCountry.Name, // Owner is the country itself initially
-                        principalInput.Value,
-                        (float)(interestInput.Value / 100.0m), // Convert percentage to decimal
-                        (int)maturityInput.Value,
-                        bondType
-                    );
-                    UpdateFinanceTab(); // Refresh display
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.Message, "Bond Issuance Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
-        }
-
-        private void ProcessBondMaturities()
-        {
-            if (playerCountry?.FinancialSystem == null) return;
-
-            var fs = playerCountry.FinancialSystem;
-            var bonds = fs.OutstandingBonds.ToList(); // Get snapshot of current bonds
-            
-            foreach (var bond in bonds)
-            {
-                if (bond.MaturityDate <= DateTime.Now && !bond.IsDefaulted)
-                {
-                    fs.ProcessBondMaturity(bond.Id);
-                }
-            }
-
-            UpdateFinanceTab(); // Refresh display after processing
-        }
     }
 }

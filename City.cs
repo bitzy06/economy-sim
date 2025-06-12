@@ -75,14 +75,14 @@ namespace StrategyGame
             }
 
             // Create population classes with names matching job types
-            DebugLogger.Log($"[City] Creating population classes for city: {Name}");
+            DebugLogger.Log($"[City] Creating population classes for city: {Name}", DebugLogger.LogCategory.Pop);
 
             var laborers = new PopClass("Laborers", (int)(Population * 0.5), 0.03);
             laborers.Needs["Food"] = 2.0;
             laborers.Needs["Housing"] = 1.0;
             laborers.Needs["Clothing"] = 0.5;
             PopClasses.Add(laborers);
-            DebugLogger.Log($"[City] Created Laborers class - Size: {laborers.Size}, Income: {laborers.IncomePerPerson}");
+            DebugLogger.Log($"[City] Created Laborers class - Size: {laborers.Size}, Income: {laborers.IncomePerPerson}", DebugLogger.LogCategory.Pop);
 
             var craftsmen = new PopClass("Craftsmen", (int)(Population * 0.25), 0.06);
             craftsmen.Needs["Food"] = 3.0;
@@ -90,7 +90,7 @@ namespace StrategyGame
             craftsmen.Needs["Clothing"] = 1.0;
             craftsmen.Needs["Luxury"] = 0.2;
             PopClasses.Add(craftsmen);
-            DebugLogger.Log($"[City] Created Craftsmen class - Size: {craftsmen.Size}, Income: {craftsmen.IncomePerPerson}");
+            DebugLogger.Log($"[City] Created Craftsmen class - Size: {craftsmen.Size}, Income: {craftsmen.IncomePerPerson}", DebugLogger.LogCategory.Pop);
 
             var engineers = new PopClass("Engineers", (int)(Population * 0.15), 0.12);
             engineers.Needs["Food"] = 4.0;
@@ -99,7 +99,7 @@ namespace StrategyGame
             engineers.Needs["Luxury"] = 0.5;
             engineers.Needs["Education"] = 1.0;
             PopClasses.Add(engineers);
-            DebugLogger.Log($"[City] Created Engineers class - Size: {engineers.Size}, Income: {engineers.IncomePerPerson}");
+            DebugLogger.Log($"[City] Created Engineers class - Size: {engineers.Size}, Income: {engineers.IncomePerPerson}", DebugLogger.LogCategory.Pop);
 
             var managers = new PopClass("Managers", (int)(Population * 0.07), 0.15);
             managers.Needs["Food"] = 5.0;
@@ -108,7 +108,7 @@ namespace StrategyGame
             managers.Needs["Luxury"] = 1.0;
             managers.Needs["Education"] = 1.5;
             PopClasses.Add(managers);
-            DebugLogger.Log($"[City] Created Managers class - Size: {managers.Size}, Income: {managers.IncomePerPerson}");
+            DebugLogger.Log($"[City] Created Managers class - Size: {managers.Size}, Income: {managers.IncomePerPerson}", DebugLogger.LogCategory.Pop);
 
             var clerks = new PopClass("Clerks", (int)(Population * 0.03), 0.08);
             clerks.Needs["Food"] = 3.5;
@@ -117,7 +117,7 @@ namespace StrategyGame
             clerks.Needs["Luxury"] = 0.3;
             clerks.Needs["Education"] = 0.5;
             PopClasses.Add(clerks);
-            DebugLogger.Log($"[City] Created Clerks class - Size: {clerks.Size}, Income: {clerks.IncomePerPerson}");
+            DebugLogger.Log($"[City] Created Clerks class - Size: {clerks.Size}, Income: {clerks.IncomePerPerson}", DebugLogger.LogCategory.Pop);
         }
 
         public void SimulateGrowth()
@@ -144,6 +144,9 @@ namespace StrategyGame
             Suburbs.Add(suburb);
         }
 
+        public double TotalHousingCapacity => Suburbs.Sum(s => s.HousingCapacity);
+        public double TotalRailwayKilometers => Suburbs.Sum(s => s.RailwayKilometers);
+
         public double CalculateCityQualityOfLife()
         {
             double suburbQoL = 0;
@@ -166,33 +169,78 @@ namespace StrategyGame
                 popClassQoL /= PopClasses.Count; // Average QoL across population classes
             }
 
-            DebugLogger.Log($"[CalculateCityQualityOfLife] Suburb QoL: {suburbQoL}, Population Class QoL: {popClassQoL}");
+            DebugLogger.Log($"[CalculateCityQualityOfLife] Suburb QoL: {suburbQoL}, Population Class QoL: {popClassQoL}", DebugLogger.LogCategory.Economy);
 
             double cityQoL = (suburbQoL + popClassQoL) / 2; // Combine with equal weight
-            DebugLogger.Log($"[CalculateCityQualityOfLife] Calculated City QoL: {cityQoL}");
+            DebugLogger.Log($"[CalculateCityQualityOfLife] Calculated City QoL: {cityQoL}", DebugLogger.LogCategory.Economy);
 
             return cityQoL;
         }
 
-        public void StartConstructionProject(ConstructionProject project)
+        // Determine if new construction projects are required and start them automatically
+        public void EvaluateConstructionNeeds()
         {
-            ActiveProjects.Add(project);
-        }
-
-        public void ProgressConstruction(decimal availableBudget)
-        {
-            foreach (var project in ActiveProjects)
+            if (!ActiveProjects.Any(p => p.Type == ProjectType.Housing))
             {
-                if (project.ProgressProject(1, availableBudget)) // Progress by 1 day
+                double deficit = Population - TotalHousingCapacity;
+                if (deficit > Population * 0.05)
                 {
-                    if (project.IsComplete())
-                    {
-                        ApplyProjectEffects(project);
-                    }
+                    int output = (int)Math.Ceiling(deficit);
+                    decimal budget = output * 50m;
+                    int duration = Math.Max(30, output / 50);
+                    decimal minBudget = ConstructionProject.MinimumDailyBudget * duration;
+                    if (budget < minBudget) budget = minBudget;
+                    var proj = new ConstructionProject(ProjectType.Housing, budget, duration, output, "Timber", 5);
+                    StartConstructionProject(proj);
                 }
             }
 
-            ActiveProjects.RemoveAll(p => p.IsComplete()); // Remove completed projects
+            if (!ActiveProjects.Any(p => p.Type == ProjectType.Railway))
+            {
+                double desired = Suburbs.Count * 5.0; // target kilometers
+                double shortfall = desired - TotalRailwayKilometers;
+                if (shortfall > 1.0)
+                {
+                    double output = Math.Min(10.0, shortfall);
+                    int duration = 60;
+                    decimal budget = (decimal)output * 100m;
+                    decimal minBudget = ConstructionProject.MinimumDailyBudget * duration;
+                    if (budget < minBudget) budget = minBudget;
+                    var proj = new ConstructionProject(ProjectType.Railway, budget, duration, output, "Steel", 3);
+                    StartConstructionProject(proj);
+                }
+            }
+        }
+
+        public void StartConstructionProject(ConstructionProject project)
+        {
+            var firm = Market.AllConstructionCompanies.FirstOrDefault();
+            if (firm != null && firm.TakeProject(project, this))
+            {
+                ActiveProjects.Add(project);
+            }
+            else
+            {
+                Console.WriteLine($"No construction firm available or unable to take project in {Name}.");
+            }
+        }
+
+        public void ProgressConstruction()
+        {
+            var firms = ActiveProjects.Select(p => p.AssignedCompany).Where(f => f != null).Distinct().ToList();
+            foreach (var firm in firms)
+            {
+                firm.WorkOnProjects(this);
+            }
+
+            foreach (var project in ActiveProjects.ToList())
+            {
+                if (project.IsComplete())
+                {
+                    ApplyProjectEffects(project);
+                    ActiveProjects.Remove(project);
+                }
+            }
         }
 
         private void ApplyProjectEffects(ConstructionProject project)

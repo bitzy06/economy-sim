@@ -47,9 +47,18 @@ namespace StrategyGame
         public bool IsPlayerControlled { get; set; } // To identify the player's starting nation
     }
 
+    public class ConstructionCompanyData
+    {
+        public string Name { get; set; }
+        public string HomeCity { get; set; }
+        public double InitialBudget { get; set; }
+        public int Workers { get; set; }
+    }
+
     // Root object for the JSON file
     public class WorldSetupData
     {
         public List<CountryData> Countries { get; set; }
+        public List<ConstructionCompanyData> ConstructionCompanies { get; set; }
     }
 } 
