@@ -256,6 +256,7 @@ namespace economy_sim
 
             pictureBox1.Image?.Dispose();
             pictureBox1.Image = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
+          //  pictureBox1.Image = PixelMapGenerator.GenerateTerrainPixelArtMap(width, height,5); // Use the new terrain map generator
 
 
         }
