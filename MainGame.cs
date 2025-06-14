@@ -1933,6 +1933,7 @@ namespace economy_sim
 
             ApplyZoom();
 
+
             int targetX = newCenterX - panelMap.ClientSize.Width / 2;
             int targetY = newCenterY - panelMap.ClientSize.Height / 2;
 
@@ -1942,6 +1943,7 @@ namespace economy_sim
             targetY = Math.Max(0, Math.Min(maxY, targetY));
 
             panelMap.AutoScrollPosition = new Point(targetX, targetY);
+
 
         }
 
