@@ -13,8 +13,19 @@ namespace StrategyGame
     /// </summary>
     public static class PixelMapGenerator
     {
+        // Resolve paths relative to the repository root so the application does
+        // not depend on developer specific locations. The executable lives in
+        // bin/Debug or bin/Release so we need to traverse three directories up
+        // to reach the repo root and then into the data folder.
+        private static readonly string RepoRoot =
+            System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
+        private static readonly string DataDir =
+            System.IO.Path.Combine(RepoRoot, "data");
         private static readonly string TifPath =
-     @"C:\Users\kayla\source\repos\bitzy06\resources\ETOPO1_Bed_g_geotiff.tif";
+            System.IO.Path.Combine(DataDir, "ETOPO1_Bed_g_geotiff.tif");
+        private static readonly string ShpPath =
+            System.IO.Path.Combine(DataDir, "ne_10m_admin_0_countries.shp");
 
         /// <summary>
         /// Ensures the GeoTIFF file exists by invoking fetch_etopo1.py if needed.
@@ -28,7 +39,7 @@ namespace StrategyGame
             {
                 FileName = "python3",
                 Arguments = "fetch_etopo1.py",
-                WorkingDirectory = @"C:\Users\kayla\source\repos\bitzy06\economy-sim",
+                WorkingDirectory = RepoRoot,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false
@@ -79,8 +90,37 @@ namespace StrategyGame
                     }
                 }
 
-                return dest;
+               return dest;
+           }
+       }
+
+        /// <summary>
+        /// Generates a terrain map and overlays country borders.
+        /// </summary>
+        public static Bitmap GeneratePixelArtMapWithCountries(int width, int height)
+        {
+            Bitmap baseMap = GeneratePixelArtMap(width, height);
+            try
+            {
+                int[,] mask = CountryMaskGenerator.CreateCountryMask(TifPath, ShpPath, width, height);
+                for (int y = 1; y < height - 1; y++)
+                {
+                    for (int x = 1; x < width - 1; x++)
+                    {
+                        int code = mask[y, x];
+                        if (code != mask[y - 1, x] || code != mask[y + 1, x] ||
+                            code != mask[y, x - 1] || code != mask[y, x + 1])
+                        {
+                            baseMap.SetPixel(x, y, Color.Black);
+                        }
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("Country overlay failed: " + ex.Message);
+            }
+            return baseMap;
         }
 
         private static Color GetAltitudeColor(float value)
