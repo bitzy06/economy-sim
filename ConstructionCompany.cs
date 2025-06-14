@@ -22,6 +22,20 @@ namespace StrategyGame
             Projects = new List<ConstructionProject>();
         }
 
+        // Convenience method for starting a new project. Returns true if the
+        // company successfully took on the job.
+        public bool StartProject(ProjectType type, decimal budget, int duration,
+                                 double output, string requiredResource,
+                                 int resourcePerDay, int workersRequired,
+                                 decimal workerWagePerDay, City city,
+                                 bool governmentSponsored = false)
+        {
+            var project = new ConstructionProject(type, budget, duration, output,
+                requiredResource, resourcePerDay, workersRequired, workerWagePerDay,
+                governmentSponsored);
+            return TakeProject(project, city);
+        }
+
         // City pays the project budget to the company when starting a job
         public bool TakeProject(ConstructionProject project, City city)
         {
@@ -50,7 +64,7 @@ namespace StrategyGame
 
                 decimal dailyBaseCost = project.Budget / project.Duration;
                 decimal resourceCost = 0m;
-
+                
                 if (!string.IsNullOrEmpty(project.RequiredResource) && project.ResourcePerDay > 0)
                 {
                     double price = city.LocalPrices.ContainsKey(project.RequiredResource)
@@ -67,12 +81,46 @@ namespace StrategyGame
                         Market.BuyFromCityMarket(city, project.RequiredResource, project.ResourcePerDay, buyerCorp: this);
                         Budget -= (double)resourceCost;
                     }
+                    else
+                    {
+                        if (project.BudgetRemaining <= 0 || Budget <= 0)
+                        {
+                            Projects.Remove(project);
+                            // TODO: if project.GovernmentSponsored continue work using state funds
+                        }
+                        continue;
+                    }
+                }
+
+                decimal workerCost = project.WorkerCostPerDay;
+                if (workerCost > 0)
+                {
+                    if (Budget >= (double)workerCost && project.TrySpendBudget(workerCost))
+                    {
+                        Budget -= (double)workerCost;
+                    }
+                    else
+                    {
+                        if (project.BudgetRemaining <= 0 || Budget <= 0)
+                        {
+                            Projects.Remove(project);
+                            // TODO: if project.GovernmentSponsored continue work using state funds
+                        }
+                        continue;
+                    }
                 }
 
                 decimal totalDailyCost = dailyBaseCost;
 
                 if (Budget < (double)totalDailyCost || project.BudgetRemaining < totalDailyCost)
+                {
+                    if (project.BudgetRemaining <= 0 || Budget <= 0)
+                    {
+                        Projects.Remove(project);
+                        // TODO: if project.GovernmentSponsored continue work using state funds
+                    }
                     continue;
+                }
 
                 if (project.ProgressProject(1, dailyBaseCost))
                 {
