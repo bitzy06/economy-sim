@@ -25,10 +25,18 @@ namespace StrategyGame
         private static readonly string DataDir =
             System.IO.Path.Combine(RepoRoot, "data");
         private static readonly string TifPath =
-
-          @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\ETOPO1_Bed_g_geotiff.tif";
+            @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\ETOPO1_Bed_g_geotiff.tif";
         private static readonly string ShpPath =
-          @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\ne_10m_admin_0_countries.shp";
+            @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\ne_10m_admin_0_countries.shp";
+
+        // Terrain map used for pixel-art generation.  We first try the copy in
+        // the repository's data folder and fall back to the absolute path that
+        // was used during development if the file is not found.  Using this
+        // fallback avoids issues when relative paths fail to resolve at runtime.
+        private static readonly string TerrainTifPath =
+            File.Exists(Path.Combine(DataDir, "terrain", "NE1_HR_LC.tif"))
+                ? Path.Combine(DataDir, "terrain", "NE1_HR_LC.tif")
+                : @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\terrain\NE1_HR_LC.tif";
 
 
         /// <summary>
@@ -109,6 +117,53 @@ namespace StrategyGame
             return baseMap;
         }
 
+        /// <summary>
+        /// Generates a pixel-art map using the Natural Earth terrain raster.
+        /// Each logical cell is represented by multiple pixels which are
+        /// randomly chosen from a small palette derived from the terrain color.
+        /// </summary>
+        /// <param name="cellsX">Number of cells horizontally.</param>
+        /// <param name="cellsY">Number of cells vertically.</param>
+        /// <param name="pixelsPerCell">Size of each cell in pixels.</param>
+        public static Bitmap GenerateTerrainPixelArtMap(int cellsX, int cellsY, int pixelsPerCell)
+        {
+            string path = TerrainTifPath;
+            if (!File.Exists(path))
+                throw new FileNotFoundException("Missing terrain GeoTIFF", path);
+
+            using (var img = new Bitmap(path))
+            using (var scaled = new Bitmap(cellsX, cellsY))
+            {
+                using (var g = Graphics.FromImage(scaled))
+                {
+                    g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                    g.PixelOffsetMode = PixelOffsetMode.Half;
+                    g.DrawImage(img, 0, 0, cellsX, cellsY);
+                }
+
+                var dest = new Bitmap(cellsX * pixelsPerCell, cellsY * pixelsPerCell);
+                Random rng = new Random();
+                for (int y = 0; y < cellsY; y++)
+                {
+                    for (int x = 0; x < cellsX; x++)
+                    {
+                        Color baseColor = scaled.GetPixel(x, y);
+                        Color[] palette = BuildPalette(baseColor);
+                        for (int py = 0; py < pixelsPerCell; py++)
+                        {
+                            for (int px = 0; px < pixelsPerCell; px++)
+                            {
+                                Color chosen = palette[rng.Next(palette.Length)];
+                                dest.SetPixel(x * pixelsPerCell + px, y * pixelsPerCell + py, chosen);
+                            }
+                        }
+                    }
+                }
+
+                return dest;
+            }
+        }
+
         private static Color GetAltitudeColor(float value)
         {
             // Piecewise gradient approximating terrain colors
@@ -133,6 +188,19 @@ namespace StrategyGame
             int g = (int)(a.G + (b.G - a.G) * t);
             int bVal = (int)(a.B + (b.B - a.B) * t);
             return Color.FromArgb(r, g, bVal);
+        }
+
+        // Builds a small palette of colors around the provided base color.  A
+        // darker and lighter variant are included to add variety when filling
+        // each cell with multiple pixels.
+        private static Color[] BuildPalette(Color baseColor)
+        {
+            return new[]
+            {
+                Lerp(baseColor, Color.Black, 0.2f),
+                baseColor,
+                Lerp(baseColor, Color.White, 0.2f)
+            };
         }
     }
 }
