@@ -11,6 +11,7 @@
         private System.Windows.Forms.ListBox listBoxMarketStats;
         private System.Windows.Forms.TabPage tabPageCompanies;
         private System.Windows.Forms.ListView listViewCompanies;
+        private System.Windows.Forms.ComboBox comboBoxCompanyFilter;
 
         /// <summary>
         /// Clean up any resources being used.
@@ -39,6 +40,7 @@
             this.listBoxMarketStats = new System.Windows.Forms.ListBox();
             this.tabPageCompanies = new System.Windows.Forms.TabPage();
             this.listViewCompanies = new System.Windows.Forms.ListView();
+            this.comboBoxCompanyFilter = new System.Windows.Forms.ComboBox();
             this.tabPageFinance = new System.Windows.Forms.TabPage();
             this.listViewFinance = new System.Windows.Forms.ListView();
             this.tabPageDebug = new System.Windows.Forms.TabPage();
@@ -107,26 +109,40 @@
             this.listBoxMarketStats.TabIndex = 2;
             // 
             // tabPageCompanies
-            // 
+            //
             this.tabPageCompanies.Controls.Add(this.listViewCompanies);
+            this.tabPageCompanies.Controls.Add(this.comboBoxCompanyFilter);
             this.tabPageCompanies.Location = new System.Drawing.Point(4, 22);
             this.tabPageCompanies.Name = "tabPageCompanies";
             this.tabPageCompanies.Size = new System.Drawing.Size(822, 454);
             this.tabPageCompanies.TabIndex = 6;
             this.tabPageCompanies.Text = "Companies";
             this.tabPageCompanies.UseVisualStyleBackColor = true;
-            // 
+            //
             // listViewCompanies
-            // 
+            //
             this.listViewCompanies.FullRowSelect = true;
             this.listViewCompanies.GridLines = true;
             this.listViewCompanies.HideSelection = false;
-            this.listViewCompanies.Location = new System.Drawing.Point(10, 10);
+            this.listViewCompanies.Location = new System.Drawing.Point(10, 40);
             this.listViewCompanies.Name = "listViewCompanies";
-            this.listViewCompanies.Size = new System.Drawing.Size(800, 430);
-            this.listViewCompanies.TabIndex = 0;
+            this.listViewCompanies.Size = new System.Drawing.Size(800, 404);
+            this.listViewCompanies.TabIndex = 1;
             this.listViewCompanies.UseCompatibleStateImageBehavior = false;
             this.listViewCompanies.View = System.Windows.Forms.View.Details;
+            //
+            // comboBoxCompanyFilter
+            //
+            this.comboBoxCompanyFilter.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.comboBoxCompanyFilter.FormattingEnabled = true;
+            this.comboBoxCompanyFilter.Items.AddRange(new object[] {
+            "All",
+            "Corporation",
+            "Construction"});
+            this.comboBoxCompanyFilter.Location = new System.Drawing.Point(10, 10);
+            this.comboBoxCompanyFilter.Name = "comboBoxCompanyFilter";
+            this.comboBoxCompanyFilter.Size = new System.Drawing.Size(160, 21);
+            this.comboBoxCompanyFilter.TabIndex = 0;
             // 
             // tabPageFinance
             // 
@@ -498,6 +514,7 @@
             this.tabControlMain.Controls.Add(this.tabPageCity);
             this.tabControlMain.Controls.Add(this.tabPageDiplomacy);
             this.tabControlMain.Controls.Add(this.tabPageDebug);
+            this.tabControlMain.Controls.Add(this.tabPageCompanies);
             this.tabControlMain.Controls.Add(this.tabPageFinance);
             this.tabControlMain.Location = new System.Drawing.Point(10, 10);
             this.tabControlMain.Name = "tabControlMain";
@@ -529,8 +546,11 @@
 
         }
 
-        #endregion
+#endregion
 
+        private System.Windows.Forms.TabPage tabPageCompanies;
+        private System.Windows.Forms.ListView listViewCompanies;
+        private System.Windows.Forms.ComboBox comboBoxCompanyFilter;
         private System.Windows.Forms.TabPage tabPageFinance;
         private System.Windows.Forms.ListView listViewFinance;
         private System.Windows.Forms.TabPage tabPageDebug;

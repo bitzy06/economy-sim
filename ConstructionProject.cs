@@ -26,12 +26,16 @@ namespace StrategyGame
         public int Cost {  get; private set; } // Cost per day of construction
         public string RequiredResource { get; private set; }
         public int ResourcePerDay { get; private set; }
+        public int WorkersRequired { get; private set; }
+        public decimal WorkerWagePerDay { get; private set; }
+        public decimal WorkerCostPerDay => WorkersRequired * WorkerWagePerDay;
+        public bool GovernmentSponsored { get; private set; }
 
         public ConstructionCompany AssignedCompany { get; set; }
 
         public const decimal MinimumDailyBudget = 100m;
 
-        public ConstructionProject(ProjectType type, decimal budget, int duration, double output, string requiredResource, int resourcePerDay)
+        public ConstructionProject(ProjectType type, decimal budget, int duration, double output, string requiredResource, int resourcePerDay, int workersRequired = 0, decimal workerWagePerDay = 0m, bool governmentSponsored = false)
         {
             Type = type;
             Budget = budget;
@@ -40,6 +44,9 @@ namespace StrategyGame
             Output = output;
             RequiredResource = requiredResource;
             ResourcePerDay = resourcePerDay;
+            WorkersRequired = workersRequired;
+            WorkerWagePerDay = workerWagePerDay;
+            GovernmentSponsored = governmentSponsored;
             Progress = 0;
         }
 

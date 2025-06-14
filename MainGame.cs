@@ -72,6 +72,7 @@ namespace economy_sim
             comboBoxStates.SelectedIndexChanged += ComboBoxStates_SelectedIndexChanged;
             comboBoxCities.SelectedIndexChanged += ComboBoxCities_SelectedIndexChanged;
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
+            comboBoxCompanyFilter.SelectedIndexChanged += ComboBoxCompanyFilter_SelectedIndexChanged;
 
             InitializeGameData();
             
@@ -112,6 +113,10 @@ namespace economy_sim
             // Initialize and populate Finance tab
             InitializeFinanceTab();
             UpdateFinanceTab();
+
+            // Initialize Companies tab
+            InitializeCompaniesTab();
+            UpdateCompaniesTab();
             // Initialize Government tab
             InitializeGovernmentTab();
             UpdateGovernmentTab();
@@ -990,6 +995,10 @@ namespace economy_sim
             {
                 UpdateFinanceTab();
             }
+            if (tabControlMain.SelectedTab == tabPageCompanies)
+            {
+                UpdateCompaniesTab();
+            }
             if (tabControlMain.SelectedTab == tabPageGovernment)
             {
                 UpdateGovernmentTab();
@@ -1295,6 +1304,11 @@ namespace economy_sim
             UpdateCountryStats();
         }
 
+        private void ComboBoxCompanyFilter_SelectedIndexChanged(object sender, System.EventArgs e)
+        {
+            UpdateCompaniesTab();
+        }
+
         private void TabControlMain_SelectedIndexChanged(object sender, EventArgs e)
         {
             // Ensure the correct controls are visible and populated when a tab is selected
@@ -1311,12 +1325,16 @@ namespace economy_sim
             UpdateStateStats(); 
             UpdateCityComboBox(); 
             UpdateCityAndFactoryStats();
-            UpdateMarketStats(); 
+            UpdateMarketStats();
             UpdateOrderLists();
             // If Finance tab selected, refresh finance data
             if (tabControlMain.SelectedTab == tabPageFinance)
             {
                 UpdateFinanceTab();
+            }
+            if (tabControlMain.SelectedTab == tabPageCompanies)
+            {
+                UpdateCompaniesTab();
             }
             if (tabControlMain.SelectedTab == tabPageGovernment)
             {
@@ -1776,6 +1794,56 @@ namespace economy_sim
             listViewFinance.Columns.Add("Credit Rating", 80);
 
             // Bond UI removed
+        }
+
+        private void InitializeCompaniesTab()
+        {
+            listViewCompanies.Columns.Add("Name", 150);
+            listViewCompanies.Columns.Add("Budget", 100);
+            listViewCompanies.Columns.Add("Workers", 80);
+            listViewCompanies.Columns.Add("Specialization", 120);
+            listViewCompanies.Columns.Add("Active Projects", 100);
+            listViewCompanies.Columns.Add("Completed", 80);
+            comboBoxCompanyFilter.SelectedIndex = 0;
+        }
+
+        private void UpdateCompaniesTab()
+        {
+            listViewCompanies.BeginUpdate();
+            listViewCompanies.Items.Clear();
+
+            string filter = comboBoxCompanyFilter.SelectedItem?.ToString() ?? "All";
+
+            if (filter == "All" || filter == "Corporation")
+            {
+                foreach (var corp in Market.AllCorporations)
+                {
+                    var item = new ListViewItem(corp.Name);
+                    item.SubItems.Add(corp.Budget.ToString("C"));
+                    int workers = corp.OwnedFactories.Sum(f => f.WorkersEmployed);
+                    item.SubItems.Add(workers.ToString());
+                    item.SubItems.Add(corp.Specialization.ToString());
+                    item.SubItems.Add(string.Empty);
+                    item.SubItems.Add(string.Empty);
+                    listViewCompanies.Items.Add(item);
+                }
+            }
+
+            if (filter == "All" || filter == "Construction")
+            {
+                foreach (var comp in Market.AllConstructionCompanies)
+                {
+                    var item = new ListViewItem(comp.Name);
+                    item.SubItems.Add(comp.Budget.ToString("C"));
+                    item.SubItems.Add(comp.Workers.ToString());
+                    item.SubItems.Add("Construction");
+                    item.SubItems.Add(comp.Projects.Count.ToString());
+                    item.SubItems.Add(comp.CompletedProjects.ToString());
+                    listViewCompanies.Items.Add(item);
+                }
+            }
+
+            listViewCompanies.EndUpdate();
         }
 
         // --- Government Tab ---
