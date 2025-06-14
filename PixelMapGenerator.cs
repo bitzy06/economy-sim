@@ -196,6 +196,7 @@ namespace StrategyGame
         // each cell with multiple pixels.
         private static Color[] BuildPalette(Color baseColor)
         {
+
             // The terrain raster uses near-white values for water. Replace them
             // with a consistent blue tone and avoid random variation so the
             // ocean does not look noisy.
@@ -205,6 +206,7 @@ namespace StrategyGame
             if (isWater)
             {
                 baseColor = Color.LightSkyBlue;
+
                 return new[] { baseColor };
             }
 
