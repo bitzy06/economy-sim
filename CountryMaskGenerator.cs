@@ -100,7 +100,7 @@ namespace StrategyGame
             newGt[4] = 0;
             newGt[5] = gt[5] * srcRows / height;
 
-            Driver memDrv = Gdal.GetDriverByName("MEM");
+            OSGeo.GDAL.Driver memDrv = Gdal.GetDriverByName("MEM");
             Dataset maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
             maskDs.SetGeoTransform(newGt);
             maskDs.SetProjection(dem.GetProjection());
