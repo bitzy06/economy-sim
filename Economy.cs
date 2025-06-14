@@ -257,7 +257,8 @@ namespace StrategyGame
     public static class Market
     {
         public static Dictionary<string, Good> GoodDefinitions { get; private set; } = new Dictionary<string, Good>(); // Keep this for base prices/categories
-        public static List<Corporation> AllCorporations { get; private set; } = new List<Corporation>(); 
+        public static List<Corporation> AllCorporations { get; private set; } = new List<Corporation>();
+        public static List<ConstructionCompany> AllConstructionCompanies { get; private set; } = new List<ConstructionCompany>();
 
         // Call this at the start of each turn for each city to reset its local supply/demand
         public static void ResetCitySupplyDemand(City city)
