@@ -114,14 +114,7 @@ namespace economy_sim
 
         private void ButtonStart_Click(object sender, EventArgs e)
         {
-            if (currentCity == null) return;
-            var type = (ProjectType)Enum.Parse(typeof(ProjectType), comboBoxType.SelectedItem.ToString());
-            decimal cost = numericCost.Value;
-            int dur = (int)numericDuration.Value;
-            double output = (double)numericOutput.Value;
-            var proj = new ConstructionProject(type, cost, dur, output);
-            currentCity.StartConstructionProject(proj);
-            UpdateProjects();
+            
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
