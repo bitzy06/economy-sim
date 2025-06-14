@@ -59,16 +59,54 @@ namespace StrategyGame
                 throw new FileNotFoundException("Missing GeoTIFF file", TifPath);
 
             using (var img = new Bitmap(TifPath))
+            using (var scaled = new Bitmap(width, height))
             {
-                var dest = new Bitmap(width, height);
-                using (var g = Graphics.FromImage(dest))
+                using (var g = Graphics.FromImage(scaled))
                 {
                     g.InterpolationMode = InterpolationMode.NearestNeighbor;
                     g.PixelOffsetMode = PixelOffsetMode.Half;
                     g.DrawImage(img, 0, 0, width, height);
                 }
+
+                var dest = new Bitmap(width, height);
+                for (int y = 0; y < height; y++)
+                {
+                    for (int x = 0; x < width; x++)
+                    {
+                        Color src = scaled.GetPixel(x, y);
+                        float b = src.GetBrightness();
+                        dest.SetPixel(x, y, GetAltitudeColor(b));
+                    }
+                }
+
                 return dest;
             }
+        }
+
+        private static Color GetAltitudeColor(float value)
+        {
+            // Piecewise gradient approximating terrain colors
+            if (value < 0.30f)
+                return Lerp(Color.DarkBlue, Color.Blue, value / 0.30f);
+            if (value < 0.50f)
+                return Lerp(Color.Blue, Color.LightBlue, (value - 0.30f) / 0.20f);
+            if (value < 0.55f)
+                return Lerp(Color.LightBlue, Color.SandyBrown, (value - 0.50f) / 0.05f);
+            if (value < 0.70f)
+                return Lerp(Color.SandyBrown, Color.Green, (value - 0.55f) / 0.15f);
+            if (value < 0.85f)
+                return Lerp(Color.Green, Color.Sienna, (value - 0.70f) / 0.15f);
+            return Lerp(Color.Sienna, Color.White, (value - 0.85f) / 0.15f);
+        }
+
+        private static Color Lerp(Color a, Color b, float t)
+        {
+            if (t < 0f) t = 0f;
+            else if (t > 1f) t = 1f;
+            int r = (int)(a.R + (b.R - a.R) * t);
+            int g = (int)(a.G + (b.G - a.G) * t);
+            int bVal = (int)(a.B + (b.B - a.B) * t);
+            return Color.FromArgb(r, g, bVal);
         }
     }
 }
