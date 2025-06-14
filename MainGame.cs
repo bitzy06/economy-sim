@@ -58,6 +58,8 @@ namespace economy_sim
         private int mapZoom = 1;
 
         private Bitmap baseMap;
+        private bool isPanning = false;
+        private Point panStart;
 
 
         public MainGame()
@@ -79,6 +81,12 @@ namespace economy_sim
             comboBoxCities.SelectedIndexChanged += ComboBoxCities_SelectedIndexChanged;
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
             trackBarZoom.ValueChanged += trackBarZoom_ValueChanged;
+
+            pictureBox1.MouseDown += PictureBox1_MouseDown;
+            pictureBox1.MouseMove += PictureBox1_MouseMove;
+            pictureBox1.MouseUp += PictureBox1_MouseUp;
+            panelMap.MouseWheel += PanelMap_MouseWheel;
+            panelMap.MouseEnter += (s, e) => panelMap.Focus();
 
             InitializeGameData();
             
@@ -282,7 +290,7 @@ namespace economy_sim
         {
             if (baseMap == null)
                 return;
-                
+
             pictureBox1.Image?.Dispose();
             int width = baseMap.Width * mapZoom;
             int height = baseMap.Height * mapZoom;
@@ -1866,10 +1874,42 @@ namespace economy_sim
             policyManagerForm.BringToFront();
         }
 
-        private void trackBarZoom_ValueChanged(object sender, EventArgs e)
-        {
-            mapZoom = trackBarZoom.Value;
 
+        private void PictureBox1_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                isPanning = true;
+                panStart = e.Location;
+                pictureBox1.Cursor = Cursors.SizeAll;
+            }
+        }
+
+        private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (isPanning)
+            {
+                int dx = e.X - panStart.X;
+                int dy = e.Y - panStart.Y;
+                panelMap.AutoScrollPosition = new Point(-panelMap.AutoScrollPosition.X - dx,
+                                                       -panelMap.AutoScrollPosition.Y - dy);
+                panStart = e.Location;
+            }
+        }
+
+        private void PictureBox1_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left)
+            {
+                isPanning = false;
+                pictureBox1.Cursor = Cursors.Default;
+            }
+        }
+
+        private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
+        {
+            int delta = e.Delta > 0 ? 1 : -1;
+            mapZoom = Math.Max(1, Math.Min(5, mapZoom + delta));
             ApplyZoom();
 
         }

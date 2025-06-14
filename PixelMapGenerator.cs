@@ -196,11 +196,17 @@ namespace StrategyGame
         // each cell with multiple pixels.
         private static Color[] BuildPalette(Color baseColor)
         {
-            // If the base color is heavily blue, treat it as water and avoid
-            // random variation to prevent a "static" looking ocean.
-            bool isWater = baseColor.B > baseColor.R + 20 && baseColor.B > baseColor.G + 20;
+
+            // The terrain raster uses near-white values for water. Replace them
+            // with a consistent blue tone and avoid random variation so the
+            // ocean does not look noisy.
+            bool isWater = baseColor.R > 200 && baseColor.G > 200 && baseColor.B > 200 &&
+                           Math.Abs(baseColor.R - baseColor.G) < 15 &&
+                           Math.Abs(baseColor.R - baseColor.B) < 15;
             if (isWater)
             {
+                baseColor = Color.LightSkyBlue;
+
                 return new[] { baseColor };
             }
 
