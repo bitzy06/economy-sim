@@ -13,6 +13,7 @@ namespace StrategyGame
         public double NationalExpenses { get; set; } // General national expenses
         public Dictionary<string, double> Resources { get; private set; }
         public NationalFinancialSystem FinancialSystem { get; private set; }
+        public Government Government { get; private set; }
 
         public Country(string name)
         {
@@ -23,6 +24,10 @@ namespace StrategyGame
             Resources = new Dictionary<string, double>();
             // Initialize the financial system for the country
             FinancialSystem = new NationalFinancialSystem(name, (decimal)Budget, 50000m, CurrencyStandard.Fiat);
+            // Initialize basic government structure
+            Government = new Government();
+            Government.Parties.Add(new PoliticalParty { Name = $"{name} Conservative Party", ShareOfGovernment = 0.5 });
+            Government.Parties.Add(new PoliticalParty { Name = $"{name} Liberal Party", ShareOfGovernment = 0.5 });
         }
 
         public void AddResource(string resourceName, double amount)
