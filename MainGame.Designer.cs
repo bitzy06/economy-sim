@@ -76,7 +76,7 @@
             this.tabPageCountry = new System.Windows.Forms.TabPage();
             this.panelMap = new System.Windows.Forms.Panel();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
-            this.trackBarZoom = new System.Windows.Forms.TrackBar();
+            
             this.tabControlMain = new System.Windows.Forms.TabControl();
             this.tabPageCompanies.SuspendLayout();
             this.tabPageFinance.SuspendLayout();
@@ -85,7 +85,7 @@
             this.tabPageCity.SuspendLayout();
             this.tabPageCountry.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.trackBarZoom)).BeginInit();
+           
             this.tabControlMain.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -492,7 +492,7 @@
             //
             // panelMap
             //
-            this.panelMap.AutoScroll = true;
+            
             this.panelMap.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelMap.Location = new System.Drawing.Point(0, 0);
             this.panelMap.Name = "panelMap";
@@ -547,7 +547,7 @@
             this.tabPageCity.ResumeLayout(false);
             this.tabPageCountry.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.trackBarZoom)).EndInit();
+          
             this.tabControlMain.ResumeLayout(false);
             this.ResumeLayout(false);
 

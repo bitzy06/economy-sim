@@ -80,7 +80,7 @@ namespace economy_sim
             comboBoxStates.SelectedIndexChanged += ComboBoxStates_SelectedIndexChanged;
             comboBoxCities.SelectedIndexChanged += ComboBoxCities_SelectedIndexChanged;
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
-            trackBarZoom.ValueChanged += trackBarZoom_ValueChanged;
+          
 
             pictureBox1.MouseDown += PictureBox1_MouseDown;
             pictureBox1.MouseMove += PictureBox1_MouseMove;
