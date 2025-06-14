@@ -74,6 +74,7 @@
             this.labelCountryStats = new System.Windows.Forms.Label();
             this.comboBoxCountry = new System.Windows.Forms.ComboBox();
             this.tabPageCountry = new System.Windows.Forms.TabPage();
+            this.panelMap = new System.Windows.Forms.Panel();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.tabControlMain = new System.Windows.Forms.TabControl();
             this.tabPageCompanies.SuspendLayout();
@@ -92,6 +93,7 @@
             // 
             // labelSimTime
             // 
+            this.labelSimTime.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.labelSimTime.Location = new System.Drawing.Point(10, 500);
             this.labelSimTime.Name = "labelSimTime";
             this.labelSimTime.Size = new System.Drawing.Size(120, 23);
@@ -100,6 +102,8 @@
             // 
             // listBoxMarketStats
             // 
+            this.listBoxMarketStats.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+                        | System.Windows.Forms.AnchorStyles.Right)));
             this.listBoxMarketStats.FormattingEnabled = true;
             this.listBoxMarketStats.Location = new System.Drawing.Point(150, 500);
             this.listBoxMarketStats.Name = "listBoxMarketStats";
@@ -474,23 +478,32 @@
             this.comboBoxCountry.TabIndex = 0;
             // 
             // tabPageCountry
-            // 
-            this.tabPageCountry.Controls.Add(this.pictureBox1);
+            //
+            this.tabPageCountry.Controls.Add(this.panelMap);
             this.tabPageCountry.Location = new System.Drawing.Point(4, 22);
             this.tabPageCountry.Name = "tabPageCountry";
             this.tabPageCountry.Size = new System.Drawing.Size(822, 454);
             this.tabPageCountry.TabIndex = 0;
             this.tabPageCountry.Text = "Map";
-            // 
+            //
+            // panelMap
+            //
+            this.panelMap.AutoScroll = true;
+            this.panelMap.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.panelMap.Location = new System.Drawing.Point(0, 0);
+            this.panelMap.Name = "panelMap";
+            this.panelMap.Size = new System.Drawing.Size(822, 454);
+            this.panelMap.TabIndex = 1;
+            this.panelMap.Controls.Add(this.pictureBox1);
+            //
             // pictureBox1
-            // 
-            this.pictureBox1.Dock = System.Windows.Forms.DockStyle.Fill;
+            //
             this.pictureBox1.Location = new System.Drawing.Point(0, 0);
             this.pictureBox1.Name = "pictureBox1";
-            this.pictureBox1.Size = new System.Drawing.Size(822, 454);
-            this.pictureBox1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
+            this.pictureBox1.SizeMode = System.Windows.Forms.PictureBoxSizeMode.AutoSize;
             this.pictureBox1.TabIndex = 0;
             this.pictureBox1.TabStop = false;
+            //
             // 
             // tabControlMain
             // 
@@ -499,6 +512,9 @@
             this.tabControlMain.Controls.Add(this.tabPageDiplomacy);
             this.tabControlMain.Controls.Add(this.tabPageDebug);
             this.tabControlMain.Controls.Add(this.tabPageFinance);
+            this.tabControlMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+                        | System.Windows.Forms.AnchorStyles.Left)
+                        | System.Windows.Forms.AnchorStyles.Right)));
             this.tabControlMain.Location = new System.Drawing.Point(10, 10);
             this.tabControlMain.Name = "tabControlMain";
             this.tabControlMain.SelectedIndex = 0;
@@ -567,6 +583,7 @@
         private System.Windows.Forms.ListBox listBoxFactoryStats;
         private System.Windows.Forms.TabPage tabPageCountry;
         private System.Windows.Forms.PictureBox pictureBox1;
+        private System.Windows.Forms.Panel panelMap;
         private System.Windows.Forms.TabControl tabControlMain;
     }
 }
