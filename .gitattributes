@@ -47,3 +47,7 @@
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
 *.tif filter=lfs diff=lfs merge=lfs -text
+data/ne_10m_admin_0_countries.shp filter=lfs diff=lfs merge=lfs -text
+data/ne_10m_admin_0_countries.shx filter=lfs diff=lfs merge=lfs -text
+data/ne_10m_admin_0_countries.dbf filter=lfs diff=lfs merge=lfs -text
+data/ne_10m_admin_0_countries.prj filter=lfs diff=lfs merge=lfs -text
