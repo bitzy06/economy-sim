@@ -1,4 +1,8 @@
-
+using System.Collections.Generic;
+using System.Linq;
+using System; // Added for Console
+using StrategyGame; // Added to reference Suburb class
+using StrategyGame; // Ensure namespace for ProjectType and ConstructionProject is included
 
 namespace StrategyGame
 {

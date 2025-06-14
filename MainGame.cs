@@ -1,3 +1,16 @@
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using StrategyGame; // For game classes like Country, State, City, PopClass, Factory, Good, etc. AND DTOs
+using System.Text.RegularExpressions; // Added for owner-drawing
+using System.IO; // For File operations
+using System.Text.Json; // For JSON deserialization
 
 namespace economy_sim
 {
