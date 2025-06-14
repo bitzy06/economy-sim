@@ -118,6 +118,7 @@
     <Compile Include="ConstructionForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="PixelMapGenerator.cs" />
     <Compile Include="Suburb.cs" />
     <Compile Include="DebugLogger.cs" />
   </ItemGroup>
