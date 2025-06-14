@@ -54,6 +54,8 @@ namespace economy_sim
 
         private bool isDetailedDebugMode = false; // Flag to track the current debug mode
 
+        private int mapZoom = 1;
+
         public MainGame()
         {
             InitializeComponent();
@@ -72,6 +74,7 @@ namespace economy_sim
             comboBoxStates.SelectedIndexChanged += ComboBoxStates_SelectedIndexChanged;
             comboBoxCities.SelectedIndexChanged += ComboBoxCities_SelectedIndexChanged;
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
+            trackBarZoom.ValueChanged += trackBarZoom_ValueChanged;
 
             InitializeGameData();
             
@@ -259,12 +262,18 @@ namespace economy_sim
         }
         private void RefreshAsciiMap()
         {
-            // Generate the map sized to the PictureBox dimensions
-            int width = pictureBox1.Width;
-            int height = pictureBox1.Height;
+            // Generate the map sized according to the zoom level
+            if (panelMap.Width == 0 || panelMap.Height == 0)
+                return;
+
+            int baseWidth = panelMap.ClientSize.Width;
+            int baseHeight = panelMap.ClientSize.Height;
+            int width = baseWidth * mapZoom;
+            int height = baseHeight * mapZoom;
 
             pictureBox1.Image?.Dispose();
             pictureBox1.Image = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
+            pictureBox1.Size = new Size(width, height);
           //  pictureBox1.Image = PixelMapGenerator.GenerateTerrainPixelArtMap(width, height,5); // Use the new terrain map generator
 
 
@@ -1832,6 +1841,12 @@ namespace economy_sim
             policyManagerForm.RefreshData();
             policyManagerForm.Show();
             policyManagerForm.BringToFront();
+        }
+
+        private void trackBarZoom_ValueChanged(object sender, EventArgs e)
+        {
+            mapZoom = trackBarZoom.Value;
+            RefreshAsciiMap();
         }
 
     }
