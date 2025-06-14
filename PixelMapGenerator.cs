@@ -196,6 +196,18 @@ namespace StrategyGame
         // each cell with multiple pixels.
         private static Color[] BuildPalette(Color baseColor)
         {
+            // The terrain raster uses near-white values for water. Replace them
+            // with a consistent blue tone and avoid random variation so the
+            // ocean does not look noisy.
+            bool isWater = baseColor.R > 200 && baseColor.G > 200 && baseColor.B > 200 &&
+                           Math.Abs(baseColor.R - baseColor.G) < 15 &&
+                           Math.Abs(baseColor.R - baseColor.B) < 15;
+            if (isWater)
+            {
+                baseColor = Color.LightSkyBlue;
+                return new[] { baseColor };
+            }
+
             return new[]
             {
                 Lerp(baseColor, Color.Black, 0.2f),
