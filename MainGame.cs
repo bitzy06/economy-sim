@@ -18,6 +18,11 @@ namespace economy_sim
         private Random random = new Random(); // Add a Random instance for AI and other uses
         private StrategyGame.DiplomacyManager diplomacyManager; // Added DiplomacyManager field
         private ListView listViewDiplomacy; // Added ListView for diplomacy
+        // Government UI fields
+        private TabPage tabPageGovernment;
+        private ListView listViewParties;
+        private Button buttonOpenPolicyManager;
+        private PolicyManagerForm policyManagerForm;
 
         // Fields to store previous values for change tracking
         private Dictionary<string, double> prevCityMetrics = new Dictionary<string, double>();
@@ -90,10 +95,13 @@ namespace economy_sim
 
             // Initialize the Debug tab
             InitializeDebugTab();
-            
+
             // Initialize and populate Finance tab
             InitializeFinanceTab();
             UpdateFinanceTab();
+            // Initialize Government tab
+            InitializeGovernmentTab();
+            UpdateGovernmentTab();
 
             UpdateOrderLists();
             timerSim.Tick += TimerSim_Tick;
@@ -957,6 +965,10 @@ namespace economy_sim
             {
                 UpdateFinanceTab();
             }
+            if (tabControlMain.SelectedTab == tabPageGovernment)
+            {
+                UpdateGovernmentTab();
+            }
 
             // Process AI trade proposals (temporary simple logic)
             if (diplomacyManager != null && playerCountry != null && random.Next(100) < 20) // 20% chance each turn
@@ -1281,9 +1293,13 @@ namespace economy_sim
             {
                 UpdateFinanceTab();
             }
+            if (tabControlMain.SelectedTab == tabPageGovernment)
+            {
+                UpdateGovernmentTab();
+            }
 
             // Debug and diplomacy handled similarly
-            
+
         }
 
         private void ListBox_DrawItemShared(object sender, DrawItemEventArgs e)
@@ -1735,6 +1751,62 @@ namespace economy_sim
             listViewFinance.Columns.Add("Credit Rating", 80);
 
             // Bond UI removed
+        }
+
+        // --- Government Tab ---
+        private void InitializeGovernmentTab()
+        {
+            tabPageGovernment = new TabPage("Government");
+
+            listViewParties = new ListView
+            {
+                View = View.Details,
+                FullRowSelect = true,
+                GridLines = true,
+                Location = new System.Drawing.Point(10, 10),
+                Size = new System.Drawing.Size(400, 200)
+            };
+            listViewParties.Columns.Add("Party", 200);
+            listViewParties.Columns.Add("Share", 80);
+
+            buttonOpenPolicyManager = new Button
+            {
+                Text = "Open Policy Manager",
+                Location = new System.Drawing.Point(10, 220),
+                Size = new System.Drawing.Size(150, 30)
+            };
+            buttonOpenPolicyManager.Click += ButtonOpenPolicyManager_Click;
+
+            tabPageGovernment.Controls.Add(listViewParties);
+            tabPageGovernment.Controls.Add(buttonOpenPolicyManager);
+
+            tabControlMain.Controls.Add(tabPageGovernment);
+
+            policyManagerForm = new PolicyManagerForm(playerCountry?.Government);
+        }
+
+        private void UpdateGovernmentTab()
+        {
+            if (playerCountry?.Government == null) return;
+            listViewParties.Items.Clear();
+            foreach (var party in playerCountry.Government.Parties)
+            {
+                var item = new ListViewItem(party.Name);
+                item.SubItems.Add($"{party.ShareOfGovernment:P0}");
+                listViewParties.Items.Add(item);
+            }
+        }
+
+        private void ButtonOpenPolicyManager_Click(object sender, EventArgs e)
+        {
+            if (playerCountry?.Government == null) return;
+            if (policyManagerForm == null || policyManagerForm.IsDisposed)
+            {
+                policyManagerForm = new PolicyManagerForm(playerCountry.Government);
+            }
+            policyManagerForm.RefreshData();
+            policyManagerForm.Show();
+            policyManagerForm.BringToFront();
         }
 
     }
