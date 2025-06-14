@@ -282,7 +282,7 @@ namespace economy_sim
             int width = panelMap.ClientSize.Width;
             int height = panelMap.ClientSize.Height;
 
-            baseMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
+            baseMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height, 3);
             ApplyZoom();
         }
 
@@ -296,6 +296,7 @@ namespace economy_sim
             int height = baseMap.Height * mapZoom;
             pictureBox1.Image = ScaleBitmapNearest(baseMap, width, height);
             pictureBox1.Size = new Size(width, height);
+            panelMap.AutoScrollMinSize = new Size(width, height);
         }
 
         private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
@@ -1891,8 +1892,16 @@ namespace economy_sim
             {
                 int dx = e.X - panStart.X;
                 int dy = e.Y - panStart.Y;
-                panelMap.AutoScrollPosition = new Point(-panelMap.AutoScrollPosition.X - dx,
-                                                       -panelMap.AutoScrollPosition.Y - dy);
+
+                int targetX = -panelMap.AutoScrollPosition.X - dx;
+                int targetY = -panelMap.AutoScrollPosition.Y - dy;
+
+                int maxX = Math.Max(0, pictureBox1.Width - panelMap.ClientSize.Width);
+                int maxY = Math.Max(0, pictureBox1.Height - panelMap.ClientSize.Height);
+                targetX = Math.Max(0, Math.Min(maxX, targetX));
+                targetY = Math.Max(0, Math.Min(maxY, targetY));
+
+                panelMap.AutoScrollPosition = new Point(targetX, targetY);
                 panStart = e.Location;
             }
         }
@@ -1909,8 +1918,30 @@ namespace economy_sim
         private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
             int delta = e.Delta > 0 ? 1 : -1;
+            int oldZoom = mapZoom;
             mapZoom = Math.Max(1, Math.Min(5, mapZoom + delta));
+            if (mapZoom == oldZoom)
+                return;
+
+            // Preserve view center when zooming
+            Point scrollPos = panelMap.AutoScrollPosition;
+            int centerX = -scrollPos.X + panelMap.ClientSize.Width / 2;
+            int centerY = -scrollPos.Y + panelMap.ClientSize.Height / 2;
+            float factor = (float)mapZoom / oldZoom;
+            int newCenterX = (int)(centerX * factor);
+            int newCenterY = (int)(centerY * factor);
+
             ApplyZoom();
+
+            int targetX = newCenterX - panelMap.ClientSize.Width / 2;
+            int targetY = newCenterY - panelMap.ClientSize.Height / 2;
+
+            int maxX = Math.Max(0, pictureBox1.Width - panelMap.ClientSize.Width);
+            int maxY = Math.Max(0, pictureBox1.Height - panelMap.ClientSize.Height);
+            targetX = Math.Max(0, Math.Min(maxX, targetX));
+            targetY = Math.Max(0, Math.Min(maxY, targetY));
+
+            panelMap.AutoScrollPosition = new Point(targetX, targetY);
 
         }
 
