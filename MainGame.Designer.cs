@@ -76,6 +76,7 @@
             this.tabPageCountry = new System.Windows.Forms.TabPage();
             this.panelMap = new System.Windows.Forms.Panel();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
+            this.trackBarZoom = new System.Windows.Forms.TrackBar();
             this.tabControlMain = new System.Windows.Forms.TabControl();
             this.tabPageCompanies.SuspendLayout();
             this.tabPageFinance.SuspendLayout();
@@ -84,6 +85,7 @@
             this.tabPageCity.SuspendLayout();
             this.tabPageCountry.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.trackBarZoom)).BeginInit();
             this.tabControlMain.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -480,6 +482,8 @@
             // tabPageCountry
             //
             this.tabPageCountry.Controls.Add(this.panelMap);
+
+
             this.tabPageCountry.Location = new System.Drawing.Point(4, 22);
             this.tabPageCountry.Name = "tabPageCountry";
             this.tabPageCountry.Size = new System.Drawing.Size(822, 454);
@@ -492,7 +496,9 @@
             this.panelMap.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelMap.Location = new System.Drawing.Point(0, 0);
             this.panelMap.Name = "panelMap";
+          
             this.panelMap.Size = new System.Drawing.Size(822, 454);
+
             this.panelMap.TabIndex = 1;
             this.panelMap.Controls.Add(this.pictureBox1);
             //
@@ -504,6 +510,7 @@
             this.pictureBox1.TabIndex = 0;
             this.pictureBox1.TabStop = false;
             //
+
             // 
             // tabControlMain
             // 
@@ -540,6 +547,7 @@
             this.tabPageCity.ResumeLayout(false);
             this.tabPageCountry.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.trackBarZoom)).EndInit();
             this.tabControlMain.ResumeLayout(false);
             this.ResumeLayout(false);
 
@@ -584,6 +592,7 @@
         private System.Windows.Forms.TabPage tabPageCountry;
         private System.Windows.Forms.PictureBox pictureBox1;
         private System.Windows.Forms.Panel panelMap;
+
         private System.Windows.Forms.TabControl tabControlMain;
     }
 }

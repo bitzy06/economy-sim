@@ -56,9 +56,11 @@ namespace economy_sim
         private bool isDetailedDebugMode = false; // Flag to track the current debug mode
 
         private int mapZoom = 1;
+
         private Bitmap baseMap;
         private bool isPanning = false;
         private Point panStart;
+
 
         public MainGame()
         {
@@ -78,6 +80,7 @@ namespace economy_sim
             comboBoxStates.SelectedIndexChanged += ComboBoxStates_SelectedIndexChanged;
             comboBoxCities.SelectedIndexChanged += ComboBoxCities_SelectedIndexChanged;
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
+            trackBarZoom.ValueChanged += trackBarZoom_ValueChanged;
 
             pictureBox1.MouseDown += PictureBox1_MouseDown;
             pictureBox1.MouseMove += PictureBox1_MouseMove;
@@ -271,6 +274,7 @@ namespace economy_sim
         }
         private void RefreshAsciiMap()
         {
+
             if (panelMap.Width == 0 || panelMap.Height == 0)
                 return;
 
@@ -1870,6 +1874,7 @@ namespace economy_sim
             policyManagerForm.BringToFront();
         }
 
+
         private void PictureBox1_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left)
@@ -1906,6 +1911,7 @@ namespace economy_sim
             int delta = e.Delta > 0 ? 1 : -1;
             mapZoom = Math.Max(1, Math.Min(5, mapZoom + delta));
             ApplyZoom();
+
         }
 
     }
