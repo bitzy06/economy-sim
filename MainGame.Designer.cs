@@ -493,12 +493,11 @@
             // panelMap
             //
             
+            this.panelMap.AutoScroll = true;
             this.panelMap.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelMap.Location = new System.Drawing.Point(0, 0);
             this.panelMap.Name = "panelMap";
-          
             this.panelMap.Size = new System.Drawing.Size(822, 454);
-
             this.panelMap.TabIndex = 1;
             this.panelMap.Controls.Add(this.pictureBox1);
             //
