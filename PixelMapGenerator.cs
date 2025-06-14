@@ -196,6 +196,14 @@ namespace StrategyGame
         // each cell with multiple pixels.
         private static Color[] BuildPalette(Color baseColor)
         {
+            // If the base color is heavily blue, treat it as water and avoid
+            // random variation to prevent a "static" looking ocean.
+            bool isWater = baseColor.B > baseColor.R + 20 && baseColor.B > baseColor.G + 20;
+            if (isWater)
+            {
+                return new[] { baseColor };
+            }
+
             return new[]
             {
                 Lerp(baseColor, Color.Black, 0.2f),

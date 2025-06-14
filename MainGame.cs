@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -54,6 +55,9 @@ namespace economy_sim
 
         private bool isDetailedDebugMode = false; // Flag to track the current debug mode
 
+        private int mapZoom = 1;
+        private Bitmap baseMap;
+
         public MainGame()
         {
             InitializeComponent();
@@ -72,6 +76,7 @@ namespace economy_sim
             comboBoxStates.SelectedIndexChanged += ComboBoxStates_SelectedIndexChanged;
             comboBoxCities.SelectedIndexChanged += ComboBoxCities_SelectedIndexChanged;
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
+            trackBarZoom.ValueChanged += trackBarZoom_ValueChanged;
 
             InitializeGameData();
             
@@ -259,15 +264,39 @@ namespace economy_sim
         }
         private void RefreshAsciiMap()
         {
-            // Generate the map sized to the PictureBox dimensions
-            int width = pictureBox1.Width;
-            int height = pictureBox1.Height;
+            if (panelMap.Width == 0 || panelMap.Height == 0)
+                return;
+
+            baseMap?.Dispose();
+            int width = panelMap.ClientSize.Width;
+            int height = panelMap.ClientSize.Height;
+
+            baseMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
+            ApplyZoom();
+        }
+
+        private void ApplyZoom()
+        {
+            if (baseMap == null)
+                return;
 
             pictureBox1.Image?.Dispose();
-            pictureBox1.Image = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
-          //  pictureBox1.Image = PixelMapGenerator.GenerateTerrainPixelArtMap(width, height,5); // Use the new terrain map generator
+            int width = baseMap.Width * mapZoom;
+            int height = baseMap.Height * mapZoom;
+            pictureBox1.Image = ScaleBitmapNearest(baseMap, width, height);
+            pictureBox1.Size = new Size(width, height);
+        }
 
-
+        private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
+        {
+            Bitmap dest = new Bitmap(width, height);
+            using (var g = Graphics.FromImage(dest))
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.DrawImage(src, 0, 0, width, height);
+            }
+            return dest;
         }
         private void InitializeGameData()
         {
@@ -1832,6 +1861,12 @@ namespace economy_sim
             policyManagerForm.RefreshData();
             policyManagerForm.Show();
             policyManagerForm.BringToFront();
+        }
+
+        private void trackBarZoom_ValueChanged(object sender, EventArgs e)
+        {
+            mapZoom = trackBarZoom.Value;
+            ApplyZoom();
         }
 
     }
