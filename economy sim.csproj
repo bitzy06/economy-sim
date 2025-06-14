@@ -121,6 +121,7 @@
     <Compile Include="PixelMapGenerator.cs" />
     <Compile Include="Suburb.cs" />
     <Compile Include="DebugLogger.cs" />
+    <Compile Include="CountryMaskGenerator.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
