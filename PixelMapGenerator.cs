@@ -1,3 +1,4 @@
+using MaxRev.Gdal.Core;
 using System;
 using System.Diagnostics;
 using System.Drawing;
@@ -13,6 +14,7 @@ namespace StrategyGame
     /// </summary>
     public static class PixelMapGenerator
     {
+
         // Resolve paths relative to the repository root so the application does
         // not depend on developer specific locations. The executable lives in
         // bin/Debug or bin/Release so we need to traverse three directories up
@@ -24,9 +26,9 @@ namespace StrategyGame
             System.IO.Path.Combine(RepoRoot, "data");
         private static readonly string TifPath =
 
-            System.IO.Path.Combine(DataDir, "ETOPO1_Bed_g_geotiff.tif");
+          @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\ETOPO1_Bed_g_geotiff.tif";
         private static readonly string ShpPath =
-            System.IO.Path.Combine(DataDir, "ne_10m_admin_0_countries.shp");
+          @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\ne_10m_admin_0_countries.shp";
 
 
         /// <summary>
@@ -37,26 +39,7 @@ namespace StrategyGame
             if (File.Exists(TifPath))
                 return;
 
-            var psi = new ProcessStartInfo
-            {
-                FileName = "python3",
-                Arguments = "fetch_etopo1.py",
-                WorkingDirectory = RepoRoot,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false
-            };
-
-            using (var proc = Process.Start(psi))
-            {
-                string output = proc.StandardOutput.ReadToEnd();
-                string err = proc.StandardError.ReadToEnd();
-                proc.WaitForExit();
-
-                DebugLogger.Log(output);
-                if (!string.IsNullOrEmpty(err))
-                    DebugLogger.Log(err);
-            }
+          
         }
 
         /// <summary>
@@ -101,6 +84,7 @@ namespace StrategyGame
         /// </summary>
         public static Bitmap GeneratePixelArtMapWithCountries(int width, int height)
         {
+            GdalBase.ConfigureAll();
             Bitmap baseMap = GeneratePixelArtMap(width, height);
             try
             {
