@@ -90,10 +90,10 @@ namespace StrategyGame
         /// <summary>
         /// Generates a terrain map and overlays country borders.
         /// </summary>
-        public static Bitmap GeneratePixelArtMapWithCountries(int width, int height)
+        public static Bitmap GeneratePixelArtMapWithCountries(int width, int height, int pixelsPerCell = 3)
         {
             GdalBase.ConfigureAll();
-            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, 5);
+            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, pixelsPerCell);
 
             // mask dimensions == pixel dimensions
             int fullW = baseMap.Width;
@@ -197,12 +197,9 @@ namespace StrategyGame
         private static Color[] BuildPalette(Color baseColor)
         {
 
-            // The terrain raster uses near-white values for water. Replace them
-            // with a consistent blue tone and avoid random variation so the
-            // ocean does not look noisy.
-            bool isWater = baseColor.R > 200 && baseColor.G > 200 && baseColor.B > 200 &&
-                           Math.Abs(baseColor.R - baseColor.G) < 15 &&
-                           Math.Abs(baseColor.R - baseColor.B) < 15;
+            // Detect water primarily by a strong blue component rather than
+            // overall brightness so snowy regions are not mistaken for ocean.
+            bool isWater = baseColor.B > baseColor.R + 20 && baseColor.B > baseColor.G + 20;
             if (isWater)
             {
                 baseColor = Color.LightSkyBlue;
