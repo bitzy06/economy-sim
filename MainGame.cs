@@ -56,7 +56,9 @@ namespace economy_sim
         private bool isDetailedDebugMode = false; // Flag to track the current debug mode
 
         private int mapZoom = 1;
+
         private Bitmap baseMap;
+
 
         public MainGame()
         {
@@ -264,6 +266,7 @@ namespace economy_sim
         }
         private void RefreshAsciiMap()
         {
+
             if (panelMap.Width == 0 || panelMap.Height == 0)
                 return;
 
@@ -279,7 +282,7 @@ namespace economy_sim
         {
             if (baseMap == null)
                 return;
-
+                
             pictureBox1.Image?.Dispose();
             int width = baseMap.Width * mapZoom;
             int height = baseMap.Height * mapZoom;
@@ -1866,7 +1869,9 @@ namespace economy_sim
         private void trackBarZoom_ValueChanged(object sender, EventArgs e)
         {
             mapZoom = trackBarZoom.Value;
+
             ApplyZoom();
+
         }
 
     }
