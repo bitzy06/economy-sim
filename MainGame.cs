@@ -296,6 +296,7 @@ namespace economy_sim
             int height = baseMap.Height * mapZoom;
             pictureBox1.Image = ScaleBitmapNearest(baseMap, width, height);
             pictureBox1.Size = new Size(width, height);
+            panelMap.AutoScrollMinSize = new Size(width, height);
         }
 
         private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
@@ -1909,8 +1910,23 @@ namespace economy_sim
         private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
             int delta = e.Delta > 0 ? 1 : -1;
+            int oldZoom = mapZoom;
             mapZoom = Math.Max(1, Math.Min(5, mapZoom + delta));
+            if (mapZoom == oldZoom)
+                return;
+
+            // Preserve view center when zooming
+            Point scrollPos = panelMap.AutoScrollPosition;
+            int centerX = -scrollPos.X + panelMap.ClientSize.Width / 2;
+            int centerY = -scrollPos.Y + panelMap.ClientSize.Height / 2;
+            float factor = (float)mapZoom / oldZoom;
+            int newCenterX = (int)(centerX * factor);
+            int newCenterY = (int)(centerY * factor);
+
             ApplyZoom();
+
+            panelMap.AutoScrollPosition = new Point(newCenterX - panelMap.ClientSize.Width / 2,
+                                                    newCenterY - panelMap.ClientSize.Height / 2);
 
         }
 
