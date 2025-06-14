@@ -1,0 +1,18 @@
+This repository contains several files with TODO comments or placeholders indicating incomplete functionality. Key references include:
+
+1. **ConstructionCompany.cs** - method `CompleteProject` lacks output delivery logic.
+   - See lines 89-94: TODO to deliver output.
+2. **Economy.cs**
+   - Placeholder values for tax calculations near lines 30-39.
+   - Comment stating states can distribute funds to cities, but not implemented (line 88).
+   - TODO for corporate action methods at line 686.
+   - Placeholder for future factory blueprints around lines 1208-1210.
+3. **NationalFinancialSystem.cs** - `SetCurrencyStandard` has TODO for currency stability impacts (lines 190-194).
+4. **Diplomacy.cs** - placeholders for future diplomacy classes around lines 43-47 and for a comprehensive diplomacy manager around lines 94-100.
+5. **PlayerRoleManager.cs** - placeholder action methods commented near lines 76-79.
+6. **generate_world.py** - fallback state generation logic mentions it can be improved around lines 216-218.
+7. **TradeManagementForm.cs** - many UI handlers show message boxes instead of real functionality. Examples include:
+   - Upgrade route placeholder around lines 644-646.
+   - Trade agreement placeholders around lines 678-695.
+   - New route cost calculation comment around lines 775-776.
+
