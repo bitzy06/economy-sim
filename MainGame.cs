@@ -250,11 +250,14 @@ namespace economy_sim
         }
         private void RefreshAsciiMap()
         {
-            // width = number of columns, height = number of rows
-            int width = 120, height = 60;
-         pictureBox1.Image = PixelMapGenerator.GeneratePixelArtMap(width, height); // Call the method to generate the map
+            // Generate the map sized to the PictureBox dimensions
+            int width = pictureBox1.Width;
+            int height = pictureBox1.Height;
 
-            
+            pictureBox1.Image?.Dispose();
+            pictureBox1.Image = PixelMapGenerator.GeneratePixelArtMap(width, height);
+
+
         }
         private void InitializeGameData()
         {
