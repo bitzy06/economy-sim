@@ -120,6 +120,13 @@
     </Compile>
     <Compile Include="Suburb.cs" />
     <Compile Include="DebugLogger.cs" />
+    <Compile Include="Government.cs" />
+    <Compile Include="PolicyManagerForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="PolicyManagerForm.Designer.cs">
+      <DependentUpon>PolicyManagerForm.cs</DependentUpon>
+    </Compile>
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
