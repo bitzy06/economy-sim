@@ -13,9 +13,8 @@ namespace StrategyGame
     /// </summary>
     public static class PixelMapGenerator
     {
-        private static readonly string RepoRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".."));
-        private static readonly string DataDir = Path.Combine(RepoRoot, "data");
-        private static readonly string TifPath = Path.Combine(DataDir, "ETOPO1_Ice_g_geotiff.tif");
+        private static readonly string TifPath =
+     @"C:\Users\kayla\source\repos\bitzy06\resources\ETOPO1_Bed_g_geotiff.tif";
 
         /// <summary>
         /// Ensures the GeoTIFF file exists by invoking fetch_etopo1.py if needed.
@@ -29,7 +28,7 @@ namespace StrategyGame
             {
                 FileName = "python3",
                 Arguments = "fetch_etopo1.py",
-                WorkingDirectory = RepoRoot,
+                WorkingDirectory = @"C:\Users\kayla\source\repos\bitzy06\economy-sim",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false

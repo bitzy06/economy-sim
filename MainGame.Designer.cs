@@ -25,8 +25,6 @@
         private System.Windows.Forms.TabPage tabPageDiplomacy; // Added
         private System.Windows.Forms.TabPage tabPageDebug; // Debug tab for role switching
         private System.Windows.Forms.TabPage tabPageFinance;
-        private System.Windows.Forms.TabPage tabPageCompanies;
-        private System.Windows.Forms.ListView listViewCompanies;
         private System.Windows.Forms.ListView listViewFinance;
         // private System.Windows.Forms.ListBox listBoxActiveTradeAgreements; // REMOVED by commenting
         private System.Windows.Forms.ListBox listBoxProposedTradeAgreements; // Added
@@ -113,16 +111,14 @@
             this.checkBoxLogEconomy = new System.Windows.Forms.CheckBox();
             this.tabPageFinance = new System.Windows.Forms.TabPage();
             this.listViewFinance = new System.Windows.Forms.ListView();
-            this.tabPageCompanies = new System.Windows.Forms.TabPage();
-            this.listViewCompanies = new System.Windows.Forms.ListView();
-            this.richTextBox1 = new System.Windows.Forms.RichTextBox();
+            this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.tabControlMain.SuspendLayout();
             this.tabPageCountry.SuspendLayout();
             this.tabPageCity.SuspendLayout();
             this.tabPageDiplomacy.SuspendLayout();
             this.tabPageDebug.SuspendLayout();
             this.tabPageFinance.SuspendLayout();
-            this.tabPageCompanies.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.SuspendLayout();
             // 
             // comboBoxCountry
@@ -226,7 +222,6 @@
             this.tabControlMain.Controls.Add(this.tabPageDiplomacy);
             this.tabControlMain.Controls.Add(this.tabPageDebug);
             this.tabControlMain.Controls.Add(this.tabPageFinance);
-            this.tabControlMain.Controls.Add(this.tabPageCompanies);
             this.tabControlMain.Location = new System.Drawing.Point(10, 10);
             this.tabControlMain.Name = "tabControlMain";
             this.tabControlMain.SelectedIndex = 0;
@@ -235,12 +230,12 @@
             // 
             // tabPageCountry
             // 
-            this.tabPageCountry.Controls.Add(this.richTextBox1);
+            this.tabPageCountry.Controls.Add(this.pictureBox1);
             this.tabPageCountry.Location = new System.Drawing.Point(4, 22);
             this.tabPageCountry.Name = "tabPageCountry";
             this.tabPageCountry.Size = new System.Drawing.Size(822, 454);
             this.tabPageCountry.TabIndex = 0;
-            this.tabPageCountry.Text = "Country";
+            this.tabPageCountry.Text = "Map";
             // 
             // tabPageState
             // 
@@ -248,7 +243,7 @@
             this.tabPageState.Name = "tabPageState";
             this.tabPageState.Size = new System.Drawing.Size(822, 454);
             this.tabPageState.TabIndex = 1;
-            this.tabPageState.Text = "State";
+            this.tabPageState.Text = "Goverment";
             // 
             // tabPageCity
             // 
@@ -265,7 +260,7 @@
             this.tabPageCity.Name = "tabPageCity";
             this.tabPageCity.Size = new System.Drawing.Size(822, 454);
             this.tabPageCity.TabIndex = 2;
-            this.tabPageCity.Text = "City";
+            this.tabPageCity.Text = "Economy";
             // 
             // tabPageDiplomacy
             // 
@@ -522,36 +517,14 @@
             this.listViewFinance.UseCompatibleStateImageBehavior = false;
             this.listViewFinance.View = System.Windows.Forms.View.Details;
             // 
-            // tabPageCompanies
+            // pictureBox1
             // 
-            this.tabPageCompanies.Controls.Add(this.listViewCompanies);
-            this.tabPageCompanies.Location = new System.Drawing.Point(4, 22);
-            this.tabPageCompanies.Name = "tabPageCompanies";
-            this.tabPageCompanies.Size = new System.Drawing.Size(822, 454);
-            this.tabPageCompanies.TabIndex = 6;
-            this.tabPageCompanies.Text = "Companies";
-            this.tabPageCompanies.UseVisualStyleBackColor = true;
-            // 
-            // listViewCompanies
-            // 
-            this.listViewCompanies.FullRowSelect = true;
-            this.listViewCompanies.GridLines = true;
-            this.listViewCompanies.HideSelection = false;
-            this.listViewCompanies.Location = new System.Drawing.Point(10, 10);
-            this.listViewCompanies.Name = "listViewCompanies";
-            this.listViewCompanies.Size = new System.Drawing.Size(800, 430);
-            this.listViewCompanies.TabIndex = 0;
-            this.listViewCompanies.UseCompatibleStateImageBehavior = false;
-            this.listViewCompanies.View = System.Windows.Forms.View.Details;
-            // 
-            // richTextBox1
-            // 
-            this.richTextBox1.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.richTextBox1.Location = new System.Drawing.Point(0, 0);
-            this.richTextBox1.Name = "richTextBox1";
-            this.richTextBox1.Size = new System.Drawing.Size(822, 454);
-            this.richTextBox1.TabIndex = 0;
-            this.richTextBox1.Text = "";
+            this.pictureBox1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.pictureBox1.Location = new System.Drawing.Point(0, 0);
+            this.pictureBox1.Name = "pictureBox1";
+            this.pictureBox1.Size = new System.Drawing.Size(822, 454);
+            this.pictureBox1.TabIndex = 0;
+            this.pictureBox1.TabStop = false;
             // 
             // MainGame
             // 
@@ -571,13 +544,13 @@
             this.tabPageDebug.ResumeLayout(false);
             this.tabPageDebug.PerformLayout();
             this.tabPageFinance.ResumeLayout(false);
-            this.tabPageCompanies.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
             this.ResumeLayout(false);
 
         }
 
         #endregion
 
-        private System.Windows.Forms.RichTextBox richTextBox1;
+        private System.Windows.Forms.PictureBox pictureBox1;
     }
 }

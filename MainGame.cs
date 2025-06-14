@@ -252,14 +252,9 @@ namespace economy_sim
         {
             // width = number of columns, height = number of rows
             int width = 120, height = 60;
-            string map = AsciiMapGenerator.GenerateAsciiMap(width, height);
+         pictureBox1.Image = PixelMapGenerator.GeneratePixelArtMap(width, height); // Call the method to generate the map
 
-            // Assign to RichTextBox
-            richTextBox1.Text = map;
-
-            // If you want it to auto-scroll to top:
-            richTextBox1.SelectionStart = 0;
-            richTextBox1.ScrollToCaret();
+            
         }
         private void InitializeGameData()
         {
