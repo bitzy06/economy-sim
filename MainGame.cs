@@ -282,7 +282,7 @@ namespace economy_sim
             int width = panelMap.ClientSize.Width;
             int height = panelMap.ClientSize.Height;
 
-            baseMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height, 3);
+            baseMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
             ApplyZoom();
         }
 
@@ -1892,16 +1892,8 @@ namespace economy_sim
             {
                 int dx = e.X - panStart.X;
                 int dy = e.Y - panStart.Y;
-
-                int targetX = -panelMap.AutoScrollPosition.X - dx;
-                int targetY = -panelMap.AutoScrollPosition.Y - dy;
-
-                int maxX = Math.Max(0, pictureBox1.Width - panelMap.ClientSize.Width);
-                int maxY = Math.Max(0, pictureBox1.Height - panelMap.ClientSize.Height);
-                targetX = Math.Max(0, Math.Min(maxX, targetX));
-                targetY = Math.Max(0, Math.Min(maxY, targetY));
-
-                panelMap.AutoScrollPosition = new Point(targetX, targetY);
+                panelMap.AutoScrollPosition = new Point(-panelMap.AutoScrollPosition.X - dx,
+                                                       -panelMap.AutoScrollPosition.Y - dy);
                 panStart = e.Location;
             }
         }
@@ -1933,17 +1925,8 @@ namespace economy_sim
 
             ApplyZoom();
 
-
-            int targetX = newCenterX - panelMap.ClientSize.Width / 2;
-            int targetY = newCenterY - panelMap.ClientSize.Height / 2;
-
-            int maxX = Math.Max(0, pictureBox1.Width - panelMap.ClientSize.Width);
-            int maxY = Math.Max(0, pictureBox1.Height - panelMap.ClientSize.Height);
-            targetX = Math.Max(0, Math.Min(maxX, targetX));
-            targetY = Math.Max(0, Math.Min(maxY, targetY));
-
-            panelMap.AutoScrollPosition = new Point(targetX, targetY);
-
+            panelMap.AutoScrollPosition = new Point(newCenterX - panelMap.ClientSize.Width / 2,
+                                                    newCenterY - panelMap.ClientSize.Height / 2);
 
         }
 
