@@ -23,9 +23,11 @@ namespace StrategyGame
         private static readonly string DataDir =
             System.IO.Path.Combine(RepoRoot, "data");
         private static readonly string TifPath =
+
             System.IO.Path.Combine(DataDir, "ETOPO1_Bed_g_geotiff.tif");
         private static readonly string ShpPath =
             System.IO.Path.Combine(DataDir, "ne_10m_admin_0_countries.shp");
+
 
         /// <summary>
         /// Ensures the GeoTIFF file exists by invoking fetch_etopo1.py if needed.
