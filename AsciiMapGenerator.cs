@@ -9,10 +9,15 @@ namespace StrategyGame
 {
     public static class AsciiMapGenerator
     {
-        //private static readonly string RepoRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".."));
-        //private static readonly string DataDir = Path.Combine(RepoRoot, "data");
-        //private static readonly string TifPath = Path.Combine(DataDir, "ETOPO1_Bed_g_geotiff.tif");
-        private static readonly string TifPath = @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\ETOPO1_Bed_g_geotiff.tif";
+        // Resolve the ETOPO1 data path relative to the repository root so it
+        // works regardless of where the project is cloned. Executables are
+        // located under bin/<Config>/ which is three levels deep from the root.
+        private static readonly string RepoRoot =
+            Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                "..", "..", ".."));
+        private static readonly string DataDir = Path.Combine(RepoRoot, "data");
+        private static readonly string TifPath = Path.Combine(DataDir,
+            "ETOPO1_Bed_g_geotiff.tif");
         //public static void EnsureElevationData()
         //{
         //    if (File.Exists(TifPath))
