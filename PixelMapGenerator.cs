@@ -15,6 +15,8 @@ namespace StrategyGame
     {
         private static readonly string TifPath =
      @"C:\Users\kayla\source\repos\bitzy06\resources\ETOPO1_Bed_g_geotiff.tif";
+        private static readonly string ShpPath =
+     @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\ne_10m_admin_0_countries.shp";
 
         /// <summary>
         /// Ensures the GeoTIFF file exists by invoking fetch_etopo1.py if needed.
@@ -79,8 +81,37 @@ namespace StrategyGame
                     }
                 }
 
-                return dest;
+               return dest;
+           }
+       }
+
+        /// <summary>
+        /// Generates a terrain map and overlays country borders.
+        /// </summary>
+        public static Bitmap GeneratePixelArtMapWithCountries(int width, int height)
+        {
+            Bitmap baseMap = GeneratePixelArtMap(width, height);
+            try
+            {
+                int[,] mask = CountryMaskGenerator.CreateCountryMask(TifPath, ShpPath, width, height);
+                for (int y = 1; y < height - 1; y++)
+                {
+                    for (int x = 1; x < width - 1; x++)
+                    {
+                        int code = mask[y, x];
+                        if (code != mask[y - 1, x] || code != mask[y + 1, x] ||
+                            code != mask[y, x - 1] || code != mask[y, x + 1])
+                        {
+                            baseMap.SetPixel(x, y, Color.Black);
+                        }
+                    }
+                }
             }
+            catch (Exception ex)
+            {
+                DebugLogger.Log("Country overlay failed: " + ex.Message);
+            }
+            return baseMap;
         }
 
         private static Color GetAltitudeColor(float value)
