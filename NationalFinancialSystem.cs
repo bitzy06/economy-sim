@@ -190,7 +190,22 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         public void SetCurrencyStandard(CurrencyStandard standard)
         {
             CurrentCurrencyStandard = standard;
-            // TODO: Impact on currency stability and policy flexibility
+            switch (standard)
+            {
+                case CurrencyStandard.Fiat:
+                    // Fiat allows greater flexibility but can raise inflation risk
+                    InflationRate = Math.Min(0.5m, InflationRate + 0.01m);
+                    break;
+                case CurrencyStandard.GoldBacked:
+                    // Limit money supply to available reserves and improve stability
+                    MoneySupply = Math.Min(MoneySupply, NationalReserves * 20m);
+                    InflationRate = Math.Max(0m, InflationRate - 0.02m);
+                    break;
+                case CurrencyStandard.SilverBacked:
+                    MoneySupply = Math.Min(MoneySupply, NationalReserves * 10m);
+                    InflationRate = Math.Max(0m, InflationRate - 0.015m);
+                    break;
+            }
         }
         #endregion
 

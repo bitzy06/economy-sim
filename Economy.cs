@@ -31,12 +31,23 @@ namespace StrategyGame
             NationalFinancialSystem fs = country.FinancialSystem;
 
             // 1. Calculate Tax Revenue using the new system
-            // Placeholder values for assessable income, corporate profits, etc.
-            // These would eventually be derived from detailed economic activity (POPs, corporations)
-            decimal totalAssessablePopIncome = (decimal)country.Population * 500m; // Example: average income per capita
-            decimal totalCorporateProfits = (decimal)country.States.Sum(s => s.Cities.Sum(c => c.Factories.Sum(f => f.OwnerCorporation?.Budget * 0.1 ?? 0.0))); // Highly simplified
-            decimal totalLandValue = (decimal)country.States.Count * 1000000m; // Example
-            decimal totalConsumptionValue = totalAssessablePopIncome * 0.6m; // Example: 60% of income is consumed
+            // Derive assessable income and profits from actual economic data
+            decimal totalAssessablePopIncome = (decimal)country.States
+                .Sum(s => s.Cities.Sum(c => c.PopClasses.Sum(p => p.Size * p.IncomePerPerson)));
+
+            decimal totalCorporateProfits = 0m;
+            foreach (var corp in Market.AllCorporations)
+            {
+                foreach (var fac in corp.OwnedFactories)
+                {
+                    double input = fac.InputGoods.Sum(g => g.Quantity * g.BasePrice * fac.ProductionCapacity);
+                    double output = fac.OutputGoods.Sum(g => g.Quantity * g.BasePrice * fac.ProductionCapacity);
+                    totalCorporateProfits += (decimal)(output - input);
+                }
+            }
+
+            decimal totalLandValue = (decimal)country.States.Count * 1000000m; // Simplified land valuation
+            decimal totalConsumptionValue = totalAssessablePopIncome * 0.6m; // Assume 60% of income is consumed
 
             decimal taxRevenue = fs.CalculateTaxRevenue(totalAssessablePopIncome, totalCorporateProfits, totalLandValue, totalConsumptionValue);
             country.Budget += (double)taxRevenue;
@@ -683,7 +694,25 @@ namespace StrategyGame
             }
         }
 
-        // TODO: Add methods for corporate actions: CollectProfits, Invest, etc.
+        public void CollectProfits()
+        {
+            double profits = 0;
+            foreach (var fac in OwnedFactories)
+            {
+                double input = fac.InputGoods.Sum(g => g.Quantity * g.BasePrice * fac.ProductionCapacity);
+                double output = fac.OutputGoods.Sum(g => g.Quantity * g.BasePrice * fac.ProductionCapacity);
+                profits += (output - input);
+            }
+            Budget += profits;
+        }
+
+        public bool Invest(double amount)
+        {
+            if (amount <= 0 || Budget < amount) return false;
+            Budget -= amount;
+            // Investment specifics would go here (e.g., expanding factories)
+            return true;
+        }
     }
 
     public static class CityEconomy
@@ -1141,6 +1170,7 @@ namespace StrategyGame
             Market.GoodDefinitions["Fertilizer"] = new Good("Fertilizer", 22.0, GoodCategory.IndustrialInput);
             Market.GoodDefinitions["Cement"] = new Good("Cement", 15.0, GoodCategory.IndustrialInput);
             Market.GoodDefinitions["Basic Chemicals"] = new Good("Basic Chemicals", 20.0, GoodCategory.IndustrialInput);
+            Market.GoodDefinitions["Glass"] = new Good("Glass", 20.0, GoodCategory.IndustrialInput);
 
             // Existing Capital Goods (assuming these are already here)
             Market.GoodDefinitions["Tools"] = new Good("Tools", 40.0, GoodCategory.CapitalGood); 
@@ -1228,6 +1258,7 @@ namespace StrategyGame
             AllBlueprints.Add(new FactoryBlueprint("Explosives Factory", new Good("Explosives", Market.GoodDefinitions["Explosives"].BasePrice, GoodCategory.IndustrialInput, 1), new List<Good> { new Good("Basic Chemicals", Market.GoodDefinitions["Basic Chemicals"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Fertilizer Plant", new Good("Fertilizer", Market.GoodDefinitions["Fertilizer"].BasePrice, GoodCategory.IndustrialInput, 2), new List<Good> { new Good("Basic Chemicals", Market.GoodDefinitions["Basic Chemicals"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Sulphur", Market.GoodDefinitions["Sulphur"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Cement Plant", new Good("Cement", Market.GoodDefinitions["Cement"].BasePrice, GoodCategory.IndustrialInput, 3), new List<Good> { new Good("Limestone", Market.GoodDefinitions["Limestone"].BasePrice, GoodCategory.RawMaterial, 2), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
+            AllBlueprints.Add(new FactoryBlueprint("Glassworks", new Good("Glass", Market.GoodDefinitions["Glass"].BasePrice, GoodCategory.IndustrialInput, 2), new List<Good> { new Good("Limestone", Market.GoodDefinitions["Limestone"].BasePrice, GoodCategory.RawMaterial, 1), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
 
             // --- Existing/Refined Capital Goods (from previous refactoring) ---
             AllBlueprints.Add(new FactoryBlueprint("Tool Factory", new Good("Tools", Market.GoodDefinitions["Tools"].BasePrice, GoodCategory.CapitalGood, 2), new List<Good> { new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 1) }, GoodCategory.CapitalGood, industrialJobSlots));

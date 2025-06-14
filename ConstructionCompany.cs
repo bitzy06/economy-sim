@@ -81,16 +81,16 @@ namespace StrategyGame
 
                 if (project.IsComplete())
                 {
-                    Projects.Remove(project);
+                    CompleteProject(project, city);
                 }
             }
         }
 
-        private void CompleteProject(ConstructionProject project)
+        private void CompleteProject(ConstructionProject project, City city)
         {
             Projects.Remove(project);
             Console.WriteLine($"Project {project.Type} completed with output: {project.Output}");
-            // TODO: Deliver the output to the city or state that issued the contract
+            city.ApplyProjectEffects(project);
         }
     }
 }

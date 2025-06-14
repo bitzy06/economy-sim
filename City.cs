@@ -179,8 +179,8 @@ namespace StrategyGame
         {
             foreach (var project in ActiveProjects.ToList())
             {
-                decimal dailyCost = project.Cost / project.Duration;
-                if ((decimal)Budget >= dailyCost && project.ProgressProject(1, (decimal)Budget))
+                decimal dailyCost = project.Budget / project.Duration;
+                if ((decimal)Budget >= dailyCost && project.ProgressProject(1, dailyCost))
                 {
                     Budget -= (double)dailyCost;
                     if (project.IsComplete())
@@ -192,7 +192,7 @@ namespace StrategyGame
             }
         }
 
-        private void ApplyProjectEffects(ConstructionProject project)
+        public void ApplyProjectEffects(ConstructionProject project)
         {
             switch (project.Type)
             {
