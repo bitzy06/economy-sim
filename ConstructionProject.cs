@@ -23,7 +23,7 @@ namespace StrategyGame
         public int Duration { get; private set; } // Duration in days
         public int Progress { get; private set; } // Progress in days completed
         public double Output { get; private set; } // Output (e.g., housing units or kilometers of railway)
-
+        public int Cost {  get; private set; } // Cost per day of construction
         public string RequiredResource { get; private set; }
         public int ResourcePerDay { get; private set; }
 

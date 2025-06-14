@@ -1,4 +1,8 @@
-
+using System.Collections.Generic;
+using System.Linq;
+using System; // Added for Console
+using StrategyGame; // Added to reference Suburb class
+using StrategyGame; // Ensure namespace for ProjectType and ConstructionProject is included
 
 namespace StrategyGame
 {
@@ -179,7 +183,7 @@ namespace StrategyGame
         {
             foreach (var project in ActiveProjects.ToList())
             {
-                decimal dailyCost = project.Cost / project.Duration;
+                decimal dailyCost = 10 / project.Duration; //change this to your desired daily cost calculation
                 if ((decimal)Budget >= dailyCost && project.ProgressProject(1, (decimal)Budget))
                 {
                     Budget -= (double)dailyCost;
