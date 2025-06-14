@@ -255,7 +255,7 @@ namespace economy_sim
             int height = pictureBox1.Height;
 
             pictureBox1.Image?.Dispose();
-            pictureBox1.Image = PixelMapGenerator.GeneratePixelArtMap(width, height);
+            pictureBox1.Image = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
 
 
         }
