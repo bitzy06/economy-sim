@@ -14,6 +14,9 @@ namespace StrategyGame
         public Dictionary<string, double> Resources { get; private set; }
         public NationalFinancialSystem FinancialSystem { get; private set; }
         public Government Government { get; private set; }
+        public List<Thunderstorm> Thunderstorms { get; set; } = new List<Thunderstorm>();
+        public List<Plane> Planes { get; set; } = new List<Plane>();
+        public List<Ship> Ships { get; set; } = new List<Ship>();
 
         public Country(string name)
         {

@@ -10,6 +10,8 @@ namespace StrategyGame
         public int Population { get; set; }
         public double TaxRate { get; set; } // Percentage (e.g., 0.1 for 10%)
         public double StateExpenses { get; set; }
+        public List<Railway> Railways { get; set; } = new List<Railway>();
+        public List<Highway> Highways { get; set; } = new List<Highway>();
 
         public State(string name)
         {

@@ -7,6 +7,15 @@ using System.IO;
 
 namespace StrategyGame
 {
+    public enum LodLevel
+    {
+        Global,
+        Continental,
+        Country,
+        State,
+        City
+    }
+
     /// <summary>
     /// Provides helper methods for generating a pixel-art map based on the
     /// ETOPO1 elevation data. The GeoTIFF is downloaded using the existing
@@ -116,6 +125,20 @@ namespace StrategyGame
             }
 
             return baseMap;
+        }
+
+        /// <summary>
+        /// Generates a map with details appropriate for the given LOD level.
+        /// </summary>
+        /// <param name="lodLevel">The level of detail for the map.</param>
+        /// <param name="width">Output image width in pixels.</param>
+        /// <param name="height">Output image height in pixels.</param>
+        /// <returns>A Bitmap that should be disposed by the caller.</returns>
+        public static Bitmap GenerateLodMap(LodLevel lodLevel, int width, int height)
+        {
+            // For now, all LOD levels will use the same generation method.
+            // Specific LOD details will be added in future changes.
+            return GeneratePixelArtMapWithCountries(width, height);
         }
 
         /// <summary>

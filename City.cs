@@ -32,6 +32,8 @@ namespace StrategyGame
         public List<SellOrder> SellOrders { get; set; }
         public List<Suburb> Suburbs { get; private set; } // Added Suburbs property
         public List<ConstructionProject> ActiveProjects { get; private set; } // Added to track active construction projects
+        public List<Building> Buildings { get; set; } = new List<Building>();
+        public List<Car> Cars { get; set; } = new List<Car>();
 
         public City(string name)
         {
