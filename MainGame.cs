@@ -57,12 +57,6 @@ namespace economy_sim
 
         private int mapZoom = 1;
         private LodLevel currentLodLevel = LodLevel.Global; // Added for LOD
-        internal LodLevel CurrentDebugLodLevel => currentLodLevel; // Internal getter for testing
-
-        // Internal flags for testing drawing logic selection
-        internal bool DidAttemptToDrawCityDetails { get; private set; }
-        internal bool DidAttemptToDrawStateDetails { get; private set; }
-        internal bool DidAttemptToDrawCountryDetails { get; private set; }
 
         private Bitmap baseMap;
         private bool isPanning = false;
@@ -279,49 +273,26 @@ namespace economy_sim
             }
         }
 
-        internal void SetCurrentLodLevelForTesting(LodLevel level)
+        private void RefreshMap()
         {
-            currentLodLevel = level;
-        }
-
-        internal void RefreshMap()
-        {
-            // Testability: Use default dimensions if UI components are not available
-            int mapWidth = 1000; // Default for testing
-            int mapHeight = 800; // Default for testing
-
-            if (panelMap != null && panelMap.ClientSize.Width > 0 && panelMap.ClientSize.Height > 0)
+            if (panelMap.ClientSize.Width == 0 || panelMap.ClientSize.Height == 0)
             {
-                mapWidth = panelMap.ClientSize.Width;
-                mapHeight = panelMap.ClientSize.Height;
+                return;
             }
-            else if (this is MainGameTestable && (panelMap == null || panelMap.ClientSize.Width == 0))
-            {
-                // In test mode, proceed with default dimensions if panelMap is not fully initialized.
-            }
-            else
-            {
-                 // If not in test mode and panelMap is invalid, then return.
-                if (!(this is MainGameTestable)) return;
-            }
-
-            if (pictureBox1 != null && (pictureBox1.Width == 0 || pictureBox1.Height == 0) && !(this is MainGameTestable))
-            {
-                return; // Only return if not in test mode and pictureBox is invalid
-            }
-
+            if (pictureBox1.Width == 0 || pictureBox1.Height == 0)
+                return;
 
             baseMap?.Dispose();
 
-            // Use determined or default dimensions
-            Bitmap rawGeneratedMap = PixelMapGenerator.GenerateLodMap(currentLodLevel, mapWidth, mapHeight);
+            // Get the panel size instead of pictureBox size for consistent dimensions
+            int width = panelMap.ClientSize.Width;
+            int height = panelMap.ClientSize.Height;
+
+            Bitmap rawGeneratedMap = PixelMapGenerator.GenerateLodMap(currentLodLevel, width, height);
 
             // Create a new bitmap to draw details onto, starting with the raw generated map
             Bitmap mapWithDetails = new Bitmap(rawGeneratedMap);
             rawGeneratedMap.Dispose(); // Dispose the original raw map as we now have a copy
-
-            // Reset test flags before drawing
-            // ResetTestFlags(); // This should be called by the test setup, not here.
 
             using (Graphics g = Graphics.FromImage(mapWithDetails))
             {
@@ -330,7 +301,6 @@ namespace economy_sim
                 switch (currentLodLevel)
                 {
                     case LodLevel.City:
-                        DidAttemptToDrawCityDetails = true;
                         if (allCitiesInWorld != null)
                         {
                             foreach (var city in allCitiesInWorld)
@@ -347,7 +317,6 @@ namespace economy_sim
                         }
                         break;
                     case LodLevel.State:
-                        DidAttemptToDrawStateDetails = true;
                         if (allCountries != null)
                         {
                             foreach (var country in allCountries)
@@ -367,7 +336,6 @@ namespace economy_sim
                         }
                         break;
                     case LodLevel.Country:
-                        DidAttemptToDrawCountryDetails = true;
                         if (allCountries != null)
                         {
                             foreach (var country in allCountries)
@@ -400,37 +368,31 @@ namespace economy_sim
             ApplyZoom();
 
             // Logic to set pictureBox1.Location after ApplyZoom() in RefreshMap()
-            if (pictureBox1 != null && panelMap != null) // Only run if UI components exist
+            int pbWidth = pictureBox1.Width;
+            int pbHeight = pictureBox1.Height;
+            int panelWidth = panelMap.ClientSize.Width;
+            int panelHeight = panelMap.ClientSize.Height;
+
+            int newX, newY;
+
+            if (pbWidth < panelWidth)
             {
-                int pbWidth = pictureBox1.Width;
-                int pbHeight = pictureBox1.Height;
-                int panelWidth = panelMap.ClientSize.Width;
-                int panelHeight = panelMap.ClientSize.Height;
-                if (pbWidth == 0 && this is MainGameTestable) pbWidth = mapWidth * mapZoom; // Approx for testing
-                if (pbHeight == 0 && this is MainGameTestable) pbHeight = mapHeight * mapZoom; // Approx for testing
-
-
-                int newX, newY;
-
-                if (pbWidth < panelWidth)
-                {
-                    newX = (panelWidth - pbWidth) / 2;
-                }
-                else
-                {
-                    newX = 0; // Default to (0,0) if larger, panning will handle the rest
-                }
-
-                if (pbHeight < panelHeight)
-                {
-                    newY = (panelHeight - pbHeight) / 2;
-                }
-                else
-                {
-                    newY = 0; // Default to (0,0) if larger
-                }
-                pictureBox1.Location = new Point(newX, newY);
+                newX = (panelWidth - pbWidth) / 2;
             }
+            else
+            {
+                newX = 0; // Default to (0,0) if larger, panning will handle the rest
+            }
+
+            if (pbHeight < panelHeight)
+            {
+                newY = (panelHeight - pbHeight) / 2;
+            }
+            else
+            {
+                newY = 0; // Default to (0,0) if larger
+            }
+            pictureBox1.Location = new Point(newX, newY);
         }
 
         private void ApplyZoom()
@@ -2125,7 +2087,31 @@ namespace economy_sim
             // float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
             // float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
 
-            UpdateLodFromZoom(Math.Sign(e.Delta));
+            int oldZoom = mapZoom;
+            mapZoom = Math.Max(1, Math.Min(5, mapZoom + Math.Sign(e.Delta)));
+            if (mapZoom == oldZoom) return;
+
+            // Update LOD level based on zoom
+            switch (mapZoom)
+            {
+                case 1:
+                    currentLodLevel = LodLevel.Global;
+                    break;
+                case 2:
+                    currentLodLevel = LodLevel.Continental;
+                    break;
+                case 3:
+                    currentLodLevel = LodLevel.Country;
+                    break;
+                case 4:
+                    currentLodLevel = LodLevel.State;
+                    break;
+                case 5:
+                    currentLodLevel = LodLevel.City;
+                    break;
+            }
+
+            RefreshMap(); // Refresh map for new LOD level
 
             // Determine the center of the panelMap
             int panelCenterX = panelMap.ClientSize.Width / 2;
@@ -2360,83 +2346,6 @@ namespace economy_sim
             float shipHeight = 5;
             g.FillRectangle(Brushes.Brown, ship.Position.X - shipWidth / 2, ship.Position.Y - shipHeight / 2, shipWidth, shipHeight);
         }
-
-        // Method to reset test flags, callable from tests
-        internal void ResetTestFlags()
-        {
-            DidAttemptToDrawCityDetails = false;
-            DidAttemptToDrawStateDetails = false;
-            DidAttemptToDrawCountryDetails = false;
-        }
-
-        // Extracted logic from PictureBox1_MouseWheel for testability
-        internal void UpdateLodFromZoom(int zoomDirection) // zoomDirection is Math.Sign(e.Delta)
-        {
-            if (baseMap == null && !(this is MainGameTestable)) return; // Allow tests to run without baseMap
-            // In a real scenario: if (baseMap == null) return;
-            // if (pictureBox1.Width == 0 || pictureBox1.Height == 0) return;
-
-
-            int oldZoom = mapZoom;
-            mapZoom = Math.Max(1, Math.Min(5, mapZoom + zoomDirection));
-            if (mapZoom == oldZoom && !(this is MainGameTestable)) return; // Allow tests to force re-evaluation
-
-            bool lodChanged = false;
-            LodLevel previousLod = currentLodLevel;
-
-            switch (mapZoom)
-            {
-                case 1:
-                    currentLodLevel = LodLevel.Global;
-                    break;
-                case 2:
-                    currentLodLevel = LodLevel.Continental;
-                    break;
-                case 3:
-                    currentLodLevel = LodLevel.Country;
-                    break;
-                case 4:
-                    currentLodLevel = LodLevel.State;
-                    break;
-                case 5:
-                    currentLodLevel = LodLevel.City;
-                    break;
-            }
-            lodChanged = previousLod != currentLodLevel;
-
-            // Only refresh if LOD changed or zoom changed,
-            // but for testing, we might call RefreshMap directly after setting LOD.
-            if (lodChanged || mapZoom != oldZoom)
-            {
-                 if (!(this is MainGameTestable)) // Don't auto-refresh map in test context if not needed
-                 {
-                    RefreshMap(); // Refresh map for new LOD level
-
-                    // The following panel/picturebox adjustment logic would typically run here.
-                    // For unit testing `UpdateLodFromZoom` itself, this UI logic is not essential.
-                    // It's more relevant for integration/UI tests.
-                    // int panelCenterX = panelMap.ClientSize.Width / 2;
-                    // int panelCenterY = panelMap.ClientSize.Height / 2;
-                    // float contentRatioXAtPanelCenter = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
-                    // float contentRatioYAtPanelCenter = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
-                    // ApplyZoom(); // This would also be called from RefreshMap or here
-                    // ... rest of the UI update logic from original PictureBox1_MouseWheel
-                 }
-            }
-        }
-    }
-
-    // Testable version of MainGame to allow parameterless constructor for unit tests
-    // And to bypass UI-specific logic that might throw NullReferenceExceptions in test environment
-    public class MainGameTestable : MainGame
-    {
-        public MainGameTestable() : base() { }
-
-        // Override or simplify methods that cause issues in tests if needed
-        // For example, if InitializeComponent or RefreshMap (called in base constructor)
-        // cause problems, they could be overridden or adjusted.
-        // For now, relying on the fact that the base constructor calls InitializeGameData,
-        // which calls RefreshMap.
     }
 }
 
