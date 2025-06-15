@@ -537,6 +537,9 @@
             panelMap.Size = new Size(960, 526);
             panelMap.TabIndex = 1;
             panelMap.AutoScroll = false;
+            panelMap.TabStop = true;
+            panelMap.KeyDown += new System.Windows.Forms.KeyEventHandler(this.panelMap_KeyDown);
+            this.panelMap.MouseUp += new System.Windows.Forms.MouseEventHandler(this.panelMap_MouseUp_ForPanning);
             // 
             // pictureBox1
             // 
@@ -634,6 +637,6 @@
 
         private System.Windows.Forms.TabControl tabControlMain;
 
-       
+
     }
 }
