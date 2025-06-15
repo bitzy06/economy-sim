@@ -22,7 +22,7 @@
 
 		<!-- Debugging entry point -->
 		<StartupObject>StrategyGame.Program</StartupObject>
-		<EnableWindowsTargeting>true</EnableWindowsTargeting>
+		
 	</PropertyGroup>
 
 	<!-- Debug configuration -->

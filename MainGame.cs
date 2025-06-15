@@ -61,6 +61,7 @@ namespace economy_sim
         private bool isPanning = false;
         private Point panStart;
 
+       
 
         public MainGame()
         {
@@ -80,14 +81,8 @@ namespace economy_sim
             comboBoxStates.SelectedIndexChanged += ComboBoxStates_SelectedIndexChanged;
             comboBoxCities.SelectedIndexChanged += ComboBoxCities_SelectedIndexChanged;
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
+
           
-
-            pictureBox1.MouseDown += PictureBox1_MouseDown;
-            pictureBox1.MouseMove += PictureBox1_MouseMove;
-            pictureBox1.MouseUp += PictureBox1_MouseUp;
-            panelMap.MouseWheel += PanelMap_MouseWheel;
-            panelMap.MouseEnter += (s, e) => panelMap.Focus();
-
             InitializeGameData();
             
             // Initialize DiplomacyManager after allCountries is populated
@@ -101,7 +96,6 @@ namespace economy_sim
             // Initialize listViewDiplomacy
             listViewDiplomacy = new ListView
             {
-                // Dock = DockStyle.Fill, // Changed from Fill
                 Location = new System.Drawing.Point(10, 10),
                 Size = new System.Drawing.Size(400, 180), // Adjusted size
                 View = View.Details,
@@ -272,13 +266,15 @@ namespace economy_sim
                 }
             }
         }
-        private void RefreshAsciiMap()
-        {
 
-            if (panelMap.Width == 0 || panelMap.Height == 0)
+        private void RefreshMap()
+        {
+            if (pictureBox1.Width == 0 || pictureBox1.Height == 0)
                 return;
 
             baseMap?.Dispose();
+            
+            // Get the panel size instead of pictureBox size for consistent dimensions
             int width = panelMap.ClientSize.Width;
             int height = panelMap.ClientSize.Height;
 
@@ -292,11 +288,20 @@ namespace economy_sim
                 return;
 
             pictureBox1.Image?.Dispose();
+            
+            // Calculate new dimensions
             int width = baseMap.Width * mapZoom;
             int height = baseMap.Height * mapZoom;
+            
+            // Create scaled image
             pictureBox1.Image = ScaleBitmapNearest(baseMap, width, height);
             pictureBox1.Size = new Size(width, height);
-            panelMap.AutoScrollMinSize = new Size(width, height);
+            
+            // Center the image in the panel
+            pictureBox1.Location = new Point(
+                Math.Max(0, (panelMap.ClientSize.Width - width) / 2),
+                Math.Max(0, (panelMap.ClientSize.Height - height) / 2)
+            );
         }
 
         private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
@@ -312,7 +317,7 @@ namespace economy_sim
         }
         private void InitializeGameData()
         {
-            RefreshAsciiMap();
+            RefreshMap();
             // 1. Clear all global static lists first
             Market.GoodDefinitions.Clear();
             Market.AllCorporations.Clear(); 
@@ -1892,8 +1897,15 @@ namespace economy_sim
             {
                 int dx = e.X - panStart.X;
                 int dy = e.Y - panStart.Y;
-                panelMap.AutoScrollPosition = new Point(-panelMap.AutoScrollPosition.X - dx,
-                                                       -panelMap.AutoScrollPosition.Y - dy);
+
+                // Calculate new position
+                int newX = pictureBox1.Left + dx;
+                int newY = pictureBox1.Top + dy;
+
+                // Set the new location
+                pictureBox1.Location = new Point(newX, newY);
+
+                // Update panStart for the next move
                 panStart = e.Location;
             }
         }
@@ -1909,27 +1921,30 @@ namespace economy_sim
 
         private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
-            int delta = e.Delta > 0 ? 1 : -1;
             int oldZoom = mapZoom;
-            mapZoom = Math.Max(1, Math.Min(5, mapZoom + delta));
-            if (mapZoom == oldZoom)
-                return;
+            mapZoom = Math.Max(1, Math.Min(5, mapZoom + Math.Sign(e.Delta)));
+            if (mapZoom == oldZoom) return;
 
-            // Preserve view center when zooming
-            Point scrollPos = panelMap.AutoScrollPosition;
-            int centerX = -scrollPos.X + panelMap.ClientSize.Width / 2;
-            int centerY = -scrollPos.Y + panelMap.ClientSize.Height / 2;
-            float factor = (float)mapZoom / oldZoom;
-            int newCenterX = (int)(centerX * factor);
-            int newCenterY = (int)(centerY * factor);
+            // Get mouse position relative to picture box
+            Point mousePos = pictureBox1.PointToClient(Control.MousePosition);
+            float relativeX = mousePos.X / (float)pictureBox1.Width;
+            float relativeY = mousePos.Y / (float)pictureBox1.Height;
 
             ApplyZoom();
 
-            panelMap.AutoScrollPosition = new Point(newCenterX - panelMap.ClientSize.Width / 2,
-                                                    newCenterY - panelMap.ClientSize.Height / 2);
-
+            // Calculate new position to zoom towards mouse
+            if (pictureBox1.Width > panelMap.Width || pictureBox1.Height > panelMap.Height)
+            {
+                int newX = Math.Min(Math.Max(
+                    (int)(mousePos.X - (pictureBox1.Width * relativeX)), 
+                    panelMap.Width - pictureBox1.Width), 0);
+                int newY = Math.Min(Math.Max(
+                    (int)(mousePos.Y - (pictureBox1.Height * relativeY)), 
+                    panelMap.Height - pictureBox1.Height), 0);
+                
+                pictureBox1.Location = new Point(newX, newY);
+            }
         }
-
     }
 }
 
