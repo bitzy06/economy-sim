@@ -269,6 +269,10 @@ namespace economy_sim
 
         private void RefreshMap()
         {
+            if (panelMap.ClientSize.Width == 0 || panelMap.ClientSize.Height == 0)
+            {
+                return;
+            }
             if (pictureBox1.Width == 0 || pictureBox1.Height == 0)
                 return;
 
@@ -1902,26 +1906,25 @@ namespace economy_sim
         }
 
 
-        private void PictureBox1_MouseDown(object sender, MouseEventArgs e)
-        {
-            if (e.Button == MouseButtons.Left)
-            {
-                isPanning = true;
-                panStart = e.Location;
-                pictureBox1.Cursor = Cursors.SizeAll;
-            }
-        }
-
-private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
-{
-    if (isPanning)
+    private void PictureBox1_MouseDown(object sender, MouseEventArgs e)
     {
-        // Only allow panning if the PictureBox is larger than the Panel in at least one dimension.
-        // If it's smaller or fits perfectly, it's centered by the zoom logic,
-        // and panning is not needed/intuitive for this setup.
-        if (pictureBox1.Width > panelMap.ClientSize.Width || pictureBox1.Height > panelMap.ClientSize.Height)
+        if (e.Button == MouseButtons.Left)
         {
-            int dx = e.X - panStart.X; // panStart is from MouseDown, relative to pictureBox1's original state at MouseDown
+            isPanning = true;
+            panStart = e.Location; // e.Location is relative to pictureBox1
+            pictureBox1.Cursor = Cursors.SizeAll;
+        }
+    }
+
+    private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (isPanning)
+        {
+            // Only allow effective panning if the PictureBox is larger than the Panel.
+            // If it's smaller or fits perfectly, it's centered by the zoom logic,
+            // and this move logic will keep it centered.
+
+            int dx = e.X - panStart.X; // panStart is from MouseDown
             int dy = e.Y - panStart.Y;
 
             int newPotentialX = pictureBox1.Left + dx;
@@ -1930,43 +1933,42 @@ private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
             int finalX;
             int finalY;
 
-            // Clamp X coordinate
+            // Determine final X coordinate
             if (pictureBox1.Width > panelMap.ClientSize.Width)
             {
+                // Clamp to ensure map edges don't go beyond panel boundaries
                 finalX = Math.Min(0, Math.Max(newPotentialX, panelMap.ClientSize.Width - pictureBox1.Width));
             }
             else
             {
-                // If not wider, keep it centered (it shouldn't be pannable horizontally in this case)
+                // If not wider than panel, keep it centered horizontally
                 finalX = (panelMap.ClientSize.Width - pictureBox1.Width) / 2;
             }
 
-            // Clamp Y coordinate
+            // Determine final Y coordinate
             if (pictureBox1.Height > panelMap.ClientSize.Height)
             {
+                // Clamp to ensure map edges don't go beyond panel boundaries
                 finalY = Math.Min(0, Math.Max(newPotentialY, panelMap.ClientSize.Height - pictureBox1.Height));
             }
             else
             {
-                // If not taller, keep it centered (it shouldn't be pannable vertically in this case)
+                // If not taller than panel, keep it centered vertically
                 finalY = (panelMap.ClientSize.Height - pictureBox1.Height) / 2;
             }
 
             pictureBox1.Location = new Point(finalX, finalY);
         }
-        // If not isPanning or if picturebox is not larger than panel, do nothing or ensure cursor is default.
-        // The cursor is reset in MouseUp.
     }
-}
 
-        private void PictureBox1_MouseUp(object sender, MouseEventArgs e)
+    private void PictureBox1_MouseUp(object sender, MouseEventArgs e)
+    {
+        if (e.Button == MouseButtons.Left)
         {
-            if (e.Button == MouseButtons.Left)
-            {
-                isPanning = false;
-                pictureBox1.Cursor = Cursors.Default;
-            }
+            isPanning = false;
+            pictureBox1.Cursor = Cursors.Default;
         }
+    }
 
         private void PictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
