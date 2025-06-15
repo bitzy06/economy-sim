@@ -1,188 +1,90 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
-  <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{9D423ACB-4515-4F5A-A621-B03CF7751C82}</ProjectGuid>
-    <OutputType>Exe</OutputType>
-    <RootNamespace>economy_sim</RootNamespace>
-    <AssemblyName>economy sim</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <Deterministic>true</Deterministic>
-    <LangVersion>7.3</LangVersion>
-    <NuGetPackageImportStamp>
-    </NuGetPackageImportStamp>
-    <!-- Added to specify C# language version -->
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
-    <DebugSymbols>true</DebugSymbols>
-    <OutputPath>bin\x64\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <DebugType>full</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <LangVersion>7.3</LangVersion>
-    <ErrorReport>prompt</ErrorReport>
-    <Prefer32Bit>true</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
-    <OutputPath>bin\x64\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <Optimize>true</Optimize>
-    <DebugType>pdbonly</DebugType>
-    <PlatformTarget>x64</PlatformTarget>
-    <LangVersion>7.3</LangVersion>
-    <ErrorReport>prompt</ErrorReport>
-    <Prefer32Bit>true</Prefer32Bit>
-  </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="MaxRev.Gdal.Core, Version=3.11.0.335, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\MaxRev.Gdal.Core.3.11.0.335\lib\net461\MaxRev.Gdal.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="MaxRev.Gdal.WindowsRuntime.Minimal, Version=3.11.0.335, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\MaxRev.Gdal.WindowsRuntime.Minimal.3.11.0.335\lib\net461\MaxRev.Gdal.WindowsRuntime.Minimal.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Bcl.AsyncInterfaces, Version=9.0.0.4, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\Microsoft.Bcl.AsyncInterfaces.9.0.4\lib\net462\Microsoft.Bcl.AsyncInterfaces.dll</HintPath>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Buffers, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.Buffers.4.5.1\lib\net461\System.Buffers.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Core" />
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.IO.Pipelines, Version=9.0.0.4, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.IO.Pipelines.9.0.4\lib\net462\System.IO.Pipelines.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Numerics" />
-    <Reference Include="System.Numerics.Vectors, Version=4.1.4.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>packages\System.Numerics.Vectors.4.5.0\lib\net46\System.Numerics.Vectors.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>packages\System.Runtime.CompilerServices.Unsafe.6.0.0\lib\net461\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Runtime.InteropServices.RuntimeInformation, Version=4.0.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>packages\System.Runtime.InteropServices.RuntimeInformation.4.3.0\lib\net45\System.Runtime.InteropServices.RuntimeInformation.dll</HintPath>
-      <Private>True</Private>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Text.Encodings.Web, Version=9.0.0.4, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.Text.Encodings.Web.9.0.4\lib\net462\System.Text.Encodings.Web.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Text.Json, Version=9.0.0.4, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.Text.Json.9.0.4\lib\net462\System.Text.Json.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Threading.Tasks.Extensions, Version=4.2.0.1, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.Threading.Tasks.Extensions.4.5.4\lib\net461\System.Threading.Tasks.Extensions.dll</HintPath>
-    </Reference>
-    <Reference Include="System.ValueTuple, Version=4.0.3.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
-      <HintPath>packages\System.ValueTuple.4.5.0\lib\net47\System.ValueTuple.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
-    <Reference Include="System.Xml" />
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Include="City.cs" />
-    <Compile Include="Country.cs" />
-    <Compile Include="Diplomacy.cs" />
-    <Compile Include="Economy.cs" />
-    <Compile Include="FactoryStatsForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="GlobalMarket.cs" />
-    <!-- Added GlobalMarket.cs to compilation -->
-    <Compile Include="MainGame.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="MainGame.Designer.cs">
-      <DependentUpon>MainGame.cs</DependentUpon>
-    </Compile>
-    <Compile Include="NationalFinancialSystem.cs" />
-    <Compile Include="PlayerRoleManager.cs" />
-    <Compile Include="PopStatsForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Program.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="State.cs" />
-    <Compile Include="trade.cs" />
-    <Compile Include="TradeManagementForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="TradeProposalForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="DiplomaticRelationsForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="WorldDataStructures.cs" />
-    <Compile Include="TradeDisplayHelper.cs" />
-    <Compile Include="ConstructionProject.cs" />
-    <Compile Include="ConstructionCompany.cs" />
-    <Compile Include="ConstructionForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="PixelMapGenerator.cs" />
-    <Compile Include="Suburb.cs" />
-    <Compile Include="DebugLogger.cs" />
-    <Compile Include="CountryMaskGenerator.cs" />
-    <Compile Include="Government.cs" />
-    <Compile Include="PolicyManagerForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="PolicyManagerForm.Designer.cs">
-      <DependentUpon>PolicyManagerForm.cs</DependentUpon>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="App.config" />
-    <None Include="packages.config" />
-    <None Include="world_setup.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="MainGame.resx">
-      <DependentUpon>MainGame.cs</DependentUpon>
-    </EmbeddedResource>
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <Import Project="packages\MaxRev.Gdal.Core.3.11.0.335\build\net461\MaxRev.Gdal.Core.targets" Condition="Exists('packages\MaxRev.Gdal.Core.3.11.0.335\build\net461\MaxRev.Gdal.Core.targets')" />
-  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
-    <PropertyGroup>
-      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
-    </PropertyGroup>
-    <Error Condition="!Exists('packages\MaxRev.Gdal.Core.3.11.0.335\build\net461\MaxRev.Gdal.Core.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\MaxRev.Gdal.Core.3.11.0.335\build\net461\MaxRev.Gdal.Core.targets'))" />
-    <Error Condition="!Exists('packages\MaxRev.Gdal.WindowsRuntime.Minimal.3.11.0.335\build\net461\MaxRev.Gdal.WindowsRuntime.Minimal.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\MaxRev.Gdal.WindowsRuntime.Minimal.3.11.0.335\build\net461\MaxRev.Gdal.WindowsRuntime.Minimal.targets'))" />
-  </Target>
-  <Import Project="packages\MaxRev.Gdal.WindowsRuntime.Minimal.3.11.0.335\build\net461\MaxRev.Gdal.WindowsRuntime.Minimal.targets" Condition="Exists('packages\MaxRev.Gdal.WindowsRuntime.Minimal.3.11.0.335\build\net461\MaxRev.Gdal.WindowsRuntime.Minimal.targets')" />
+﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+
+	<!-- Global properties -->
+	<PropertyGroup>
+		<ProjectGuid>{9D423ACB-4515-4F5A-A621-B03CF7751C82}</ProjectGuid>
+		<Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+		<Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+
+		<!-- Output settings -->
+		<OutputType>WinExe</OutputType>
+		<AssemblyName>economy_sim</AssemblyName>
+		<RootNamespace>economy_sim</RootNamespace>
+		<UseWindowsForms>true</UseWindowsForms>
+
+		<!-- Target framework -->
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!-- Disable auto-generated assembly attributes to avoid duplicates -->
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+		<!-- Debugging entry point -->
+		<StartupObject>StrategyGame.Program</StartupObject>
+	</PropertyGroup>
+
+	<!-- Debug configuration -->
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+		<PlatformTarget>AnyCPU</PlatformTarget>
+		<DebugSymbols>true</DebugSymbols>
+		<DebugType>full</DebugType>
+		<Optimize>false</Optimize>
+		<OutputPath>bin\Debug\</OutputPath>
+		<DefineConstants>DEBUG;TRACE</DefineConstants>
+		<Prefer32Bit>true</Prefer32Bit>
+	</PropertyGroup>
+
+	<!-- Release configuration -->
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+		<PlatformTarget>AnyCPU</PlatformTarget>
+		<DebugType>pdbonly</DebugType>
+		<Optimize>true</Optimize>
+		<OutputPath>bin\Release\</OutputPath>
+		<DefineConstants>TRACE</DefineConstants>
+		<Prefer32Bit>true</Prefer32Bit>
+	</PropertyGroup>
+
+	<!-- x64 Debug configuration -->
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
+		<PlatformTarget>x64</PlatformTarget>
+		<DebugSymbols>true</DebugSymbols>
+		<DebugType>full</DebugType>
+		<Optimize>false</Optimize>
+		<OutputPath>bin\x64\Debug\</OutputPath>
+		<DefineConstants>DEBUG;TRACE</DefineConstants>
+		<Prefer32Bit>false</Prefer32Bit>
+	</PropertyGroup>
+
+	<!-- x64 Release configuration -->
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+		<PlatformTarget>x64</PlatformTarget>
+		<DebugType>pdbonly</DebugType>
+		<Optimize>true</Optimize>
+		<OutputPath>bin\x64\Release\</OutputPath>
+		<DefineConstants>TRACE</DefineConstants>
+		<Prefer32Bit>false</Prefer32Bit>
+	</PropertyGroup>
+
+	<!-- NuGet package references -->
+	<ItemGroup>
+		<PackageReference Include="MaxRev.Gdal.Core" Version="3.11.0.335" />
+		<PackageReference Include="MaxRev.Gdal.WindowsRuntime.Minimal" Version="3.11.0.335" />
+		<PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.0" />
+		<PackageReference Include="System.Buffers" Version="4.5.1" />
+		<PackageReference Include="System.IO.Pipelines" Version="9.0.4" />
+		<PackageReference Include="System.Memory" Version="4.5.5" />
+		<PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
+		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+		<PackageReference Include="System.Text.Encodings.Web" Version="9.0.4" />
+		<PackageReference Include="System.Text.Json" Version="9.0.4" />
+		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
+		<PackageReference Include="System.ValueTuple" Version="4.5.0" />
+		<None Include="world_setup.json">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
+	<!-- Rely on SDK implicit Compile and EmbeddedResource items -->
+
 </Project>
