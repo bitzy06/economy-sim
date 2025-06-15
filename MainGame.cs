@@ -1927,7 +1927,7 @@ namespace economy_sim
                 pictureBox1.Location = new Point(newX, newY);
 
                 // Update panStart for the next move
-                panStart = e.Location;
+                // panStart = e.Location; // Removed as per request
             }
         }
 
