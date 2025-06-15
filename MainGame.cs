@@ -280,6 +280,33 @@ namespace economy_sim
 
             baseMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
             ApplyZoom();
+
+            // Logic to set pictureBox1.Location after ApplyZoom() in RefreshMap()
+            int pbWidth = pictureBox1.Width;
+            int pbHeight = pictureBox1.Height;
+            int panelWidth = panelMap.ClientSize.Width;
+            int panelHeight = panelMap.ClientSize.Height;
+
+            int newX, newY;
+
+            if (pbWidth < panelWidth)
+            {
+                newX = (panelWidth - pbWidth) / 2;
+            }
+            else
+            {
+                newX = 0; // Default to (0,0) if larger, panning will handle the rest
+            }
+
+            if (pbHeight < panelHeight)
+            {
+                newY = (panelHeight - pbHeight) / 2;
+            }
+            else
+            {
+                newY = 0; // Default to (0,0) if larger
+            }
+            pictureBox1.Location = new Point(newX, newY);
         }
 
         private void ApplyZoom()
@@ -290,18 +317,12 @@ namespace economy_sim
             pictureBox1.Image?.Dispose();
             
             // Calculate new dimensions
-            int width = baseMap.Width * mapZoom;
-            int height = baseMap.Height * mapZoom;
+            int newScaledWidth = baseMap.Width * mapZoom;
+            int newScaledHeight = baseMap.Height * mapZoom;
             
             // Create scaled image
-            pictureBox1.Image = ScaleBitmapNearest(baseMap, width, height);
-            pictureBox1.Size = new Size(width, height);
-            
-            // Center the image in the panel
-            pictureBox1.Location = new Point(
-                Math.Max(0, (panelMap.ClientSize.Width - width) / 2),
-                Math.Max(0, (panelMap.ClientSize.Height - height) / 2)
-            );
+            pictureBox1.Image = ScaleBitmapNearest(baseMap, newScaledWidth, newScaledHeight);
+            pictureBox1.Size = new Size(newScaledWidth, newScaledHeight);
         }
 
         private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
@@ -1919,31 +1940,45 @@ namespace economy_sim
             }
         }
 
-        private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
+        private void PictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
+            if (baseMap == null) return;
+
+            Point mousePosInPanel = panelMap.PointToClient(Control.MousePosition);
+            float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
+            float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
+
             int oldZoom = mapZoom;
             mapZoom = Math.Max(1, Math.Min(5, mapZoom + Math.Sign(e.Delta)));
             if (mapZoom == oldZoom) return;
 
-            // Get mouse position relative to picture box
-            Point mousePos = pictureBox1.PointToClient(Control.MousePosition);
-            float relativeX = mousePos.X / (float)pictureBox1.Width;
-            float relativeY = mousePos.Y / (float)pictureBox1.Height;
-
             ApplyZoom();
 
-            // Calculate new position to zoom towards mouse
-            if (pictureBox1.Width > panelMap.Width || pictureBox1.Height > panelMap.Height)
+            int newPbWidth = pictureBox1.Width;
+            int newPbHeight = pictureBox1.Height;
+
+            int newX = (int)(mousePosInPanel.X - relativeXInBase * newPbWidth);
+            int newY = (int)(mousePosInPanel.Y - relativeYInBase * newPbHeight);
+
+            if (newPbWidth < panelMap.ClientSize.Width)
             {
-                int newX = Math.Min(Math.Max(
-                    (int)(mousePos.X - (pictureBox1.Width * relativeX)), 
-                    panelMap.Width - pictureBox1.Width), 0);
-                int newY = Math.Min(Math.Max(
-                    (int)(mousePos.Y - (pictureBox1.Height * relativeY)), 
-                    panelMap.Height - pictureBox1.Height), 0);
-                
-                pictureBox1.Location = new Point(newX, newY);
+                newX = (panelMap.ClientSize.Width - newPbWidth) / 2;
             }
+            else
+            {
+                newX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - newPbWidth));
+            }
+
+            if (newPbHeight < panelMap.ClientSize.Height)
+            {
+                newY = (panelMap.ClientSize.Height - newPbHeight) / 2;
+            }
+            else
+            {
+                newY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - newPbHeight));
+            }
+
+            pictureBox1.Location = new Point(newX, newY);
         }
     }
 }
