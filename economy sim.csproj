@@ -1,3 +1,4 @@
+
 ﻿<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
 
 	<!-- Global properties -->
@@ -89,3 +90,4 @@
 	<!-- Rely on SDK implicit Compile and EmbeddedResource items -->
 
 </Project>
+
