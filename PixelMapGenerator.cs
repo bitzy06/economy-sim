@@ -93,7 +93,7 @@ namespace StrategyGame
         public static Bitmap GeneratePixelArtMapWithCountries(int width, int height)
         {
             GdalBase.ConfigureAll();
-            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, 5);
+            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, 8);
 
             // mask dimensions == pixel dimensions
             int fullW = baseMap.Width;
