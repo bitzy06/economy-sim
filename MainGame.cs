@@ -1912,24 +1912,52 @@ namespace economy_sim
             }
         }
 
-        private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
+private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
+{
+    if (isPanning)
+    {
+        // Only allow panning if the PictureBox is larger than the Panel in at least one dimension.
+        // If it's smaller or fits perfectly, it's centered by the zoom logic,
+        // and panning is not needed/intuitive for this setup.
+        if (pictureBox1.Width > panelMap.ClientSize.Width || pictureBox1.Height > panelMap.ClientSize.Height)
         {
-            if (isPanning)
+            int dx = e.X - panStart.X; // panStart is from MouseDown, relative to pictureBox1's original state at MouseDown
+            int dy = e.Y - panStart.Y;
+
+            int newPotentialX = pictureBox1.Left + dx;
+            int newPotentialY = pictureBox1.Top + dy;
+
+            int finalX;
+            int finalY;
+
+            // Clamp X coordinate
+            if (pictureBox1.Width > panelMap.ClientSize.Width)
             {
-                int dx = e.X - panStart.X;
-                int dy = e.Y - panStart.Y;
-
-                // Calculate new position
-                int newX = pictureBox1.Left + dx;
-                int newY = pictureBox1.Top + dy;
-
-                // Set the new location
-                pictureBox1.Location = new Point(newX, newY);
-
-                // Update panStart for the next move
-                // panStart = e.Location; // Removed as per request
+                finalX = Math.Min(0, Math.Max(newPotentialX, panelMap.ClientSize.Width - pictureBox1.Width));
             }
+            else
+            {
+                // If not wider, keep it centered (it shouldn't be pannable horizontally in this case)
+                finalX = (panelMap.ClientSize.Width - pictureBox1.Width) / 2;
+            }
+
+            // Clamp Y coordinate
+            if (pictureBox1.Height > panelMap.ClientSize.Height)
+            {
+                finalY = Math.Min(0, Math.Max(newPotentialY, panelMap.ClientSize.Height - pictureBox1.Height));
+            }
+            else
+            {
+                // If not taller, keep it centered (it shouldn't be pannable vertically in this case)
+                finalY = (panelMap.ClientSize.Height - pictureBox1.Height) / 2;
+            }
+
+            pictureBox1.Location = new Point(finalX, finalY);
         }
+        // If not isPanning or if picturebox is not larger than panel, do nothing or ensure cursor is default.
+        // The cursor is reset in MouseUp.
+    }
+}
 
         private void PictureBox1_MouseUp(object sender, MouseEventArgs e)
         {
@@ -1943,22 +1971,33 @@ namespace economy_sim
         private void PictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
             if (baseMap == null) return;
+            if (pictureBox1.Width == 0 || pictureBox1.Height == 0) return;
 
-            Point mousePosInPanel = panelMap.PointToClient(Control.MousePosition);
-            float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
-            float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
+            // Point mousePosInPanel = panelMap.PointToClient(Control.MousePosition);
+            // float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
+            // float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
 
             int oldZoom = mapZoom;
             mapZoom = Math.Max(1, Math.Min(5, mapZoom + Math.Sign(e.Delta)));
             if (mapZoom == oldZoom) return;
+
+            // Determine the center of the panelMap
+            int panelCenterX = panelMap.ClientSize.Width / 2;
+            int panelCenterY = panelMap.ClientSize.Height / 2;
+
+            // Calculate what proportional point of the PictureBox content is currently at the panel's center
+            // This must be done BEFORE pictureBox1.Size is changed by ApplyZoom
+            float contentRatioXAtPanelCenter = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
+            float contentRatioYAtPanelCenter = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
 
             ApplyZoom();
 
             int newPbWidth = pictureBox1.Width;
             int newPbHeight = pictureBox1.Height;
 
-            int newX = (int)(mousePosInPanel.X - relativeXInBase * newPbWidth);
-            int newY = (int)(mousePosInPanel.Y - relativeYInBase * newPbHeight);
+            // Calculate the new PictureBox location to keep the content point (that was at panelCenter) at panelCenter
+            int newX = panelCenterX - (int)(contentRatioXAtPanelCenter * newPbWidth);
+            int newY = panelCenterY - (int)(contentRatioYAtPanelCenter * newPbHeight);
 
             if (newPbWidth < panelMap.ClientSize.Width)
             {
