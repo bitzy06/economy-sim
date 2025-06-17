@@ -164,21 +164,43 @@ namespace StrategyGame
             int[,] mask = CountryMaskGenerator.CreateCountryMask(
                 TerrainTifPath, ShpPath, fullW, fullH);
 
-            // draw one‐pixel‐wide border wherever the mask changes
-            for (int y = 1; y < fullH - 1; y++)
+            DrawBorders(baseMap, mask);
+
+            return baseMap;
+        }
+
+        /// <summary>
+        /// Draw one-pixel-wide borders where adjacent mask values differ.
+        /// Using direct memory access avoids the overhead of SetPixel.
+        /// </summary>
+        private static unsafe void DrawBorders(Bitmap bmp, int[,] mask)
+        {
+            var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+            var data = bmp.LockBits(rect, ImageLockMode.ReadWrite, bmp.PixelFormat);
+            int stride = data.Stride;
+            byte* basePtr = (byte*)data.Scan0;
+            int width = bmp.Width;
+            int height = bmp.Height;
+
+            for (int y = 1; y < height - 1; y++)
             {
-                for (int x = 1; x < fullW - 1; x++)
+                byte* row = basePtr + y * stride;
+                for (int x = 1; x < width - 1; x++)
                 {
                     int code = mask[y, x];
                     if (code != mask[y - 1, x] || code != mask[y + 1, x] ||
                         code != mask[y, x - 1] || code != mask[y, x + 1])
                     {
-                        baseMap.SetPixel(x, y, Color.Black);
+                        byte* pixel = row + x * 4;
+                        pixel[0] = 0;
+                        pixel[1] = 0;
+                        pixel[2] = 0;
+                        pixel[3] = 255;
                     }
                 }
             }
 
-            return baseMap;
+            bmp.UnlockBits(data);
         }
 
         /// <summary>
