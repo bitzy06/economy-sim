@@ -25,6 +25,7 @@ namespace StrategyGame
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
 
+
         // Data files are expected to live in the user's Documents\data folder
         // (e.g. "C:\\Users\\kayla\\Documents\\data").  This path is used directly
         // rather than falling back to the repository so the game always loads
@@ -33,7 +34,9 @@ namespace StrategyGame
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "data");
 
+
         private static readonly string RepoDataDir = Path.Combine(RepoRoot, "data");
+
 
         // Data files listed in the text file are resolved relative to the data
         // directory.  This allows the application to load resources that are
@@ -45,6 +48,7 @@ namespace StrategyGame
 
         private static string GetDataFile(string name)
         {
+
             // first check explicit mappings from DataFileNames
             if (DataFiles.TryGetValue(name, out var mapped) && File.Exists(mapped))
                 return mapped;
@@ -53,6 +57,7 @@ namespace StrategyGame
             string userPath = Path.Combine(DataDir, name);
             if (File.Exists(userPath))
                 return userPath;
+
             if (Directory.Exists(DataDir))
             {
                 var matches = Directory.GetFiles(DataDir, name, SearchOption.AllDirectories);
@@ -60,16 +65,19 @@ namespace StrategyGame
                     return matches[0];
             }
 
+
             // fall back to the repository data directory if nothing found
             string repoPath = Path.Combine(RepoDataDir, name);
             if (File.Exists(repoPath))
                 return repoPath;
+
             if (Directory.Exists(RepoDataDir))
             {
                 var matches = Directory.GetFiles(RepoDataDir, name, SearchOption.AllDirectories);
                 if (matches.Length > 0)
                     return matches[0];
             }
+
 
             // return the path in the Documents folder even if missing so callers know where it was expected
             return userPath;
@@ -284,6 +292,7 @@ namespace StrategyGame
                     var trimmed = line.Trim();
                     if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#") || trimmed.StartsWith("files"))
                         continue;
+
                     string userPath = Path.Combine(DataDir, trimmed);
                     if (File.Exists(userPath))
                     {
@@ -293,6 +302,7 @@ namespace StrategyGame
                     {
                         dict[trimmed] = Path.Combine(RepoDataDir, trimmed);
                     }
+
                 }
             }
             return dict;
