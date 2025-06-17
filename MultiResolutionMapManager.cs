@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 
-using System.Threading.Tasks;
 
 
 namespace StrategyGame
@@ -38,28 +37,19 @@ namespace StrategyGame
             int width = Math.Max(1, _baseWidth);
             int height = Math.Max(1, _baseHeight);
 
-            var tasks = new List<Task>();
+
             for (int i = 1; i <= 5; i++)
             {
                 var level = (ZoomLevel)i;
-                int w = width;
-                int h = height;
-                tasks.Add(Task.Run(() =>
-                {
-                    Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(w, h);
-                    OverlayFeatures(bmp, level);
-                    lock (_maps)
-                    {
-                        _maps[level] = bmp;
-                    }
-                }));
+                Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
+                OverlayFeatures(bmp, level);
+                _maps[level] = bmp;
+
 
                 // Prepare dimensions for the next zoom level
                 width *= 2;
                 height *= 2;
             }
-
-            Task.WaitAll(tasks.ToArray());
 
         }
 
