@@ -1983,11 +1983,38 @@ namespace economy_sim
             if (baseMap == null) return;
             if (pictureBox1.Width == 0 || pictureBox1.Height == 0) return;
 
-            // Point mousePosInPanel = panelMap.PointToClient(Control.MousePosition); 
-            // float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
-            // float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
+            Point mousePosInPanel = panelMap.PointToClient(Control.MousePosition);
+            float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
+            float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
 
-            AdjustZoom(mapZoom + Math.Sign(e.Delta) * 0.25f);
+            float newZoom = mapZoom + Math.Sign(e.Delta) * 0.25f;
+            newZoom = Math.Max(1f, Math.Min(5f, newZoom));
+            if (Math.Abs(newZoom - mapZoom) < 0.001f)
+                return;
+
+            mapZoom = newZoom;
+            ApplyZoom();
+
+            int newPbWidth = pictureBox1.Width;
+            int newPbHeight = pictureBox1.Height;
+
+            int newX = mousePosInPanel.X - (int)(relativeXInBase * newPbWidth);
+            int newY = mousePosInPanel.Y - (int)(relativeYInBase * newPbHeight);
+
+            int finalX;
+            int finalY;
+
+            if (pictureBox1.Width > panelMap.ClientSize.Width)
+                finalX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - pictureBox1.Width));
+            else
+                finalX = (panelMap.ClientSize.Width - pictureBox1.Width) / 2;
+
+            if (pictureBox1.Height > panelMap.ClientSize.Height)
+                finalY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - pictureBox1.Height));
+            else
+                finalY = (panelMap.ClientSize.Height - pictureBox1.Height) / 2;
+
+            pictureBox1.Location = new Point(finalX, finalY);
         }
 
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
@@ -2094,6 +2121,30 @@ namespace economy_sim
                 {
                     pictureBox1.Left += e.X - lastLocation.X;
                     pictureBox1.Top += e.Y - lastLocation.Y;
+
+                    int finalX;
+                    int finalY;
+
+                    if (pictureBox1.Width > panelMap.ClientSize.Width)
+                    {
+                        finalX = Math.Min(0, Math.Max(pictureBox1.Left, panelMap.ClientSize.Width - pictureBox1.Width));
+                    }
+                    else
+                    {
+                        finalX = (panelMap.ClientSize.Width - pictureBox1.Width) / 2;
+                    }
+
+                    if (pictureBox1.Height > panelMap.ClientSize.Height)
+                    {
+                        finalY = Math.Min(0, Math.Max(pictureBox1.Top, panelMap.ClientSize.Height - pictureBox1.Height));
+                    }
+                    else
+                    {
+                        finalY = (panelMap.ClientSize.Height - pictureBox1.Height) / 2;
+                    }
+
+                    pictureBox1.Location = new Point(finalX, finalY);
+                    lastLocation = e.Location;
                 }
             }
         }
