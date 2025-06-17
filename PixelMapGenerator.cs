@@ -143,10 +143,10 @@ namespace StrategyGame
         /// <summary>
         /// Generates a terrain map and overlays country borders.
         /// </summary>
-        public static Bitmap GeneratePixelArtMapWithCountries(int width, int height)
+        public static Bitmap GeneratePixelArtMapWithCountries(int width, int height, int pixelsPerCell = 8)
         {
             GdalBase.ConfigureAll();
-            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, 8);
+            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, pixelsPerCell);
 
             // mask dimensions == pixel dimensions
             int fullW = baseMap.Width;
