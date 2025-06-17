@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 
+
+
 namespace StrategyGame
 {
     /// <summary>
@@ -29,10 +31,12 @@ namespace StrategyGame
         /// </summary>
         public void GenerateMaps()
         {
+
             // Ensure we never request zero-sized bitmaps which would throw an
             // ArgumentException from System.Drawing.Bitmap.
             int width = Math.Max(1, _baseWidth);
             int height = Math.Max(1, _baseHeight);
+
 
             for (int i = 1; i <= 5; i++)
             {
@@ -41,10 +45,12 @@ namespace StrategyGame
                 OverlayFeatures(bmp, level);
                 _maps[level] = bmp;
 
+
                 // Prepare dimensions for the next zoom level
                 width *= 2;
                 height *= 2;
             }
+
         }
 
         /// <summary>
@@ -54,6 +60,7 @@ namespace StrategyGame
         {
             return _maps.TryGetValue(level, out var bmp) ? bmp : null;
         }
+
 
         /// <summary>
         /// Return a cropped portion of the map at the requested zoom level.
