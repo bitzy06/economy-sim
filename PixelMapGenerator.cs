@@ -7,6 +7,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Advanced;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -267,7 +268,7 @@ namespace StrategyGame
             int height = img.Height;
             for (int y = 1; y < height - 1; y++)
             {
-                var row = img.GetPixelRowSpan(y);
+                var row = img.DangerousGetPixelRowMemory(y).Span;
                 for (int x = 1; x < width - 1; x++)
                 {
                     int code = mask[y, x];
@@ -388,7 +389,7 @@ namespace StrategyGame
 
                     for (int py = 0; py < pixelsPerCell; py++)
                     {
-                        Span<Rgba32> destRow = dest.GetPixelRowSpan(y * pixelsPerCell + py);
+                        Span<Rgba32> destRow = dest.DangerousGetPixelRowMemory(y * pixelsPerCell + py).Span;
 
                         for (int x = 0; x < cellsX; x++)
                         {
