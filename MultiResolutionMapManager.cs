@@ -7,6 +7,8 @@ using System.IO;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Processing.Processors.Transforms;
 
 
 namespace StrategyGame
@@ -21,6 +23,16 @@ namespace StrategyGame
 
         private readonly Dictionary<ZoomLevel, SystemDrawing.Bitmap> _maps = new();
         private readonly Dictionary<ZoomLevel, Image<Rgba32>> _largeMaps = new();
+        private ZoomLevel? _largeSourceLevel = null;
+
+        private static readonly Dictionary<ZoomLevel, int> CellSizeMap = new()
+        {
+            { ZoomLevel.Global, 1 },
+            { ZoomLevel.Continental, 2 },
+            { ZoomLevel.Country, 4 },
+            { ZoomLevel.State, 6 },
+            { ZoomLevel.City, 40 }
+        };
         private readonly int _baseWidth;
         private readonly int _baseHeight;
 
@@ -46,24 +58,23 @@ namespace StrategyGame
             int widthPx = _baseWidth * highestCell;
             int heightPx = _baseHeight * highestCell;
 
-            SystemDrawing.Bitmap highestMap;
+            SystemDrawing.Bitmap highestMap = null;
 
             if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
             {
                 var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, highestCell);
                 OverlayFeaturesLarge(img, highestLevel);
-                using var ms = new MemoryStream();
-                img.SaveAsBmp(ms);
-                ms.Position = 0;
-                highestMap = new SystemDrawing.Bitmap(ms);
+                _largeMaps[highestLevel] = img;
+                _largeSourceLevel = highestLevel;
             }
             else
             {
                 highestMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, highestCell);
                 OverlayFeatures(highestMap, highestLevel);
+                _maps[highestLevel] = highestMap;
+                _largeSourceLevel = null;
+                _largeMaps.Clear();
             }
-
-            _maps[highestLevel] = highestMap;
 
             for (int i = highestIndex - 1; i >= 0; i--)
             {
@@ -71,7 +82,21 @@ namespace StrategyGame
                 int cellSize = cellSizes[i];
                 int w = _baseWidth * cellSize;
                 int h = _baseHeight * cellSize;
-                SystemDrawing.Bitmap scaled = ScaleBitmapNearest(highestMap, w, h);
+                SystemDrawing.Bitmap scaled;
+
+                if (highestMap != null)
+                {
+                    scaled = ScaleBitmapNearest(highestMap, w, h);
+                }
+                else if (_largeSourceLevel != null && _largeMaps.TryGetValue(_largeSourceLevel.Value, out var img))
+                {
+                    scaled = ScaleImageSharp(img, w, h);
+                }
+                else
+                {
+                    continue;
+                }
+
                 OverlayFeatures(scaled, level);
                 _maps[level] = scaled;
             }
@@ -82,7 +107,28 @@ namespace StrategyGame
         /// </summary>
         public SystemDrawing.Bitmap GetMap(ZoomLevel level)
         {
-            return _maps.TryGetValue(level, out var bmp) ? bmp : null;
+            if (_maps.TryGetValue(level, out var bmp))
+                return bmp;
+
+            if (_largeMaps.TryGetValue(level, out var large))
+            {
+                bmp = ImageSharpToBitmap(large);
+                _maps[level] = bmp;
+                return bmp;
+            }
+
+            if (_largeSourceLevel != null && _largeMaps.TryGetValue(_largeSourceLevel.Value, out var src))
+            {
+                int cellSize = CellSizeMap[level];
+                int w = _baseWidth * cellSize;
+                int h = _baseHeight * cellSize;
+                bmp = ScaleImageSharp(src, w, h);
+                OverlayFeatures(bmp, level);
+                _maps[level] = bmp;
+                return bmp;
+            }
+
+            return null;
         }
 
 
@@ -91,19 +137,46 @@ namespace StrategyGame
         /// </summary>
         public SystemDrawing.Bitmap GetMap(ZoomLevel level, SystemDrawing.Rectangle view)
         {
-            if (!_maps.TryGetValue(level, out var bmp))
-                return null;
-            SystemDrawing.Rectangle src = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, bmp.Size), view);
-            if (src.Width <= 0 || src.Height <= 0)
-                return null;
-            SystemDrawing.Bitmap dest = new SystemDrawing.Bitmap(src.Width, src.Height);
-            using (SystemDrawing.Graphics g = SystemDrawing.Graphics.FromImage(dest))
+            if (_maps.TryGetValue(level, out var bmp))
             {
-                g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                g.PixelOffsetMode = PixelOffsetMode.Half;
-                g.DrawImage(bmp, new SystemDrawing.Rectangle(0, 0, dest.Width, dest.Height), src, SystemDrawing.GraphicsUnit.Pixel);
+                SystemDrawing.Rectangle src = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, bmp.Size), view);
+                if (src.Width <= 0 || src.Height <= 0)
+                    return null;
+                SystemDrawing.Bitmap dest = new SystemDrawing.Bitmap(src.Width, src.Height);
+                using (SystemDrawing.Graphics g = SystemDrawing.Graphics.FromImage(dest))
+                {
+                    g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                    g.PixelOffsetMode = PixelOffsetMode.Half;
+                    g.DrawImage(bmp, new SystemDrawing.Rectangle(0, 0, dest.Width, dest.Height), src, SystemDrawing.GraphicsUnit.Pixel);
+                }
+                return dest;
             }
-            return dest;
+
+            if (_largeMaps.TryGetValue(level, out var large))
+            {
+                SystemDrawing.Rectangle src = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, new SystemDrawing.Size(large.Width, large.Height)), view);
+                if (src.Width <= 0 || src.Height <= 0)
+                    return null;
+                return CropImageSharp(large, src);
+            }
+
+            if (_largeSourceLevel != null && _largeMaps.TryGetValue(_largeSourceLevel.Value, out var srcImg))
+            {
+                float scale = (float)CellSizeMap[_largeSourceLevel.Value] / CellSizeMap[level];
+                var srcRect = new SystemDrawing.Rectangle(
+                    (int)(view.X * scale),
+                    (int)(view.Y * scale),
+                    (int)(view.Width * scale),
+                    (int)(view.Height * scale));
+
+                srcRect = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, new SystemDrawing.Size(srcImg.Width, srcImg.Height)), srcRect);
+                if (srcRect.Width <= 0 || srcRect.Height <= 0)
+                    return null;
+
+                return CropScaleImageSharp(srcImg, srcRect, view.Width, view.Height);
+            }
+
+            return null;
         }
 
         private static void OverlayFeatures(SystemDrawing.Bitmap bmp, ZoomLevel level)
@@ -293,6 +366,34 @@ namespace StrategyGame
                 g.DrawImage(src, 0, 0, width, height);
             }
             return dest;
+        }
+
+        private static SystemDrawing.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
+        {
+            using var ms = new MemoryStream();
+            img.SaveAsBmp(ms);
+            ms.Position = 0;
+            return new SystemDrawing.Bitmap(ms);
+        }
+
+        private static SystemDrawing.Bitmap ScaleImageSharp(Image<Rgba32> img, int width, int height)
+        {
+            using var clone = img.Clone(ctx => ctx.Resize(width, height, KnownResamplers.NearestNeighbor));
+            return ImageSharpToBitmap(clone);
+        }
+
+        private static SystemDrawing.Bitmap CropImageSharp(Image<Rgba32> img, SystemDrawing.Rectangle rect)
+        {
+            var src = new SixLabors.ImageSharp.Rectangle(rect.X, rect.Y, rect.Width, rect.Height);
+            using var clone = img.Clone(ctx => ctx.Crop(src));
+            return ImageSharpToBitmap(clone);
+        }
+
+        private static SystemDrawing.Bitmap CropScaleImageSharp(Image<Rgba32> img, SystemDrawing.Rectangle rect, int width, int height)
+        {
+            var src = new SixLabors.ImageSharp.Rectangle(rect.X, rect.Y, rect.Width, rect.Height);
+            using var clone = img.Clone(ctx => ctx.Crop(src).Resize(width, height, KnownResamplers.NearestNeighbor));
+            return ImageSharpToBitmap(clone);
         }
     }
 }
