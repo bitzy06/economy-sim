@@ -57,6 +57,8 @@ namespace economy_sim
 
         private int mapZoom = 1;
 
+        private MultiResolutionMapManager mapManager;
+
         private Bitmap baseMap;
         private bool isPanning = false;
         private Point panStart;
@@ -278,16 +280,15 @@ namespace economy_sim
             {
                 return;
             }
-            if (pictureBox1.Width == 0 || pictureBox1.Height == 0)
-                return;
+
+            if (mapManager == null)
+            {
+                mapManager = new MultiResolutionMapManager(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
+                mapManager.GenerateMaps();
+            }
 
             baseMap?.Dispose();
-
-            // Get the panel size instead of pictureBox size for consistent dimensions
-            int width = panelMap.ClientSize.Width;
-            int height = panelMap.ClientSize.Height;
-
-            baseMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
+            baseMap = mapManager.GetMap((MultiResolutionMapManager.ZoomLevel)mapZoom);
             ApplyZoom();
 
             // Logic to set pictureBox1.Location after ApplyZoom() in RefreshMap()
@@ -320,39 +321,16 @@ namespace economy_sim
 
         private void ApplyZoom()
         {
+            if (mapManager == null)
+                return;
+
+            baseMap = mapManager.GetMap((MultiResolutionMapManager.ZoomLevel)mapZoom);
             if (baseMap == null)
                 return;
 
-            // Calculate new dimensions
-            int newWidth = baseMap.Width * mapZoom;
-            int newHeight = baseMap.Height * mapZoom;
-
-            // Clamp to avoid zero or GDI+ limits
-            newWidth = Math.Max(1, Math.Min(newWidth, 32767));
-            newHeight = Math.Max(1, Math.Min(newHeight, 32767));
-
-            // Generate the scaled image
-            Bitmap scaled;
-            try
-            {
-                scaled = new Bitmap(newWidth, newHeight);
-                using (Graphics g = Graphics.FromImage(scaled))
-                {
-                    g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                    g.PixelOffsetMode = PixelOffsetMode.Half;
-                    g.DrawImage(baseMap, 0, 0, newWidth, newHeight);
-                }
-            }
-            catch
-            {
-                // If creation fails, just bail out and keep the old image alive
-                return;
-            }
-
-            // Swap in the new image, then dispose the old one
             var old = pictureBox1.Image;
-            pictureBox1.Image = scaled;
-            pictureBox1.Size = new Size(newWidth, newHeight);
+            pictureBox1.Image = baseMap;
+            pictureBox1.Size = baseMap.Size;
             old?.Dispose();
         }
 
