@@ -34,15 +34,17 @@ namespace StrategyGame
             int[] cellSizes = { 1, 2, 4, 6, 8 };
 
 
-            for (int i = 1; i <= 5; i++)
+            System.Threading.Tasks.Parallel.For(0, 5, i =>
             {
-                var level = (ZoomLevel)i;
-
-                int cellSize = cellSizes[i - 1];
+                var level = (ZoomLevel)(i + 1);
+                int cellSize = cellSizes[i];
                 Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
                 OverlayFeatures(bmp, level);
-                _maps[level] = bmp;
-            }
+                lock (_maps)
+                {
+                    _maps[level] = bmp;
+                }
+            });
 
         }
 
