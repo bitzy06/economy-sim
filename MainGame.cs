@@ -106,7 +106,7 @@ namespace economy_sim
                 Size = new System.Drawing.Size(400, 180), // Adjusted size
                 View = View.Details,
                 FullRowSelect = true,
-                GridLines = true
+                GridLines = false
             };
 
             listViewDiplomacy.Columns.Add("Country", 120);
