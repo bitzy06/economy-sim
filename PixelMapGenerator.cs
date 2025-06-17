@@ -24,6 +24,7 @@ namespace StrategyGame
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
 
+
         // Prefer a data directory inside the user's Documents folder so large
         // resources can live outside the repository.  Fall back to the repo
         // bundled data folder when that directory does not exist.
