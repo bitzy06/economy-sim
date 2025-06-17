@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Threading.Tasks;
+using System.IO;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -35,43 +36,44 @@ namespace StrategyGame
         /// </summary>
         public void GenerateMaps()
         {
-
             int[] cellSizes = { 1, 2, 4, 6, 40 };
 
-            var tasks = new List<Task>();
-            for (int i = 0; i < 5; i++)
-            {
-                int idx = i;
-                tasks.Add(Task.Run(() =>
-                {
-                    var level = (ZoomLevel)(idx + 1);
-                    int cellSize = cellSizes[idx];
-                    int widthPx = _baseWidth * cellSize;
-                    int heightPx = _baseHeight * cellSize;
+            int highestIndex = cellSizes.Length - 1;
+            ZoomLevel highestLevel = (ZoomLevel)(highestIndex + 1);
+            int highestCell = cellSizes[highestIndex];
 
-                    if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
-                    {
-                        var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, cellSize);
-                        OverlayFeaturesLarge(img, level);
-                        lock (_largeMaps)
-                        {
-                            _largeMaps[level] = img;
-                        }
-                    }
-                    else
-                    {
-                        Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
-                        OverlayFeatures(bmp, level);
-                        lock (_maps)
-                        {
-                            _maps[level] = bmp;
-                        }
-                    }
-                }));
+            int widthPx = _baseWidth * highestCell;
+            int heightPx = _baseHeight * highestCell;
+
+            Bitmap highestMap;
+
+            if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
+            {
+                var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, highestCell);
+                OverlayFeaturesLarge(img, highestLevel);
+                using var ms = new MemoryStream();
+                img.SaveAsBmp(ms);
+                ms.Position = 0;
+                highestMap = new Bitmap(ms);
+            }
+            else
+            {
+                highestMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, highestCell);
+                OverlayFeatures(highestMap, highestLevel);
             }
 
-            Task.WaitAll(tasks.ToArray());
+            _maps[highestLevel] = highestMap;
 
+            for (int i = highestIndex - 1; i >= 0; i--)
+            {
+                var level = (ZoomLevel)(i + 1);
+                int cellSize = cellSizes[i];
+                int w = _baseWidth * cellSize;
+                int h = _baseHeight * cellSize;
+                Bitmap scaled = ScaleBitmapNearest(highestMap, w, h);
+                OverlayFeatures(scaled, level);
+                _maps[level] = scaled;
+            }
         }
 
         /// <summary>
@@ -268,6 +270,29 @@ namespace StrategyGame
                     row[xx] = color;
                 }
             }
+        }
+
+        private static Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
+        {
+            if (width <= 0 || height <= 0)
+            {
+                return new Bitmap(1, 1);
+            }
+
+            const int MAX_DIMENSION = 32767;
+            if (width > MAX_DIMENSION || height > MAX_DIMENSION)
+            {
+                return new Bitmap(1, 1);
+            }
+
+            Bitmap dest = new Bitmap(width, height);
+            using (var g = Graphics.FromImage(dest))
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.DrawImage(src, 0, 0, width, height);
+            }
+            return dest;
         }
     }
 }
