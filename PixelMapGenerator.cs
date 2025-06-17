@@ -6,6 +6,9 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace StrategyGame
 {
@@ -270,6 +273,52 @@ namespace StrategyGame
                 dest.UnlockBits(bmpData);
                 return dest;
             }
+        }
+
+        /// <summary>
+        /// Generate a pixel-art terrain map for dimensions larger than System.Drawing supports.
+        /// This uses ImageSharp to avoid the 32k bitmap limit.
+        /// </summary>
+        public static Image<Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell)
+        {
+            string path = TerrainTifPath;
+            if (!File.Exists(path))
+                throw new FileNotFoundException("Missing terrain GeoTIFF", path);
+
+            int widthPx = cellsX * pixelsPerCell;
+            int heightPx = cellsY * pixelsPerCell;
+
+            using var img = new Bitmap(path);
+            using var scaled = new Bitmap(cellsX, cellsY);
+            using (Graphics g = Graphics.FromImage(scaled))
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.DrawImage(img, 0, 0, cellsX, cellsY);
+            }
+
+            var dest = new Image<Rgba32>(widthPx, heightPx);
+            Random rng = new Random();
+            for (int y = 0; y < cellsY; y++)
+            {
+                for (int x = 0; x < cellsX; x++)
+                {
+                    Color baseColor = scaled.GetPixel(x, y);
+                    Color[] palette = BuildPalette(baseColor);
+                    for (int py = 0; py < pixelsPerCell; py++)
+                    {
+                        int destY = y * pixelsPerCell + py;
+                        for (int px = 0; px < pixelsPerCell; px++)
+                        {
+                            Color chosen = palette[rng.Next(palette.Length)];
+                            int destX = x * pixelsPerCell + px;
+                            dest[destX, destY] = new Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
+                        }
+                    }
+                }
+            }
+
+            return dest;
         }
 
         private static Color GetAltitudeColor(float value)
