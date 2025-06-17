@@ -31,7 +31,7 @@ namespace StrategyGame
         /// </summary>
         public void GenerateMaps()
         {
-            int[] cellSizes = { 1, 2, 4, 6, 8 };
+            int[] cellSizes = { 1, 2, 7, 12, 16 };
 
 
             for (int i = 1; i <= 5; i++)
