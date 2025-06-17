@@ -50,6 +50,8 @@ namespace StrategyGame
             return _maps.TryGetValue(level, out var bmp) ? bmp : null;
         }
 
+
+
         /// <summary>
         /// Return a cropped portion of the map at the requested zoom level.
         /// </summary>
