@@ -50,6 +50,27 @@ namespace StrategyGame
             return _maps.TryGetValue(level, out var bmp) ? bmp : null;
         }
 
+
+        /// <summary>
+        /// Return a cropped portion of the map at the requested zoom level.
+        /// </summary>
+        public Bitmap GetMap(ZoomLevel level, Rectangle view)
+        {
+            if (!_maps.TryGetValue(level, out var bmp))
+                return null;
+            Rectangle src = Rectangle.Intersect(new Rectangle(Point.Empty, bmp.Size), view);
+            if (src.Width <= 0 || src.Height <= 0)
+                return null;
+            Bitmap dest = new Bitmap(src.Width, src.Height);
+            using (Graphics g = Graphics.FromImage(dest))
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.DrawImage(bmp, new Rectangle(0, 0, dest.Width, dest.Height), src, GraphicsUnit.Pixel);
+            }
+            return dest;
+        }
+
         private static void OverlayFeatures(Bitmap bmp, ZoomLevel level)
         {
             using Graphics g = Graphics.FromImage(bmp);
