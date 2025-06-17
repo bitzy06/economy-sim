@@ -24,6 +24,8 @@ namespace StrategyGame
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
 
+
+
         // Data files are expected to live in the user's Documents\data folder
         // (e.g. "C:\\Users\\kayla\\Documents\\data").  This path is used directly
         // rather than falling back to the repository so the game always loads
@@ -32,7 +34,9 @@ namespace StrategyGame
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "data");
 
+
         private static readonly string RepoDataDir = Path.Combine(RepoRoot, "data");
+
 
         // Data files listed in the text file are resolved relative to the data
         // directory.  This allows the application to load resources that are
@@ -44,6 +48,7 @@ namespace StrategyGame
 
         private static string GetDataFile(string name)
         {
+
             // first check explicit mappings from DataFileNames
             if (DataFiles.TryGetValue(name, out var mapped) && File.Exists(mapped))
                 return mapped;
@@ -267,6 +272,7 @@ namespace StrategyGame
                     var trimmed = line.Trim();
                     if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#") || trimmed.StartsWith("files"))
                         continue;
+
                     string userPath = Path.Combine(DataDir, trimmed);
                     if (File.Exists(userPath))
                     {
@@ -276,6 +282,7 @@ namespace StrategyGame
                     {
                         dict[trimmed] = Path.Combine(RepoDataDir, trimmed);
                     }
+
                 }
             }
             return dict;
