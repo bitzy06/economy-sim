@@ -24,8 +24,8 @@ namespace StrategyGame
         private Image<Rgba32> _largeBaseMap;
         private SystemDrawing.Bitmap _baseMap;
 
-        private const int MaxCellSize = 40;
 
+        private const int MaxCellSize = 40;
         private const int MAX_DIMENSION = 32767;
         private const int MAX_PIXEL_COUNT = 250_000_000;
 
