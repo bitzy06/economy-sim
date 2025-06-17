@@ -4,7 +4,6 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 
 
-
 namespace StrategyGame
 {
     /// <summary>
@@ -26,29 +25,23 @@ namespace StrategyGame
         }
 
         /// <summary>
-        /// Generate maps for all zoom levels. Each level doubles the resolution
-        /// of the previous one.
+
+        /// Generate maps for all zoom levels. Each level increases the pixel
+        /// density without creating excessively large bitmaps.
         /// </summary>
         public void GenerateMaps()
         {
-
-            // Ensure we never request zero-sized bitmaps which would throw an
-            // ArgumentException from System.Drawing.Bitmap.
-            int width = Math.Max(1, _baseWidth);
-            int height = Math.Max(1, _baseHeight);
+            int[] cellSizes = { 1, 2, 4, 6, 8 };
 
 
             for (int i = 1; i <= 5; i++)
             {
                 var level = (ZoomLevel)i;
-                Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
+
+                int cellSize = cellSizes[i - 1];
+                Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
                 OverlayFeatures(bmp, level);
                 _maps[level] = bmp;
-
-
-                // Prepare dimensions for the next zoom level
-                width *= 2;
-                height *= 2;
             }
 
         }
