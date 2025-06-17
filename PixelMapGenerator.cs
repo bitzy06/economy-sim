@@ -48,6 +48,11 @@ namespace StrategyGame
 
         private static readonly Dictionary<string, string> DataFiles = LoadDataFiles();
 
+        // System.Drawing fails with "Parameter is not valid" when width or height
+        // exceed approximately 32k pixels.  Clamp generated bitmap dimensions to
+        // stay below this threshold.
+        private const int MaxBitmapDimension = 30000;
+
         private static string GetDataFile(string name)
         {
 
@@ -211,11 +216,18 @@ namespace StrategyGame
         /// <param name="cellsX">Number of cells horizontally.</param>
         /// <param name="cellsY">Number of cells vertically.</param>
         /// <param name="pixelsPerCell">Size of each cell in pixels.</param>
+
         public static unsafe Bitmap GenerateTerrainPixelArtMap(int cellsX, int cellsY, int pixelsPerCell)
         {
             string path = TerrainTifPath;
             if (!File.Exists(path))
                 throw new FileNotFoundException("Missing terrain GeoTIFF", path);
+
+            int widthPx = cellsX * pixelsPerCell;
+            int heightPx = cellsY * pixelsPerCell;
+            if (widthPx > MaxBitmapDimension || heightPx > MaxBitmapDimension)
+                throw new ArgumentOutOfRangeException(nameof(pixelsPerCell),
+                    $"Bitmap size {widthPx}x{heightPx} exceeds supported dimensions ({MaxBitmapDimension}).");
 
             using (var img = new Bitmap(path))
             using (var scaled = new Bitmap(cellsX, cellsY))
@@ -227,7 +239,7 @@ namespace StrategyGame
                     g.DrawImage(img, 0, 0, cellsX, cellsY);
                 }
 
-                var dest = new Bitmap(cellsX * pixelsPerCell, cellsY * pixelsPerCell, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                var dest = new Bitmap(widthPx, heightPx, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                 var bmpData = dest.LockBits(new Rectangle(0, 0, dest.Width, dest.Height), System.Drawing.Imaging.ImageLockMode.WriteOnly, dest.PixelFormat);
                 int stride = bmpData.Stride;
                 byte* basePtr = (byte*)bmpData.Scan0;
