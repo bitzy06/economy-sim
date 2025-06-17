@@ -51,6 +51,7 @@ namespace StrategyGame
         }
 
 
+
         /// <summary>
         /// Return a cropped portion of the map at the requested zoom level.
         /// </summary>
