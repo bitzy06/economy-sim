@@ -57,7 +57,12 @@ namespace StrategyGame
         // System.Drawing fails with "Parameter is not valid" when width or height
         // exceed approximately 32k pixels.  Clamp generated bitmap dimensions to
         // stay below this threshold.
-        private const int MaxBitmapDimension = 30000;
+        /// <summary>
+        /// Maximum bitmap dimension that can be safely created using
+        /// System.Drawing. Larger images must be generated using
+        /// ImageSharp to avoid GDI limitations.
+        /// </summary>
+        public const int MaxBitmapDimension = 30000;
 
         private static string GetDataFile(string name)
         {

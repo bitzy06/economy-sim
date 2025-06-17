@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Threading.Tasks;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 
 
 namespace StrategyGame
@@ -15,6 +18,7 @@ namespace StrategyGame
         public enum ZoomLevel { Global = 1, Continental, Country, State, City }
 
         private readonly Dictionary<ZoomLevel, Bitmap> _maps = new();
+        private readonly Dictionary<ZoomLevel, Image<Rgba32>> _largeMaps = new();
         private readonly int _baseWidth;
         private readonly int _baseHeight;
 
@@ -42,11 +46,26 @@ namespace StrategyGame
                 {
                     var level = (ZoomLevel)(idx + 1);
                     int cellSize = cellSizes[idx];
-                    Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
-                    OverlayFeatures(bmp, level);
-                    lock (_maps)
+                    int widthPx = _baseWidth * cellSize;
+                    int heightPx = _baseHeight * cellSize;
+
+                    if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
                     {
-                        _maps[level] = bmp;
+                        var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, cellSize);
+                        OverlayFeaturesLarge(img, level);
+                        lock (_largeMaps)
+                        {
+                            _largeMaps[level] = img;
+                        }
+                    }
+                    else
+                    {
+                        Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
+                        OverlayFeatures(bmp, level);
+                        lock (_maps)
+                        {
+                            _maps[level] = bmp;
+                        }
                     }
                 }));
             }
@@ -137,6 +156,117 @@ namespace StrategyGame
                         g.FillRectangle(Brushes.Red, x, y, 3, 2);
                     }
                     break;
+            }
+        }
+
+        private static void OverlayFeaturesLarge(Image<Rgba32> img, ZoomLevel level)
+        {
+            Random rng = new Random(42);
+            switch (level)
+            {
+                case ZoomLevel.Country:
+                    for (int i = 0; i < 3; i++)
+                    {
+                        int size = img.Width / 15;
+                        int x = rng.Next(img.Width - size);
+                        int y = rng.Next(img.Height - size);
+                        FillCircle(img, x, y, size, Color.LightGray);
+                    }
+                    break;
+                case ZoomLevel.State:
+                    DrawLine(img, 0, img.Height / 3, img.Width, img.Height / 3, Color.Gray, 2);
+                    DrawLine(img, img.Width / 2, 0, img.Width / 2, img.Height, Color.Gray, 2);
+                    DrawDashedLine(img, 0, img.Height * 2 / 3, img.Width, img.Height * 2 / 3, Color.DarkGray);
+                    break;
+                case ZoomLevel.City:
+                    for (int x = 0; x < img.Width; x += 20)
+                        DrawLine(img, x, 0, x, img.Height, Color.Gray);
+                    for (int y = 0; y < img.Height; y += 20)
+                        DrawLine(img, 0, y, img.Width, y, Color.Gray);
+                    for (int i = 0; i < 50; i++)
+                    {
+                        int w = rng.Next(4, 8);
+                        int h = rng.Next(4, 8);
+                        int x = rng.Next(img.Width - w);
+                        int y = rng.Next(img.Height - h);
+                        FillRect(img, x, y, w, h, Color.DarkSlateBlue);
+                    }
+                    for (int i = 0; i < 20; i++)
+                    {
+                        int x = rng.Next(img.Width - 3);
+                        int y = rng.Next(img.Height - 2);
+                        FillRect(img, x, y, 3, 2, Color.Red);
+                    }
+                    break;
+            }
+        }
+
+        private static void FillCircle(Image<Rgba32> img, int x, int y, int size, Color color)
+        {
+            int radius = size / 2;
+            int cx = x + radius;
+            int cy = y + radius;
+            for (int iy = -radius; iy <= radius; iy++)
+            {
+                int yy = cy + iy;
+                if (yy < 0 || yy >= img.Height) continue;
+                int dx = (int)Math.Sqrt(radius * radius - iy * iy);
+                int start = cx - dx;
+                int end = cx + dx;
+                if (start < 0) start = 0;
+                if (end >= img.Width) end = img.Width - 1;
+                var row = img.GetPixelRowSpan(yy);
+                for (int ix = start; ix <= end; ix++)
+                    row[ix] = color;
+            }
+        }
+
+        private static void DrawLine(Image<Rgba32> img, int x0, int y0, int x1, int y1, Color color, int thickness = 1)
+        {
+            int dx = Math.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+            int dy = -Math.Abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+            int err = dx + dy, e2;
+            while (true)
+            {
+                FillRect(img, x0 - thickness / 2, y0 - thickness / 2, thickness, thickness, color);
+                if (x0 == x1 && y0 == y1) break;
+                e2 = 2 * err;
+                if (e2 >= dy) { err += dy; x0 += sx; }
+                if (e2 <= dx) { err += dx; y0 += sy; }
+            }
+        }
+
+        private static void DrawDashedLine(Image<Rgba32> img, int x0, int y0, int x1, int y1, Color color)
+        {
+            int dx = Math.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+            int dy = -Math.Abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+            int err = dx + dy, e2;
+            bool draw = true;
+            int count = 0;
+            while (true)
+            {
+                if (draw)
+                    FillRect(img, x0, y0, 1, 1, color);
+                if (x0 == x1 && y0 == y1) break;
+                e2 = 2 * err;
+                if (e2 >= dy) { err += dy; x0 += sx; }
+                if (e2 <= dx) { err += dx; y0 += sy; }
+                count++;
+                if (count % 4 == 0) draw = !draw;
+            }
+        }
+
+        private static void FillRect(Image<Rgba32> img, int x, int y, int width, int height, Color color)
+        {
+            for (int yy = y; yy < y + height; yy++)
+            {
+                if (yy < 0 || yy >= img.Height) continue;
+                var row = img.GetPixelRowSpan(yy);
+                for (int xx = x; xx < x + width; xx++)
+                {
+                    if (xx < 0 || xx >= img.Width) continue;
+                    row[xx] = color;
+                }
             }
         }
     }
