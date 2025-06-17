@@ -288,6 +288,8 @@ namespace economy_sim
             }
 
 
+
+
             ApplyZoom();
 
             // Logic to set pictureBox1.Location after ApplyZoom() in RefreshMap()
@@ -323,8 +325,10 @@ namespace economy_sim
             if (mapManager == null)
                 return;
 
+
             Bitmap newMap = mapManager.GetMap(mapZoom);
             if (newMap == null)
+
                 return;
 
             Bitmap oldMap = baseMap;
@@ -337,6 +341,40 @@ namespace economy_sim
             if (oldMap != null && !ReferenceEquals(oldMap, newMap))
                 oldMap.Dispose();
 
+        }
+
+        private void AdjustZoom(float newZoom)
+        {
+            newZoom = Math.Max(1f, Math.Min(5f, newZoom));
+            if (Math.Abs(newZoom - mapZoom) < 0.001f)
+                return;
+
+            int panelCenterX = panelMap.ClientSize.Width / 2;
+            int panelCenterY = panelMap.ClientSize.Height / 2;
+
+            float contentRatioX = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
+            float contentRatioY = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
+
+            mapZoom = newZoom;
+            ApplyZoom();
+
+            int newPbWidth = pictureBox1.Width;
+            int newPbHeight = pictureBox1.Height;
+
+            int newX = panelCenterX - (int)(contentRatioX * newPbWidth);
+            int newY = panelCenterY - (int)(contentRatioY * newPbHeight);
+
+            if (newPbWidth < panelMap.ClientSize.Width)
+                newX = (panelMap.ClientSize.Width - newPbWidth) / 2;
+            else
+                newX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - newPbWidth));
+
+            if (newPbHeight < panelMap.ClientSize.Height)
+                newY = (panelMap.ClientSize.Height - newPbHeight) / 2;
+            else
+                newY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - newPbHeight));
+
+            pictureBox1.Location = new Point(newX, newY);
         }
 
         private void AdjustZoom(float newZoom)
