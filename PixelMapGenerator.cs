@@ -6,6 +6,7 @@ using SystemDrawing = System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
+using SixLabors.ImageSharp.PixelFormats;
 
 
 
@@ -166,6 +167,12 @@ namespace StrategyGame
                     _gdalConfigured = true;
                 }
             }
+            int widthPx = width * pixelsPerCell;
+            int heightPx = height * pixelsPerCell;
+            if (widthPx > MaxBitmapDimension || heightPx > MaxBitmapDimension)
+                throw new ArgumentOutOfRangeException(nameof(pixelsPerCell),
+                    $"Bitmap size {widthPx}x{heightPx} exceeds supported dimensions ({MaxBitmapDimension}). Use GeneratePixelArtMapWithCountriesLarge instead.");
+
             Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, pixelsPerCell);
 
             // mask dimensions == pixel dimensions
@@ -175,6 +182,34 @@ namespace StrategyGame
                 TerrainTifPath, ShpPath, fullW, fullH);
 
             DrawBorders(baseMap, mask);
+
+            return baseMap;
+        }
+
+        /// <summary>
+
+        /// Generate a pixel-art map with country borders for very large maps
+        /// using ImageSharp to avoid System.Drawing size limits.
+        /// </summary>
+        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GeneratePixelArtMapWithCountriesLarge(int width, int height, int pixelsPerCell = 8)
+        {
+            lock (GdalConfigLock)
+            {
+                if (!_gdalConfigured)
+                {
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
+                }
+            }
+
+            var baseMap = GenerateTerrainPixelArtMapLarge(width, height, pixelsPerCell);
+
+            int fullW = baseMap.Width;
+            int fullH = baseMap.Height;
+            int[,] mask = CountryMaskGenerator.CreateCountryMask(
+                TerrainTifPath, ShpPath, fullW, fullH);
+
+            DrawBordersLarge(baseMap, mask);
 
             return baseMap;
         }
@@ -194,6 +229,7 @@ namespace StrategyGame
 
             for (int y = 1; y < height - 1; y++)
             {
+
                 byte* row = basePtr + y * stride;
                 for (int x = 1; x < width - 1; x++)
                 {
@@ -211,6 +247,31 @@ namespace StrategyGame
             }
 
             bmp.UnlockBits(data);
+
+        }
+
+        /// <summary>
+        /// Draw borders directly on an ImageSharp image when the map exceeds
+        /// System.Drawing limits.
+        /// </summary>
+        private static void DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> img, int[,] mask)
+        {
+            int width = img.Width;
+            int height = img.Height;
+            for (int y = 1; y < height - 1; y++)
+            {
+                var row = img.GetPixelRowSpan(y);
+                for (int x = 1; x < width - 1; x++)
+                {
+                    int code = mask[y, x];
+                    if (code != mask[y - 1, x] || code != mask[y + 1, x] ||
+                        code != mask[y, x - 1] || code != mask[y, x + 1])
+                    {
+                        row[x] = SixLabors.ImageSharp.Color.Black;
+                    }
+                }
+            }
+
         }
 
         /// <summary>
@@ -282,9 +343,7 @@ namespace StrategyGame
         /// This uses ImageSharp to avoid the 32k bitmap limit.
         /// </summary>
 
-
         public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell)
-
 
         {
             string path = TerrainTifPath;
@@ -304,9 +363,7 @@ namespace StrategyGame
             }
 
 
-
             var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(widthPx, heightPx);
-
 
             Random rng = new Random();
             for (int y = 0; y < cellsY; y++)
