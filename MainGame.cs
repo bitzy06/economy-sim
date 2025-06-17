@@ -285,6 +285,7 @@ namespace economy_sim
             {
                 mapManager = new MultiResolutionMapManager(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
                 mapManager.GenerateMaps();
+                mapManager.ClearCache();
             }
 
 

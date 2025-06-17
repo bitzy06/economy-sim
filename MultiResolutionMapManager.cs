@@ -24,6 +24,9 @@ namespace StrategyGame
         private Image<Rgba32> _largeBaseMap;
         private SystemDrawing.Bitmap _baseMap;
 
+        // Cache of scaled bitmaps keyed by cell size
+        private readonly Dictionary<int, SystemDrawing.Bitmap> _cachedMaps = new();
+
 
         private const int MaxCellSize = 40;
         private const int MAX_DIMENSION = 32767;
@@ -70,16 +73,32 @@ namespace StrategyGame
         public SystemDrawing.Bitmap GetMap(float zoom)
         {
             int cellSize = GetCellSize(zoom);
+
+            if (_cachedMaps.TryGetValue(cellSize, out var cached))
+            {
+                return cached;
+            }
+
             int w = _baseWidth * cellSize;
             int h = _baseHeight * cellSize;
 
+            SystemDrawing.Bitmap bmp = null;
+
             if (_baseMap != null)
-                return ScaleBitmapNearest(_baseMap, w, h);
+            {
+                bmp = ScaleBitmapNearest(_baseMap, w, h);
+            }
+            else if (_largeBaseMap != null)
+            {
+                bmp = ScaleImageSharp(_largeBaseMap, w, h);
+            }
 
-            if (_largeBaseMap != null)
-                return ScaleImageSharp(_largeBaseMap, w, h);
+            if (bmp != null)
+            {
+                _cachedMaps[cellSize] = bmp;
+            }
 
-            return null;
+            return bmp;
         }
 
 
@@ -370,6 +389,18 @@ namespace StrategyGame
             var src = new SixLabors.ImageSharp.Rectangle(rect.X, rect.Y, rect.Width, rect.Height);
             using var clone = img.Clone(ctx => ctx.Crop(src).Resize(width, height, KnownResamplers.NearestNeighbor));
             return ImageSharpToBitmap(clone);
+        }
+
+        /// <summary>
+        /// Dispose all cached bitmaps and clear the cache.
+        /// </summary>
+        public void ClearCache()
+        {
+            foreach (var bmp in _cachedMaps.Values)
+            {
+                bmp.Dispose();
+            }
+            _cachedMaps.Clear();
         }
     }
 }
