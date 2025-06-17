@@ -55,7 +55,7 @@ namespace economy_sim
 
         private bool isDetailedDebugMode = false; // Flag to track the current debug mode
 
-        private int mapZoom = 1;
+        private float mapZoom = 1f;
 
         private MultiResolutionMapManager mapManager;
 
@@ -106,7 +106,7 @@ namespace economy_sim
                 Size = new System.Drawing.Size(400, 180), // Adjusted size
                 View = View.Details,
                 FullRowSelect = true,
-                GridLines = true
+                GridLines = false
             };
 
             listViewDiplomacy.Columns.Add("Country", 120);
@@ -288,7 +288,7 @@ namespace economy_sim
             }
 
 
-            baseMap = mapManager.GetMap((MultiResolutionMapManager.ZoomLevel)mapZoom);
+            baseMap = mapManager.GetMap(mapZoom);
             ApplyZoom();
 
             // Logic to set pictureBox1.Location after ApplyZoom() in RefreshMap()
@@ -324,7 +324,7 @@ namespace economy_sim
             if (mapManager == null)
                 return;
 
-            baseMap = mapManager.GetMap((MultiResolutionMapManager.ZoomLevel)mapZoom);
+            baseMap = mapManager.GetMap(mapZoom);
             if (baseMap == null)
                 return;
 
@@ -334,6 +334,40 @@ namespace economy_sim
             pictureBox1.Image = baseMap;
             pictureBox1.Size = baseMap.Size;
 
+        }
+
+        private void AdjustZoom(float newZoom)
+        {
+            newZoom = Math.Max(1f, Math.Min(5f, newZoom));
+            if (Math.Abs(newZoom - mapZoom) < 0.001f)
+                return;
+
+            int panelCenterX = panelMap.ClientSize.Width / 2;
+            int panelCenterY = panelMap.ClientSize.Height / 2;
+
+            float contentRatioX = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
+            float contentRatioY = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
+
+            mapZoom = newZoom;
+            ApplyZoom();
+
+            int newPbWidth = pictureBox1.Width;
+            int newPbHeight = pictureBox1.Height;
+
+            int newX = panelCenterX - (int)(contentRatioX * newPbWidth);
+            int newY = panelCenterY - (int)(contentRatioY * newPbHeight);
+
+            if (newPbWidth < panelMap.ClientSize.Width)
+                newX = (panelMap.ClientSize.Width - newPbWidth) / 2;
+            else
+                newX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - newPbWidth));
+
+            if (newPbHeight < panelMap.ClientSize.Height)
+                newY = (panelMap.ClientSize.Height - newPbHeight) / 2;
+            else
+                newY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - newPbHeight));
+
+            pictureBox1.Location = new Point(newX, newY);
         }
 
 
@@ -1953,53 +1987,28 @@ namespace economy_sim
             // float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
             // float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
 
-            int oldZoom = mapZoom;
-            mapZoom = Math.Max(1, Math.Min(5, mapZoom + Math.Sign(e.Delta)));
-            if (mapZoom == oldZoom) return;
-
-            // Determine the center of the panelMap
-            int panelCenterX = panelMap.ClientSize.Width / 2;
-            int panelCenterY = panelMap.ClientSize.Height / 2;
-
-            // Calculate what proportional point of the PictureBox content is currently at the panel's center
-            // This must be done BEFORE pictureBox1.Size is changed by ApplyZoom
-            float contentRatioXAtPanelCenter = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
-            float contentRatioYAtPanelCenter = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
-
-            ApplyZoom();
-
-            int newPbWidth = pictureBox1.Width;
-            int newPbHeight = pictureBox1.Height;
-
-            // Calculate the new PictureBox location to keep the content point (that was at panelCenter) at panelCenter
-            int newX = panelCenterX - (int)(contentRatioXAtPanelCenter * newPbWidth);
-            int newY = panelCenterY - (int)(contentRatioYAtPanelCenter * newPbHeight);
-
-            if (newPbWidth < panelMap.ClientSize.Width)
-            {
-                newX = (panelMap.ClientSize.Width - newPbWidth) / 2;
-            }
-            else
-            {
-                newX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - newPbWidth));
-            }
-
-            if (newPbHeight < panelMap.ClientSize.Height)
-            {
-                newY = (panelMap.ClientSize.Height - newPbHeight) / 2;
-            }
-            else
-            {
-                newY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - newPbHeight));
-            }
-
-            pictureBox1.Location = new Point(newX, newY);
+            AdjustZoom(mapZoom + Math.Sign(e.Delta) * 0.25f);
         }
 
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
         {
             if (this.pictureBox1 == null || this.panelMap == null) // Safety check
             {
+                return;
+            }
+
+            if (e.KeyCode == Keys.Oemplus || e.KeyCode == Keys.Add)
+            {
+                AdjustZoom(mapZoom + 0.25f);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                return;
+            }
+            if (e.KeyCode == Keys.OemMinus || e.KeyCode == Keys.Subtract)
+            {
+                AdjustZoom(mapZoom - 0.25f);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
                 return;
             }
 
