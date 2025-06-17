@@ -24,9 +24,11 @@ namespace StrategyGame
         private Image<Rgba32> _largeBaseMap;
         private SystemDrawing.Bitmap _baseMap;
 
+
         private const int MaxCellSize = 40;
         private const int MAX_DIMENSION = 32767;
         private const int MAX_PIXEL_COUNT = 250_000_000;
+
         private readonly int _baseWidth;
         private readonly int _baseHeight;
 
@@ -313,6 +315,7 @@ namespace StrategyGame
             return dest;
         }
 
+
         private int GetCellSize(float zoom)
         {
             float[] anchors = { 1f, 2f, 4f, 6f, 40f };
@@ -336,6 +339,7 @@ namespace StrategyGame
 
             if (size < 1f)
                 size = 1f;
+
 
             return (int)Math.Round(size);
         }
