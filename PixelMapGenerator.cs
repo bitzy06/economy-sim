@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.IO;
 
 namespace StrategyGame
@@ -179,7 +180,7 @@ namespace StrategyGame
         /// <param name="cellsX">Number of cells horizontally.</param>
         /// <param name="cellsY">Number of cells vertically.</param>
         /// <param name="pixelsPerCell">Size of each cell in pixels.</param>
-        public static Bitmap GenerateTerrainPixelArtMap(int cellsX, int cellsY, int pixelsPerCell)
+        public static unsafe Bitmap GenerateTerrainPixelArtMap(int cellsX, int cellsY, int pixelsPerCell)
         {
             string path = TerrainTifPath;
             if (!File.Exists(path))
@@ -195,8 +196,12 @@ namespace StrategyGame
                     g.DrawImage(img, 0, 0, cellsX, cellsY);
                 }
 
-                var dest = new Bitmap(cellsX * pixelsPerCell, cellsY * pixelsPerCell);
+                var dest = new Bitmap(cellsX * pixelsPerCell, cellsY * pixelsPerCell, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                var bmpData = dest.LockBits(new Rectangle(0, 0, dest.Width, dest.Height), System.Drawing.Imaging.ImageLockMode.WriteOnly, dest.PixelFormat);
+                int stride = bmpData.Stride;
+                byte* basePtr = (byte*)bmpData.Scan0;
                 Random rng = new Random();
+
                 for (int y = 0; y < cellsY; y++)
                 {
                     for (int x = 0; x < cellsX; x++)
@@ -205,15 +210,21 @@ namespace StrategyGame
                         Color[] palette = BuildPalette(baseColor);
                         for (int py = 0; py < pixelsPerCell; py++)
                         {
+                            byte* row = basePtr + ((y * pixelsPerCell + py) * stride) + (x * pixelsPerCell * 4);
                             for (int px = 0; px < pixelsPerCell; px++)
                             {
                                 Color chosen = palette[rng.Next(palette.Length)];
-                                dest.SetPixel(x * pixelsPerCell + px, y * pixelsPerCell + py, chosen);
+                                int offset = px * 4;
+                                row[offset] = chosen.B;
+                                row[offset + 1] = chosen.G;
+                                row[offset + 2] = chosen.R;
+                                row[offset + 3] = chosen.A;
                             }
                         }
                     }
                 }
 
+                dest.UnlockBits(bmpData);
                 return dest;
             }
         }
