@@ -1,11 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
+using SystemDrawing = System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Threading.Tasks;
 using System.IO;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Advanced;
 
 
 namespace StrategyGame
@@ -18,7 +19,7 @@ namespace StrategyGame
     {
         public enum ZoomLevel { Global = 1, Continental, Country, State, City }
 
-        private readonly Dictionary<ZoomLevel, Bitmap> _maps = new();
+        private readonly Dictionary<ZoomLevel, SystemDrawing.Bitmap> _maps = new();
         private readonly Dictionary<ZoomLevel, Image<Rgba32>> _largeMaps = new();
         private readonly int _baseWidth;
         private readonly int _baseHeight;
@@ -45,7 +46,7 @@ namespace StrategyGame
             int widthPx = _baseWidth * highestCell;
             int heightPx = _baseHeight * highestCell;
 
-            Bitmap highestMap;
+            SystemDrawing.Bitmap highestMap;
 
             if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
             {
@@ -54,7 +55,7 @@ namespace StrategyGame
                 using var ms = new MemoryStream();
                 img.SaveAsBmp(ms);
                 ms.Position = 0;
-                highestMap = new Bitmap(ms);
+                highestMap = new SystemDrawing.Bitmap(ms);
             }
             else
             {
@@ -70,7 +71,7 @@ namespace StrategyGame
                 int cellSize = cellSizes[i];
                 int w = _baseWidth * cellSize;
                 int h = _baseHeight * cellSize;
-                Bitmap scaled = ScaleBitmapNearest(highestMap, w, h);
+                SystemDrawing.Bitmap scaled = ScaleBitmapNearest(highestMap, w, h);
                 OverlayFeatures(scaled, level);
                 _maps[level] = scaled;
             }
@@ -79,7 +80,7 @@ namespace StrategyGame
         /// <summary>
         /// Retrieve the full map bitmap for a zoom level.
         /// </summary>
-        public Bitmap GetMap(ZoomLevel level)
+        public SystemDrawing.Bitmap GetMap(ZoomLevel level)
         {
             return _maps.TryGetValue(level, out var bmp) ? bmp : null;
         }
@@ -88,26 +89,26 @@ namespace StrategyGame
         /// <summary>
         /// Return a cropped portion of the map at the requested zoom level.
         /// </summary>
-        public Bitmap GetMap(ZoomLevel level, Rectangle view)
+        public SystemDrawing.Bitmap GetMap(ZoomLevel level, SystemDrawing.Rectangle view)
         {
             if (!_maps.TryGetValue(level, out var bmp))
                 return null;
-            Rectangle src = Rectangle.Intersect(new Rectangle(Point.Empty, bmp.Size), view);
+            SystemDrawing.Rectangle src = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, bmp.Size), view);
             if (src.Width <= 0 || src.Height <= 0)
                 return null;
-            Bitmap dest = new Bitmap(src.Width, src.Height);
-            using (Graphics g = Graphics.FromImage(dest))
+            SystemDrawing.Bitmap dest = new SystemDrawing.Bitmap(src.Width, src.Height);
+            using (SystemDrawing.Graphics g = SystemDrawing.Graphics.FromImage(dest))
             {
                 g.InterpolationMode = InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode = PixelOffsetMode.Half;
-                g.DrawImage(bmp, new Rectangle(0, 0, dest.Width, dest.Height), src, GraphicsUnit.Pixel);
+                g.DrawImage(bmp, new SystemDrawing.Rectangle(0, 0, dest.Width, dest.Height), src, SystemDrawing.GraphicsUnit.Pixel);
             }
             return dest;
         }
 
-        private static void OverlayFeatures(Bitmap bmp, ZoomLevel level)
+        private static void OverlayFeatures(SystemDrawing.Bitmap bmp, ZoomLevel level)
         {
-            using Graphics g = Graphics.FromImage(bmp);
+            using SystemDrawing.Graphics g = SystemDrawing.Graphics.FromImage(bmp);
             Random rng = new Random(42);
             switch (level)
             {
@@ -118,24 +119,24 @@ namespace StrategyGame
                         int size = bmp.Width / 15;
                         int x = rng.Next(bmp.Width - size);
                         int y = rng.Next(bmp.Height - size);
-                        g.FillEllipse(Brushes.LightGray, x, y, size, size);
+                        g.FillEllipse(SystemDrawing.Brushes.LightGray, x, y, size, size);
                     }
                     break;
                 case ZoomLevel.State:
                     // Highways and railways as lines
-                    using (Pen highway = new Pen(Color.Gray, 2))
+                    using (SystemDrawing.Pen highway = new SystemDrawing.Pen(SystemDrawing.Color.Gray, 2))
                     {
                         g.DrawLine(highway, 0, bmp.Height / 3, bmp.Width, bmp.Height / 3);
                         g.DrawLine(highway, bmp.Width / 2, 0, bmp.Width / 2, bmp.Height);
                     }
-                    using (Pen rail = new Pen(Color.DarkGray, 1) { DashStyle = DashStyle.Dot })
+                    using (SystemDrawing.Pen rail = new SystemDrawing.Pen(SystemDrawing.Color.DarkGray, 1) { DashStyle = DashStyle.Dot })
                     {
                         g.DrawLine(rail, 0, bmp.Height * 2 / 3, bmp.Width, bmp.Height * 2 / 3);
                     }
                     break;
                 case ZoomLevel.City:
                     // Draw a simple grid of roads
-                    using (Pen road = new Pen(Color.Gray, 1))
+                    using (SystemDrawing.Pen road = new SystemDrawing.Pen(SystemDrawing.Color.Gray, 1))
                     {
                         for (int x = 0; x < bmp.Width; x += 20)
                             g.DrawLine(road, x, 0, x, bmp.Height);
@@ -149,13 +150,13 @@ namespace StrategyGame
                         int h = rng.Next(4, 8);
                         int x = rng.Next(bmp.Width - w);
                         int y = rng.Next(bmp.Height - h);
-                        g.FillRectangle(Brushes.DarkSlateBlue, x, y, w, h);
+                        g.FillRectangle(SystemDrawing.Brushes.DarkSlateBlue, x, y, w, h);
                     }
                     for (int i = 0; i < 20; i++)
                     {
                         int x = rng.Next(bmp.Width - 3);
                         int y = rng.Next(bmp.Height - 2);
-                        g.FillRectangle(Brushes.Red, x, y, 3, 2);
+                        g.FillRectangle(SystemDrawing.Brushes.Red, x, y, 3, 2);
                     }
                     break;
             }
@@ -172,38 +173,38 @@ namespace StrategyGame
                         int size = img.Width / 15;
                         int x = rng.Next(img.Width - size);
                         int y = rng.Next(img.Height - size);
-                        FillCircle(img, x, y, size, Color.LightGray);
+                        FillCircle(img, x, y, size, SixLabors.ImageSharp.Color.LightGray);
                     }
                     break;
                 case ZoomLevel.State:
-                    DrawLine(img, 0, img.Height / 3, img.Width, img.Height / 3, Color.Gray, 2);
-                    DrawLine(img, img.Width / 2, 0, img.Width / 2, img.Height, Color.Gray, 2);
-                    DrawDashedLine(img, 0, img.Height * 2 / 3, img.Width, img.Height * 2 / 3, Color.DarkGray);
+                    DrawLine(img, 0, img.Height / 3, img.Width, img.Height / 3, SixLabors.ImageSharp.Color.Gray, 2);
+                    DrawLine(img, img.Width / 2, 0, img.Width / 2, img.Height, SixLabors.ImageSharp.Color.Gray, 2);
+                    DrawDashedLine(img, 0, img.Height * 2 / 3, img.Width, img.Height * 2 / 3, SixLabors.ImageSharp.Color.DarkGray);
                     break;
                 case ZoomLevel.City:
                     for (int x = 0; x < img.Width; x += 20)
-                        DrawLine(img, x, 0, x, img.Height, Color.Gray);
+                        DrawLine(img, x, 0, x, img.Height, SixLabors.ImageSharp.Color.Gray);
                     for (int y = 0; y < img.Height; y += 20)
-                        DrawLine(img, 0, y, img.Width, y, Color.Gray);
+                        DrawLine(img, 0, y, img.Width, y, SixLabors.ImageSharp.Color.Gray);
                     for (int i = 0; i < 50; i++)
                     {
                         int w = rng.Next(4, 8);
                         int h = rng.Next(4, 8);
                         int x = rng.Next(img.Width - w);
                         int y = rng.Next(img.Height - h);
-                        FillRect(img, x, y, w, h, Color.DarkSlateBlue);
+                        FillRect(img, x, y, w, h, SixLabors.ImageSharp.Color.DarkSlateBlue);
                     }
                     for (int i = 0; i < 20; i++)
                     {
                         int x = rng.Next(img.Width - 3);
                         int y = rng.Next(img.Height - 2);
-                        FillRect(img, x, y, 3, 2, Color.Red);
+                        FillRect(img, x, y, 3, 2, SixLabors.ImageSharp.Color.Red);
                     }
                     break;
             }
         }
 
-        private static void FillCircle(Image<Rgba32> img, int x, int y, int size, Color color)
+        private static void FillCircle(Image<Rgba32> img, int x, int y, int size, SixLabors.ImageSharp.Color color)
         {
             int radius = size / 2;
             int cx = x + radius;
@@ -217,13 +218,12 @@ namespace StrategyGame
                 int end = cx + dx;
                 if (start < 0) start = 0;
                 if (end >= img.Width) end = img.Width - 1;
-                var row = img.GetPixelRowSpan(yy);
+                var row = img.DangerousGetPixelRowMemory(yy).Span;
                 for (int ix = start; ix <= end; ix++)
                     row[ix] = color;
             }
         }
-
-        private static void DrawLine(Image<Rgba32> img, int x0, int y0, int x1, int y1, Color color, int thickness = 1)
+        private static void DrawLine(Image<Rgba32> img, int x0, int y0, int x1, int y1, SixLabors.ImageSharp.Color color, int thickness = 1)
         {
             int dx = Math.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
             int dy = -Math.Abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
@@ -238,7 +238,7 @@ namespace StrategyGame
             }
         }
 
-        private static void DrawDashedLine(Image<Rgba32> img, int x0, int y0, int x1, int y1, Color color)
+        private static void DrawDashedLine(Image<Rgba32> img, int x0, int y0, int x1, int y1, SixLabors.ImageSharp.Color color)
         {
             int dx = Math.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
             int dy = -Math.Abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
@@ -258,12 +258,12 @@ namespace StrategyGame
             }
         }
 
-        private static void FillRect(Image<Rgba32> img, int x, int y, int width, int height, Color color)
+        private static void FillRect(Image<Rgba32> img, int x, int y, int width, int height, SixLabors.ImageSharp.Color color)
         {
             for (int yy = y; yy < y + height; yy++)
             {
                 if (yy < 0 || yy >= img.Height) continue;
-                var row = img.GetPixelRowSpan(yy);
+                var row = img.DangerousGetPixelRowMemory(yy).Span;
                 for (int xx = x; xx < x + width; xx++)
                 {
                     if (xx < 0 || xx >= img.Width) continue;
@@ -272,21 +272,21 @@ namespace StrategyGame
             }
         }
 
-        private static Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
+        private static SystemDrawing.Bitmap ScaleBitmapNearest(SystemDrawing.Bitmap src, int width, int height)
         {
             if (width <= 0 || height <= 0)
             {
-                return new Bitmap(1, 1);
+                return new SystemDrawing.Bitmap(1, 1);
             }
 
             const int MAX_DIMENSION = 32767;
             if (width > MAX_DIMENSION || height > MAX_DIMENSION)
             {
-                return new Bitmap(1, 1);
+                return new SystemDrawing.Bitmap(1, 1);
             }
 
-            Bitmap dest = new Bitmap(width, height);
-            using (var g = Graphics.FromImage(dest))
+            SystemDrawing.Bitmap dest = new SystemDrawing.Bitmap(width, height);
+            using (var g = SystemDrawing.Graphics.FromImage(dest))
             {
                 g.InterpolationMode = InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode = PixelOffsetMode.Half;
