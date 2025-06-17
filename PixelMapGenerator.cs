@@ -25,7 +25,6 @@ namespace StrategyGame
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
 
 
-
         // Data files are expected to live in the user's Documents\data folder
         // (e.g. "C:\\Users\\kayla\\Documents\\data").  This path is used directly
         // rather than falling back to the repository so the game always loads
@@ -57,17 +56,27 @@ namespace StrategyGame
             string userPath = Path.Combine(DataDir, name);
             if (File.Exists(userPath))
                 return userPath;
-            var matches = Directory.GetFiles(DataDir, name, SearchOption.AllDirectories);
-            if (matches.Length > 0)
-                return matches[0];
+
+            if (Directory.Exists(DataDir))
+            {
+                var matches = Directory.GetFiles(DataDir, name, SearchOption.AllDirectories);
+                if (matches.Length > 0)
+                    return matches[0];
+            }
+
 
             // fall back to the repository data directory if nothing found
             string repoPath = Path.Combine(RepoDataDir, name);
             if (File.Exists(repoPath))
                 return repoPath;
-            matches = Directory.GetFiles(RepoDataDir, name, SearchOption.AllDirectories);
-            if (matches.Length > 0)
-                return matches[0];
+
+            if (Directory.Exists(RepoDataDir))
+            {
+                var matches = Directory.GetFiles(RepoDataDir, name, SearchOption.AllDirectories);
+                if (matches.Length > 0)
+                    return matches[0];
+            }
+
 
             // return the path in the Documents folder even if missing so callers know where it was expected
             return userPath;
