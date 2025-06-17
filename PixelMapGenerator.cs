@@ -16,6 +16,8 @@ namespace StrategyGame
     /// </summary>
     public static class PixelMapGenerator
     {
+        private static readonly object GdalConfigLock = new object();
+        private static bool _gdalConfigured = false;
 
         // Resolve paths relative to the repository root so the application does
         // not depend on developer specific locations. The executable lives in
@@ -146,7 +148,14 @@ namespace StrategyGame
         /// </summary>
         public static Bitmap GeneratePixelArtMapWithCountries(int width, int height, int pixelsPerCell = 8)
         {
-            GdalBase.ConfigureAll();
+            lock (GdalConfigLock)
+            {
+                if (!_gdalConfigured)
+                {
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
+                }
+            }
             Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, pixelsPerCell);
 
             // mask dimensions == pixel dimensions
