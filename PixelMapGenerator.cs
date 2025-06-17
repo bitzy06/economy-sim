@@ -7,6 +7,8 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using SixLabors.ImageSharp.PixelFormats;
+using System.Threading;
+using System.Threading.Tasks;
 
 
 
@@ -370,25 +372,47 @@ namespace StrategyGame
 
             var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(widthPx, heightPx);
 
-            Random rng = new Random();
-            for (int y = 0; y < cellsY; y++)
+            var data = scaled.LockBits(new Rectangle(0, 0, cellsX, cellsY), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            int stride = data.Stride;
+
+            int seed = Environment.TickCount;
+            var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
+
+            unsafe
             {
-                for (int x = 0; x < cellsX; x++)
+                byte* basePtr = (byte*)data.Scan0;
+
+                Parallel.For(0, cellsY, y =>
                 {
-                    Color baseColor = scaled.GetPixel(x, y);
-                    Color[] palette = BuildPalette(baseColor);
+                    byte* rowPtr = basePtr + y * stride;
+
                     for (int py = 0; py < pixelsPerCell; py++)
                     {
-                        int destY = y * pixelsPerCell + py;
-                        for (int px = 0; px < pixelsPerCell; px++)
+                        Span<Rgba32> destRow = dest.GetPixelRowSpan(y * pixelsPerCell + py);
+
+                        for (int x = 0; x < cellsX; x++)
                         {
-                            Color chosen = palette[rng.Next(palette.Length)];
-                            int destX = x * pixelsPerCell + px;
-                            dest[destX, destY] = new Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
+                            int offset = x * 4;
+                            byte b = rowPtr[offset];
+                            byte g = rowPtr[offset + 1];
+                            byte r = rowPtr[offset + 2];
+                            byte a = rowPtr[offset + 3];
+
+                            Color baseColor = Color.FromArgb(a, r, g, b);
+                            Color[] palette = BuildPalette(baseColor);
+
+                            for (int px = 0; px < pixelsPerCell; px++)
+                            {
+                                Color chosen = palette[rngLocal.Value.Next(palette.Length)];
+                                int destX = x * pixelsPerCell + px;
+                                destRow[destX] = new Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
+                            }
                         }
                     }
-                }
+                });
             }
+
+            scaled.UnlockBits(data);
 
             return dest;
         }
