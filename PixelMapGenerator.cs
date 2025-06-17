@@ -23,8 +23,18 @@ namespace StrategyGame
         private static readonly string RepoRoot =
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
-        private static readonly string DataDir =
-            System.IO.Path.Combine(RepoRoot, "data");
+
+
+        // Prefer a data directory inside the user's Documents folder so large
+        // resources can live outside the repository.  Fall back to the repo
+        // bundled data folder when that directory does not exist.
+        private static readonly string DocumentDataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "data");
+
+        private static readonly string DataDir = Directory.Exists(DocumentDataDir)
+            ? DocumentDataDir
+            : Path.Combine(RepoRoot, "data");
 
         // Data files listed in the text file are resolved relative to the data
         // directory.  This allows the application to load resources that are
