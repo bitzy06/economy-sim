@@ -21,18 +21,12 @@ namespace StrategyGame
     {
         public enum ZoomLevel { Global = 1, Continental, Country, State, City }
 
-        private readonly Dictionary<ZoomLevel, SystemDrawing.Bitmap> _maps = new();
-        private readonly Dictionary<ZoomLevel, Image<Rgba32>> _largeMaps = new();
-        private ZoomLevel? _largeSourceLevel = null;
+        private Image<Rgba32> _largeBaseMap;
+        private SystemDrawing.Bitmap _baseMap;
 
-        private static readonly Dictionary<ZoomLevel, int> CellSizeMap = new()
-        {
-            { ZoomLevel.Global, 1 },
-            { ZoomLevel.Continental, 2 },
-            { ZoomLevel.Country, 4 },
-            { ZoomLevel.State, 6 },
-            { ZoomLevel.City, 40 }
-        };
+        private const int MaxCellSize = 40;
+        private const int MAX_DIMENSION = 32767;
+        private const int MAX_PIXEL_COUNT = 250_000_000;
         private readonly int _baseWidth;
         private readonly int _baseHeight;
 
@@ -49,84 +43,39 @@ namespace StrategyGame
         /// </summary>
         public void GenerateMaps()
         {
-            int[] cellSizes = { 1, 2, 4, 6, 40 };
-
-            int highestIndex = cellSizes.Length - 1;
-            ZoomLevel highestLevel = (ZoomLevel)(highestIndex + 1);
-            int highestCell = cellSizes[highestIndex];
-
-            int widthPx = _baseWidth * highestCell;
-            int heightPx = _baseHeight * highestCell;
-
-            SystemDrawing.Bitmap highestMap = null;
+            int widthPx = _baseWidth * MaxCellSize;
+            int heightPx = _baseHeight * MaxCellSize;
 
             if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
             {
-                var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, highestCell);
-                OverlayFeaturesLarge(img, highestLevel);
-                _largeMaps[highestLevel] = img;
-                _largeSourceLevel = highestLevel;
+                var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, MaxCellSize);
+                OverlayFeaturesLarge(img, ZoomLevel.City);
+                _largeBaseMap = img;
+                _baseMap = null;
             }
             else
             {
-                highestMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, highestCell);
-                OverlayFeatures(highestMap, highestLevel);
-                _maps[highestLevel] = highestMap;
-                _largeSourceLevel = null;
-                _largeMaps.Clear();
-            }
-
-            for (int i = highestIndex - 1; i >= 0; i--)
-            {
-                var level = (ZoomLevel)(i + 1);
-                int cellSize = cellSizes[i];
-                int w = _baseWidth * cellSize;
-                int h = _baseHeight * cellSize;
-                SystemDrawing.Bitmap scaled;
-
-                if (highestMap != null)
-                {
-                    scaled = ScaleBitmapNearest(highestMap, w, h);
-                }
-                else if (_largeSourceLevel != null && _largeMaps.TryGetValue(_largeSourceLevel.Value, out var img))
-                {
-                    scaled = ScaleImageSharp(img, w, h);
-                }
-                else
-                {
-                    continue;
-                }
-
-                OverlayFeatures(scaled, level);
-                _maps[level] = scaled;
+                var bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, MaxCellSize);
+                OverlayFeatures(bmp, ZoomLevel.City);
+                _baseMap = bmp;
+                _largeBaseMap = null;
             }
         }
 
         /// <summary>
         /// Retrieve the full map bitmap for a zoom level.
         /// </summary>
-        public SystemDrawing.Bitmap GetMap(ZoomLevel level)
+        public SystemDrawing.Bitmap GetMap(float zoom)
         {
-            if (_maps.TryGetValue(level, out var bmp))
-                return bmp;
+            int cellSize = GetCellSize(zoom);
+            int w = _baseWidth * cellSize;
+            int h = _baseHeight * cellSize;
 
-            if (_largeMaps.TryGetValue(level, out var large))
-            {
-                bmp = ImageSharpToBitmap(large);
-                _maps[level] = bmp;
-                return bmp;
-            }
+            if (_baseMap != null)
+                return ScaleBitmapNearest(_baseMap, w, h);
 
-            if (_largeSourceLevel != null && _largeMaps.TryGetValue(_largeSourceLevel.Value, out var src))
-            {
-                int cellSize = CellSizeMap[level];
-                int w = _baseWidth * cellSize;
-                int h = _baseHeight * cellSize;
-                bmp = ScaleImageSharp(src, w, h);
-                OverlayFeatures(bmp, level);
-                _maps[level] = bmp;
-                return bmp;
-            }
+            if (_largeBaseMap != null)
+                return ScaleImageSharp(_largeBaseMap, w, h);
 
             return null;
         }
@@ -135,45 +84,40 @@ namespace StrategyGame
         /// <summary>
         /// Return a cropped portion of the map at the requested zoom level.
         /// </summary>
-        public SystemDrawing.Bitmap GetMap(ZoomLevel level, SystemDrawing.Rectangle view)
+        public SystemDrawing.Bitmap GetMap(float zoom, SystemDrawing.Rectangle view)
         {
-            if (_maps.TryGetValue(level, out var bmp))
-            {
-                SystemDrawing.Rectangle src = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, bmp.Size), view);
-                if (src.Width <= 0 || src.Height <= 0)
-                    return null;
-                SystemDrawing.Bitmap dest = new SystemDrawing.Bitmap(src.Width, src.Height);
-                using (SystemDrawing.Graphics g = SystemDrawing.Graphics.FromImage(dest))
-                {
-                    g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                    g.PixelOffsetMode = PixelOffsetMode.Half;
-                    g.DrawImage(bmp, new SystemDrawing.Rectangle(0, 0, dest.Width, dest.Height), src, SystemDrawing.GraphicsUnit.Pixel);
-                }
-                return dest;
-            }
+            int cellSize = GetCellSize(zoom);
 
-            if (_largeMaps.TryGetValue(level, out var large))
+            if (_baseMap != null)
             {
-                SystemDrawing.Rectangle src = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, new SystemDrawing.Size(large.Width, large.Height)), view);
-                if (src.Width <= 0 || src.Height <= 0)
-                    return null;
-                return CropImageSharp(large, src);
-            }
-
-            if (_largeSourceLevel != null && _largeMaps.TryGetValue(_largeSourceLevel.Value, out var srcImg))
-            {
-                float scale = (float)CellSizeMap[_largeSourceLevel.Value] / CellSizeMap[level];
+                float scale = (float)MaxCellSize / cellSize;
                 var srcRect = new SystemDrawing.Rectangle(
                     (int)(view.X * scale),
                     (int)(view.Y * scale),
                     (int)(view.Width * scale),
                     (int)(view.Height * scale));
 
-                srcRect = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, new SystemDrawing.Size(srcImg.Width, srcImg.Height)), srcRect);
+                srcRect = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, _baseMap.Size), srcRect);
                 if (srcRect.Width <= 0 || srcRect.Height <= 0)
                     return null;
 
-                return CropScaleImageSharp(srcImg, srcRect, view.Width, view.Height);
+                return CropScaleBitmapNearest(_baseMap, srcRect, view.Width, view.Height);
+            }
+
+            if (_largeBaseMap != null)
+            {
+                float scale = (float)MaxCellSize / cellSize;
+                var srcRect = new SystemDrawing.Rectangle(
+                    (int)(view.X * scale),
+                    (int)(view.Y * scale),
+                    (int)(view.Width * scale),
+                    (int)(view.Height * scale));
+
+                srcRect = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, new SystemDrawing.Size(_largeBaseMap.Width, _largeBaseMap.Height)), srcRect);
+                if (srcRect.Width <= 0 || srcRect.Height <= 0)
+                    return null;
+
+                return CropScaleImageSharp(_largeBaseMap, srcRect, view.Width, view.Height);
             }
 
             return null;
@@ -208,15 +152,7 @@ namespace StrategyGame
                     }
                     break;
                 case ZoomLevel.City:
-                    // Draw a simple grid of roads
-                    using (SystemDrawing.Pen road = new SystemDrawing.Pen(SystemDrawing.Color.Gray, 1))
-                    {
-                        for (int x = 0; x < bmp.Width; x += 20)
-                            g.DrawLine(road, x, 0, x, bmp.Height);
-                        for (int y = 0; y < bmp.Height; y += 20)
-                            g.DrawLine(road, 0, y, bmp.Width, y);
-                    }
-                    // Add buildings and cars
+                    // Add buildings and cars without drawing a full grid of road lines
                     for (int i = 0; i < 50; i++)
                     {
                         int w = rng.Next(4, 8);
@@ -255,10 +191,7 @@ namespace StrategyGame
                     DrawDashedLine(img, 0, img.Height * 2 / 3, img.Width, img.Height * 2 / 3, SixLabors.ImageSharp.Color.DarkGray);
                     break;
                 case ZoomLevel.City:
-                    for (int x = 0; x < img.Width; x += 20)
-                        DrawLine(img, x, 0, x, img.Height, SixLabors.ImageSharp.Color.Gray);
-                    for (int y = 0; y < img.Height; y += 20)
-                        DrawLine(img, 0, y, img.Width, y, SixLabors.ImageSharp.Color.Gray);
+                    // Skip drawing the repetitive road grid on the large map as well
                     for (int i = 0; i < 50; i++)
                     {
                         int w = rng.Next(4, 8);
@@ -366,6 +299,45 @@ namespace StrategyGame
                 g.DrawImage(src, 0, 0, width, height);
             }
             return dest;
+        }
+
+        private static SystemDrawing.Bitmap CropScaleBitmapNearest(SystemDrawing.Bitmap src, SystemDrawing.Rectangle rect, int width, int height)
+        {
+            SystemDrawing.Bitmap dest = new SystemDrawing.Bitmap(width, height);
+            using (var g = SystemDrawing.Graphics.FromImage(dest))
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.DrawImage(src, new SystemDrawing.Rectangle(0, 0, width, height), rect, SystemDrawing.GraphicsUnit.Pixel);
+            }
+            return dest;
+        }
+
+        private int GetCellSize(float zoom)
+        {
+            float[] anchors = { 1f, 2f, 4f, 6f, 40f };
+
+            float size;
+            if (zoom <= 1f) size = anchors[0];
+            else if (zoom >= 5f) size = anchors[4];
+            else
+            {
+                int lowerIndex = (int)Math.Floor(zoom) - 1;
+                float t = zoom - (lowerIndex + 1);
+                size = anchors[lowerIndex] + t * (anchors[lowerIndex + 1] - anchors[lowerIndex]);
+            }
+
+            int maxDimSize = MAX_DIMENSION / Math.Max(_baseWidth, _baseHeight);
+            double maxPixelSize = Math.Sqrt((double)MAX_PIXEL_COUNT / (_baseWidth * _baseHeight));
+            int maxAllowed = (int)Math.Floor(Math.Min(maxDimSize, maxPixelSize));
+
+            if (size > maxAllowed)
+                size = maxAllowed;
+
+            if (size < 1f)
+                size = 1f;
+
+            return (int)Math.Round(size);
         }
 
         private static SystemDrawing.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
