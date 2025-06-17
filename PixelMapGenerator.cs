@@ -24,6 +24,7 @@ namespace StrategyGame
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
 
+
         // Data files are expected to live in the user's Documents\data folder
         // (e.g. "C:\\Users\\kayla\\Documents\\data").  This path is used directly
         // rather than falling back to the repository so the game always loads
@@ -31,6 +32,7 @@ namespace StrategyGame
         private static readonly string DataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "data");
+
 
         // Data files listed in the text file are resolved relative to the data
         // directory.  This allows the application to load resources that are
