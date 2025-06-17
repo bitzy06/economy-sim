@@ -31,20 +31,27 @@ namespace StrategyGame
         /// </summary>
         public void GenerateMaps()
         {
-            int[] cellSizes = { 1, 2, 7, 12, 16 };
 
+            int[] cellSizes = { 1, 2, 4, 6, 8 };
 
-            System.Threading.Tasks.Parallel.For(0, 5, i =>
+            var tasks = new List<Task>();
+            for (int i = 0; i < 5; i++)
             {
-                var level = (ZoomLevel)(i + 1);
-                int cellSize = cellSizes[i];
-                Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
-                OverlayFeatures(bmp, level);
-                lock (_maps)
+                int idx = i;
+                tasks.Add(Task.Run(() =>
                 {
-                    _maps[level] = bmp;
-                }
-            });
+                    var level = (ZoomLevel)(idx + 1);
+                    int cellSize = cellSizes[idx];
+                    Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
+                    OverlayFeatures(bmp, level);
+                    lock (_maps)
+                    {
+                        _maps[level] = bmp;
+                    }
+                }));
+            }
+
+            Task.WaitAll(tasks.ToArray());
 
         }
 

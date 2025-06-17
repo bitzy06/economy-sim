@@ -287,6 +287,7 @@ namespace economy_sim
                 mapManager.GenerateMaps();
             }
 
+
             baseMap = mapManager.GetMap((MultiResolutionMapManager.ZoomLevel)mapZoom);
             ApplyZoom();
 
