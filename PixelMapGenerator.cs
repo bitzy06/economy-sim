@@ -6,9 +6,11 @@ using SystemDrawing = System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using ImageSharp = SixLabors.ImageSharp;
+
+
+
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Processing;
+
 
 namespace StrategyGame
 {
@@ -279,7 +281,11 @@ namespace StrategyGame
         /// Generate a pixel-art terrain map for dimensions larger than System.Drawing supports.
         /// This uses ImageSharp to avoid the 32k bitmap limit.
         /// </summary>
-        public static SixLabors.ImageSharp.Image<Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell)
+
+
+        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell)
+
+
         {
             string path = TerrainTifPath;
             if (!File.Exists(path))
@@ -297,7 +303,11 @@ namespace StrategyGame
                 g.DrawImage(img, 0, 0, cellsX, cellsY);
             }
 
-            var dest = new SixLabors.ImageSharp.Image<Rgba32>(widthPx, heightPx);
+
+
+            var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(widthPx, heightPx);
+
+
             Random rng = new Random();
             for (int y = 0; y < cellsY; y++)
             {
