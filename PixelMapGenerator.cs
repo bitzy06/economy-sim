@@ -2,11 +2,11 @@
 using System;
 using System.Diagnostics;
 using System.Collections.Generic;
-using System.Drawing;
+using SystemDrawing = System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using SixLabors.ImageSharp;
+using ImageSharp = SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
@@ -252,14 +252,14 @@ namespace StrategyGame
                 {
                     for (int x = 0; x < cellsX; x++)
                     {
-                        Color baseColor = scaled.GetPixel(x, y);
+                         Color baseColor = scaled.GetPixel(x, y);
                         Color[] palette = BuildPalette(baseColor);
                         for (int py = 0; py < pixelsPerCell; py++)
                         {
                             byte* row = basePtr + ((y * pixelsPerCell + py) * stride) + (x * pixelsPerCell * 4);
                             for (int px = 0; px < pixelsPerCell; px++)
                             {
-                                Color chosen = palette[rng.Next(palette.Length)];
+                              Color chosen = palette[rng.Next(palette.Length)];
                                 int offset = px * 4;
                                 row[offset] = chosen.B;
                                 row[offset + 1] = chosen.G;
@@ -279,7 +279,7 @@ namespace StrategyGame
         /// Generate a pixel-art terrain map for dimensions larger than System.Drawing supports.
         /// This uses ImageSharp to avoid the 32k bitmap limit.
         /// </summary>
-        public static Image<Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell)
+        public static SixLabors.ImageSharp.Image<Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell)
         {
             string path = TerrainTifPath;
             if (!File.Exists(path))
@@ -297,7 +297,7 @@ namespace StrategyGame
                 g.DrawImage(img, 0, 0, cellsX, cellsY);
             }
 
-            var dest = new Image<Rgba32>(widthPx, heightPx);
+            var dest = new SixLabors.ImageSharp.Image<Rgba32>(widthPx, heightPx);
             Random rng = new Random();
             for (int y = 0; y < cellsY; y++)
             {
