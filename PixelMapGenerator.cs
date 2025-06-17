@@ -1,6 +1,7 @@
 ﻿using MaxRev.Gdal.Core;
 using System;
 using System.Diagnostics;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
@@ -22,21 +23,65 @@ namespace StrategyGame
         private static readonly string RepoRoot =
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
-        private static readonly string DataDir =
-            System.IO.Path.Combine(RepoRoot, "data");
-        private static readonly string TifPath =
-            @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\elavation data\ETOPO1_Bed_g_geotiff.tif";
-        private static readonly string ShpPath =
-            @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\country boarders\ne_10m_admin_0_countries.shp";
 
-        // Terrain map used for pixel-art generation.  We first try the copy in
-        // the repository's data folder and fall back to the absolute path that
-        // was used during development if the file is not found.  Using this
-        // fallback avoids issues when relative paths fail to resolve at runtime.
+        // Data files are expected to live in the user's Documents\data folder
+        // (e.g. "C:\\Users\\kayla\\Documents\\data").  This path is used directly
+        // rather than falling back to the repository so the game always loads
+        // external resources from that location.
+        private static readonly string DataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "data");
+
+        private static readonly string RepoDataDir = Path.Combine(RepoRoot, "data");
+
+        // Data files listed in the text file are resolved relative to the data
+        // directory.  This allows the application to load resources that are
+        // not part of the repository but exist locally.
+        private static readonly string DataFileList =
+            Path.Combine(RepoRoot, "DataFileNames");
+
+        private static readonly Dictionary<string, string> DataFiles = LoadDataFiles();
+
+        private static string GetDataFile(string name)
+        {
+            // first check explicit mappings from DataFileNames
+            if (DataFiles.TryGetValue(name, out var mapped) && File.Exists(mapped))
+                return mapped;
+
+            // search the user Documents data directory recursively
+            string userPath = Path.Combine(DataDir, name);
+            if (File.Exists(userPath))
+                return userPath;
+            if (Directory.Exists(DataDir))
+            {
+                var matches = Directory.GetFiles(DataDir, name, SearchOption.AllDirectories);
+                if (matches.Length > 0)
+                    return matches[0];
+            }
+
+            // fall back to the repository data directory if nothing found
+            string repoPath = Path.Combine(RepoDataDir, name);
+            if (File.Exists(repoPath))
+                return repoPath;
+            if (Directory.Exists(RepoDataDir))
+            {
+                var matches = Directory.GetFiles(RepoDataDir, name, SearchOption.AllDirectories);
+                if (matches.Length > 0)
+                    return matches[0];
+            }
+
+            // return the path in the Documents folder even if missing so callers know where it was expected
+            return userPath;
+        }
+
+        private static readonly string TifPath =
+            GetDataFile("ETOPO1_Bed_g_geotiff.tif");
+        private static readonly string ShpPath =
+            GetDataFile("ne_10m_admin_0_countries.shp");
+
+        // Terrain map used for pixel-art generation.
         private static readonly string TerrainTifPath =
-            File.Exists(Path.Combine(DataDir, "terrain", "NE1_HR_LC.tif"))
-                ? Path.Combine(DataDir, "terrain", "NE1_HR_LC.tif")
-                : @"C:\Users\kayla\source\repos\bitzy06\economy-sim\data\terrain\NE1_HR_LC.tif";
+            GetDataFile("NE1_HR_LC.tif");
 
 
         /// <summary>
@@ -90,10 +135,10 @@ namespace StrategyGame
         /// <summary>
         /// Generates a terrain map and overlays country borders.
         /// </summary>
-        public static Bitmap GeneratePixelArtMapWithCountries(int width, int height)
+        public static Bitmap GeneratePixelArtMapWithCountries(int width, int height, int pixelsPerCell = 8)
         {
             GdalBase.ConfigureAll();
-            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, 8);
+            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, pixelsPerCell);
 
             // mask dimensions == pixel dimensions
             int fullW = baseMap.Width;
@@ -216,6 +261,30 @@ namespace StrategyGame
                 baseColor,
                 Lerp(baseColor, Color.White, 0.2f)
             };
+        }
+
+        private static Dictionary<string, string> LoadDataFiles()
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (File.Exists(DataFileList))
+            {
+                foreach (var line in File.ReadAllLines(DataFileList))
+                {
+                    var trimmed = line.Trim();
+                    if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#") || trimmed.StartsWith("files"))
+                        continue;
+                    string userPath = Path.Combine(DataDir, trimmed);
+                    if (File.Exists(userPath))
+                    {
+                        dict[trimmed] = userPath;
+                    }
+                    else
+                    {
+                        dict[trimmed] = Path.Combine(RepoDataDir, trimmed);
+                    }
+                }
+            }
+            return dict;
         }
     }
 }
