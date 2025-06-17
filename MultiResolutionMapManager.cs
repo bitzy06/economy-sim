@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Threading.Tasks;
 
 namespace StrategyGame
 {
@@ -31,14 +32,24 @@ namespace StrategyGame
         {
             int[] cellSizes = { 1, 2, 4, 6, 8 };
 
+            var tasks = new List<Task>();
             for (int i = 0; i < 5; i++)
             {
-                var level = (ZoomLevel)(i + 1);
-                int cellSize = cellSizes[i];
-                Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
-                OverlayFeatures(bmp, level);
-                _maps[level] = bmp;
+                int idx = i;
+                tasks.Add(Task.Run(() =>
+                {
+                    var level = (ZoomLevel)(idx + 1);
+                    int cellSize = cellSizes[idx];
+                    Bitmap bmp = PixelMapGenerator.GeneratePixelArtMapWithCountries(_baseWidth, _baseHeight, cellSize);
+                    OverlayFeatures(bmp, level);
+                    lock (_maps)
+                    {
+                        _maps[level] = bmp;
+                    }
+                }));
             }
+
+            Task.WaitAll(tasks.ToArray());
         }
 
         /// <summary>
