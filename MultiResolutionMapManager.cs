@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 
+
 namespace StrategyGame
 {
     /// <summary>
@@ -24,12 +25,14 @@ namespace StrategyGame
         }
 
         /// <summary>
+
         /// Generate maps for all zoom levels. Each level increases the pixel
         /// density without creating excessively large bitmaps.
         /// </summary>
         public void GenerateMaps()
         {
             int[] cellSizes = { 1, 2, 4, 6, 8 };
+
 
             System.Threading.Tasks.Parallel.For(0, 5, i =>
             {
@@ -42,6 +45,7 @@ namespace StrategyGame
                     _maps[level] = bmp;
                 }
             });
+
         }
 
         /// <summary>
@@ -51,6 +55,7 @@ namespace StrategyGame
         {
             return _maps.TryGetValue(level, out var bmp) ? bmp : null;
         }
+
 
         /// <summary>
         /// Return a cropped portion of the map at the requested zoom level.
