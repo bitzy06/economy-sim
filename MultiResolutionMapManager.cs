@@ -32,7 +32,7 @@ namespace StrategyGame
         public void GenerateMaps()
         {
 
-            int[] cellSizes = { 1, 2, 4, 6, 8 };
+            int[] cellSizes = { 1, 2, 4, 6, 40 };
 
             var tasks = new List<Task>();
             for (int i = 0; i < 5; i++)
