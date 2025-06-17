@@ -287,8 +287,10 @@ namespace economy_sim
                 mapManager.GenerateMaps();
             }
 
+
             // Do not dispose maps from MultiResolutionMapManager because
             // they are cached for future zoom operations.
+
             baseMap = mapManager.GetMap((MultiResolutionMapManager.ZoomLevel)mapZoom);
             ApplyZoom();
 
@@ -329,10 +331,12 @@ namespace economy_sim
             if (baseMap == null)
                 return;
 
+
             // Replace the displayed image without disposing the cached bitmaps
             // returned by the map manager.
             pictureBox1.Image = baseMap;
             pictureBox1.Size = baseMap.Size;
+
         }
 
 
