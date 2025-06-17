@@ -6,6 +6,9 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 
 namespace StrategyGame
 {
@@ -47,6 +50,11 @@ namespace StrategyGame
             Path.Combine(RepoRoot, "DataFileNames");
 
         private static readonly Dictionary<string, string> DataFiles = LoadDataFiles();
+
+        // System.Drawing fails with "Parameter is not valid" when width or height
+        // exceed approximately 32k pixels.  Clamp generated bitmap dimensions to
+        // stay below this threshold.
+        private const int MaxBitmapDimension = 30000;
 
         private static string GetDataFile(string name)
         {
@@ -164,21 +172,43 @@ namespace StrategyGame
             int[,] mask = CountryMaskGenerator.CreateCountryMask(
                 TerrainTifPath, ShpPath, fullW, fullH);
 
-            // draw one‐pixel‐wide border wherever the mask changes
-            for (int y = 1; y < fullH - 1; y++)
+            DrawBorders(baseMap, mask);
+
+            return baseMap;
+        }
+
+        /// <summary>
+        /// Draw one-pixel-wide borders where adjacent mask values differ.
+        /// Using direct memory access avoids the overhead of SetPixel.
+        /// </summary>
+        private static unsafe void DrawBorders(Bitmap bmp, int[,] mask)
+        {
+            var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+            var data = bmp.LockBits(rect, ImageLockMode.ReadWrite, bmp.PixelFormat);
+            int stride = data.Stride;
+            byte* basePtr = (byte*)data.Scan0;
+            int width = bmp.Width;
+            int height = bmp.Height;
+
+            for (int y = 1; y < height - 1; y++)
             {
-                for (int x = 1; x < fullW - 1; x++)
+                byte* row = basePtr + y * stride;
+                for (int x = 1; x < width - 1; x++)
                 {
                     int code = mask[y, x];
                     if (code != mask[y - 1, x] || code != mask[y + 1, x] ||
                         code != mask[y, x - 1] || code != mask[y, x + 1])
                     {
-                        baseMap.SetPixel(x, y, Color.Black);
+                        byte* pixel = row + x * 4;
+                        pixel[0] = 0;
+                        pixel[1] = 0;
+                        pixel[2] = 0;
+                        pixel[3] = 255;
                     }
                 }
             }
 
-            return baseMap;
+            bmp.UnlockBits(data);
         }
 
         /// <summary>
@@ -189,11 +219,18 @@ namespace StrategyGame
         /// <param name="cellsX">Number of cells horizontally.</param>
         /// <param name="cellsY">Number of cells vertically.</param>
         /// <param name="pixelsPerCell">Size of each cell in pixels.</param>
+
         public static unsafe Bitmap GenerateTerrainPixelArtMap(int cellsX, int cellsY, int pixelsPerCell)
         {
             string path = TerrainTifPath;
             if (!File.Exists(path))
                 throw new FileNotFoundException("Missing terrain GeoTIFF", path);
+
+            int widthPx = cellsX * pixelsPerCell;
+            int heightPx = cellsY * pixelsPerCell;
+            if (widthPx > MaxBitmapDimension || heightPx > MaxBitmapDimension)
+                throw new ArgumentOutOfRangeException(nameof(pixelsPerCell),
+                    $"Bitmap size {widthPx}x{heightPx} exceeds supported dimensions ({MaxBitmapDimension}).");
 
             using (var img = new Bitmap(path))
             using (var scaled = new Bitmap(cellsX, cellsY))
@@ -205,7 +242,7 @@ namespace StrategyGame
                     g.DrawImage(img, 0, 0, cellsX, cellsY);
                 }
 
-                var dest = new Bitmap(cellsX * pixelsPerCell, cellsY * pixelsPerCell, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                var dest = new Bitmap(widthPx, heightPx, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
                 var bmpData = dest.LockBits(new Rectangle(0, 0, dest.Width, dest.Height), System.Drawing.Imaging.ImageLockMode.WriteOnly, dest.PixelFormat);
                 int stride = bmpData.Stride;
                 byte* basePtr = (byte*)bmpData.Scan0;
@@ -236,6 +273,52 @@ namespace StrategyGame
                 dest.UnlockBits(bmpData);
                 return dest;
             }
+        }
+
+        /// <summary>
+        /// Generate a pixel-art terrain map for dimensions larger than System.Drawing supports.
+        /// This uses ImageSharp to avoid the 32k bitmap limit.
+        /// </summary>
+        public static Image<Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell)
+        {
+            string path = TerrainTifPath;
+            if (!File.Exists(path))
+                throw new FileNotFoundException("Missing terrain GeoTIFF", path);
+
+            int widthPx = cellsX * pixelsPerCell;
+            int heightPx = cellsY * pixelsPerCell;
+
+            using var img = new Bitmap(path);
+            using var scaled = new Bitmap(cellsX, cellsY);
+            using (Graphics g = Graphics.FromImage(scaled))
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.DrawImage(img, 0, 0, cellsX, cellsY);
+            }
+
+            var dest = new Image<Rgba32>(widthPx, heightPx);
+            Random rng = new Random();
+            for (int y = 0; y < cellsY; y++)
+            {
+                for (int x = 0; x < cellsX; x++)
+                {
+                    Color baseColor = scaled.GetPixel(x, y);
+                    Color[] palette = BuildPalette(baseColor);
+                    for (int py = 0; py < pixelsPerCell; py++)
+                    {
+                        int destY = y * pixelsPerCell + py;
+                        for (int px = 0; px < pixelsPerCell; px++)
+                        {
+                            Color chosen = palette[rng.Next(palette.Length)];
+                            int destX = x * pixelsPerCell + px;
+                            dest[destX, destY] = new Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
+                        }
+                    }
+                }
+            }
+
+            return dest;
         }
 
         private static Color GetAltitudeColor(float value)
