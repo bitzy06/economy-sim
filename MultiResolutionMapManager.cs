@@ -25,6 +25,10 @@ namespace StrategyGame
         private SystemDrawing.Bitmap _baseMap;
 
         private const int MaxCellSize = 40;
+
+        private const int MAX_DIMENSION = 32767;
+        private const int MAX_PIXEL_COUNT = 250_000_000;
+
         private readonly int _baseWidth;
         private readonly int _baseHeight;
 
@@ -150,15 +154,7 @@ namespace StrategyGame
                     }
                     break;
                 case ZoomLevel.City:
-                    // Draw a simple grid of roads
-                    using (SystemDrawing.Pen road = new SystemDrawing.Pen(SystemDrawing.Color.Gray, 1))
-                    {
-                        for (int x = 0; x < bmp.Width; x += 20)
-                            g.DrawLine(road, x, 0, x, bmp.Height);
-                        for (int y = 0; y < bmp.Height; y += 20)
-                            g.DrawLine(road, 0, y, bmp.Width, y);
-                    }
-                    // Add buildings and cars
+                    // Add buildings and cars without drawing a full grid of road lines
                     for (int i = 0; i < 50; i++)
                     {
                         int w = rng.Next(4, 8);
@@ -197,10 +193,7 @@ namespace StrategyGame
                     DrawDashedLine(img, 0, img.Height * 2 / 3, img.Width, img.Height * 2 / 3, SixLabors.ImageSharp.Color.DarkGray);
                     break;
                 case ZoomLevel.City:
-                    for (int x = 0; x < img.Width; x += 20)
-                        DrawLine(img, x, 0, x, img.Height, SixLabors.ImageSharp.Color.Gray);
-                    for (int y = 0; y < img.Height; y += 20)
-                        DrawLine(img, 0, y, img.Width, y, SixLabors.ImageSharp.Color.Gray);
+                    // Skip drawing the repetitive road grid on the large map as well
                     for (int i = 0; i < 50; i++)
                     {
                         int w = rng.Next(4, 8);
@@ -322,16 +315,32 @@ namespace StrategyGame
             return dest;
         }
 
-        private static int GetCellSize(float zoom)
+
+        private int GetCellSize(float zoom)
         {
             float[] anchors = { 1f, 2f, 4f, 6f, 40f };
 
-            if (zoom <= 1f) return (int)anchors[0];
-            if (zoom >= 5f) return (int)anchors[4];
+            float size;
+            if (zoom <= 1f) size = anchors[0];
+            else if (zoom >= 5f) size = anchors[4];
+            else
+            {
+                int lowerIndex = (int)Math.Floor(zoom) - 1;
+                float t = zoom - (lowerIndex + 1);
+                size = anchors[lowerIndex] + t * (anchors[lowerIndex + 1] - anchors[lowerIndex]);
+            }
 
-            int lowerIndex = (int)Math.Floor(zoom) - 1;
-            float t = zoom - (lowerIndex + 1);
-            float size = anchors[lowerIndex] + t * (anchors[lowerIndex + 1] - anchors[lowerIndex]);
+            int maxDimSize = MAX_DIMENSION / Math.Max(_baseWidth, _baseHeight);
+            double maxPixelSize = Math.Sqrt((double)MAX_PIXEL_COUNT / (_baseWidth * _baseHeight));
+            int maxAllowed = (int)Math.Floor(Math.Min(maxDimSize, maxPixelSize));
+
+            if (size > maxAllowed)
+                size = maxAllowed;
+
+            if (size < 1f)
+                size = 1f;
+
+
             return (int)Math.Round(size);
         }
 
