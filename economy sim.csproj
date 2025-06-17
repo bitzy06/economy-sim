@@ -81,10 +81,11 @@
 		<PackageReference Include="System.Text.Encodings.Web" Version="9.0.4" />
 		<PackageReference Include="System.Text.Json" Version="9.0.4" />
 		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
-		<PackageReference Include="System.ValueTuple" Version="4.5.0" />
-		<None Include="world_setup.json">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
+                <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+                <PackageReference Include="SixLabors.ImageSharp" Version="3.1.10" />
+                <None Include="world_setup.json">
+                        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+                </None>
 	</ItemGroup>
 
 	<!-- Rely on SDK implicit Compile and EmbeddedResource items -->
