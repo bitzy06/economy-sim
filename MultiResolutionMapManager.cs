@@ -28,6 +28,13 @@ namespace StrategyGame
         private readonly Dictionary<int, SystemDrawing.Bitmap> _cachedMaps = new();
         // Cache of individual tiles for each zoom level
         private readonly Dictionary<(int cellSize, int x, int y), SystemDrawing.Bitmap> _tileCache = new();
+        // LRU order for tile cache entries
+        private readonly LinkedList<(int cellSize, int x, int y)> _tileLru = new();
+
+        /// <summary>
+        /// Maximum number of tiles kept in the cache.
+        /// </summary>
+        private const int TileCacheLimit = 256;
 
         /// <summary>
         /// Size in pixels of each cached tile.
@@ -165,7 +172,7 @@ namespace StrategyGame
         /// </summary>
         public void GenerateTileCache()
         {
-            _tileCache.Clear();
+            ClearTileCache();
             foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
             {
                 float z = (int)level;
@@ -182,7 +189,12 @@ namespace StrategyGame
                             Math.Min(TileSizePx, size.Height - y * TileSizePx));
                         var tile = GetMap(z, rect);
                         if (tile != null)
-                            _tileCache[(cellSize, x, y)] = tile;
+                        {
+                            var key = (cellSize, x, y);
+                            _tileCache[key] = tile;
+                            _tileLru.AddLast(key);
+                            EnforceTileLimit();
+                        }
                     }
                 }
             }
@@ -196,7 +208,11 @@ namespace StrategyGame
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
             if (_tileCache.TryGetValue(key, out var bmp))
+            {
+                _tileLru.Remove(key);
+                _tileLru.AddLast(key);
                 return bmp;
+            }
 
             var size = GetMapSize(zoom);
             var rect = new SystemDrawing.Rectangle(tileX * TileSizePx, tileY * TileSizePx,
@@ -205,7 +221,11 @@ namespace StrategyGame
 
             bmp = GetMap(zoom, rect);
             if (bmp != null)
+            {
                 _tileCache[key] = bmp;
+                _tileLru.AddLast(key);
+                EnforceTileLimit();
+            }
             return bmp;
         }
 
@@ -500,12 +520,34 @@ namespace StrategyGame
                 bmp.Dispose();
             }
             _cachedMaps.Clear();
+            ClearTileCache();
+        }
 
+        /// <summary>
+        /// Dispose all cached tiles and clear the tile cache.
+        /// </summary>
+        public void ClearTileCache()
+        {
             foreach (var tile in _tileCache.Values)
             {
                 tile.Dispose();
             }
             _tileCache.Clear();
+            _tileLru.Clear();
+        }
+
+        private void EnforceTileLimit()
+        {
+            while (_tileLru.Count > TileCacheLimit)
+            {
+                var oldest = _tileLru.First.Value;
+                _tileLru.RemoveFirst();
+                if (_tileCache.TryGetValue(oldest, out var oldBmp))
+                {
+                    oldBmp.Dispose();
+                    _tileCache.Remove(oldest);
+                }
+            }
         }
     }
 }
