@@ -606,7 +606,9 @@ namespace StrategyGame
             }
             catch (Exception ex)
             {
-                DebugLogger.Log($"[Tile Save Error] Failed to save tile '{path}': {ex.Message}");
+#if DEBUG
+                DebugLogger.Log($"[Tile Save Error] Failed to save tile '{path}' for ({tileX},{tileY}): {ex}");
+#endif
                 try
                 {
                     MessageBox.Show($"Failed to save tile:\n{path}\n{ex.Message}", "Tile Save Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -629,8 +631,11 @@ namespace StrategyGame
                 {
                     return new SystemDrawing.Bitmap(path);
                 }
-                catch
+                catch (Exception ex)
                 {
+#if DEBUG
+                    DebugLogger.Log($"[Tile Load Error] Failed to load tile '{path}' for ({tileX},{tileY}): {ex}");
+#endif
                     // Corrupt tile file: remove and regenerate
                     try { File.Delete(path); } catch { }
                 }
@@ -646,7 +651,12 @@ namespace StrategyGame
                 Directory.CreateDirectory(dir);
                 bmp.Save(path, SystemDrawing.Imaging.ImageFormat.Png);
             }
-            catch { }
+            catch (Exception ex)
+            {
+#if DEBUG
+                DebugLogger.Log($"[Tile Save Error] Failed to save generated tile '{path}' for ({tileX},{tileY}): {ex}");
+#endif
+            }
 
             return bmp;
         }
