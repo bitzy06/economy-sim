@@ -12,6 +12,7 @@ using StrategyGame; // For game classes like Country, State, City, PopClass, Fac
 using System.Text.RegularExpressions; // Added for owner-drawing
 using System.IO; // For File operations
 using System.Text.Json; // For JSON deserialization
+using System.Reflection;
 
 namespace economy_sim
 {
@@ -64,14 +65,22 @@ namespace economy_sim
         private Point panStart;
         private Point mapViewOrigin = Point.Empty;
 
+        private System.Windows.Forms.Timer mapUpdateTimer;
+        private bool pendingMapUpdate = false;
+
 
 
         public MainGame()
         {
             InitializeComponent();
+            typeof(Panel).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(panelMap, true);
+            typeof(PictureBox).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(pictureBox1, true);
             pictureBox1.MouseDown += PictureBox1_MouseDown;
             pictureBox1.MouseMove += PictureBox1_MouseMove;
             pictureBox1.MouseUp += PictureBox1_MouseUp;
+            mapUpdateTimer = new System.Windows.Forms.Timer { Interval = 40 };
+            mapUpdateTimer.Tick += MapUpdateTimer_Tick;
+            mapUpdateTimer.Start();
             playerRoleManager = new PlayerRoleManager();
             allCitiesInWorld = new List<StrategyGame.City>();
             allCountries = new List<StrategyGame.Country>();
@@ -291,6 +300,7 @@ namespace economy_sim
             pictureBox1.Location = new Point(0, 0);
 
             ApplyZoom();
+            PreloadMapTiles();
         }
 
         private void ApplyZoom()
@@ -338,6 +348,7 @@ namespace economy_sim
             mapViewOrigin.Y = (int)(centerRatioY * newSize.Height - panelMap.ClientSize.Height / 2f);
 
             ApplyZoom();
+            PreloadMapTiles();
         }
 
 
@@ -1827,6 +1838,8 @@ namespace economy_sim
             }
             DebugLogger.FinalizeLog(allCountries); // Pass the list of countries to the logger
             mapManager?.ClearTileCache();
+            mapUpdateTimer?.Stop();
+            mapUpdateTimer?.Dispose();
             base.OnFormClosing(e);
         }
 
@@ -1975,6 +1988,7 @@ namespace economy_sim
             mapViewOrigin.Y = (int)(ratioY * newSize.Height - mousePosInPanel.Y);
 
             ApplyZoom();
+            PreloadMapTiles();
         }
 
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
@@ -2059,7 +2073,7 @@ namespace economy_sim
                 mapViewOrigin.X = Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width);
                 mapViewOrigin.Y = Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height);
                 lastLocation = e.Location;
-                ApplyZoom();
+                pendingMapUpdate = true;
             }
         }
 
@@ -2074,6 +2088,7 @@ namespace economy_sim
             {
                 isPanning = false;
                 Cursor = Cursors.Default;
+                PreloadMapTiles();
             }
         }
 
@@ -2086,7 +2101,25 @@ namespace economy_sim
                 this.panelMap.Cursor = Cursors.Default; // Reset panelMap cursor
                 this.panelMap.BackColor = SystemColors.Control;
                 this.pictureBox1.BackColor = Color.Transparent; // Reset pictureBox backcolor
+                PreloadMapTiles();
             }
+        }
+
+        private void MapUpdateTimer_Tick(object sender, EventArgs e)
+        {
+            if (pendingMapUpdate)
+            {
+                ApplyZoom();
+                pendingMapUpdate = false;
+            }
+        }
+
+        private void PreloadMapTiles()
+        {
+            if (mapManager == null)
+                return;
+            var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+            _ = mapManager.PreloadTilesAsync(mapZoom, view);
         }
     }
 }
