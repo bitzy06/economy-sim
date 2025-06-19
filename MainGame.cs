@@ -62,7 +62,7 @@ namespace economy_sim
         private Bitmap baseMap;
         private bool isPanning = false;
         private Point panStart;
-        private Point panPictureBoxStartLocation;
+        private Point mapViewOrigin = Point.Empty;
 
 
 
@@ -285,40 +285,13 @@ namespace economy_sim
             {
                 mapManager = new MultiResolutionMapManager(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
                 mapManager.GenerateMaps();
-                mapManager.ClearCache();
+                mapManager.GenerateTileCache();
             }
 
-
-
+            pictureBox1.Size = panelMap.ClientSize;
+            pictureBox1.Location = new Point(0, 0);
 
             ApplyZoom();
-
-            // Logic to set pictureBox1.Location after ApplyZoom() in RefreshMap()
-            int pbWidth = pictureBox1.Width;
-            int pbHeight = pictureBox1.Height;
-            int panelWidth = panelMap.ClientSize.Width;
-            int panelHeight = panelMap.ClientSize.Height;
-
-            int newX, newY;
-
-            if (pbWidth < panelWidth)
-            {
-                newX = (panelWidth - pbWidth) / 2;
-            }
-            else
-            {
-                newX = 0; // Default to (0,0) if larger, panning will handle the rest
-            }
-
-            if (pbHeight < panelHeight)
-            {
-                newY = (panelHeight - pbHeight) / 2;
-            }
-            else
-            {
-                newY = 0; // Default to (0,0) if larger
-            }
-            pictureBox1.Location = new Point(newX, newY);
         }
 
         private void ApplyZoom()
@@ -327,15 +300,18 @@ namespace economy_sim
                 return;
 
 
-            Bitmap newMap = mapManager.GetMap(mapZoom);
-            if (newMap == null)
+            Size mapSize = mapManager.GetMapSize(mapZoom);
+            mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+            mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
 
+            Bitmap newMap = mapManager.AssembleView(mapZoom, new Rectangle(mapViewOrigin, panelMap.ClientSize));
+            if (newMap == null)
                 return;
 
             Bitmap oldMap = baseMap;
 
             pictureBox1.Image = newMap;
-            pictureBox1.Size = newMap.Size;
+            pictureBox1.Size = panelMap.ClientSize;
 
             baseMap = newMap;
 
@@ -350,67 +326,21 @@ namespace economy_sim
             if (Math.Abs(newZoom - mapZoom) < 0.001f)
                 return;
 
-            int panelCenterX = panelMap.ClientSize.Width / 2;
-            int panelCenterY = panelMap.ClientSize.Height / 2;
-
-            float contentRatioX = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
-            float contentRatioY = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
-
-            mapZoom = newZoom;
-            ApplyZoom();
-
-            int newPbWidth = pictureBox1.Width;
-            int newPbHeight = pictureBox1.Height;
-
-            int newX = panelCenterX - (int)(contentRatioX * newPbWidth);
-            int newY = panelCenterY - (int)(contentRatioY * newPbHeight);
-
-            if (newPbWidth < panelMap.ClientSize.Width)
-                newX = (panelMap.ClientSize.Width - newPbWidth) / 2;
-            else
-                newX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - newPbWidth));
-
-            if (newPbHeight < panelMap.ClientSize.Height)
-                newY = (panelMap.ClientSize.Height - newPbHeight) / 2;
-            else
-                newY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - newPbHeight));
-
-            pictureBox1.Location = new Point(newX, newY);
-        }
-
-        private void AdjustZoom(float newZoom)
-        {
-            newZoom = Math.Max(1f, Math.Min(5f, newZoom));
-            if (Math.Abs(newZoom - mapZoom) < 0.001f)
-                return;
-
-            int panelCenterX = panelMap.ClientSize.Width / 2;
-            int panelCenterY = panelMap.ClientSize.Height / 2;
-
-            float contentRatioX = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
-            float contentRatioY = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
+            var oldSize = mapManager.GetMapSize(mapZoom);
+            float centerX = mapViewOrigin.X + panelMap.ClientSize.Width / 2f;
+            float centerY = mapViewOrigin.Y + panelMap.ClientSize.Height / 2f;
+            float centerRatioX = centerX / oldSize.Width;
+            float centerRatioY = centerY / oldSize.Height;
 
             mapZoom = newZoom;
+
+            var newSize = mapManager.GetMapSize(mapZoom);
+            mapViewOrigin.X = (int)(centerRatioX * newSize.Width - panelMap.ClientSize.Width / 2f);
+            mapViewOrigin.Y = (int)(centerRatioY * newSize.Height - panelMap.ClientSize.Height / 2f);
+
             ApplyZoom();
-
-            int newPbWidth = pictureBox1.Width;
-            int newPbHeight = pictureBox1.Height;
-
-            int newX = panelCenterX - (int)(contentRatioX * newPbWidth);
-            int newY = panelCenterY - (int)(contentRatioY * newPbHeight);
-
-            if (newPbWidth < panelMap.ClientSize.Width)
-                newX = (panelMap.ClientSize.Width - newPbWidth) / 2;
-            else
-                newX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - newPbWidth));
-
-            if (newPbHeight < panelMap.ClientSize.Height)
-                newY = (panelMap.ClientSize.Height - newPbHeight) / 2;
-            else
-                newY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - newPbHeight));
-
-            pictureBox1.Location = new Point(newX, newY);
         }
+
 
 
         private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
@@ -2022,12 +1952,15 @@ namespace economy_sim
 
         private void PictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
-            if (baseMap == null) return;
             if (pictureBox1.Width == 0 || pictureBox1.Height == 0) return;
 
             Point mousePosInPanel = panelMap.PointToClient(Control.MousePosition);
-            float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
-            float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
+
+            var oldSize = mapManager.GetMapSize(mapZoom);
+            float worldX = mapViewOrigin.X + mousePosInPanel.X;
+            float worldY = mapViewOrigin.Y + mousePosInPanel.Y;
+            float ratioX = worldX / oldSize.Width;
+            float ratioY = worldY / oldSize.Height;
 
             float newZoom = mapZoom + Math.Sign(e.Delta) * 0.25f;
             newZoom = Math.Max(1f, Math.Min(5f, newZoom));
@@ -2035,28 +1968,12 @@ namespace economy_sim
                 return;
 
             mapZoom = newZoom;
+
+            var newSize = mapManager.GetMapSize(mapZoom);
+            mapViewOrigin.X = (int)(ratioX * newSize.Width - mousePosInPanel.X);
+            mapViewOrigin.Y = (int)(ratioY * newSize.Height - mousePosInPanel.Y);
+
             ApplyZoom();
-
-            int newPbWidth = pictureBox1.Width;
-            int newPbHeight = pictureBox1.Height;
-
-            int newX = mousePosInPanel.X - (int)(relativeXInBase * newPbWidth);
-            int newY = mousePosInPanel.Y - (int)(relativeYInBase * newPbHeight);
-
-            int finalX;
-            int finalY;
-
-            if (pictureBox1.Width > panelMap.ClientSize.Width)
-                finalX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - pictureBox1.Width));
-            else
-                finalX = (panelMap.ClientSize.Width - pictureBox1.Width) / 2;
-
-            if (pictureBox1.Height > panelMap.ClientSize.Height)
-                finalY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - pictureBox1.Height));
-            else
-                finalY = (panelMap.ClientSize.Height - pictureBox1.Height) / 2;
-
-            pictureBox1.Location = new Point(finalX, finalY);
         }
 
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
@@ -2082,63 +1999,36 @@ namespace economy_sim
             }
 
             const int panAmount = 30; // Pixels to move per key press
-            int currentPbLeft = this.pictureBox1.Left;
-            int currentPbTop = this.pictureBox1.Top;
-
             bool keyProcessed = false;
 
             switch (e.KeyCode)
             {
                 case Keys.Left:
-                    currentPbLeft += panAmount;
+                    mapViewOrigin.X -= panAmount;
                     keyProcessed = true;
                     break;
                 case Keys.Right:
-                    currentPbLeft -= panAmount;
+                    mapViewOrigin.X += panAmount;
                     keyProcessed = true;
                     break;
                 case Keys.Up:
-                    currentPbTop += panAmount;
+                    mapViewOrigin.Y -= panAmount;
                     keyProcessed = true;
                     break;
                 case Keys.Down:
-                    currentPbTop -= panAmount;
+                    mapViewOrigin.Y += panAmount;
                     keyProcessed = true;
                     break;
             }
 
             if (keyProcessed)
             {
-                e.Handled = true; // Mark event as handled if we processed an arrow key
-                e.SuppressKeyPress = true; // Prevents further processing for this key press, like sound dings
-
-                int finalX;
-                int finalY;
-
-                // Apply clamping and centering logic, similar to mouse panning
-                // Clamp X coordinate
-                if (this.pictureBox1.Width > this.panelMap.ClientSize.Width)
-                {
-                    finalX = Math.Min(0, Math.Max(currentPbLeft, this.panelMap.ClientSize.Width - this.pictureBox1.Width));
-                }
-                else
-                {
-                    // If not wider than panel, keep it centered horizontally
-                    finalX = (this.panelMap.ClientSize.Width - this.pictureBox1.Width) / 2;
-                }
-
-                // Clamp Y coordinate
-                if (this.pictureBox1.Height > this.panelMap.ClientSize.Height)
-                {
-                    finalY = Math.Min(0, Math.Max(currentPbTop, this.panelMap.ClientSize.Height - this.pictureBox1.Height));
-                }
-                else
-                {
-                    // If not taller than panel, keep it centered vertically
-                    finalY = (this.panelMap.ClientSize.Height - this.pictureBox1.Height) / 2;
-                }
-
-                this.pictureBox1.Location = new Point(finalX, finalY);
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                Size mapSize = mapManager.GetMapSize(mapZoom);
+                mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+                mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+                ApplyZoom();
             }
         }
 
@@ -2149,6 +2039,7 @@ namespace economy_sim
             if (e.Button == MouseButtons.Left)
             {
                 lastLocation = e.Location;
+                isPanning = true;
                 Cursor = Cursors.Hand; // Change cursor to indicate dragging
             }
         }
@@ -2157,37 +2048,17 @@ namespace economy_sim
 
         private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left)
+            if (isPanning && e.Button == MouseButtons.Left)
             {
-                if (pictureBox1.ClientRectangle.Contains(e.Location))
-                {
-                    pictureBox1.Left += e.X - lastLocation.X;
-                    pictureBox1.Top += e.Y - lastLocation.Y;
-
-                    int finalX;
-                    int finalY;
-
-                    if (pictureBox1.Width > panelMap.ClientSize.Width)
-                    {
-                        finalX = Math.Min(0, Math.Max(pictureBox1.Left, panelMap.ClientSize.Width - pictureBox1.Width));
-                    }
-                    else
-                    {
-                        finalX = (panelMap.ClientSize.Width - pictureBox1.Width) / 2;
-                    }
-
-                    if (pictureBox1.Height > panelMap.ClientSize.Height)
-                    {
-                        finalY = Math.Min(0, Math.Max(pictureBox1.Top, panelMap.ClientSize.Height - pictureBox1.Height));
-                    }
-                    else
-                    {
-                        finalY = (panelMap.ClientSize.Height - pictureBox1.Height) / 2;
-                    }
-
-                    pictureBox1.Location = new Point(finalX, finalY);
-                    lastLocation = e.Location;
-                }
+                int dx = e.X - lastLocation.X;
+                int dy = e.Y - lastLocation.Y;
+                mapViewOrigin.X = Math.Max(0, mapViewOrigin.X - dx);
+                mapViewOrigin.Y = Math.Max(0, mapViewOrigin.Y - dy);
+                Size mapSize = mapManager.GetMapSize(mapZoom);
+                mapViewOrigin.X = Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width);
+                mapViewOrigin.Y = Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height);
+                lastLocation = e.Location;
+                ApplyZoom();
             }
         }
 

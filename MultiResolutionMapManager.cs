@@ -26,6 +26,13 @@ namespace StrategyGame
 
         // Cache of scaled bitmaps keyed by cell size
         private readonly Dictionary<int, SystemDrawing.Bitmap> _cachedMaps = new();
+        // Cache of individual tiles for each zoom level
+        private readonly Dictionary<(int cellSize, int x, int y), SystemDrawing.Bitmap> _tileCache = new();
+
+        /// <summary>
+        /// Size in pixels of each cached tile.
+        /// </summary>
+        public const int TileSizePx = 512;
 
 
         private const int MaxCellSize = 40;
@@ -39,6 +46,15 @@ namespace StrategyGame
         {
             _baseWidth = baseWidth;
             _baseHeight = baseHeight;
+        }
+
+        /// <summary>
+        /// Get the full map pixel dimensions for the provided zoom level.
+        /// </summary>
+        public SystemDrawing.Size GetMapSize(float zoom)
+        {
+            int cellSize = GetCellSize(zoom);
+            return new SystemDrawing.Size(_baseWidth * cellSize, _baseHeight * cellSize);
         }
 
         /// <summary>
@@ -142,6 +158,89 @@ namespace StrategyGame
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Generate tile cache for all predefined zoom levels.
+        /// </summary>
+        public void GenerateTileCache()
+        {
+            _tileCache.Clear();
+            foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
+            {
+                float z = (int)level;
+                int cellSize = GetCellSize(z);
+                var size = GetMapSize(z);
+                int tilesX = (size.Width + TileSizePx - 1) / TileSizePx;
+                int tilesY = (size.Height + TileSizePx - 1) / TileSizePx;
+                for (int x = 0; x < tilesX; x++)
+                {
+                    for (int y = 0; y < tilesY; y++)
+                    {
+                        var rect = new SystemDrawing.Rectangle(x * TileSizePx, y * TileSizePx,
+                            Math.Min(TileSizePx, size.Width - x * TileSizePx),
+                            Math.Min(TileSizePx, size.Height - y * TileSizePx));
+                        var tile = GetMap(z, rect);
+                        if (tile != null)
+                            _tileCache[(cellSize, x, y)] = tile;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Retrieve a single tile bitmap for the given zoom level and tile coordinates.
+        /// </summary>
+        public SystemDrawing.Bitmap GetTile(float zoom, int tileX, int tileY)
+        {
+            int cellSize = GetCellSize(zoom);
+            var key = (cellSize, tileX, tileY);
+            if (_tileCache.TryGetValue(key, out var bmp))
+                return bmp;
+
+            var size = GetMapSize(zoom);
+            var rect = new SystemDrawing.Rectangle(tileX * TileSizePx, tileY * TileSizePx,
+                Math.Min(TileSizePx, size.Width - tileX * TileSizePx),
+                Math.Min(TileSizePx, size.Height - tileY * TileSizePx));
+
+            bmp = GetMap(zoom, rect);
+            if (bmp != null)
+                _tileCache[key] = bmp;
+            return bmp;
+        }
+
+        /// <summary>
+        /// Assemble a view rectangle from cached tiles.
+        /// </summary>
+        public SystemDrawing.Bitmap AssembleView(float zoom, SystemDrawing.Rectangle view)
+        {
+            var size = GetMapSize(zoom);
+            view = SystemDrawing.Rectangle.Intersect(new SystemDrawing.Rectangle(SystemDrawing.Point.Empty, size), view);
+            if (view.Width <= 0 || view.Height <= 0)
+                return new SystemDrawing.Bitmap(1, 1);
+
+            int firstTileX = view.X / TileSizePx;
+            int lastTileX = (view.Right - 1) / TileSizePx;
+            int firstTileY = view.Y / TileSizePx;
+            int lastTileY = (view.Bottom - 1) / TileSizePx;
+
+            var result = new SystemDrawing.Bitmap(view.Width, view.Height);
+            using (var g = SystemDrawing.Graphics.FromImage(result))
+            {
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                for (int tx = firstTileX; tx <= lastTileX; tx++)
+                {
+                    for (int ty = firstTileY; ty <= lastTileY; ty++)
+                    {
+                        var tile = GetTile(zoom, tx, ty);
+                        if (tile == null) continue;
+                        int destX = tx * TileSizePx - view.X;
+                        int destY = ty * TileSizePx - view.Y;
+                        g.DrawImage(tile, destX, destY, tile.Width, tile.Height);
+                    }
+                }
+            }
+            return result;
         }
 
         private static void OverlayFeatures(SystemDrawing.Bitmap bmp, ZoomLevel level)
@@ -401,6 +500,12 @@ namespace StrategyGame
                 bmp.Dispose();
             }
             _cachedMaps.Clear();
+
+            foreach (var tile in _tileCache.Values)
+            {
+                tile.Dispose();
+            }
+            _tileCache.Clear();
         }
     }
 }
