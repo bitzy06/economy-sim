@@ -4,6 +4,7 @@ using SystemDrawing = System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Threading.Tasks;
 using System.IO;
+using System.Windows.Forms;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Advanced;
@@ -584,20 +585,28 @@ namespace StrategyGame
 
         private static void SaveTileToDisk(int cellSize, int tileX, int tileY, SystemDrawing.Bitmap bmp)
         {
+            string path = string.Empty;
             try
             {
                 string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
-                string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+                path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
                 if (!File.Exists(path))
                 {
                     Directory.CreateDirectory(dir);
                     bmp.Save(path, SystemDrawing.Imaging.ImageFormat.Png);
                 }
             }
-
-            catch
+            catch (Exception ex)
             {
-                // Ignore disk errors
+                DebugLogger.Log($"[Tile Save Error] Failed to save tile '{path}': {ex.Message}");
+                try
+                {
+                    MessageBox.Show($"Failed to save tile:\n{path}\n{ex.Message}", "Tile Save Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch
+                {
+                    // Ignore UI errors
+                }
             }
         }
 
