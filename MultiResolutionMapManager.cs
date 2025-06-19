@@ -237,6 +237,7 @@ namespace StrategyGame
 
             bmp = GetMap(zoom, rect);
 
+
             if (bmp != null)
             {
                 SaveTileToDisk(cellSize, tileX, tileY, bmp);
@@ -580,6 +581,7 @@ namespace StrategyGame
             }
         }
 
+
         private static void SaveTileToDisk(int cellSize, int tileX, int tileY, SystemDrawing.Bitmap bmp)
         {
             try
@@ -592,6 +594,7 @@ namespace StrategyGame
                     bmp.Save(path, SystemDrawing.Imaging.ImageFormat.Png);
                 }
             }
+
             catch
             {
                 // Ignore disk errors
@@ -604,6 +607,7 @@ namespace StrategyGame
             string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
             if (File.Exists(path))
             {
+
                 try
                 {
                     return new SystemDrawing.Bitmap(path);
@@ -613,6 +617,7 @@ namespace StrategyGame
                     // Corrupt tile file: remove and regenerate
                     try { File.Delete(path); } catch { }
                 }
+
             }
 
             using var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, cellSize);
