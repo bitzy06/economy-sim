@@ -42,9 +42,24 @@ namespace StrategyGame
         public const int TileSizePx = 512;
 
 
-        private const int MaxCellSize = 40;
+        /// <summary>
+        /// Number of pixels per map cell for each zoom level from
+        /// <see cref="ZoomLevel.Global"/> through <see cref="ZoomLevel.City"/>.
+        /// Adjusting this array changes both the zoom anchors and the
+        /// maximum cell size used when generating maps.
+        /// </summary>
+        public static readonly int[] PixelsPerCellLevels = { 1, 2, 4, 6, 40 };
+
+        private static int MaxCellSize => PixelsPerCellLevels[PixelsPerCellLevels.Length - 1];
         private const int MAX_DIMENSION = 32767;
         private const int MAX_PIXEL_COUNT = 250_000_000;
+
+        private static readonly string RepoRoot =
+            System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
+
+        private static readonly string TileCacheDir =
+            System.IO.Path.Combine(RepoRoot, "tile_cache");
 
         private readonly int _baseWidth;
         private readonly int _baseHeight;
@@ -76,9 +91,17 @@ namespace StrategyGame
 
             if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
             {
-                var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, MaxCellSize);
-                OverlayFeaturesLarge(img, ZoomLevel.City);
-                _largeBaseMap = img;
+                _largeBaseMap = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, MaxCellSize);
+                OverlayFeaturesLarge(_largeBaseMap, ZoomLevel.City);
+
+                foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
+                {
+                    GetMap((float)level);
+                }
+                GenerateTileCache();
+
+                _largeBaseMap.Dispose();
+                _largeBaseMap = null;
                 _baseMap = null;
             }
             else
@@ -87,6 +110,7 @@ namespace StrategyGame
                 OverlayFeatures(bmp, ZoomLevel.City);
                 _baseMap = bmp;
                 _largeBaseMap = null;
+                GenerateTileCache();
             }
         }
 
@@ -176,25 +200,17 @@ namespace StrategyGame
             foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
             {
                 float z = (int)level;
-                int cellSize = GetCellSize(z);
                 var size = GetMapSize(z);
                 int tilesX = (size.Width + TileSizePx - 1) / TileSizePx;
                 int tilesY = (size.Height + TileSizePx - 1) / TileSizePx;
+
                 for (int x = 0; x < tilesX; x++)
                 {
                     for (int y = 0; y < tilesY; y++)
                     {
-                        var rect = new SystemDrawing.Rectangle(x * TileSizePx, y * TileSizePx,
-                            Math.Min(TileSizePx, size.Width - x * TileSizePx),
-                            Math.Min(TileSizePx, size.Height - y * TileSizePx));
-                        var tile = GetMap(z, rect);
-                        if (tile != null)
-                        {
-                            var key = (cellSize, x, y);
-                            _tileCache[key] = tile;
-                            _tileLru.AddLast(key);
-                            EnforceTileLimit();
-                        }
+                        // Use the public method so any generated tile is also
+                        // written to disk and cached consistently
+                        GetTile(z, x, y);
                     }
                 }
             }
@@ -220,6 +236,16 @@ namespace StrategyGame
                 Math.Min(TileSizePx, size.Height - tileY * TileSizePx));
 
             bmp = GetMap(zoom, rect);
+
+            if (bmp != null)
+            {
+                SaveTileToDisk(cellSize, tileX, tileY, bmp);
+            }
+            else if (_baseMap == null)
+            {
+                bmp = LoadOrGenerateTileFromData(cellSize, tileX, tileY, rect);
+            }
+
             if (bmp != null)
             {
                 _tileCache[key] = bmp;
@@ -456,11 +482,15 @@ namespace StrategyGame
 
         private int GetCellSize(float zoom)
         {
-            float[] anchors = { 1f, 2f, 4f, 6f, 40f };
+            // Convert the pixel-per-cell configuration to a float array for interpolation
+            float[] anchors = new float[PixelsPerCellLevels.Length];
+            for (int i = 0; i < anchors.Length; i++)
+                anchors[i] = PixelsPerCellLevels[i];
 
             float size;
             if (zoom <= 1f) size = anchors[0];
-            else if (zoom >= 5f) size = anchors[4];
+            else if (zoom >= anchors.Length)
+                size = anchors[anchors.Length - 1];
             else
             {
                 int lowerIndex = (int)Math.Floor(zoom) - 1;
@@ -548,6 +578,55 @@ namespace StrategyGame
                     _tileCache.Remove(oldest);
                 }
             }
+        }
+
+        private static void SaveTileToDisk(int cellSize, int tileX, int tileY, SystemDrawing.Bitmap bmp)
+        {
+            try
+            {
+                string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+                string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+                if (!File.Exists(path))
+                {
+                    Directory.CreateDirectory(dir);
+                    bmp.Save(path, SystemDrawing.Imaging.ImageFormat.Png);
+                }
+            }
+            catch
+            {
+                // Ignore disk errors
+            }
+        }
+
+        private SystemDrawing.Bitmap LoadOrGenerateTileFromData(int cellSize, int tileX, int tileY, SystemDrawing.Rectangle rect)
+        {
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+            if (File.Exists(path))
+            {
+                try
+                {
+                    return new SystemDrawing.Bitmap(path);
+                }
+                catch
+                {
+                    // Corrupt tile file: remove and regenerate
+                    try { File.Delete(path); } catch { }
+                }
+            }
+
+            using var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, cellSize);
+            OverlayFeaturesLarge(img, ZoomLevel.City);
+            var bmp = CropImageSharp(img, rect);
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+                bmp.Save(path, SystemDrawing.Imaging.ImageFormat.Png);
+            }
+            catch { }
+
+            return bmp;
         }
     }
 }
