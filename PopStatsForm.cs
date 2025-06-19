@@ -5,17 +5,11 @@ using System.Windows.Forms;
 
 namespace economy_sim
 {
-    public class PopStatsForm : Form
+    public partial class PopStatsForm : Form
     {
-        private ListBox listBoxPopStats;
-
         public PopStatsForm()
         {
-            this.Text = "Population Class Stats";
-            this.Size = new System.Drawing.Size(400, 400);
-            listBoxPopStats = new ListBox();
-            listBoxPopStats.Dock = DockStyle.Fill;
-            this.Controls.Add(listBoxPopStats);
+            InitializeComponent();
         }
 
         public void UpdateStats(StrategyGame.City city)

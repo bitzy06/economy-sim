@@ -13,20 +13,9 @@ namespace economy_sim // Assuming this is your project's namespace
 {
     public partial class FactoryStatsForm : Form
     {
-        private ListBox listBoxFactoryDetails;
-
         public FactoryStatsForm()
         {
-            InitializeComponent(); // This will be auto-generated in FactoryStatsForm.Designer.cs
-            // Manual setup for the ListBox if not using the designer for this part:
-            this.listBoxFactoryDetails = new System.Windows.Forms.ListBox();
-            this.listBoxFactoryDetails.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.listBoxFactoryDetails.FormattingEnabled = true;
-            this.listBoxFactoryDetails.ItemHeight = 15; // Default, can be adjusted
-            this.listBoxFactoryDetails.IntegralHeight = false; // Allows partial last item if needed
-            this.Controls.Add(this.listBoxFactoryDetails);
-            this.Text = "Factory Details";
-            this.Size = new System.Drawing.Size(600, 400); // Initial size
+            InitializeComponent();
         }
 
         public void UpdateStats(City city)
@@ -113,22 +102,5 @@ namespace economy_sim // Assuming this is your project's namespace
                 listBoxFactoryDetails.TopIndex = 0; // Default to top if previous index is invalid
             }
         }
-
-        // Minimal InitializeComponent - actual designer code would be in FactoryStatsForm.Designer.cs
-        // This is just to make the .cs file compilable standalone for this step.
-        // In a real VS project, you'd let the designer handle this.
-        private void InitializeComponent()
-        {
-            this.SuspendLayout();
-            // 
-            // FactoryStatsForm
-            // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(584, 361); // Example
-            this.Name = "FactoryStatsForm";
-            this.Text = "Factory Details";
-            this.ResumeLayout(false);
-        }
     }
-} 
+}
