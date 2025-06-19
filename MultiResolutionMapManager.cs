@@ -36,11 +36,12 @@ namespace StrategyGame
         private readonly Dictionary<(int cellSize, int x, int y), SystemDrawing.Bitmap> _tileCache = new();
         // LRU order for tile cache entries
         private readonly LinkedList<(int cellSize, int x, int y)> _tileLru = new();
+        private readonly object _cacheLock = new();
 
         /// <summary>
         /// Maximum number of tiles kept in the cache.
         /// </summary>
-        private const int TileCacheLimit = 256;
+        private const int TileCacheLimit = 1024;
 
         /// <summary>
         /// Size in pixels of each cached tile.
@@ -238,11 +239,15 @@ namespace StrategyGame
         {
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
-            if (_tileCache.TryGetValue(key, out var bmp))
+            SystemDrawing.Bitmap bmp = null;
+            lock (_cacheLock)
             {
-                _tileLru.Remove(key);
-                _tileLru.AddLast(key);
-                return bmp;
+                if (_tileCache.TryGetValue(key, out var bmpCached))
+                {
+                    _tileLru.Remove(key);
+                    _tileLru.AddLast(key);
+                    return bmpCached;
+                }
             }
 
             var size = GetMapSize(zoom);
@@ -264,9 +269,12 @@ namespace StrategyGame
 
             if (bmp != null)
             {
-                _tileCache[key] = bmp;
-                _tileLru.AddLast(key);
-                EnforceTileLimit();
+                lock (_cacheLock)
+                {
+                    _tileCache[key] = bmp;
+                    _tileLru.AddLast(key);
+                    EnforceTileLimit();
+                }
             }
             return bmp;
         }
@@ -574,12 +582,15 @@ namespace StrategyGame
         /// </summary>
         public void ClearTileCache()
         {
-            foreach (var tile in _tileCache.Values)
+            lock (_cacheLock)
             {
-                tile.Dispose();
+                foreach (var tile in _tileCache.Values)
+                {
+                    tile.Dispose();
+                }
+                _tileCache.Clear();
+                _tileLru.Clear();
             }
-            _tileCache.Clear();
-            _tileLru.Clear();
         }
 
         private void EnforceTileLimit()
@@ -594,6 +605,26 @@ namespace StrategyGame
                     _tileCache.Remove(oldest);
                 }
             }
+        }
+
+        public Task PreloadTilesAsync(float zoom, SystemDrawing.Rectangle view, int radius = 1)
+        {
+            return Task.Run(() =>
+            {
+                var size = GetMapSize(zoom);
+                int firstTileX = Math.Max(0, view.X / TileSizePx - radius);
+                int lastTileX = Math.Min((size.Width - 1) / TileSizePx, (view.Right - 1) / TileSizePx + radius);
+                int firstTileY = Math.Max(0, view.Y / TileSizePx - radius);
+                int lastTileY = Math.Min((size.Height - 1) / TileSizePx, (view.Bottom - 1) / TileSizePx + radius);
+
+                for (int tx = firstTileX; tx <= lastTileX; tx++)
+                {
+                    for (int ty = firstTileY; ty <= lastTileY; ty++)
+                    {
+                        GetTile(zoom, tx, ty);
+                    }
+                }
+            });
         }
         private static Image<Rgba32> ConvertBitmapToImageSharpFast(Bitmap bmp)
         {
