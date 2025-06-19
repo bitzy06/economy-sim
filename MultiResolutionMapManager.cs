@@ -237,6 +237,7 @@ namespace StrategyGame
 
             bmp = GetMap(zoom, rect);
 
+
             if (bmp != null)
             {
                 SaveTileToDisk(cellSize, tileX, tileY, bmp);
@@ -580,6 +581,7 @@ namespace StrategyGame
             }
         }
 
+
         private static void SaveTileToDisk(int cellSize, int tileX, int tileY, SystemDrawing.Bitmap bmp)
         {
             try
@@ -594,6 +596,7 @@ namespace StrategyGame
             }
             catch { }
         }
+
 
         private SystemDrawing.Bitmap LoadOrGenerateTileFromData(int cellSize, int tileX, int tileY, SystemDrawing.Rectangle rect)
         {
