@@ -1838,6 +1838,8 @@ namespace economy_sim
             }
             DebugLogger.FinalizeLog(allCountries); // Pass the list of countries to the logger
             mapManager?.ClearTileCache();
+            mapUpdateTimer?.Stop();
+            mapUpdateTimer?.Dispose();
             base.OnFormClosing(e);
         }
 
@@ -2117,7 +2119,9 @@ namespace economy_sim
             if (mapManager == null)
                 return;
             var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
-            _ = Task.Run(() => mapManager.PreloadTilesAsync(mapZoom, view));
+
+            _ = mapManager.PreloadTilesAsync(mapZoom, view);
+
         }
     }
 }
