@@ -1,15 +1,20 @@
-using System;
-using System.Collections.Generic;
-using SystemDrawing = System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Threading.Tasks;
-using System.IO;
-using System.Windows.Forms;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
+using System;
+using System.Collections.Generic;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using SystemDrawing = System.Drawing;
+using ImageSharpImage = SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>;
+
+
 
 
 namespace StrategyGame
@@ -59,8 +64,9 @@ namespace StrategyGame
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
 
-        private static readonly string TileCacheDir =
-            System.IO.Path.Combine(RepoRoot, "tile_cache");
+        private static readonly string TileCacheDir = Path.Combine(
+     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+     "data", "tile_cache");
 
         private readonly int _baseWidth;
         private readonly int _baseHeight;
@@ -589,27 +595,56 @@ namespace StrategyGame
                 }
             }
         }
+        private static Image<Rgba32> ConvertBitmapToImageSharpFast(Bitmap bmp)
+        {
+            var image = new Image<Rgba32>(bmp.Width, bmp.Height);
+            var rect = new System.Drawing.Rectangle(0, 0, bmp.Width, bmp.Height);
+            var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+
+            unsafe
+            {
+                for (int y = 0; y < bmp.Height; y++)
+                {
+                    byte* row = (byte*)bmpData.Scan0 + (y * bmpData.Stride);
+                    var pixelRow = image.DangerousGetPixelRowMemory(y).Span; // alternate name for GetPixelRowSpan
+
+                    for (int x = 0; x < bmp.Width; x++)
+                    {
+                        byte b = row[x * 3 + 0];
+                        byte g = row[x * 3 + 1];
+                        byte r = row[x * 3 + 2];
+                        pixelRow[x] = new Rgba32(r, g, b, 255);
+                    }
+                }
+            }
+
+            bmp.UnlockBits(bmpData);
+            return image;
+        }
 
 
         private static void SaveTileToDisk(int cellSize, int tileX, int tileY, SystemDrawing.Bitmap bmp)
         {
-            string path = string.Empty;
+            if (bmp == null || bmp.Width == 0 || bmp.Height == 0)
+                return;
+
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+
             try
             {
-                string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
-                path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+                Directory.CreateDirectory(dir); // Ensure directory exists before checking or saving
                 if (!File.Exists(path))
                 {
-                    Directory.CreateDirectory(dir);
-                    bmp.Save(path, SystemDrawing.Imaging.ImageFormat.Png);
+                    DebugLogger.Log($"Saving bitmap: {path}, size: {bmp.Width}x{bmp.Height}");
+                    using var imgSharp = ConvertBitmapToImageSharpFast(bmp);
+                    imgSharp.Save(path); // PNG
                 }
             }
             catch (Exception ex)
             {
 #if DEBUG
-
-                DebugLogger.Log($"[Tile Save Error] Failed to save tile '{path}' for ({tileX},{tileY}): {ex}");
-
+                DebugLogger.Log($"[Tile Save Error] Failed to save tile '{path}' for ({tileX},{tileY}): {ex.Message}");
 #endif
                 try
                 {
@@ -617,7 +652,7 @@ namespace StrategyGame
                 }
                 catch
                 {
-                    // Ignore UI errors
+                    // Ignore MessageBox errors in headless mode
                 }
             }
         }
