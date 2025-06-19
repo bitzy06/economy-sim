@@ -626,25 +626,50 @@ namespace StrategyGame
                 }
             });
         }
+        // DONT CHANGE
         private static Image<Rgba32> ConvertBitmapToImageSharpFast(Bitmap bmp)
         {
             var image = new Image<Rgba32>(bmp.Width, bmp.Height);
+
             var rect = new System.Drawing.Rectangle(0, 0, bmp.Width, bmp.Height);
-            var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+            PixelFormat format = bmp.PixelFormat;
+
+            // Convert to 32bppArgb if it's not already compatible
+            if (format != PixelFormat.Format24bppRgb && format != PixelFormat.Format32bppArgb)
+            {
+                using var converted = new Bitmap(bmp.Width, bmp.Height, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(converted))
+                    g.DrawImage(bmp, 0, 0, bmp.Width, bmp.Height);
+                bmp = converted;
+                format = PixelFormat.Format32bppArgb;
+            }
+
+            var bmpData = bmp.LockBits(rect, ImageLockMode.ReadOnly, format);
 
             unsafe
             {
                 for (int y = 0; y < bmp.Height; y++)
                 {
                     byte* row = (byte*)bmpData.Scan0 + (y * bmpData.Stride);
-                    var pixelRow = image.DangerousGetPixelRowMemory(y).Span; // alternate name for GetPixelRowSpan
+                    var pixelRow = image.DangerousGetPixelRowMemory(y).Span;
 
                     for (int x = 0; x < bmp.Width; x++)
                     {
-                        byte b = row[x * 3 + 0];
-                        byte g = row[x * 3 + 1];
-                        byte r = row[x * 3 + 2];
-                        pixelRow[x] = new Rgba32(r, g, b, 255);
+                        if (format == PixelFormat.Format24bppRgb)
+                        {
+                            byte b = row[x * 3 + 0];
+                            byte g = row[x * 3 + 1];
+                            byte r = row[x * 3 + 2];
+                            pixelRow[x] = new Rgba32(r, g, b, 255);
+                        }
+                        else if (format == PixelFormat.Format32bppArgb)
+                        {
+                            byte b = row[x * 4 + 0];
+                            byte g = row[x * 4 + 1];
+                            byte r = row[x * 4 + 2];
+                            byte a = row[x * 4 + 3];
+                            pixelRow[x] = new Rgba32(r, g, b, a);
+                        }
                     }
                 }
             }
@@ -719,7 +744,8 @@ namespace StrategyGame
             try
             {
                 Directory.CreateDirectory(dir);
-                bmp.Save(path, SystemDrawing.Imaging.ImageFormat.Png);
+                using var imgSharp = ConvertBitmapToImageSharpFast(bmp);
+                imgSharp.Save(path); // PNG
             }
             catch (Exception ex)
             {
