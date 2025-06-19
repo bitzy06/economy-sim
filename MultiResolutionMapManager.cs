@@ -46,6 +46,13 @@ namespace StrategyGame
         private const int MAX_DIMENSION = 32767;
         private const int MAX_PIXEL_COUNT = 250_000_000;
 
+        private static readonly string RepoRoot =
+            System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
+
+        private static readonly string TileCacheDir =
+            System.IO.Path.Combine(RepoRoot, "tile_cache");
+
         private readonly int _baseWidth;
         private readonly int _baseHeight;
 
@@ -76,9 +83,17 @@ namespace StrategyGame
 
             if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
             {
-                var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, MaxCellSize);
-                OverlayFeaturesLarge(img, ZoomLevel.City);
-                _largeBaseMap = img;
+                _largeBaseMap = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, MaxCellSize);
+                OverlayFeaturesLarge(_largeBaseMap, ZoomLevel.City);
+
+                foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
+                {
+                    GetMap((float)level);
+                }
+                GenerateTileCache();
+
+                _largeBaseMap.Dispose();
+                _largeBaseMap = null;
                 _baseMap = null;
             }
             else
@@ -87,6 +102,7 @@ namespace StrategyGame
                 OverlayFeatures(bmp, ZoomLevel.City);
                 _baseMap = bmp;
                 _largeBaseMap = null;
+                GenerateTileCache();
             }
         }
 
@@ -220,6 +236,12 @@ namespace StrategyGame
                 Math.Min(TileSizePx, size.Height - tileY * TileSizePx));
 
             bmp = GetMap(zoom, rect);
+
+            if (bmp == null && _baseMap == null)
+            {
+                bmp = LoadOrGenerateTileFromData(cellSize, tileX, tileY, rect);
+            }
+
             if (bmp != null)
             {
                 _tileCache[key] = bmp;
@@ -548,6 +570,29 @@ namespace StrategyGame
                     _tileCache.Remove(oldest);
                 }
             }
+        }
+
+        private SystemDrawing.Bitmap LoadOrGenerateTileFromData(int cellSize, int tileX, int tileY, SystemDrawing.Rectangle rect)
+        {
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+            if (File.Exists(path))
+            {
+                return new SystemDrawing.Bitmap(path);
+            }
+
+            using var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, cellSize);
+            OverlayFeaturesLarge(img, ZoomLevel.City);
+            var bmp = CropImageSharp(img, rect);
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+                bmp.Save(path, SystemDrawing.Imaging.ImageFormat.Png);
+            }
+            catch { }
+
+            return bmp;
         }
     }
 }
