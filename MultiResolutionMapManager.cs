@@ -607,7 +607,9 @@ namespace StrategyGame
             catch (Exception ex)
             {
 #if DEBUG
+
                 DebugLogger.Log($"[Tile Save Error] Failed to save tile '{path}' for ({tileX},{tileY}): {ex}");
+
 #endif
                 try
                 {
@@ -634,7 +636,9 @@ namespace StrategyGame
                 catch (Exception ex)
                 {
 #if DEBUG
+
                     DebugLogger.Log($"[Tile Load Error] Failed to load tile '{path}' for ({tileX},{tileY}): {ex}");
+
 #endif
                     // Corrupt tile file: remove and regenerate
                     try { File.Delete(path); } catch { }
@@ -654,7 +658,9 @@ namespace StrategyGame
             catch (Exception ex)
             {
 #if DEBUG
+
                 DebugLogger.Log($"[Tile Save Error] Failed to save generated tile '{path}' for ({tileX},{tileY}): {ex}");
+
 #endif
             }
 
