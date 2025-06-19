@@ -91,6 +91,14 @@ namespace StrategyGame
 
             if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
             {
+                if (IsTileCacheComplete(MaxCellSize))
+                {
+                    _largeBaseMap = null;
+                    _baseMap = null;
+                    _cachedMaps.Clear();
+                    return;
+                }
+
                 _largeBaseMap = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, MaxCellSize);
                 OverlayFeaturesLarge(_largeBaseMap, ZoomLevel.City);
 
@@ -632,6 +640,29 @@ namespace StrategyGame
             catch { }
 
             return bmp;
+        }
+
+        private bool IsTileCacheComplete(int cellSize)
+        {
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            if (!Directory.Exists(dir))
+                return false;
+
+            int widthPx = _baseWidth * cellSize;
+            int heightPx = _baseHeight * cellSize;
+            int tilesX = (widthPx + TileSizePx - 1) / TileSizePx;
+            int tilesY = (heightPx + TileSizePx - 1) / TileSizePx;
+
+            for (int x = 0; x < tilesX; x++)
+            {
+                for (int y = 0; y < tilesY; y++)
+                {
+                    string path = System.IO.Path.Combine(dir, $"{x}_{y}.png");
+                    if (!File.Exists(path))
+                        return false;
+                }
+            }
+            return true;
         }
     }
 }
