@@ -285,7 +285,6 @@ namespace economy_sim
             {
                 mapManager = new MultiResolutionMapManager(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
                 mapManager.GenerateMaps();
-                mapManager.GenerateTileCache();
             }
 
             pictureBox1.Size = panelMap.ClientSize;
@@ -374,6 +373,7 @@ namespace economy_sim
         }
         private void InitializeGameData()
         {
+            mapManager?.ClearTileCache();
             RefreshMap();
             // 1. Clear all global static lists first
             Market.GoodDefinitions.Clear();
@@ -1826,6 +1826,7 @@ namespace economy_sim
                 DebugLogger.LogDetailedCityData(selectedCity); // Log detailed data for the selected city
             }
             DebugLogger.FinalizeLog(allCountries); // Pass the list of countries to the logger
+            mapManager?.ClearTileCache();
             base.OnFormClosing(e);
         }
 
