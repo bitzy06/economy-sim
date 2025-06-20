@@ -10,10 +10,9 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Advanced;
 using System.Threading;
 using System.Threading.Tasks;
+using OSGeo.GDAL;
+using OSGeo.OGR;
 
-
-
-using SixLabors.ImageSharp.PixelFormats;
 
 
 namespace StrategyGame
@@ -220,6 +219,161 @@ namespace StrategyGame
             DrawBordersLarge(baseMap, mask);
 
             return baseMap;
+        }
+
+        /// <summary>
+        /// Generate a single tile of the pixel-art map directly from the terrain
+        /// raster. Only the required region is read using GDAL.
+        /// </summary>
+        private static Image<Rgba32> GenerateTerrainTileLarge(int mapWidth, int mapHeight,
+            int cellSize, int tileX, int tileY, int tileSizePx = 512)
+        {
+            lock (GdalConfigLock)
+            {
+                if (!_gdalConfigured)
+                {
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
+                }
+            }
+
+            using var ds = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            if (ds == null)
+                throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
+
+            int srcW = ds.RasterXSize;
+            int srcH = ds.RasterYSize;
+
+            int mapWidthPx = mapWidth * cellSize;
+            int mapHeightPx = mapHeight * cellSize;
+
+            int pixelX = tileX * tileSizePx;
+            int pixelY = tileY * tileSizePx;
+            int tileWidth = Math.Min(tileSizePx, mapWidthPx - pixelX);
+            int tileHeight = Math.Min(tileSizePx, mapHeightPx - pixelY);
+            if (tileWidth <= 0 || tileHeight <= 0)
+                return new Image<Rgba32>(1, 1);
+
+            int startCellX = pixelX / cellSize;
+            int startCellY = pixelY / cellSize;
+            int cellsX = (tileWidth + cellSize - 1) / cellSize;
+            int cellsY = (tileHeight + cellSize - 1) / cellSize;
+
+            double scaleX = (double)srcW / mapWidth;
+            double scaleY = (double)srcH / mapHeight;
+
+            int srcX = (int)Math.Floor(startCellX * scaleX);
+            int srcY = (int)Math.Floor(startCellY * scaleY);
+            int readW = (int)Math.Ceiling(cellsX * scaleX);
+            int readH = (int)Math.Ceiling(cellsY * scaleY);
+
+            byte[] r = new byte[cellsX * cellsY];
+            byte[] g = new byte[cellsX * cellsY];
+            byte[] b = new byte[cellsX * cellsY];
+
+            ds.GetRasterBand(1).ReadRaster(srcX, srcY, readW, readH, r, cellsX, cellsY, 0, 0);
+            ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
+            ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
+
+            var dest = new Image<Rgba32>(cellsX * cellSize, cellsY * cellSize);
+
+            int seed = Environment.TickCount;
+            var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
+
+            Parallel.For(0, cellsY, y =>
+            {
+                for (int py = 0; py < cellSize; py++)
+                {
+                    Span<Rgba32> row = dest.DangerousGetPixelRowMemory(y * cellSize + py).Span;
+                    for (int x = 0; x < cellsX; x++)
+                    {
+                        int idx = y * cellsX + x;
+                        var baseColor = SystemDrawing.Color.FromArgb(r[idx], g[idx], b[idx]);
+                        SystemDrawing.Color[] palette = BuildPalette(baseColor);
+                        for (int px = 0; px < cellSize; px++)
+                        {
+                            var chosen = palette[rngLocal.Value.Next(palette.Length)];
+                            int destX = x * cellSize + px;
+                            if (destX < row.Length)
+                                row[destX] = new Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
+                        }
+                    }
+                }
+            });
+
+            if (dest.Width != tileWidth || dest.Height != tileHeight)
+            {
+                dest.Mutate(ctx => ctx.Crop(tileWidth, tileHeight));
+            }
+
+            return dest;
+        }
+
+        /// <summary>
+        /// Generate a terrain tile and overlay country borders.
+        /// </summary>
+        public static Image<Rgba32> GenerateTileWithCountriesLarge(int mapWidth, int mapHeight,
+            int cellSize, int tileX, int tileY, int tileSizePx = 512)
+        {
+            var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
+
+            int fullW = mapWidth * cellSize;
+            int fullH = mapHeight * cellSize;
+            int offsetX = tileX * tileSizePx;
+            int offsetY = tileY * tileSizePx;
+
+            int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, img.Width, img.Height);
+
+            DrawBordersLarge(img, mask);
+
+            return img;
+        }
+
+        private static int[,] CreateCountryMaskTile(int fullWidth, int fullHeight,
+            int offsetX, int offsetY, int width, int height)
+        {
+            using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            double[] gt = new double[6];
+            dem.GetGeoTransform(gt);
+            int srcCols = dem.RasterXSize;
+            int srcRows = dem.RasterYSize;
+
+            double scaleX = (double)srcCols / fullWidth;
+            double scaleY = (double)srcRows / fullHeight;
+
+            double[] newGt = new double[6];
+            newGt[0] = gt[0] + offsetX * scaleX * gt[1];
+            newGt[1] = gt[1] * scaleX;
+            newGt[2] = 0;
+            newGt[3] = gt[3] + offsetY * scaleY * gt[5];
+            newGt[4] = 0;
+            newGt[5] = gt[5] * scaleY;
+
+            Driver memDrv = Gdal.GetDriverByName("MEM");
+            using var maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
+            maskDs.SetGeoTransform(newGt);
+            maskDs.SetProjection(dem.GetProjection());
+
+            using DataSource ds = Ogr.Open(ShpPath, 0);
+            Layer layer = ds.GetLayerByIndex(0);
+
+            Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
+                0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
+
+            Band band = maskDs.GetRasterBand(1);
+            int[] flat = new int[width * height];
+            band.ReadRaster(0, 0, width, height, flat, width, height, 0, 0);
+
+            int[,] result = new int[height, width];
+            for (int r = 0; r < height; r++)
+            {
+                for (int c = 0; c < width; c++)
+                {
+                    result[r, c] = flat[r * width + c];
+                }
+            }
+
+            return result;
         }
 
         /// <summary>

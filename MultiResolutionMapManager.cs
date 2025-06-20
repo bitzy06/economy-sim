@@ -310,7 +310,7 @@ namespace StrategyGame
             }
             else if (_baseMap == null)
             {
-                bmp = LoadOrGenerateTileFromData(cellSize, tileX, tileY, rect);
+                bmp = LoadOrGenerateTileFromData(cellSize, tileX, tileY);
             }
 
             if (bmp != null)
@@ -767,7 +767,7 @@ namespace StrategyGame
             }
         }
 
-        private SystemDrawing.Bitmap LoadOrGenerateTileFromData(int cellSize, int tileX, int tileY, SystemDrawing.Rectangle rect)
+        private SystemDrawing.Bitmap LoadOrGenerateTileFromData(int cellSize, int tileX, int tileY)
         {
             string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
             string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
@@ -791,9 +791,9 @@ namespace StrategyGame
 
             }
 
-            using var img = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, cellSize);
+            using var img = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
             OverlayFeaturesLarge(img, ZoomLevel.City);
-            var bmp = CropImageSharp(img, rect);
+            var bmp = ImageSharpToBitmap(img);
 
             try
             {
