@@ -39,6 +39,13 @@ namespace StrategyGame
         private readonly object _cacheLock = new();
 
         /// <summary>
+        /// Raised during tile cache generation. The first parameter is the
+        /// number of tiles processed so far and the second is the total tile
+        /// count.
+        /// </summary>
+        public event Action<int, int> TileGenerationProgress;
+
+        /// <summary>
         /// Maximum number of tiles kept in the cache.
         /// </summary>
         private const int TileCacheLimit = 1024;
@@ -224,9 +231,20 @@ namespace StrategyGame
         public void GenerateTileCache()
         {
             ClearTileCache();
+
+            int total = 0;
+            foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
+            {
+                var size = GetMapSize((int)level);
+                total += ((size.Width + TileSizePx - 1) / TileSizePx) *
+                         ((size.Height + TileSizePx - 1) / TileSizePx);
+            }
+
+            int count = 0;
             foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
             {
                 float z = (int)level;
+                int cellSize = GetCellSize(z);
                 var size = GetMapSize(z);
                 int tilesX = (size.Width + TileSizePx - 1) / TileSizePx;
                 int tilesY = (size.Height + TileSizePx - 1) / TileSizePx;
@@ -235,9 +253,9 @@ namespace StrategyGame
                 {
                     for (int y = 0; y < tilesY; y++)
                     {
-                        // Use the public method so any generated tile is also
-                        // written to disk and cached consistently
-                        GetTile(z, x, y);
+                        LoadOrGenerateTileFromData(cellSize, x, y);
+                        count++;
+                        TileGenerationProgress?.Invoke(count, total);
                     }
                 }
             }
@@ -252,6 +270,7 @@ namespace StrategyGame
         /// </summary>
         public void GenerateMissingTileCaches()
         {
+            int total = 0;
             foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
             {
                 float z = (int)level;
@@ -267,9 +286,38 @@ namespace StrategyGame
                 {
                     for (int y = 0; y < tilesY; y++)
                     {
-                        // Use the public method so any generated tile is also
-                        // written to disk and cached consistently
-                        GetTile(z, x, y);
+                        string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+                        string path = System.IO.Path.Combine(dir, $"{x}_{y}.png");
+                        if (!File.Exists(path))
+                            total++;
+                    }
+                }
+            }
+
+            int count = 0;
+            foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
+            {
+                float z = (int)level;
+                int cellSize = GetCellSize(z);
+                if (IsTileCacheComplete(cellSize))
+                    continue;
+
+                var size = GetMapSize(z);
+                int tilesX = (size.Width + TileSizePx - 1) / TileSizePx;
+                int tilesY = (size.Height + TileSizePx - 1) / TileSizePx;
+
+                for (int x = 0; x < tilesX; x++)
+                {
+                    for (int y = 0; y < tilesY; y++)
+                    {
+                        string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+                        string path = System.IO.Path.Combine(dir, $"{x}_{y}.png");
+                        if (!File.Exists(path))
+                        {
+                            LoadOrGenerateTileFromData(cellSize, x, y);
+                            count++;
+                            TileGenerationProgress?.Invoke(count, total);
+                        }
                     }
                 }
             }
@@ -296,21 +344,38 @@ namespace StrategyGame
                 }
             }
 
-            var size = GetMapSize(zoom);
-            var rect = new SystemDrawing.Rectangle(tileX * TileSizePx, tileY * TileSizePx,
-                Math.Min(TileSizePx, size.Width - tileX * TileSizePx),
-                Math.Min(TileSizePx, size.Height - tileY * TileSizePx));
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
 
-            bmp = GetMap(zoom, rect);
-
-
-            if (bmp != null)
+            if (File.Exists(path))
             {
-                SaveTileToDisk(cellSize, tileX, tileY, bmp);
+                try
+                {
+                    bmp = new SystemDrawing.Bitmap(path);
+                }
+                catch
+                {
+                    try { File.Delete(path); } catch { }
+                }
             }
-            else if (_baseMap == null)
+
+            if (bmp == null)
             {
-                bmp = LoadOrGenerateTileFromData(cellSize, tileX, tileY);
+                if (_baseMap != null || _largeBaseMap != null)
+                {
+                    var size = GetMapSize(zoom);
+                    var rect = new SystemDrawing.Rectangle(tileX * TileSizePx, tileY * TileSizePx,
+                        Math.Min(TileSizePx, size.Width - tileX * TileSizePx),
+                        Math.Min(TileSizePx, size.Height - tileY * TileSizePx));
+
+                    bmp = GetMap(zoom, rect);
+                    if (bmp != null)
+                        SaveTileToDisk(cellSize, tileX, tileY, bmp);
+                }
+                else
+                {
+                    bmp = LoadOrGenerateTileFromData(cellSize, tileX, tileY);
+                }
             }
 
             if (bmp != null)
