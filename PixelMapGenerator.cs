@@ -330,6 +330,68 @@ namespace StrategyGame
             return img;
         }
 
+        /// <summary>
+        /// Determine if a tile contains any land pixels.
+        /// </summary>
+        public static bool TileContainsLand(int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
+        {
+            lock (GdalConfigLock)
+            {
+                if (!_gdalConfigured)
+                {
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
+                }
+            }
+
+            using var ds = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            if (ds == null)
+                throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
+
+            int srcW = ds.RasterXSize;
+            int srcH = ds.RasterYSize;
+
+            int mapWidthPx = mapWidth * cellSize;
+            int mapHeightPx = mapHeight * cellSize;
+
+            int pixelX = tileX * tileSizePx;
+            int pixelY = tileY * tileSizePx;
+            int tileWidth = Math.Min(tileSizePx, mapWidthPx - pixelX);
+            int tileHeight = Math.Min(tileSizePx, mapHeightPx - pixelY);
+            if (tileWidth <= 0 || tileHeight <= 0)
+                return false;
+
+            int startCellX = pixelX / cellSize;
+            int startCellY = pixelY / cellSize;
+            int cellsX = (tileWidth + cellSize - 1) / cellSize;
+            int cellsY = (tileHeight + cellSize - 1) / cellSize;
+
+            double scaleX = (double)srcW / mapWidth;
+            double scaleY = (double)srcH / mapHeight;
+
+            int srcX = (int)Math.Floor(startCellX * scaleX);
+            int srcY = (int)Math.Floor(startCellY * scaleY);
+            int readW = (int)Math.Ceiling(cellsX * scaleX);
+            int readH = (int)Math.Ceiling(cellsY * scaleY);
+
+            byte[] r = new byte[cellsX * cellsY];
+            byte[] g = new byte[cellsX * cellsY];
+            byte[] b = new byte[cellsX * cellsY];
+
+            ds.GetRasterBand(1).ReadRaster(srcX, srcY, readW, readH, r, cellsX, cellsY, 0, 0);
+            ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
+            ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
+
+            for (int i = 0; i < cellsX * cellsY; i++)
+            {
+                var color = SystemDrawing.Color.FromArgb(r[i], g[i], b[i]);
+                if (!IsWaterColor(color))
+                    return true;
+            }
+
+            return false;
+        }
+
         private static int[,] CreateCountryMaskTile(int fullWidth, int fullHeight,
             int offsetX, int offsetY, int width, int height)
         {
@@ -602,16 +664,20 @@ namespace StrategyGame
         // Builds a small palette of colors around the provided base color.  A
         // darker and lighter variant are included to add variety when filling
         // each cell with multiple pixels.
+        private static bool IsWaterColor(Color baseColor)
+        {
+            return baseColor.R > 200 && baseColor.G > 200 && baseColor.B > 200 &&
+                   Math.Abs(baseColor.R - baseColor.G) < 15 &&
+                   Math.Abs(baseColor.R - baseColor.B) < 15;
+        }
+
         private static Color[] BuildPalette(Color baseColor)
         {
 
             // The terrain raster uses near-white values for water. Replace them
             // with a consistent blue tone and avoid random variation so the
             // ocean does not look noisy.
-            bool isWater = baseColor.R > 200 && baseColor.G > 200 && baseColor.B > 200 &&
-                           Math.Abs(baseColor.R - baseColor.G) < 15 &&
-                           Math.Abs(baseColor.R - baseColor.B) < 15;
-            if (isWater)
+            if (IsWaterColor(baseColor))
             {
                 baseColor = Color.LightSkyBlue;
 
