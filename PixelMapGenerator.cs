@@ -1,17 +1,18 @@
 ﻿using MaxRev.Gdal.Core;
+using OSGeo.GDAL;
+using OSGeo.OGR;
+using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
 using System;
-using System.Diagnostics;
 using System.Collections.Generic;
-using SystemDrawing = System.Drawing;
+using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
-using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Advanced;
 using System.Threading;
 using System.Threading.Tasks;
-using OSGeo.GDAL;
-using OSGeo.OGR;
+using SystemDrawing = System.Drawing;
 
 
 
@@ -225,8 +226,8 @@ namespace StrategyGame
         /// Generate a single tile of the pixel-art map directly from the terrain
         /// raster. Only the required region is read using GDAL.
         /// </summary>
-        private static Image<Rgba32> GenerateTerrainTileLarge(int mapWidth, int mapHeight,
-            int cellSize, int tileX, int tileY, int tileSizePx = 512)
+        private static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTerrainTileLarge(
+    int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
         {
             lock (GdalConfigLock)
             {
@@ -252,7 +253,7 @@ namespace StrategyGame
             int tileWidth = Math.Min(tileSizePx, mapWidthPx - pixelX);
             int tileHeight = Math.Min(tileSizePx, mapHeightPx - pixelY);
             if (tileWidth <= 0 || tileHeight <= 0)
-                return new Image<Rgba32>(1, 1);
+                return new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(1, 1);
 
             int startCellX = pixelX / cellSize;
             int startCellY = pixelY / cellSize;
@@ -275,7 +276,7 @@ namespace StrategyGame
             ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
             ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
 
-            var dest = new Image<Rgba32>(cellsX * cellSize, cellsY * cellSize);
+            var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(cellsX * cellSize, cellsY * cellSize);
 
             int seed = Environment.TickCount;
             var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
@@ -284,7 +285,7 @@ namespace StrategyGame
             {
                 for (int py = 0; py < cellSize; py++)
                 {
-                    Span<Rgba32> row = dest.DangerousGetPixelRowMemory(y * cellSize + py).Span;
+                    Span<SixLabors.ImageSharp.PixelFormats.Rgba32> row = dest.DangerousGetPixelRowMemory(y * cellSize + py).Span;
                     for (int x = 0; x < cellsX; x++)
                     {
                         int idx = y * cellsX + x;
@@ -295,7 +296,7 @@ namespace StrategyGame
                             var chosen = palette[rngLocal.Value.Next(palette.Length)];
                             int destX = x * cellSize + px;
                             if (destX < row.Length)
-                                row[destX] = new Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
+                                row[destX] = new SixLabors.ImageSharp.PixelFormats.Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
                         }
                     }
                 }
@@ -312,8 +313,8 @@ namespace StrategyGame
         /// <summary>
         /// Generate a terrain tile and overlay country borders.
         /// </summary>
-        public static Image<Rgba32> GenerateTileWithCountriesLarge(int mapWidth, int mapHeight,
-            int cellSize, int tileX, int tileY, int tileSizePx = 512)
+        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTileWithCountriesLarge(
+     int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
         {
             var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
 
@@ -349,7 +350,7 @@ namespace StrategyGame
             newGt[4] = 0;
             newGt[5] = gt[5] * scaleY;
 
-            Driver memDrv = Gdal.GetDriverByName("MEM");
+            OSGeo.GDAL.Driver memDrv = Gdal.GetDriverByName("MEM");
             using var maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
             maskDs.SetGeoTransform(newGt);
             maskDs.SetProjection(dem.GetProjection());
