@@ -334,7 +334,9 @@ namespace StrategyGame
                 {
                     Debug.WriteLine($"[TILE LOAD] Finished tile ({tileX}, {tileY})");
 
-                    lock (GetFileLock(path))
+                    var fileLock = GetFileLock(path);
+                    await fileLock.WaitAsync(token);
+                    try
                     {
                         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                         using var img = SixLabors.ImageSharp.Image.Load<Rgba32>(stream);
@@ -347,6 +349,10 @@ namespace StrategyGame
                             Debug.WriteLine($"Discarding corrupted tile at {path}");
                             File.Delete(path);
                         }
+                    }
+                    finally
+                    {
+                        fileLock.Release();
                     }
                 }
                 catch (Exception ex)
@@ -489,10 +495,16 @@ namespace StrategyGame
                             {
                                 try
                                 {
-                                    lock (GetFileLock(tilePath))
+                                    var fileLock = GetFileLock(tilePath);
+                                    fileLock.Wait();
+                                    try
                                     {
                                         using var tmp = new System.Drawing.Bitmap(tilePath);
                                         tile = new System.Drawing.Bitmap(tmp); // Deep copy for safety
+                                    }
+                                    finally
+                                    {
+                                        fileLock.Release();
                                     }
 
                                     lock (_cacheLock)
@@ -911,7 +923,9 @@ namespace StrategyGame
             {
                 Directory.CreateDirectory(dir);
 
-                lock (GetFileLock(path))
+                var fileLock = GetFileLock(path);
+                fileLock.Wait();
+                try
                 {
                     if (File.Exists(path))
                     {
@@ -921,6 +935,10 @@ namespace StrategyGame
                     }
 
                     bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                }
+                finally
+                {
+                    fileLock.Release();
                 }
             }
             catch (Exception ex)
@@ -942,7 +960,9 @@ namespace StrategyGame
                 // Convert to ImageSharp outside the lock
                 using var image = ImageSharpToImageSharp(bmp);
 
-                lock (GetFileLock(path))
+                var fileLock = GetFileLock(path);
+                await fileLock.WaitAsync(token);
+                try
                 {
                     // Force close by ensuring exclusive write
                     if (File.Exists(path))
@@ -960,6 +980,10 @@ namespace StrategyGame
                     // Write to file synchronously inside lock to avoid race
                     using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
                     ms.CopyTo(fs);
+                }
+                finally
+                {
+                    fileLock.Release();
                 }
             }
             catch (IOException ioEx)
