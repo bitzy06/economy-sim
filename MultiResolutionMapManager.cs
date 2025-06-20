@@ -55,7 +55,7 @@ namespace StrategyGame
         /// Adjusting this array changes both the zoom anchors and the
         /// maximum cell size used when generating maps.
         /// </summary>
-        public static readonly int[] PixelsPerCellLevels = { 1, 2, 4, 6, 40 };
+        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40 };
 
         private static int MaxCellSize => PixelsPerCellLevels[PixelsPerCellLevels.Length - 1];
         private const int MAX_DIMENSION = 32767;
