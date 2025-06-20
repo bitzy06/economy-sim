@@ -63,7 +63,9 @@ namespace StrategyGame
         /// Adjusting this array changes both the zoom anchors and the
         /// maximum cell size used when generating maps.
         /// </summary>
-        public static readonly int[] PixelsPerCellLevels = { 2, 3, 4, 6, 10, 40, 80 };
+
+        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80 };
+
 
         private static int MaxCellSize => PixelsPerCellLevels[PixelsPerCellLevels.Length - 1];
         private const int MAX_DIMENSION = 100_000;
@@ -400,7 +402,10 @@ namespace StrategyGame
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-                    using var img = await Image.LoadAsync<Rgba32>(fs, token);
+
+                    using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
+
+
                     bmp = ImageSharpToBitmap(img);
                 }
                 catch
@@ -1012,8 +1017,12 @@ namespace StrategyGame
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-                    using var img = await Image.LoadAsync<Rgba32>(fs, token);
-                    return ImageSharpToBitmap(img);
+
+
+                    using var imageSharpImg = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
+                    return ImageSharpToBitmap(imageSharpImg);
+
+
                 }
                 catch (Exception ex)
                 {
@@ -1047,6 +1056,7 @@ namespace StrategyGame
 
                 bmp = ImageSharpToBitmap(img);
             }
+
 
             try
             {
