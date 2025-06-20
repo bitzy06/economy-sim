@@ -63,11 +63,11 @@ namespace StrategyGame
         /// Adjusting this array changes both the zoom anchors and the
         /// maximum cell size used when generating maps.
         /// </summary>
-        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40 };
+        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80 };
 
         private static int MaxCellSize => PixelsPerCellLevels[PixelsPerCellLevels.Length - 1];
-        private const int MAX_DIMENSION = 32767;
-        private const int MAX_PIXEL_COUNT = 250_000_000;
+        private const int MAX_DIMENSION = 100_000;
+        private const long MAX_PIXEL_COUNT = 6_000_000_000L;
 
         private static readonly string RepoRoot =
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
@@ -107,26 +107,12 @@ namespace StrategyGame
 
             if (widthPx > PixelMapGenerator.MaxBitmapDimension || heightPx > PixelMapGenerator.MaxBitmapDimension)
             {
-                if (IsTileCacheComplete(MaxCellSize))
+                if (!IsTileCacheComplete(MaxCellSize))
                 {
-                    _largeBaseMap = null;
-                    _baseMap = null;
-                    _cachedMaps.Clear();
-                    return;
+                    GenerateTileCache();
                 }
-
-                _largeBaseMap = PixelMapGenerator.GeneratePixelArtMapWithCountriesLarge(_baseWidth, _baseHeight, MaxCellSize);
-                OverlayFeaturesLarge(_largeBaseMap, ZoomLevel.City);
-
-                foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
-                {
-                    GetMap((float)level);
-                }
-                GenerateTileCache();
-
 
                 ClearMapCache();
-
 
                 _largeBaseMap?.Dispose();
                 _largeBaseMap = null;
@@ -415,6 +401,7 @@ namespace StrategyGame
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
                     using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
+
                     bmp = ImageSharpToBitmap(img);
                 }
                 catch
@@ -698,7 +685,7 @@ namespace StrategyGame
             }
 
             int maxDimSize = MAX_DIMENSION / Math.Max(_baseWidth, _baseHeight);
-            double maxPixelSize = Math.Sqrt((double)MAX_PIXEL_COUNT / (_baseWidth * _baseHeight));
+            double maxPixelSize = Math.Sqrt((double)MAX_PIXEL_COUNT / ((long)_baseWidth * _baseHeight));
             int maxAllowed = (int)Math.Floor(Math.Min(maxDimSize, maxPixelSize));
 
             if (size > maxAllowed)
@@ -1003,8 +990,10 @@ namespace StrategyGame
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+
                     using var imageSharpImg = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
                     return ImageSharpToBitmap(imageSharpImg);
+
                 }
                 catch (Exception ex)
                 {
@@ -1015,14 +1004,19 @@ namespace StrategyGame
                 }
             }
 
-            using var generatedImg = await Task.Run(() =>
+
+            using var img = await Task.Run(() =>
+
+
             {
                 var generated = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
                 OverlayFeaturesLarge(generated, ZoomLevel.City);
                 return generated;
             }, token);
 
-            var bmp = ImageSharpToBitmap(generatedImg);
+
+            var bmp = ImageSharpToBitmap(img);
+
 
             try
             {

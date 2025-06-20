@@ -331,7 +331,8 @@ namespace economy_sim
 
         private void AdjustZoom(float newZoom)
         {
-            newZoom = Math.Max(1f, Math.Min(5f, newZoom));
+            float maxZoom = MultiResolutionMapManager.PixelsPerCellLevels.Length;
+            newZoom = Math.Max(1f, Math.Min(maxZoom, newZoom));
             if (Math.Abs(newZoom - mapZoom) < 0.001f)
                 return;
 
@@ -1984,7 +1985,8 @@ namespace economy_sim
             float ratioY = worldY / oldSize.Height;
 
             float newZoom = mapZoom + Math.Sign(e.Delta) * 0.25f;
-            newZoom = Math.Max(1f, Math.Min(5f, newZoom));
+            float maxZoom = MultiResolutionMapManager.PixelsPerCellLevels.Length;
+            newZoom = Math.Max(1f, Math.Min(maxZoom, newZoom));
             if (Math.Abs(newZoom - mapZoom) < 0.001f)
                 return;
 
