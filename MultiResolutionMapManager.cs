@@ -400,7 +400,8 @@ namespace StrategyGame
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-                    using var img = await Image.LoadAsync<Rgba32>(fs, token);
+                    using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
+
                     bmp = ImageSharpToBitmap(img);
                 }
                 catch
@@ -989,8 +990,10 @@ namespace StrategyGame
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-                    using var img = await Image.LoadAsync<Rgba32>(fs, token);
-                    return ImageSharpToBitmap(img);
+
+                    using var imageSharpImg = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
+                    return ImageSharpToBitmap(imageSharpImg);
+
                 }
                 catch (Exception ex)
                 {
@@ -1001,14 +1004,19 @@ namespace StrategyGame
                 }
             }
 
+
             using var img = await Task.Run(() =>
+
+
             {
                 var generated = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
                 OverlayFeaturesLarge(generated, ZoomLevel.City);
                 return generated;
             }, token);
 
+
             var bmp = ImageSharpToBitmap(img);
+
 
             try
             {
