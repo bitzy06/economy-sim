@@ -34,6 +34,7 @@ namespace StrategyGame
         public enum ZoomLevel { Global = 1, Continental, Country, State, City }
         private readonly HashSet<(int cellSize, int tileX, int tileY)> _tilesBeingLoaded = new();
         private readonly object _tileLoadLock = new();
+        private readonly SemaphoreSlim _preloadSemaphore = new(1, 1);
         private Image<Rgba32> _largeBaseMap;
         private SystemDrawing.Bitmap _baseMap;
 
@@ -335,7 +336,7 @@ namespace StrategyGame
                     Debug.WriteLine($"[TILE LOAD] Finished tile ({tileX}, {tileY})");
 
                     var fileLock = GetFileLock(path);
-                    await fileLock.WaitAsync(token);
+                    await fileLock.WaitAsync(token).ConfigureAwait(false);
                     try
                     {
                         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
@@ -367,10 +368,10 @@ namespace StrategyGame
             {
                 try
                 {
-                    bmp = await LoadOrGenerateTileFromDataAsync(cellSize, tileX, tileY, token);
+                    bmp = await LoadOrGenerateTileFromDataAsync(cellSize, tileX, tileY, token).ConfigureAwait(false);
                     if (bmp != null && bmp.Width > 0 && bmp.Height > 0)
                     {
-                        await SaveTileToDiskAsync(cellSize, tileX, tileY, bmp, token);
+                        await SaveTileToDiskAsync(cellSize, tileX, tileY, bmp, token).ConfigureAwait(false);
                     }
                     else
                     {
@@ -424,7 +425,7 @@ namespace StrategyGame
                                 tileSize);
 
                             Directory.CreateDirectory(Path.GetDirectoryName(tilePath));
-                            tile.Save(tilePath); // image saving — still needs lock
+                            tile.Save(tilePath); // image saving Â— still needs lock
                             tile.Dispose();
                         }
                         finally
@@ -839,6 +840,9 @@ namespace StrategyGame
 
         public async Task PreloadTilesAsync(float zoom, SystemDrawing.Rectangle view, int radius = 1, CancellationToken token = default)
         {
+            await _preloadSemaphore.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
             var size = GetMapSize(zoom);
             int firstTileX = Math.Max(0, view.X / TileSizePx - radius);
             int lastTileX = Math.Min((size.Width - 1) / TileSizePx, (view.Right - 1) / TileSizePx + radius);
@@ -853,14 +857,14 @@ namespace StrategyGame
             {
                 for (int ty = firstTileY; ty <= lastTileY; ty++)
                 {
-                    await throttler.WaitAsync(token);
+                    await throttler.WaitAsync(token).ConfigureAwait(false);
                     var ttx = tx;
                     var tty = ty;
                     tasks.Add(Task.Run(async () =>
                     {
                         try
                         {
-                            await GetTileAsync(zoom, ttx, tty, token);
+                            await GetTileAsync(zoom, ttx, tty, token).ConfigureAwait(false);
                         }
                         finally
                         {
@@ -870,7 +874,12 @@ namespace StrategyGame
                 }
             }
 
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
+        finally
+        {
+            _preloadSemaphore.Release();
+        }
         }
         // DONT CHANGE
         private static Image<Rgba32> ConvertBitmapToImageSharpFast(Bitmap bmp)
@@ -972,7 +981,7 @@ namespace StrategyGame
                 using var image = ImageSharpToImageSharp(bmp);
 
                 var fileLock = GetFileLock(path);
-                await fileLock.WaitAsync(token);
+                await fileLock.WaitAsync(token).ConfigureAwait(false);
                 try
                 {
                     // Force close by ensuring exclusive write
@@ -1107,7 +1116,7 @@ namespace StrategyGame
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-                    using var imageSharpImg = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
+                    using var imageSharpImg = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     return ImageSharpToBitmap(imageSharpImg);
                 }
                 catch (Exception ex)
@@ -1125,7 +1134,7 @@ namespace StrategyGame
                     var generated = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
                     OverlayFeaturesLarge(generated, ZoomLevel.City);
                     return generated;
-                }, token);
+                }, token).ConfigureAwait(false);
 
             bmp = ImageSharpToBitmap(img);
 
@@ -1135,7 +1144,7 @@ namespace StrategyGame
                 Directory.CreateDirectory(dir);
                 using var imgSharp = ConvertBitmapToImageSharpFast(bmp);
                 await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                await imgSharp.SaveAsPngAsync(fs, token);
+                await imgSharp.SaveAsPngAsync(fs, token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
