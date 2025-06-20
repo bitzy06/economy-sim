@@ -2132,7 +2132,7 @@ namespace economy_sim
                 return;
             var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
 
-            _ = mapManager.PreloadTilesAsync(mapZoom, view);
+            _ = mapManager.PreloadTilesAsync(mapZoom, view, 1, CancellationToken.None);
 
         }
     }
