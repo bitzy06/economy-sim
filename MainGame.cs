@@ -69,6 +69,8 @@ namespace economy_sim
         private Point mapViewOrigin = new Point(0, 0); // Origin for the map view
         private System.Windows.Forms.Timer mapUpdateTimer;
         private bool pendingMapUpdate = false;
+        private bool mapRenderInProgress = false;
+        private bool mapRenderQueued = false;
         public MainGame()
         {
             GdalBase.ConfigureAll(); 
@@ -389,41 +391,43 @@ namespace economy_sim
                 Debug.WriteLine("ApplyZoom skipped: panelMap has invalid size.");
                 return;
             }
-            Bitmap newMap = mapManager.AssembleView(mapZoom, new Rectangle(mapViewOrigin, panelMap.ClientSize));
-            // Clamp view origin within bounds
             Size mapSize = mapManager.GetMapSize(mapZoom);
             mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
             mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
 
-            // Display temporary placeholder to avoid UI freeze
-            Bitmap placeholder = new Bitmap(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
-            using (Graphics g = Graphics.FromImage(placeholder))
+            if (mapRenderInProgress)
             {
-                g.Clear(Color.LightGray);
-                g.DrawString("Loading map...", new Font("Arial", 14), Brushes.Black, new PointF(10, 10));
+                mapRenderQueued = true;
+                return;
             }
 
-            pictureBox1.Image?.Dispose();
-            pictureBox1.Image = placeholder;
+            mapRenderInProgress = true;
+            var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
 
-            // Load actual tiles in background and update when ready
             Task.Run(() =>
             {
-                Bitmap map = mapManager.AssembleView(mapZoom, new Rectangle(mapViewOrigin, panelMap.ClientSize));
+                Bitmap map = mapManager.AssembleView(mapZoom, view);
                 if (map == null) return;
 
-                if (pictureBox1.InvokeRequired)
-                {
-                    pictureBox1.Invoke(new Action(() =>
-                    {
-                        pictureBox1.Image?.Dispose();
-                        pictureBox1.Image = map;
-                    }));
-                }
-                else
+                void setImage()
                 {
                     pictureBox1.Image?.Dispose();
                     pictureBox1.Image = map;
+                    mapRenderInProgress = false;
+                    if (mapRenderQueued)
+                    {
+                        mapRenderQueued = false;
+                        ApplyZoom();
+                    }
+                }
+
+                if (pictureBox1.InvokeRequired)
+                {
+                    pictureBox1.Invoke((Action)setImage);
+                }
+                else
+                {
+                    setImage();
                 }
             });
         }
