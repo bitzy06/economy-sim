@@ -9,6 +9,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using SystemDrawing = System.Drawing;
@@ -390,6 +391,69 @@ namespace StrategyGame
             return bmp;
         }
 
+        public async Task<SystemDrawing.Bitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
+        {
+            int cellSize = GetCellSize(zoom);
+            var key = (cellSize, tileX, tileY);
+            SystemDrawing.Bitmap bmp = null;
+            lock (_cacheLock)
+            {
+                if (_tileCache.TryGetValue(key, out var bmpCached))
+                {
+                    _tileLru.Remove(key);
+                    _tileLru.AddLast(key);
+                    return bmpCached;
+                }
+            }
+
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+
+            if (File.Exists(path))
+            {
+                try
+                {
+                    await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+                    using var img = await Image.LoadAsync<Rgba32>(fs, token);
+                    bmp = ImageSharpToBitmap(img);
+                }
+                catch
+                {
+                    try { File.Delete(path); } catch { }
+                }
+            }
+
+            if (bmp == null)
+            {
+                if (_baseMap != null || _largeBaseMap != null)
+                {
+                    var size = GetMapSize(zoom);
+                    var rect = new SystemDrawing.Rectangle(tileX * TileSizePx, tileY * TileSizePx,
+                        Math.Min(TileSizePx, size.Width - tileX * TileSizePx),
+                        Math.Min(TileSizePx, size.Height - tileY * TileSizePx));
+
+                    bmp = GetMap(zoom, rect);
+                    if (bmp != null)
+                        await SaveTileToDiskAsync(cellSize, tileX, tileY, bmp, token);
+                }
+                else
+                {
+                    bmp = await LoadOrGenerateTileFromDataAsync(cellSize, tileX, tileY, token);
+                }
+            }
+
+            if (bmp != null)
+            {
+                lock (_cacheLock)
+                {
+                    _tileCache[key] = bmp;
+                    _tileLru.AddLast(key);
+                    EnforceTileLimit();
+                }
+            }
+            return bmp;
+        }
+
         /// <summary>
         /// Assemble a view rectangle from cached tiles.
         /// </summary>
@@ -726,24 +790,40 @@ namespace StrategyGame
             }
         }
 
-        public Task PreloadTilesAsync(float zoom, SystemDrawing.Rectangle view, int radius = 1)
+        public async Task PreloadTilesAsync(float zoom, SystemDrawing.Rectangle view, int radius = 1, CancellationToken token = default)
         {
-            return Task.Run(() =>
-            {
-                var size = GetMapSize(zoom);
-                int firstTileX = Math.Max(0, view.X / TileSizePx - radius);
-                int lastTileX = Math.Min((size.Width - 1) / TileSizePx, (view.Right - 1) / TileSizePx + radius);
-                int firstTileY = Math.Max(0, view.Y / TileSizePx - radius);
-                int lastTileY = Math.Min((size.Height - 1) / TileSizePx, (view.Bottom - 1) / TileSizePx + radius);
+            var size = GetMapSize(zoom);
+            int firstTileX = Math.Max(0, view.X / TileSizePx - radius);
+            int lastTileX = Math.Min((size.Width - 1) / TileSizePx, (view.Right - 1) / TileSizePx + radius);
+            int firstTileY = Math.Max(0, view.Y / TileSizePx - radius);
+            int lastTileY = Math.Min((size.Height - 1) / TileSizePx, (view.Bottom - 1) / TileSizePx + radius);
 
-                for (int tx = firstTileX; tx <= lastTileX; tx++)
+            const int maxParallel = 4;
+            using var throttler = new SemaphoreSlim(maxParallel);
+            var tasks = new List<Task>();
+
+            for (int tx = firstTileX; tx <= lastTileX; tx++)
+            {
+                for (int ty = firstTileY; ty <= lastTileY; ty++)
                 {
-                    for (int ty = firstTileY; ty <= lastTileY; ty++)
+                    await throttler.WaitAsync(token);
+                    var ttx = tx;
+                    var tty = ty;
+                    tasks.Add(Task.Run(async () =>
                     {
-                        GetTile(zoom, tx, ty);
-                    }
+                        try
+                        {
+                            await GetTileAsync(zoom, ttx, tty, token);
+                        }
+                        finally
+                        {
+                            throttler.Release();
+                        }
+                    }, token));
                 }
-            });
+            }
+
+            await Task.WhenAll(tasks);
         }
         // DONT CHANGE
         private static Image<Rgba32> ConvertBitmapToImageSharpFast(Bitmap bmp)
@@ -832,6 +912,41 @@ namespace StrategyGame
             }
         }
 
+        private static async Task SaveTileToDiskAsync(int cellSize, int tileX, int tileY, SystemDrawing.Bitmap bmp, CancellationToken token)
+        {
+            if (bmp == null || bmp.Width == 0 || bmp.Height == 0)
+                return;
+
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+                if (!File.Exists(path))
+                {
+                    DebugLogger.Log($"Saving bitmap: {path}, size: {bmp.Width}x{bmp.Height}");
+                    using var imgSharp = ConvertBitmapToImageSharpFast(bmp);
+                    await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                    await imgSharp.SaveAsPngAsync(fs, token);
+                }
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                DebugLogger.Log($"[Tile Save Error] Failed to save tile '{path}' for ({tileX},{tileY}): {ex.Message}");
+#endif
+                try
+                {
+                    MessageBox.Show($"Failed to save tile:\n{path}\n{ex.Message}", "Tile Save Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                catch
+                {
+                    // Ignore MessageBox errors in headless mode
+                }
+            }
+        }
+
         private SystemDrawing.Bitmap LoadOrGenerateTileFromData(int cellSize, int tileX, int tileY)
         {
             string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
@@ -872,6 +987,54 @@ namespace StrategyGame
 
                 DebugLogger.Log($"[Tile Save Error] Failed to save generated tile '{path}' for ({tileX},{tileY}): {ex}");
 
+#endif
+            }
+
+            return bmp;
+        }
+
+        private async Task<SystemDrawing.Bitmap> LoadOrGenerateTileFromDataAsync(int cellSize, int tileX, int tileY, CancellationToken token)
+        {
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+
+            if (File.Exists(path))
+            {
+                try
+                {
+                    await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+                    using var img = await Image.LoadAsync<Rgba32>(fs, token);
+                    return ImageSharpToBitmap(img);
+                }
+                catch (Exception ex)
+                {
+#if DEBUG
+                    DebugLogger.Log($"[Tile Load Error] Failed to load tile '{path}' for ({tileX},{tileY}): {ex}");
+#endif
+                    try { File.Delete(path); } catch { }
+                }
+            }
+
+            using var img = await Task.Run(() =>
+            {
+                var generated = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
+                OverlayFeaturesLarge(generated, ZoomLevel.City);
+                return generated;
+            }, token);
+
+            var bmp = ImageSharpToBitmap(img);
+
+            try
+            {
+                Directory.CreateDirectory(dir);
+                using var imgSharp = ConvertBitmapToImageSharpFast(bmp);
+                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
+                await imgSharp.SaveAsPngAsync(fs, token);
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                DebugLogger.Log($"[Tile Save Error] Failed to save generated tile '{path}' for ({tileX},{tileY}): {ex}");
 #endif
             }
 
