@@ -73,6 +73,7 @@ namespace economy_sim
         private bool pendingMapUpdate = false;
         private bool mapRenderInProgress = false;
         private bool mapRenderQueued = false;
+        private readonly object _zoomLock = new();
         public MainGame()
         {
             GdalBase.ConfigureAll(); 
@@ -398,9 +399,16 @@ namespace economy_sim
                 return;
             }
 
-            Size mapSize = mapManager.GetMapSize(mapZoom);
-            mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
-            mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+            Rectangle view;
+            int zoom;
+            lock (_zoomLock)
+            {
+                Size mapSize = mapManager.GetMapSize(mapZoom);
+                mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+                mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+                zoom = mapZoom;
+                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+            }
 
             if (mapRenderInProgress)
             {
@@ -408,16 +416,13 @@ namespace economy_sim
                 return;
             }
 
-            var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
-
-           
-            mapManager.PreloadVisibleTiles(mapZoom, view);
+            mapManager.PreloadVisibleTiles(zoom, view);
 
             mapRenderInProgress = true;
 
             Task.Run(() =>
             {
-                Bitmap map = mapManager.AssembleView(mapZoom, view, triggerRefresh: () =>
+                Bitmap map = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
@@ -2062,26 +2067,29 @@ namespace economy_sim
             if (mapManager == null)
                 return;
 
-            int oldZoom = mapZoom;
-            mapZoom = Math.Max(1, Math.Min(MultiResolutionMapManager.PixelsPerCellLevels.Length, mapZoom + Math.Sign(e.Delta)));
-            if (mapZoom == oldZoom)
-                return;
+            lock (_zoomLock)
+            {
+                int oldZoom = mapZoom;
+                mapZoom = Math.Max(1, Math.Min(MultiResolutionMapManager.PixelsPerCellLevels.Length, mapZoom + Math.Sign(e.Delta)));
+                if (mapZoom == oldZoom)
+                    return;
 
-            int oldCell = GetCellSizeForZoom(oldZoom);
-            int newCell = GetCellSizeForZoom(mapZoom);
+                int oldCell = GetCellSizeForZoom(oldZoom);
+                int newCell = GetCellSizeForZoom(mapZoom);
 
-            int mouseMapX = mapViewOrigin.X + e.X;
-            int mouseMapY = mapViewOrigin.Y + e.Y;
+                int mouseMapX = mapViewOrigin.X + e.X;
+                int mouseMapY = mapViewOrigin.Y + e.Y;
 
-            double baseX = (double)mouseMapX / oldCell;
-            double baseY = (double)mouseMapY / oldCell;
+                double baseX = (double)mouseMapX / oldCell;
+                double baseY = (double)mouseMapY / oldCell;
 
-            mapViewOrigin.X = (int)Math.Round(baseX * newCell) - e.X;
-            mapViewOrigin.Y = (int)Math.Round(baseY * newCell) - e.Y;
+                mapViewOrigin.X = (int)Math.Round(baseX * newCell) - e.X;
+                mapViewOrigin.Y = (int)Math.Round(baseY * newCell) - e.Y;
 
-            Size mapSize = mapManager.GetMapSize(mapZoom);
-            mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
-            mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+                Size mapSize = mapManager.GetMapSize(mapZoom);
+                mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+                mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+            }
 
             ApplyZoom();
             PreloadMapTiles();
@@ -2094,7 +2102,10 @@ namespace economy_sim
 
             if (e.KeyCode == Keys.Oemplus || e.KeyCode == Keys.Add)
             {
-                mapZoom = Math.Min(mapZoom + 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
+                lock (_zoomLock)
+                {
+                    mapZoom = Math.Min(mapZoom + 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
+                }
                 ApplyZoom();
                 PreloadMapTiles();
                 e.Handled = true;
@@ -2104,7 +2115,10 @@ namespace economy_sim
 
             if (e.KeyCode == Keys.OemMinus || e.KeyCode == Keys.Subtract)
             {
-                mapZoom = Math.Max(1, mapZoom - 1);
+                lock (_zoomLock)
+                {
+                    mapZoom = Math.Max(1, mapZoom - 1);
+                }
                 ApplyZoom();
                 PreloadMapTiles();
                 e.Handled = true;
@@ -2115,24 +2129,27 @@ namespace economy_sim
             const int panAmount = 30; // Pixels to move per key press
             bool keyProcessed = false;
 
-            switch (e.KeyCode)
+            lock (_zoomLock)
             {
-                case Keys.Left:
-                    mapViewOrigin.X -= panAmount;
-                    keyProcessed = true;
-                    break;
-                case Keys.Right:
-                    mapViewOrigin.X += panAmount;
-                    keyProcessed = true;
-                    break;
-                case Keys.Up:
-                    mapViewOrigin.Y -= panAmount;
-                    keyProcessed = true;
-                    break;
-                case Keys.Down:
-                    mapViewOrigin.Y += panAmount;
-                    keyProcessed = true;
-                    break;
+                switch (e.KeyCode)
+                {
+                    case Keys.Left:
+                        mapViewOrigin.X -= panAmount;
+                        keyProcessed = true;
+                        break;
+                    case Keys.Right:
+                        mapViewOrigin.X += panAmount;
+                        keyProcessed = true;
+                        break;
+                    case Keys.Up:
+                        mapViewOrigin.Y -= panAmount;
+                        keyProcessed = true;
+                        break;
+                    case Keys.Down:
+                        mapViewOrigin.Y += panAmount;
+                        keyProcessed = true;
+                        break;
+                }
             }
 
             if (keyProcessed)
@@ -2140,9 +2157,12 @@ namespace economy_sim
                 e.Handled = true;
                 e.SuppressKeyPress = true;
 
-                Size mapSize = mapManager.GetMapSize(mapZoom);
-                mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
-                mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+                lock (_zoomLock)
+                {
+                    Size mapSize = mapManager.GetMapSize(mapZoom);
+                    mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+                    mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+                }
                 ApplyZoom();
                 PreloadMapTiles();
             }
@@ -2166,15 +2186,18 @@ namespace economy_sim
         {
             if (isPanning && e.Button == MouseButtons.Left)
             {
-                int dx = e.X - lastLocation.X;
-                int dy = e.Y - lastLocation.Y;
-                mapViewOrigin.X = Math.Max(0, mapViewOrigin.X - dx);
-                mapViewOrigin.Y = Math.Max(0, mapViewOrigin.Y - dy);
-                Size mapSize = mapManager.GetMapSize(mapZoom);
-                mapViewOrigin.X = Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width);
-                mapViewOrigin.Y = Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height);
-                lastLocation = e.Location;
-                pendingMapUpdate = true;
+                lock (_zoomLock)
+                {
+                    int dx = e.X - lastLocation.X;
+                    int dy = e.Y - lastLocation.Y;
+                    mapViewOrigin.X = Math.Max(0, mapViewOrigin.X - dx);
+                    mapViewOrigin.Y = Math.Max(0, mapViewOrigin.Y - dy);
+                    Size mapSize = mapManager.GetMapSize(mapZoom);
+                    mapViewOrigin.X = Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width);
+                    mapViewOrigin.Y = Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height);
+                    lastLocation = e.Location;
+                    pendingMapUpdate = true;
+                }
             }
         }
 
@@ -2205,8 +2228,11 @@ namespace economy_sim
         {
             if (pendingMapUpdate)
             {
-                ApplyZoom();
-                pendingMapUpdate = false;
+                lock (_zoomLock)
+                {
+                    ApplyZoom();
+                    pendingMapUpdate = false;
+                }
             }
         }
 
@@ -2214,8 +2240,14 @@ namespace economy_sim
         {
             if (mapManager == null)
                 return;
-            var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
-            _ = mapManager.PreloadTilesAsync(mapZoom, view, 1, CancellationToken.None);
+            Rectangle view;
+            int zoom;
+            lock (_zoomLock)
+            {
+                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                zoom = mapZoom;
+            }
+            _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
         }
 
         private int GetCellSizeForZoom(float zoom)
