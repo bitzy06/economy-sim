@@ -116,7 +116,9 @@ namespace StrategyGame
                 }
                 GenerateTileCache();
 
-                ClearCache();
+
+                ClearMapCache();
+
 
                 _largeBaseMap?.Dispose();
                 _largeBaseMap = null;
@@ -131,7 +133,8 @@ namespace StrategyGame
                 _largeBaseMap = null;
                 GenerateTileCache();
 
-                ClearCache();
+
+                ClearMapCache();
 
                 _baseMap?.Dispose();
                 _baseMap = null;
@@ -238,6 +241,9 @@ namespace StrategyGame
                     }
                 }
             }
+
+            ClearTileCache();
+            ClearMapCache();
         }
 
         /// <summary>
@@ -267,6 +273,9 @@ namespace StrategyGame
                     }
                 }
             }
+
+            ClearTileCache();
+            ClearMapCache();
         }
 
         /// <summary>
@@ -602,15 +611,23 @@ namespace StrategyGame
         }
 
         /// <summary>
-        /// Dispose all cached bitmaps and clear the cache.
+        /// Dispose all cached bitmaps without affecting tile caches.
         /// </summary>
-        public void ClearCache()
+        public void ClearMapCache()
         {
             foreach (var bmp in _cachedMaps.Values)
             {
                 bmp.Dispose();
             }
             _cachedMaps.Clear();
+        }
+
+        /// <summary>
+        /// Dispose all cached bitmaps and clear the cache.
+        /// </summary>
+        public void ClearCache()
+        {
+            ClearMapCache();
             ClearTileCache();
         }
 
