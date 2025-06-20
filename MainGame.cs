@@ -391,11 +391,13 @@ namespace economy_sim
         {
             if (mapManager == null)
                 return;
+
             if (panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
             {
                 Debug.WriteLine("ApplyZoom skipped: panelMap has invalid size.");
                 return;
             }
+
             Size mapSize = mapManager.GetMapSize(mapZoom);
             mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
             mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
@@ -406,12 +408,22 @@ namespace economy_sim
                 return;
             }
 
-            mapRenderInProgress = true;
             var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+
+           
+            mapManager.PreloadVisibleTiles(mapZoom, view);
+
+            mapRenderInProgress = true;
 
             Task.Run(() =>
             {
-                Bitmap map = mapManager.AssembleView(mapZoom, view);
+                Bitmap map = mapManager.AssembleView(mapZoom, view, triggerRefresh: () =>
+                {
+                    if (this.InvokeRequired)
+                        this.BeginInvoke(new Action(ApplyZoom));
+                    else
+                        ApplyZoom();
+                });
                 if (map == null) return;
 
                 void setImage()
@@ -2208,13 +2220,9 @@ namespace economy_sim
 
         private int GetCellSizeForZoom(float zoom)
         {
-            if (baseCellsWidth == 0)
-            {
-                var baseSize = mapManager.GetMapSize(1);
-                baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
-                baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
-            }
-            return mapManager.GetMapSize(zoom).Width / baseCellsWidth;
+            int[] levels = MultiResolutionMapManager.PixelsPerCellLevels;
+            int index = (int)Math.Clamp(Math.Round(zoom), 0, levels.Length - 1);
+            return levels[index];
         }
     }
 }

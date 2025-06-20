@@ -398,28 +398,39 @@ namespace StrategyGame
         }
         public void PreloadVisibleTiles(int zoomLevel, DrawingRectangle viewRect)
         {
-            int cellSize = GetCellSize(zoomLevel);       // map cell size for this zoom
-            int tileSize = TileSizePx;                    // tile pixel dimension
+            int cellSize = GetCellSize(zoomLevel);
+            int tileSize = TileSizePx;
             var tiles = GetTilesForView(zoomLevel, viewRect);
 
             foreach (var tileCoord in tiles)
             {
-                string tilePath = GetTilePath(cellSize, tileCoord.X, tileCoord.Y);
+                var coord = tileCoord; // prevent closure bug
+                string tilePath = GetTilePath(cellSize, coord.X, coord.Y);
+
                 if (!File.Exists(tilePath))
                 {
                     Task.Run(() =>
                     {
-                        var tile = PixelMapGenerator.GenerateTileWithCountriesLarge(
-                            _baseWidth,
-                            _baseHeight,
-                            cellSize,   // pixels per map cell
-                            tileCoord.X,
-                            tileCoord.Y,
-                            tileSize);
+                        var fileLock = GetFileLock(tilePath); // use the correct variable
+                        fileLock.Wait();
+                        try
+                        {
+                            var tile = PixelMapGenerator.GenerateTileWithCountriesLarge(
+                                _baseWidth,
+                                _baseHeight,
+                                cellSize,
+                                coord.X,
+                                coord.Y,
+                                tileSize);
 
-                        Directory.CreateDirectory(Path.GetDirectoryName(tilePath));
-                        tile.Save(tilePath);
-                        tile.Dispose();
+                            Directory.CreateDirectory(Path.GetDirectoryName(tilePath));
+                            tile.Save(tilePath); // image saving — still needs lock
+                            tile.Dispose();
+                        }
+                        finally
+                        {
+                            fileLock.Release();
+                        }
                     });
                 }
             }
