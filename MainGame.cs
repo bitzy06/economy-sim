@@ -1866,6 +1866,13 @@ namespace economy_sim
             DebugLogger.EnableEconomyLogging(checkBoxLogEconomy.Checked);
         }
 
+        private void ButtonGenerateTileCache_Click(object sender, EventArgs e)
+        {
+            mapManager ??= new MultiResolutionMapManager(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
+            mapManager.GenerateMissingTileCaches();
+            MessageBox.Show("Tile cache generation complete.");
+        }
+
         // Update the Finance tab UI
         private void UpdateFinanceTab()
         {
