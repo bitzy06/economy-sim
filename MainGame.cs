@@ -13,6 +13,7 @@ using System.Text;
 using System.Text.Json; // For JSON deserialization
 using System.Text.RegularExpressions; // Added for owner-drawing
 using System.Threading.Tasks;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace economy_sim
@@ -66,6 +67,8 @@ namespace economy_sim
         private DateTime _lastRedrawTime = DateTime.MinValue;
         private MultiResolutionMapManager mapManager;
         private Point mapViewOrigin = new Point(0, 0); // Origin for the map view
+        private System.Windows.Forms.Timer mapUpdateTimer;
+        private bool pendingMapUpdate = false;
         public MainGame()
         {
             GdalBase.ConfigureAll(); 
@@ -77,6 +80,9 @@ namespace economy_sim
             pictureBox1.MouseDown += PictureBox1_MouseDown;
             pictureBox1.MouseMove += PictureBox1_MouseMove;
             pictureBox1.MouseUp += PictureBox1_MouseUp;
+            mapUpdateTimer = new System.Windows.Forms.Timer { Interval = 40 };
+            mapUpdateTimer.Tick += MapUpdateTimer_Tick;
+            mapUpdateTimer.Start();
             playerRoleManager = new PlayerRoleManager();
             allCitiesInWorld = new List<StrategyGame.City>();
             allCountries = new List<StrategyGame.Country>();
@@ -2084,69 +2090,62 @@ namespace economy_sim
 
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
         {
-            if (this.pictureBox1 == null || this.panelMap == null) // Safety check
+            if (mapManager == null)
+                return;
+
+            if (e.KeyCode == Keys.Oemplus || e.KeyCode == Keys.Add)
             {
+                mapZoom = Math.Min(mapZoom + 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
+                ApplyZoom();
+                PreloadMapTiles();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                return;
+            }
+
+            if (e.KeyCode == Keys.OemMinus || e.KeyCode == Keys.Subtract)
+            {
+                mapZoom = Math.Max(1, mapZoom - 1);
+                ApplyZoom();
+                PreloadMapTiles();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
                 return;
             }
 
             const int panAmount = 30; // Pixels to move per key press
-            int currentPbLeft = this.pictureBox1.Left;
-            int currentPbTop = this.pictureBox1.Top;
-
             bool keyProcessed = false;
 
             switch (e.KeyCode)
             {
                 case Keys.Left:
-                    currentPbLeft += panAmount;
+                    mapViewOrigin.X -= panAmount;
                     keyProcessed = true;
                     break;
                 case Keys.Right:
-                    currentPbLeft -= panAmount;
+                    mapViewOrigin.X += panAmount;
                     keyProcessed = true;
                     break;
                 case Keys.Up:
-                    currentPbTop += panAmount;
+                    mapViewOrigin.Y -= panAmount;
                     keyProcessed = true;
                     break;
                 case Keys.Down:
-                    currentPbTop -= panAmount;
+                    mapViewOrigin.Y += panAmount;
                     keyProcessed = true;
                     break;
             }
 
             if (keyProcessed)
             {
-                e.Handled = true; // Mark event as handled if we processed an arrow key
-                e.SuppressKeyPress = true; // Prevents further processing for this key press, like sound dings
+                e.Handled = true;
+                e.SuppressKeyPress = true;
 
-                int finalX;
-                int finalY;
-
-                // Apply clamping and centering logic, similar to mouse panning
-                // Clamp X coordinate
-                if (this.pictureBox1.Width > this.panelMap.ClientSize.Width)
-                {
-                    finalX = Math.Min(0, Math.Max(currentPbLeft, this.panelMap.ClientSize.Width - this.pictureBox1.Width));
-                }
-                else
-                {
-                    // If not wider than panel, keep it centered horizontally
-                    finalX = (this.panelMap.ClientSize.Width - this.pictureBox1.Width) / 2;
-                }
-
-                // Clamp Y coordinate
-                if (this.pictureBox1.Height > this.panelMap.ClientSize.Height)
-                {
-                    finalY = Math.Min(0, Math.Max(currentPbTop, this.panelMap.ClientSize.Height - this.pictureBox1.Height));
-                }
-                else
-                {
-                    // If not taller than panel, keep it centered vertically
-                    finalY = (this.panelMap.ClientSize.Height - this.pictureBox1.Height) / 2;
-                }
-
-                this.pictureBox1.Location = new Point(finalX, finalY);
+                Size mapSize = mapManager.GetMapSize(mapZoom);
+                mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+                mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+                ApplyZoom();
+                PreloadMapTiles();
             }
         }
 
@@ -2157,6 +2156,7 @@ namespace economy_sim
             if (e.Button == MouseButtons.Left)
             {
                 lastLocation = e.Location;
+                isPanning = true;
                 Cursor = Cursors.Hand; // Change cursor to indicate dragging
             }
         }
@@ -2165,12 +2165,17 @@ namespace economy_sim
 
         private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left)
+            if (isPanning && e.Button == MouseButtons.Left)
             {
-                if (pictureBox1.ClientRectangle.Contains(e.Location))
-                {
-                   
-                }
+                int dx = e.X - lastLocation.X;
+                int dy = e.Y - lastLocation.Y;
+                mapViewOrigin.X = Math.Max(0, mapViewOrigin.X - dx);
+                mapViewOrigin.Y = Math.Max(0, mapViewOrigin.Y - dy);
+                Size mapSize = mapManager.GetMapSize(mapZoom);
+                mapViewOrigin.X = Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width);
+                mapViewOrigin.Y = Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height);
+                lastLocation = e.Location;
+                pendingMapUpdate = true;
             }
         }
 
@@ -2180,6 +2185,7 @@ namespace economy_sim
             {
                 isPanning = false;
                 Cursor = Cursors.Default;
+                PreloadMapTiles();
             }
         }
 
@@ -2192,7 +2198,25 @@ namespace economy_sim
                 this.panelMap.Cursor = Cursors.Default; // Reset panelMap cursor
                 this.panelMap.BackColor = SystemColors.Control;
                 this.pictureBox1.BackColor = Color.Transparent; // Reset pictureBox backcolor
+                PreloadMapTiles();
             }
+        }
+
+        private void MapUpdateTimer_Tick(object sender, EventArgs e)
+        {
+            if (pendingMapUpdate)
+            {
+                ApplyZoom();
+                pendingMapUpdate = false;
+            }
+        }
+
+        private void PreloadMapTiles()
+        {
+            if (mapManager == null)
+                return;
+            var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+            _ = mapManager.PreloadTilesAsync(mapZoom, view, 1, CancellationToken.None);
         }
     }
 }
