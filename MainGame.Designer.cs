@@ -552,6 +552,7 @@
             panelMap.AutoScroll = false;
             panelMap.TabStop = true;
             panelMap.KeyDown += new System.Windows.Forms.KeyEventHandler(this.panelMap_KeyDown);
+            panelMap.MouseWheel += new System.Windows.Forms.MouseEventHandler(this.PanelMap_MouseWheel);
             this.panelMap.MouseUp += new System.Windows.Forms.MouseEventHandler(this.panelMap_MouseUp_ForPanning);
             // 
             // pictureBox1
