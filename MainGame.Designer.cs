@@ -331,7 +331,7 @@
             buttonGenerateTileCache.TabIndex = 13;
             buttonGenerateTileCache.Text = "Build Tile Cache";
             buttonGenerateTileCache.UseVisualStyleBackColor = true;
-            buttonGenerateTileCache.Click += ButtonGenerateTileCache_Click;
+            
             //
             // tabPageDiplomacy
             //
@@ -552,7 +552,7 @@
             panelMap.AutoScroll = false;
             panelMap.TabStop = true;
             panelMap.KeyDown += new System.Windows.Forms.KeyEventHandler(this.panelMap_KeyDown);
-            panelMap.MouseWheel += new System.Windows.Forms.MouseEventHandler(this.PanelMap_MouseWheel);
+            
             this.panelMap.MouseUp += new System.Windows.Forms.MouseEventHandler(this.panelMap_MouseUp_ForPanning);
             // 
             // pictureBox1

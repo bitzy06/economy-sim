@@ -84,7 +84,7 @@ namespace StrategyGame
             }
         }
 
-        private static int MaxCellSize => PixelsPerCellLevels[PixelsPerCellLevels.Length - 1];
+        public static int MaxCellSize => PixelsPerCellLevels[PixelsPerCellLevels.Length - 1];
         private const int MAX_DIMENSION = 100_000;
         private const long MAX_PIXEL_COUNT = 6_000_000_000L;
 
@@ -300,6 +300,7 @@ namespace StrategyGame
 
         public async Task<System.Drawing.Bitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
         {
+            Debug.WriteLine($"[TILE LOAD] Starting tile ({tileX}, {tileY})");
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
             System.Drawing.Bitmap bmp = null;
@@ -324,6 +325,7 @@ namespace StrategyGame
             {
                 try
                 {
+                    Debug.WriteLine($"[TILE LOAD] Finished tile ({tileX}, {tileY})");
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
                     using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
 
@@ -443,6 +445,7 @@ namespace StrategyGame
             if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
                 return new System.Drawing.Bitmap(1, 1); // Safe fallback
 
+
             int tileStartX = Math.Max(0, viewArea.X / tileSize);
             int tileStartY = Math.Max(0, viewArea.Y / tileSize);
             int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
@@ -468,8 +471,22 @@ namespace StrategyGame
                         continue;
 
                     System.Drawing.Bitmap tile = null;
+                    if (tile == null)
+                    {
+                        string tilePath = GetTilePath(cellSize, tx, ty);
+                        if (File.Exists(tilePath))
+                        {
+                            tile = new System.Drawing.Bitmap(tilePath);
+                            lock (_cacheLock)
+                            {
+                                _tileCache[key] = tile;
+                            }
+                            Debug.WriteLine($"[SYNC LOAD] Loaded tile: {tilePath}");
+                        }
+                    }
                     lock (_cacheLock)
                     {
+
                         _tileCache.TryGetValue(key, out tile);
                     }
 
@@ -497,6 +514,7 @@ namespace StrategyGame
                                     {
                                         await GetTileAsync(zoom, tx, ty, CancellationToken.None);
                                         triggerRefresh?.Invoke();
+                                        Debug.WriteLine($"[TILE] Triggering redraw for tile ({tx},{ty})");
                                     }
                                     finally
                                     {
@@ -1032,7 +1050,7 @@ namespace StrategyGame
             return bmp;
         }
 
-        private bool IsTileCacheComplete(int cellSize)
+        public bool IsTileCacheComplete(int cellSize)
         {
             string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
             if (!Directory.Exists(dir))
