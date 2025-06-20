@@ -44,6 +44,7 @@ namespace StrategyGame
         // LRU order for tile cache entries
         private readonly LinkedList<(int cellSize, int x, int y)> _tileLru = new();
         private readonly object _cacheLock = new();
+        private readonly object _assembleLock = new();
 
         /// <summary>
         /// Raised during tile cache generation. The first parameter is the
@@ -439,21 +440,22 @@ namespace StrategyGame
         /// </summary>
         public System.Drawing.Bitmap AssembleView(float zoom, System.Drawing.Rectangle viewArea, Action triggerRefresh = null)
         {
-            int cellSize = GetCellSize(zoom);
-            int tileSize = TileSizePx;
+            lock (_assembleLock)
+            {
+                int cellSize = GetCellSize(zoom);
+                int tileSize = TileSizePx;
 
-            if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
-                return new System.Drawing.Bitmap(1, 1); // Safe fallback
+                if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
+                    return new System.Drawing.Bitmap(1, 1); // Safe fallback
 
+                int tileStartX = Math.Max(0, viewArea.X / tileSize);
+                int tileStartY = Math.Max(0, viewArea.Y / tileSize);
+                int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
+                int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
 
-            int tileStartX = Math.Max(0, viewArea.X / tileSize);
-            int tileStartY = Math.Max(0, viewArea.Y / tileSize);
-            int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
-            int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
-
-            var output = new System.Drawing.Bitmap(viewArea.Width, viewArea.Height);
-            using var g = System.Drawing.Graphics.FromImage(output);
-            g.Clear(System.Drawing.Color.DarkGray);
+                var output = new System.Drawing.Bitmap(viewArea.Width, viewArea.Height);
+                using var g = System.Drawing.Graphics.FromImage(output);
+                g.Clear(System.Drawing.Color.DarkGray);
 
             for (int ty = tileStartY; ty < tileEndY; ty++)
             {
@@ -530,7 +532,8 @@ namespace StrategyGame
                 }
             }
 
-            return output;
+                return output;
+            }
         }
 
         private static void OverlayFeatures(SystemDrawing.Bitmap bmp, ZoomLevel level)
