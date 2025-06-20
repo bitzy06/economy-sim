@@ -116,8 +116,11 @@ namespace StrategyGame
                 }
                 GenerateTileCache();
 
-                _largeBaseMap.Dispose();
+                ClearCache();
+
+                _largeBaseMap?.Dispose();
                 _largeBaseMap = null;
+                _baseMap?.Dispose();
                 _baseMap = null;
             }
             else
@@ -127,6 +130,11 @@ namespace StrategyGame
                 _baseMap = bmp;
                 _largeBaseMap = null;
                 GenerateTileCache();
+
+                ClearCache();
+
+                _baseMap?.Dispose();
+                _baseMap = null;
             }
         }
 
