@@ -382,24 +382,24 @@ namespace StrategyGame
         }
         public void PreloadVisibleTiles(int zoomLevel, DrawingRectangle viewRect)
         {
-            int tileSize = GetTileSizeForZoom(zoomLevel);
+            int cellSize = GetCellSize(zoomLevel);       // map cell size for this zoom
+            int tileSize = TileSizePx;                    // tile pixel dimension
             var tiles = GetTilesForView(zoomLevel, viewRect);
 
             foreach (var tileCoord in tiles)
             {
-                string tilePath = GetTilePath(zoomLevel, tileCoord.X, tileCoord.Y);
+                string tilePath = GetTilePath(cellSize, tileCoord.X, tileCoord.Y);
                 if (!File.Exists(tilePath))
                 {
                     Task.Run(() =>
                     {
                         var tile = PixelMapGenerator.GenerateTileWithCountriesLarge(
-     _baseWidth,
-     _baseHeight,
-     tileSize,        // cellSize
-     tileCoord.X,
-     tileCoord.Y,
-     tileSize         // tileSizePx
- );
+                            _baseWidth,
+                            _baseHeight,
+                            cellSize,   // pixels per map cell
+                            tileCoord.X,
+                            tileCoord.Y,
+                            tileSize);
 
                         Directory.CreateDirectory(Path.GetDirectoryName(tilePath));
                         tile.Save(tilePath);
@@ -429,9 +429,9 @@ namespace StrategyGame
 
             return tiles;
         }
-        public string GetTilePath(int zoomLevel, int tileX, int tileY)
+        public string GetTilePath(int cellSize, int tileX, int tileY)
         {
-            string tileFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "tile_cache", $"{zoomLevel}");
+            string tileFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "tile_cache", $"{cellSize}");
             return Path.Combine(tileFolder, $"{tileX}_{tileY}.png");
         }
         /// <summary>
