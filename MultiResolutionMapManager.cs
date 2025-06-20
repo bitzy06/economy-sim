@@ -233,6 +233,35 @@ namespace StrategyGame
         }
 
         /// <summary>
+        /// Generate tile caches for zoom levels that are missing tiles on disk.
+        /// Existing caches are left untouched.
+        /// </summary>
+        public void GenerateMissingTileCaches()
+        {
+            foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
+            {
+                float z = (int)level;
+                int cellSize = GetCellSize(z);
+                if (IsTileCacheComplete(cellSize))
+                    continue;
+
+                var size = GetMapSize(z);
+                int tilesX = (size.Width + TileSizePx - 1) / TileSizePx;
+                int tilesY = (size.Height + TileSizePx - 1) / TileSizePx;
+
+                for (int x = 0; x < tilesX; x++)
+                {
+                    for (int y = 0; y < tilesY; y++)
+                    {
+                        // Use the public method so any generated tile is also
+                        // written to disk and cached consistently
+                        GetTile(z, x, y);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Retrieve a single tile bitmap for the given zoom level and tile coordinates.
         /// </summary>
         public SystemDrawing.Bitmap GetTile(float zoom, int tileX, int tileY)
