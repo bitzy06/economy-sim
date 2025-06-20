@@ -950,9 +950,18 @@ namespace StrategyGame
         {
             string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
             string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
+
+            if (!PixelMapGenerator.TileContainsLand(_baseWidth, _baseHeight, cellSize, tileX, tileY))
+            {
+                if (File.Exists(path))
+                {
+                    try { File.Delete(path); } catch { }
+                }
+                return null;
+            }
+
             if (File.Exists(path))
             {
-
                 try
                 {
                     return new SystemDrawing.Bitmap(path);
@@ -960,34 +969,16 @@ namespace StrategyGame
                 catch (Exception ex)
                 {
 #if DEBUG
-
                     DebugLogger.Log($"[Tile Load Error] Failed to load tile '{path}' for ({tileX},{tileY}): {ex}");
-
 #endif
-                    // Corrupt tile file: remove and regenerate
                     try { File.Delete(path); } catch { }
                 }
-
             }
-
-            int mapWidthPx = _baseWidth * cellSize;
-            int mapHeightPx = _baseHeight * cellSize;
-            int pixelX = tileX * TileSizePx;
-            int pixelY = tileY * TileSizePx;
-            int tileWidth = Math.Min(TileSizePx, mapWidthPx - pixelX);
-            int tileHeight = Math.Min(TileSizePx, mapHeightPx - pixelY);
 
             SystemDrawing.Bitmap bmp;
-            if (!PixelMapGenerator.TileContainsLand(_baseWidth, _baseHeight, cellSize, tileX, tileY))
-            {
-                bmp = CreateWaterTile(tileWidth, tileHeight);
-            }
-            else
-            {
-                using var img = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
-                OverlayFeaturesLarge(img, ZoomLevel.City);
-                bmp = ImageSharpToBitmap(img);
-            }
+            using var img = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
+            OverlayFeaturesLarge(img, ZoomLevel.City);
+            bmp = ImageSharpToBitmap(img);
 
             try
             {
@@ -1012,17 +1003,22 @@ namespace StrategyGame
             string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
             string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
 
+            if (!PixelMapGenerator.TileContainsLand(_baseWidth, _baseHeight, cellSize, tileX, tileY))
+            {
+                if (File.Exists(path))
+                {
+                    try { File.Delete(path); } catch { }
+                }
+                return null;
+            }
+
             if (File.Exists(path))
             {
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-
-
                     using var imageSharpImg = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token);
                     return ImageSharpToBitmap(imageSharpImg);
-
-
                 }
                 catch (Exception ex)
                 {
@@ -1033,29 +1029,15 @@ namespace StrategyGame
                 }
             }
 
-            int mapWidthPx = _baseWidth * cellSize;
-            int mapHeightPx = _baseHeight * cellSize;
-            int pixelX = tileX * TileSizePx;
-            int pixelY = tileY * TileSizePx;
-            int tileWidth = Math.Min(TileSizePx, mapWidthPx - pixelX);
-            int tileHeight = Math.Min(TileSizePx, mapHeightPx - pixelY);
-
             SystemDrawing.Bitmap bmp;
-            if (!PixelMapGenerator.TileContainsLand(_baseWidth, _baseHeight, cellSize, tileX, tileY))
-            {
-                bmp = CreateWaterTile(tileWidth, tileHeight);
-            }
-            else
-            {
-                using var img = await Task.Run(() =>
+            using var img = await Task.Run(() =>
                 {
                     var generated = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
                     OverlayFeaturesLarge(generated, ZoomLevel.City);
                     return generated;
                 }, token);
 
-                bmp = ImageSharpToBitmap(img);
-            }
+            bmp = ImageSharpToBitmap(img);
 
 
             try

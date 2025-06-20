@@ -181,13 +181,12 @@ namespace StrategyGame
                 throw new ArgumentOutOfRangeException(nameof(pixelsPerCell),
                     $"Bitmap size {widthPx}x{heightPx} exceeds supported dimensions ({MaxBitmapDimension}). Use GeneratePixelArtMapWithCountriesLarge instead.");
 
-            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, pixelsPerCell);
-
-            // mask dimensions == pixel dimensions
-            int fullW = baseMap.Width;
-            int fullH = baseMap.Height;
+            int fullW = width * pixelsPerCell;
+            int fullH = height * pixelsPerCell;
             int[,] mask = CountryMaskGenerator.CreateCountryMask(
                 TerrainTifPath, ShpPath, fullW, fullH);
+
+            Bitmap baseMap = GenerateTerrainPixelArtMap(width, height, pixelsPerCell, mask);
 
             DrawBorders(baseMap, mask);
 
@@ -210,12 +209,12 @@ namespace StrategyGame
                 }
             }
 
-            var baseMap = GenerateTerrainPixelArtMapLarge(width, height, pixelsPerCell);
-
-            int fullW = baseMap.Width;
-            int fullH = baseMap.Height;
+            int fullW = width * pixelsPerCell;
+            int fullH = height * pixelsPerCell;
             int[,] mask = CountryMaskGenerator.CreateCountryMask(
                 TerrainTifPath, ShpPath, fullW, fullH);
+
+            var baseMap = GenerateTerrainPixelArtMapLarge(width, height, pixelsPerCell, mask);
 
             DrawBordersLarge(baseMap, mask);
 
@@ -227,7 +226,7 @@ namespace StrategyGame
         /// raster. Only the required region is read using GDAL.
         /// </summary>
         private static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTerrainTileLarge(
-    int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
+    int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512, int[,] landMask = null)
         {
             lock (GdalConfigLock)
             {
@@ -255,6 +254,8 @@ namespace StrategyGame
             if (tileWidth <= 0 || tileHeight <= 0)
                 return new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(1, 1);
 
+            landMask ??= CreateCountryMaskTile(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
+
             int startCellX = pixelX / cellSize;
             int startCellY = pixelY / cellSize;
             int cellsX = (tileWidth + cellSize - 1) / cellSize;
@@ -276,7 +277,7 @@ namespace StrategyGame
             ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
             ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
 
-            var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(cellsX * cellSize, cellsY * cellSize);
+            var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(tileWidth, tileHeight);
 
             int seed = Environment.TickCount;
             var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
@@ -285,7 +286,9 @@ namespace StrategyGame
             {
                 for (int py = 0; py < cellSize; py++)
                 {
-                    Span<SixLabors.ImageSharp.PixelFormats.Rgba32> row = dest.DangerousGetPixelRowMemory(y * cellSize + py).Span;
+                    int destY = y * cellSize + py;
+                    if (destY >= tileHeight) continue;
+                    Span<SixLabors.ImageSharp.PixelFormats.Rgba32> row = dest.DangerousGetPixelRowMemory(destY).Span;
                     for (int x = 0; x < cellsX; x++)
                     {
                         int idx = y * cellsX + x;
@@ -293,19 +296,16 @@ namespace StrategyGame
                         SystemDrawing.Color[] palette = BuildPalette(baseColor);
                         for (int px = 0; px < cellSize; px++)
                         {
-                            var chosen = palette[rngLocal.Value.Next(palette.Length)];
                             int destX = x * cellSize + px;
-                            if (destX < row.Length)
-                                row[destX] = new SixLabors.ImageSharp.PixelFormats.Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
+                            if (destX >= tileWidth) break;
+                            var chosen = palette[rngLocal.Value.Next(palette.Length)];
+                            if (landMask[destY, destX] == 0)
+                                chosen = SystemDrawing.Color.LightSkyBlue;
+                            row[destX] = new SixLabors.ImageSharp.PixelFormats.Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
                         }
                     }
                 }
             });
-
-            if (dest.Width != tileWidth || dest.Height != tileHeight)
-            {
-                dest.Mutate(ctx => ctx.Crop(tileWidth, tileHeight));
-            }
 
             return dest;
         }
@@ -316,14 +316,14 @@ namespace StrategyGame
         public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTileWithCountriesLarge(
      int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
         {
-            var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
-
             int fullW = mapWidth * cellSize;
             int fullH = mapHeight * cellSize;
             int offsetX = tileX * tileSizePx;
             int offsetY = tileY * tileSizePx;
 
-            int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, img.Width, img.Height);
+            int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, Math.Min(tileSizePx, fullW - offsetX), Math.Min(tileSizePx, fullH - offsetY));
+
+            var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
 
             DrawBordersLarge(img, mask);
 
@@ -508,7 +508,7 @@ namespace StrategyGame
         /// <param name="cellsY">Number of cells vertically.</param>
         /// <param name="pixelsPerCell">Size of each cell in pixels.</param>
 
-        public static unsafe Bitmap GenerateTerrainPixelArtMap(int cellsX, int cellsY, int pixelsPerCell)
+        public static unsafe Bitmap GenerateTerrainPixelArtMap(int cellsX, int cellsY, int pixelsPerCell, int[,] landMask = null)
         {
             string path = TerrainTifPath;
             if (!File.Exists(path))
@@ -519,6 +519,9 @@ namespace StrategyGame
             if (widthPx > MaxBitmapDimension || heightPx > MaxBitmapDimension)
                 throw new ArgumentOutOfRangeException(nameof(pixelsPerCell),
                     $"Bitmap size {widthPx}x{heightPx} exceeds supported dimensions ({MaxBitmapDimension}).");
+
+            landMask ??= CountryMaskGenerator.CreateCountryMask(
+                TerrainTifPath, ShpPath, widthPx, heightPx);
 
             using (var img = new Bitmap(path))
             using (var scaled = new Bitmap(cellsX, cellsY))
@@ -535,6 +538,7 @@ namespace StrategyGame
                 int stride = bmpData.Stride;
                 byte* basePtr = (byte*)bmpData.Scan0;
                 Random rng = new Random();
+                System.Drawing.Color waterColor = System.Drawing.Color.LightSkyBlue;
 
                 for (int y = 0; y < cellsY; y++)
                 {
@@ -547,7 +551,11 @@ namespace StrategyGame
                             byte* row = basePtr + ((y * pixelsPerCell + py) * stride) + (x * pixelsPerCell * 4);
                             for (int px = 0; px < pixelsPerCell; px++)
                             {
-                              Color chosen = palette[rng.Next(palette.Length)];
+                                int destX = x * pixelsPerCell + px;
+                                int destY = y * pixelsPerCell + py;
+                                System.Drawing.Color chosen = palette[rng.Next(palette.Length)];
+                                if (landMask[destY, destX] == 0)
+                                    chosen = waterColor;
                                 int offset = px * 4;
                                 row[offset] = chosen.B;
                                 row[offset + 1] = chosen.G;
@@ -568,7 +576,7 @@ namespace StrategyGame
         /// This uses ImageSharp to avoid the 32k bitmap limit.
         /// </summary>
 
-        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell)
+        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell, int[,] landMask = null)
 
         {
             string path = TerrainTifPath;
@@ -587,6 +595,8 @@ namespace StrategyGame
                 g.DrawImage(img, 0, 0, cellsX, cellsY);
             }
 
+            landMask ??= CountryMaskGenerator.CreateCountryMask(
+                TerrainTifPath, ShpPath, widthPx, heightPx);
 
             var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(widthPx, heightPx);
 
@@ -599,6 +609,7 @@ namespace StrategyGame
             unsafe
             {
                 byte* basePtr = (byte*)data.Scan0;
+                SystemDrawing.Color waterColor = SystemDrawing.Color.LightSkyBlue;
 
                 Parallel.For(0, cellsY, y =>
                 {
@@ -606,7 +617,8 @@ namespace StrategyGame
 
                     for (int py = 0; py < pixelsPerCell; py++)
                     {
-                        Span<Rgba32> destRow = dest.DangerousGetPixelRowMemory(y * pixelsPerCell + py).Span;
+                        int destY = y * pixelsPerCell + py;
+                        Span<Rgba32> destRow = dest.DangerousGetPixelRowMemory(destY).Span;
 
                         for (int x = 0; x < cellsX; x++)
                         {
@@ -621,8 +633,10 @@ namespace StrategyGame
 
                             for (int px = 0; px < pixelsPerCell; px++)
                             {
-                                Color chosen = palette[rngLocal.Value.Next(palette.Length)];
                                 int destX = x * pixelsPerCell + px;
+                                Color chosen = palette[rngLocal.Value.Next(palette.Length)];
+                                if (landMask[destY, destX] == 0)
+                                    chosen = waterColor;
                                 destRow[destX] = new Rgba32(chosen.R, chosen.G, chosen.B, chosen.A);
                             }
                         }
