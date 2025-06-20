@@ -957,7 +957,13 @@ namespace StrategyGame
                 {
                     try { File.Delete(path); } catch { }
                 }
-                return null;
+                int fullW = _baseWidth * cellSize;
+                int fullH = _baseHeight * cellSize;
+                int offsetX = tileX * TileSizePx;
+                int offsetY = tileY * TileSizePx;
+                int widthPx = Math.Min(TileSizePx, fullW - offsetX);
+                int heightPx = Math.Min(TileSizePx, fullH - offsetY);
+                return CreateWaterTile(widthPx, heightPx);
             }
 
             if (File.Exists(path))
@@ -1009,7 +1015,13 @@ namespace StrategyGame
                 {
                     try { File.Delete(path); } catch { }
                 }
-                return null;
+                int fullW = _baseWidth * cellSize;
+                int fullH = _baseHeight * cellSize;
+                int offsetX = tileX * TileSizePx;
+                int offsetY = tileY * TileSizePx;
+                int widthPx = Math.Min(TileSizePx, fullW - offsetX);
+                int heightPx = Math.Min(TileSizePx, fullH - offsetY);
+                return CreateWaterTile(widthPx, heightPx);
             }
 
             if (File.Exists(path))
