@@ -67,6 +67,8 @@ namespace economy_sim
         private DateTime _lastRedrawTime = DateTime.MinValue;
         private MultiResolutionMapManager mapManager;
         private Point mapViewOrigin = new Point(0, 0); // Origin for the map view
+        private int baseCellsWidth;
+        private int baseCellsHeight;
         private System.Windows.Forms.Timer mapUpdateTimer;
         private bool pendingMapUpdate = false;
         private bool mapRenderInProgress = false;
@@ -234,6 +236,9 @@ namespace economy_sim
             if (mapManager == null)
             {
                 mapManager = new MultiResolutionMapManager(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
+                var baseSize = mapManager.GetMapSize(1);
+                baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
+                baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
 
                 var viewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
 
@@ -2042,54 +2047,32 @@ namespace economy_sim
 
         private void PictureBox1_MouseWheel(object sender, MouseEventArgs e)
         {
-            if (baseMap == null) return;
-            if (pictureBox1.Width == 0 || pictureBox1.Height == 0) return;
-
-            // Point mousePosInPanel = panelMap.PointToClient(Control.MousePosition); 
-            // float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
-            // float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
+            if (mapManager == null)
+                return;
 
             int oldZoom = mapZoom;
-            mapZoom = Math.Max(1, Math.Min(10, mapZoom + Math.Sign(e.Delta)));
-            if (mapZoom == oldZoom) return;
+            mapZoom = Math.Max(1, Math.Min(MultiResolutionMapManager.PixelsPerCellLevels.Length, mapZoom + Math.Sign(e.Delta)));
+            if (mapZoom == oldZoom)
+                return;
 
-            // Determine the center of the panelMap
-            int panelCenterX = panelMap.ClientSize.Width / 2;
-            int panelCenterY = panelMap.ClientSize.Height / 2;
+            int oldCell = GetCellSizeForZoom(oldZoom);
+            int newCell = GetCellSizeForZoom(mapZoom);
 
-            // Calculate what proportional point of the PictureBox content is currently at the panel's center
-            // This must be done BEFORE pictureBox1.Size is changed by ApplyZoom
-            float contentRatioXAtPanelCenter = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
-            float contentRatioYAtPanelCenter = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
+            int mouseMapX = mapViewOrigin.X + e.X;
+            int mouseMapY = mapViewOrigin.Y + e.Y;
+
+            double baseX = (double)mouseMapX / oldCell;
+            double baseY = (double)mouseMapY / oldCell;
+
+            mapViewOrigin.X = (int)Math.Round(baseX * newCell) - e.X;
+            mapViewOrigin.Y = (int)Math.Round(baseY * newCell) - e.Y;
+
+            Size mapSize = mapManager.GetMapSize(mapZoom);
+            mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+            mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
 
             ApplyZoom();
-
-            int newPbWidth = pictureBox1.Width;
-            int newPbHeight = pictureBox1.Height;
-
-            // Calculate the new PictureBox location to keep the content point (that was at panelCenter) at panelCenter
-            int newX = panelCenterX - (int)(contentRatioXAtPanelCenter * newPbWidth);
-            int newY = panelCenterY - (int)(contentRatioYAtPanelCenter * newPbHeight);
-
-            if (newPbWidth < panelMap.ClientSize.Width)
-            {
-                newX = (panelMap.ClientSize.Width - newPbWidth) / 2;
-            }
-            else
-            {
-                newX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - newPbWidth));
-            }
-
-            if (newPbHeight < panelMap.ClientSize.Height)
-            {
-                newY = (panelMap.ClientSize.Height - newPbHeight) / 2;
-            }
-            else
-            {
-                newY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - newPbHeight));
-            }
-
-            pictureBox1.Location = new Point(newX, newY);
+            PreloadMapTiles();
         }
 
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
@@ -2221,6 +2204,17 @@ namespace economy_sim
                 return;
             var view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
             _ = mapManager.PreloadTilesAsync(mapZoom, view, 1, CancellationToken.None);
+        }
+
+        private int GetCellSizeForZoom(float zoom)
+        {
+            if (baseCellsWidth == 0)
+            {
+                var baseSize = mapManager.GetMapSize(1);
+                baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
+                baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
+            }
+            return mapManager.GetMapSize(zoom).Width / baseCellsWidth;
         }
     }
 }
