@@ -344,13 +344,6 @@ namespace StrategyGame
                 }
             }
 
-            using var ds = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
-            if (ds == null)
-                throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
-
-            int srcW = ds.RasterXSize;
-            int srcH = ds.RasterYSize;
-
             int mapWidthPx = mapWidth * cellSize;
             int mapHeightPx = mapHeight * cellSize;
 
@@ -361,31 +354,14 @@ namespace StrategyGame
             if (tileWidth <= 0 || tileHeight <= 0)
                 return false;
 
-            int startCellX = pixelX / cellSize;
-            int startCellY = pixelY / cellSize;
-            int cellsX = (tileWidth + cellSize - 1) / cellSize;
-            int cellsY = (tileHeight + cellSize - 1) / cellSize;
+            // Use the rasterized country mask instead of raw terrain colors. The
+            // mask precisely marks land areas and avoids false negatives when the
+            // terrain imagery uses near-white colors for beaches or deserts.
+            int[,] mask = CreateCountryMaskTile(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
 
-            double scaleX = (double)srcW / mapWidth;
-            double scaleY = (double)srcH / mapHeight;
-
-            int srcX = (int)Math.Floor(startCellX * scaleX);
-            int srcY = (int)Math.Floor(startCellY * scaleY);
-            int readW = (int)Math.Ceiling(cellsX * scaleX);
-            int readH = (int)Math.Ceiling(cellsY * scaleY);
-
-            byte[] r = new byte[cellsX * cellsY];
-            byte[] g = new byte[cellsX * cellsY];
-            byte[] b = new byte[cellsX * cellsY];
-
-            ds.GetRasterBand(1).ReadRaster(srcX, srcY, readW, readH, r, cellsX, cellsY, 0, 0);
-            ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
-            ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
-
-            for (int i = 0; i < cellsX * cellsY; i++)
+            foreach (var value in mask)
             {
-                var color = SystemDrawing.Color.FromArgb(r[i], g[i], b[i]);
-                if (!IsWaterColor(color))
+                if (value != 0)
                     return true;
             }
 
