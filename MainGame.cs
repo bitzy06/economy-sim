@@ -1998,6 +1998,11 @@ namespace economy_sim
             PreloadMapTiles();
         }
 
+        private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
+        {
+            PictureBox1_MouseWheel(sender, e);
+        }
+
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
         {
             if (this.pictureBox1 == null || this.panelMap == null) // Safety check
