@@ -31,14 +31,37 @@ namespace StrategyGame
             NationalFinancialSystem fs = country.FinancialSystem;
 
             // 1. Calculate Tax Revenue using the new system
-            // Placeholder values for assessable income, corporate profits, etc.
-            // These would eventually be derived from detailed economic activity (POPs, corporations)
-            decimal totalAssessablePopIncome = (decimal)country.Population * 500m; // Example: average income per capita
-            decimal totalCorporateProfits = (decimal)country.States.Sum(s => s.Cities.Sum(c => c.Factories.Sum(f => f.OwnerCorporation?.Budget * 0.1 ?? 0.0))); // Highly simplified
-            decimal totalLandValue = (decimal)country.States.Count * 1000000m; // Example
-            decimal totalConsumptionValue = totalAssessablePopIncome * 0.6m; // Example: 60% of income is consumed
+            // Derive assessable income from POP classes and corporations
+            var popIncomeMap = new Dictionary<string, decimal>();
+            decimal totalAssessablePopIncome = 0m;
+            int totalPopulation = 0;
+            foreach (var state in country.States)
+            {
+                foreach (var city in state.Cities)
+                {
+                    foreach (var pop in city.PopClasses)
+                    {
+                        decimal income = (decimal)pop.Size * (decimal)pop.IncomePerPerson;
+                        totalAssessablePopIncome += income;
+                        totalPopulation += pop.Size;
+                        if (popIncomeMap.ContainsKey(pop.Name))
+                            popIncomeMap[pop.Name] += income;
+                        else
+                            popIncomeMap[pop.Name] = income;
+                    }
+                }
+            }
 
-            decimal taxRevenue = fs.CalculateTaxRevenue(totalAssessablePopIncome, totalCorporateProfits, totalLandValue, totalConsumptionValue);
+            decimal totalCorporateProfits = 0m;
+            foreach (var corp in Market.AllCorporations)
+            {
+                totalCorporateProfits += (decimal)(corp.Budget * 0.1); // Simple profit approximation
+            }
+
+            decimal totalLandValue = (decimal)country.States.Count * 1000000m; // Placeholder land value
+            decimal totalConsumptionValue = totalAssessablePopIncome * 0.6m; // Assume 60% consumed
+
+            decimal taxRevenue = fs.CalculateTaxRevenue(popIncomeMap, totalCorporateProfits, totalLandValue, totalConsumptionValue, totalPopulation);
             country.Budget += (double)taxRevenue;
             // Channel a portion of revenue into reserves
             fs.AdjustReserves(taxRevenue * 0.05m);
