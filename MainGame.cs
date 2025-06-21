@@ -74,6 +74,8 @@ namespace economy_sim
         private bool mapRenderInProgress = false;
         private bool mapRenderQueued = false;
         private readonly object _zoomLock = new();
+        private float _zoom = 1f;
+
         public MainGame()
         {
             GdalBase.ConfigureAll(); 
@@ -82,9 +84,10 @@ namespace economy_sim
             var sw = Stopwatch.StartNew();
 
             InitializeComponent();
-            pictureBox1.MouseDown += PictureBox1_MouseDown;
-            pictureBox1.MouseMove += PictureBox1_MouseMove;
-            pictureBox1.MouseUp += PictureBox1_MouseUp;
+            // In your constructor, after InitializeComponent():
+            panelMap.TabStop = true;                        // make panel focusable
+            panelMap.MouseEnter += (s, e) => panelMap.Focus();
+            panelMap.MouseWheel += PanelMap_MouseWheel;
             mapUpdateTimer = new System.Windows.Forms.Timer { Interval = 40 };
             mapUpdateTimer.Tick += MapUpdateTimer_Tick;
             mapUpdateTimer.Start();
@@ -92,7 +95,7 @@ namespace economy_sim
             allCitiesInWorld = new List<StrategyGame.City>();
             allCountries = new List<StrategyGame.Country>();
             states = new List<StrategyGame.State>();
-
+            panelMap.Resize += PanelMap_Resize;
             if (this.listBoxMarketStats != null)
             {
                 this.listBoxMarketStats.Height += 70;
@@ -154,7 +157,8 @@ namespace economy_sim
             sw.Restart();
             UpdateOrderLists();
             Console.WriteLine($"[Startup] UpdateOrderLists took {sw.Elapsed.TotalSeconds:F2} seconds");
-
+            pictureBox1.Dock = DockStyle.Fill;
+            pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
             timerSim.Tick += TimerSim_Tick;
             timerSim.Start();
 
@@ -2062,39 +2066,54 @@ namespace economy_sim
         }
 
 
-        private void PictureBox1_MouseWheel(object sender, MouseEventArgs e)
+        private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
-            if (mapManager == null)
-                return;
+            // 1) figure out the anchor in panel coords
+            Point anchor = panelMap.PointToClient(Cursor.Position);
+            if (!panelMap.ClientRectangle.Contains(anchor)) return;
 
-            lock (_zoomLock)
-            {
-                int oldZoom = mapZoom;
-                mapZoom = Math.Max(1, Math.Min(MultiResolutionMapManager.PixelsPerCellLevels.Length, mapZoom + Math.Sign(e.Delta)));
-                if (mapZoom == oldZoom)
-                    return;
+            // 2) bump zoom
+            int oldZoom = mapZoom;
+            mapZoom = Math.Clamp(mapZoom + Math.Sign(e.Delta),
+                                1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
+            if (mapZoom == oldZoom) return;
 
-                int oldCell = GetCellSizeForZoom(oldZoom);
-                int newCell = GetCellSizeForZoom(mapZoom);
+            // 3) compute old vs. new cell size
+            int oldCell = GetCellSizeForZoom(oldZoom);
+            int newCell = GetCellSizeForZoom(mapZoom);
 
-                int mouseMapX = mapViewOrigin.X + e.X;
-                int mouseMapY = mapViewOrigin.Y + e.Y;
+            // 4) your raw re-anchor formula
+            int rawX = (int)Math.Round((mapViewOrigin.X + anchor.X) * (double)newCell / oldCell)
+                       - anchor.X;
+            int rawY = (int)Math.Round((mapViewOrigin.Y + anchor.Y) * (double)newCell / oldCell)
+                       - anchor.Y;
 
-                double baseX = (double)mouseMapX / oldCell;
-                double baseY = (double)mouseMapY / oldCell;
+            // 5) map bounds
+            var mapSize = mapManager.GetMapSize(mapZoom);
+            int maxX = mapSize.Width - panelMap.ClientSize.Width;
+            int maxY = mapSize.Height - panelMap.ClientSize.Height;
 
-                mapViewOrigin.X = (int)Math.Round(baseX * newCell) - e.X;
-                mapViewOrigin.Y = (int)Math.Round(baseY * newCell) - e.Y;
+            Debug.WriteLine($@"
+      ANCHOR={anchor}  
+      RAW_ORIGIN=({rawX},{rawY})  
+      CLAMP_RANGE X:[0..{maxX}], Y:[0..{maxY}]
+    ");
 
-                Size mapSize = mapManager.GetMapSize(mapZoom);
-                mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
-                mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
-            }
+            // 6) clamp
+            mapViewOrigin.X = Math.Clamp(rawX, 0, maxX);
+            mapViewOrigin.Y = Math.Clamp(rawY, 0, maxY);
+
+            Debug.WriteLine($"  FINAL_ORIGIN=({mapViewOrigin.X},{mapViewOrigin.Y})");
 
             ApplyZoom();
             PreloadMapTiles();
         }
-
+        private void PanelMap_Resize(object sender, EventArgs e)
+        {
+            // This method is called whenever the map panel is resized.
+            // We call ApplyZoom() to generate a new map image that fits the new dimensions.
+            ApplyZoom();
+        }
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
         {
             if (mapManager == null)
@@ -2250,10 +2269,17 @@ namespace economy_sim
             _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
         }
 
-        private int GetCellSizeForZoom(float zoom)
+        private int GetCellSizeForZoom(int zoomLevel)
         {
             int[] levels = MultiResolutionMapManager.PixelsPerCellLevels;
-            int index = (int)Math.Clamp(Math.Round(zoom), 0, levels.Length - 1);
+
+            // `zoomLevel` is 1-based (e.g., 1, 2, 3...), but array indices are 0-based.
+            // We subtract 1 to get the correct 0-based index.
+            int index = zoomLevel - 1;
+
+            // Clamp the index to ensure it's always within the valid bounds of the array.
+            index = Math.Clamp(index, 0, levels.Length - 1);
+
             return levels[index];
         }
     }
