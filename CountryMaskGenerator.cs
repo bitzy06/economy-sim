@@ -10,6 +10,8 @@ namespace StrategyGame
     /// </summary>
     public static class CountryMaskGenerator
     {
+        private static readonly object GdalLock = new object();
+        private static bool _gdalRegistered = false;
         /// <summary>
         /// Generates a rasterized country mask matching the given DEM.
         /// </summary>
@@ -18,8 +20,14 @@ namespace StrategyGame
         /// <returns>Two dimensional array of ISO codes indexed by row/column.</returns>
         public static int[,] CreateCountryMask(string demPath, string shpPath)
         {
-            Gdal.AllRegister();
-            Ogr.RegisterAll();
+            lock (GdalLock)
+            {
+                if (!_gdalRegistered)
+                {
+                    Gdal.AllRegister();
+                    Ogr.RegisterAll();
+                    _gdalRegistered = true;
+                }
 
             Dataset dem = Gdal.Open(demPath, Access.GA_ReadOnly);
             if (dem == null)
@@ -68,6 +76,7 @@ namespace StrategyGame
             }
 
             return result;
+            }
         }
 
         /// <summary>
@@ -80,8 +89,14 @@ namespace StrategyGame
         /// <returns>Two dimensional array of ISO codes indexed by row/column.</returns>
         public static int[,] CreateCountryMask(string demPath, string shpPath, int width, int height)
         {
-            Gdal.AllRegister();
-            Ogr.RegisterAll();
+            lock (GdalLock)
+            {
+                if (!_gdalRegistered)
+                {
+                    Gdal.AllRegister();
+                    Ogr.RegisterAll();
+                    _gdalRegistered = true;
+                }
 
             Dataset dem = Gdal.Open(demPath, Access.GA_ReadOnly);
             if (dem == null)
@@ -127,6 +142,7 @@ namespace StrategyGame
             }
 
             return result;
+            }
         }
     }
 }
