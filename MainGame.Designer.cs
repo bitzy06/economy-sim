@@ -87,9 +87,9 @@
             pictureBox1 = new PictureBox();
             tabControlMain = new TabControl();
             tabPageCompanies.SuspendLayout();
+            tabPageGovernment.SuspendLayout();
             tabPageFinance.SuspendLayout();
             tabPageDebug.SuspendLayout();
-            tabPageGovernment.SuspendLayout();
             tabPageDiplomacy.SuspendLayout();
             tabPageCity.SuspendLayout();
             tabPageCountry.SuspendLayout();
@@ -143,6 +143,81 @@
             listViewCompanies.TabIndex = 0;
             listViewCompanies.UseCompatibleStateImageBehavior = false;
             listViewCompanies.View = View.Details;
+            // 
+            // listViewDiplomacy
+            // 
+            listViewDiplomacy.FullRowSelect = true;
+            listViewDiplomacy.GridLines = true;
+            listViewDiplomacy.Location = new Point(10, 10);
+            listViewDiplomacy.Name = "listViewDiplomacy";
+            listViewDiplomacy.Size = new Size(400, 180);
+            listViewDiplomacy.TabIndex = 7;
+            listViewDiplomacy.UseCompatibleStateImageBehavior = false;
+            listViewDiplomacy.View = View.Details;
+            // 
+            // buttonShowPopStats
+            // 
+            buttonShowPopStats.Location = new Point(0, 0);
+            buttonShowPopStats.Name = "buttonShowPopStats";
+            buttonShowPopStats.Size = new Size(120, 23);
+            buttonShowPopStats.TabIndex = 9;
+            buttonShowPopStats.Text = "Show Pop Stats";
+            // 
+            // buttonShowFactoryStats
+            // 
+            buttonShowFactoryStats.Location = new Point(0, 0);
+            buttonShowFactoryStats.Name = "buttonShowFactoryStats";
+            buttonShowFactoryStats.Size = new Size(120, 23);
+            buttonShowFactoryStats.TabIndex = 10;
+            buttonShowFactoryStats.Text = "Building Details";
+            // 
+            // buttonShowConstruction
+            // 
+            buttonShowConstruction.Location = new Point(0, 0);
+            buttonShowConstruction.Name = "buttonShowConstruction";
+            buttonShowConstruction.Size = new Size(120, 23);
+            buttonShowConstruction.TabIndex = 11;
+            buttonShowConstruction.Text = "Construction";
+            // 
+            // tabPageGovernment
+            // 
+            tabPageGovernment.Controls.Add(listViewParties);
+            tabPageGovernment.Controls.Add(buttonOpenPolicyManager);
+            tabPageGovernment.Location = new Point(4, 24);
+            tabPageGovernment.Margin = new Padding(4, 3, 4, 3);
+            tabPageGovernment.Name = "tabPageGovernment";
+            tabPageGovernment.Size = new Size(960, 526);
+            tabPageGovernment.TabIndex = 6;
+            tabPageGovernment.Text = "Government";
+            tabPageGovernment.UseVisualStyleBackColor = true;
+            // 
+            // listViewParties
+            // 
+            listViewParties.FullRowSelect = true;
+            listViewParties.GridLines = true;
+            listViewParties.Location = new Point(10, 10);
+            listViewParties.Name = "listViewParties";
+            listViewParties.Size = new Size(400, 200);
+            listViewParties.TabIndex = 0;
+            listViewParties.UseCompatibleStateImageBehavior = false;
+            listViewParties.View = View.Details;
+            // 
+            // buttonOpenPolicyManager
+            // 
+            buttonOpenPolicyManager.Location = new Point(10, 220);
+            buttonOpenPolicyManager.Name = "buttonOpenPolicyManager";
+            buttonOpenPolicyManager.Size = new Size(150, 30);
+            buttonOpenPolicyManager.TabIndex = 1;
+            buttonOpenPolicyManager.Text = "Open Policy Manager";
+            buttonOpenPolicyManager.Click += ButtonOpenPolicyManager_Click;
+            // 
+            // buttonToggleDebugMode
+            // 
+            buttonToggleDebugMode.Location = new Point(159, 294);
+            buttonToggleDebugMode.Name = "buttonToggleDebugMode";
+            buttonToggleDebugMode.Size = new Size(120, 23);
+            buttonToggleDebugMode.TabIndex = 14;
+            buttonToggleDebugMode.Text = "Toggle Debug Mode";
             // 
             // tabPageFinance
             // 
@@ -276,7 +351,7 @@
             // 
             // buttonAssumeRole
             // 
-            buttonAssumeRole.Location = new Point(12, 254);
+            buttonAssumeRole.Location = new Point(8, 292);
             buttonAssumeRole.Margin = new Padding(4, 3, 4, 3);
             buttonAssumeRole.Name = "buttonAssumeRole";
             buttonAssumeRole.Size = new Size(140, 27);
@@ -287,7 +362,7 @@
             // 
             // buttonRelinquishRole
             // 
-            buttonRelinquishRole.Location = new Point(12, 288);
+            buttonRelinquishRole.Location = new Point(8, 346);
             buttonRelinquishRole.Margin = new Padding(4, 3, 4, 3);
             buttonRelinquishRole.Name = "buttonRelinquishRole";
             buttonRelinquishRole.Size = new Size(140, 27);
@@ -331,20 +406,19 @@
             checkBoxLogEconomy.Text = "Log Economy Stats";
             checkBoxLogEconomy.UseVisualStyleBackColor = true;
             checkBoxLogEconomy.CheckedChanged += CheckBoxLogEconomy_CheckedChanged;
-            //
+            // 
             // buttonGenerateTileCache
-            //
-            buttonGenerateTileCache.Location = new Point(12, 323);
+            // 
+            buttonGenerateTileCache.Location = new Point(4, 400);
             buttonGenerateTileCache.Margin = new Padding(4, 3, 4, 3);
             buttonGenerateTileCache.Name = "buttonGenerateTileCache";
             buttonGenerateTileCache.Size = new Size(140, 27);
             buttonGenerateTileCache.TabIndex = 13;
             buttonGenerateTileCache.Text = "Build Tile Cache";
             buttonGenerateTileCache.UseVisualStyleBackColor = true;
-
-            //
+            // 
             // tabPageDiplomacy
-            //
+            // 
             tabPageDiplomacy.Controls.Add(labelProposedTrades);
             tabPageDiplomacy.Controls.Add(listBoxProposedTradeAgreements);
             tabPageDiplomacy.Controls.Add(buttonAcceptTrade);
@@ -361,19 +435,6 @@
             tabPageDiplomacy.TabIndex = 3;
             tabPageDiplomacy.Text = "Diplomacy";
             tabPageDiplomacy.UseVisualStyleBackColor = true;
-
-            //
-            // tabPageGovernment
-            //
-            tabPageGovernment.Controls.Add(listViewParties);
-            tabPageGovernment.Controls.Add(buttonOpenPolicyManager);
-            tabPageGovernment.Location = new Point(4, 24);
-            tabPageGovernment.Margin = new Padding(4, 3, 4, 3);
-            tabPageGovernment.Name = "tabPageGovernment";
-            tabPageGovernment.Size = new Size(960, 526);
-            tabPageGovernment.TabIndex = 6;
-            tabPageGovernment.Text = "Government";
-            tabPageGovernment.UseVisualStyleBackColor = true;
             // 
             // labelProposedTrades
             // 
@@ -449,23 +510,6 @@
             buttonOpenTradeManagement.Text = "Trade Management";
             buttonOpenTradeManagement.UseVisualStyleBackColor = true;
             buttonOpenTradeManagement.Click += ButtonOpenTradeManagement_Click;
-
-            //
-            // listViewDiplomacy
-            //
-            listViewDiplomacy.FullRowSelect = true;
-            listViewDiplomacy.GridLines = true;
-            listViewDiplomacy.Location = new Point(10, 10);
-            listViewDiplomacy.Name = "listViewDiplomacy";
-            listViewDiplomacy.Size = new Size(400, 180);
-            listViewDiplomacy.TabIndex = 7;
-            listViewDiplomacy.View = View.Details;
-            listViewDiplomacy.Columns.Add("Country", 120);
-            listViewDiplomacy.Columns.Add("Type", 80);
-            listViewDiplomacy.Columns.Add("Resource", 100);
-            listViewDiplomacy.Columns.Add("Quantity", 80);
-            listViewDiplomacy.Columns.Add("Price", 80);
-            listViewDiplomacy.Columns.Add("Remaining", 80);
             // 
             // tabPageCity
             // 
@@ -573,53 +617,6 @@
             listBoxFactoryStats.Name = "listBoxFactoryStats";
             listBoxFactoryStats.Size = new Size(326, 214);
             listBoxFactoryStats.TabIndex = 8;
-
-            //
-            // buttonShowPopStats
-            //
-            buttonShowPopStats.Name = "buttonShowPopStats";
-            buttonShowPopStats.Size = new Size(120, 23);
-            buttonShowPopStats.Text = "Show Pop Stats";
-
-            //
-            // buttonShowFactoryStats
-            //
-            buttonShowFactoryStats.Name = "buttonShowFactoryStats";
-            buttonShowFactoryStats.Size = new Size(120, 23);
-            buttonShowFactoryStats.Text = "Building Details";
-
-            //
-            // buttonShowConstruction
-            //
-            buttonShowConstruction.Name = "buttonShowConstruction";
-            buttonShowConstruction.Size = new Size(120, 23);
-            buttonShowConstruction.Text = "Construction";
-
-            //
-            // listViewParties
-            //
-            listViewParties.View = View.Details;
-            listViewParties.FullRowSelect = true;
-            listViewParties.GridLines = true;
-            listViewParties.Location = new Point(10, 10);
-            listViewParties.Size = new Size(400, 200);
-            listViewParties.Columns.Add("Party", 200);
-            listViewParties.Columns.Add("Share", 80);
-
-            //
-            // buttonOpenPolicyManager
-            //
-            buttonOpenPolicyManager.Location = new Point(10, 220);
-            buttonOpenPolicyManager.Size = new Size(150, 30);
-            buttonOpenPolicyManager.Text = "Open Policy Manager";
-            buttonOpenPolicyManager.Click += ButtonOpenPolicyManager_Click;
-
-            //
-            // buttonToggleDebugMode
-            //
-            buttonToggleDebugMode.Location = new Point(10, 280);
-            buttonToggleDebugMode.Size = new Size(120, 23);
-            buttonToggleDebugMode.Text = "Toggle Debug Mode";
             // 
             // tabPageCountry
             // 
@@ -640,23 +637,18 @@
             panelMap.Name = "panelMap";
             panelMap.Size = new Size(960, 526);
             panelMap.TabIndex = 1;
-            panelMap.AutoScroll = false;
             panelMap.TabStop = true;
-            panelMap.KeyDown += new System.Windows.Forms.KeyEventHandler(this.panelMap_KeyDown);
-            
-            this.panelMap.MouseUp += new System.Windows.Forms.MouseEventHandler(this.panelMap_MouseUp_ForPanning);
+            panelMap.KeyDown += panelMap_KeyDown;
+            panelMap.MouseUp += panelMap_MouseUp_ForPanning;
             // 
             // pictureBox1
             // 
-            pictureBox1.Dock = DockStyle.None;
             pictureBox1.Location = new Point(0, 0);
             pictureBox1.Margin = new Padding(4, 3, 4, 3);
             pictureBox1.Name = "pictureBox1";
             pictureBox1.Size = new Size(960, 526);
-            pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
             pictureBox1.TabIndex = 0;
             pictureBox1.TabStop = false;
-       
             // 
             // tabControlMain
             // 
@@ -686,17 +678,15 @@
             Name = "MainGame";
             Text = "MainGame";
             tabPageCompanies.ResumeLayout(false);
+            tabPageGovernment.ResumeLayout(false);
             tabPageFinance.ResumeLayout(false);
             tabPageDebug.ResumeLayout(false);
             tabPageDebug.PerformLayout();
-            tabPageGovernment.ResumeLayout(false);
-            tabPageGovernment.PerformLayout();
             tabPageDiplomacy.ResumeLayout(false);
             tabPageDiplomacy.PerformLayout();
             tabPageCity.ResumeLayout(false);
             tabPageCountry.ResumeLayout(false);
             panelMap.ResumeLayout(false);
-            panelMap.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             tabControlMain.ResumeLayout(false);
             ResumeLayout(false);
