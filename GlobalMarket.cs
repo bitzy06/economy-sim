@@ -60,9 +60,31 @@ namespace StrategyGame // Reverted from EconomySim
         }
         
         // Method signature changed to reflect that it's part of EconomySim and might not need all these specific StrategyGame types directly if they are wrapped or accessed via a common interface.
-        public void UpdateGlobalMarket(List<StrategyGame.City> allCities, List<StrategyGame.Country> allCountries, 
-                                     TradeRouteManager routeManager, EnhancedTradeManager tradeManager)        
+        public void UpdateGlobalMarket(List<StrategyGame.City> allCities, List<StrategyGame.Country> allCountries,
+                                     TradeRouteManager routeManager, EnhancedTradeManager tradeManager)
         {
+            // Clear previous turn trade volumes and flows
+            foreach (var goodName in TradeVolumes.Keys)
+            {
+                TradeVolumes[goodName].Clear();
+            }
+            foreach (var country in CountryTradeFlows.Values)
+            {
+                foreach (var flow in country.Values)
+                {
+                    flow.Exports = 0;
+                    flow.Imports = 0;
+                }
+            }
+            GlobalTradeValue = 0;
+
+            // Update ageing of recent trade events
+            RecentTradeEvents.RemoveAll(e => e.TurnsAgo > 5);
+            foreach (var evt in RecentTradeEvents)
+            {
+                evt.TurnsAgo++;
+            }
+
             // Reset demand and supply
             foreach (var goodName in GlobalDemand.Keys.ToList())
             {
@@ -175,27 +197,8 @@ namespace StrategyGame // Reverted from EconomySim
                     }
                 }
             }
-              // Reset trade volumes and flows for new turn
-            foreach (var goodName in TradeVolumes.Keys)
-            {
-                TradeVolumes[goodName].Clear();
-            }
-            foreach (var country in CountryTradeFlows.Values)
-            {
-                foreach (var flow in country.Values)
-                {
-                    flow.Exports = 0;
-                    flow.Imports = 0;
-                }
-            }
-            GlobalTradeValue = 0;
-            
-            // Clear old trade events but keep very recent ones
-            RecentTradeEvents.RemoveAll(e => e.TurnsAgo > 5);
-            foreach (var evt in RecentTradeEvents)
-            {
-                evt.TurnsAgo++;
-            }
+            // Execute international trade between countries
+            InternationalTrade.ExecuteTradeTurn(allCountries, this, tradeManager);
         }
           public void RecordTrade(string goodName, string exportingCountry, string importingCountry, 
                                int quantity, double totalValue)
