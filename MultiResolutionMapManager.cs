@@ -35,6 +35,8 @@ namespace StrategyGame
         private readonly HashSet<(int cellSize, int tileX, int tileY)> _tilesBeingLoaded = new();
         private readonly object _tileLoadLock = new();
         private readonly SemaphoreSlim _preloadSemaphore = new(1, 1);
+        private readonly Dictionary<(int cellSize, int tileX, int tileY), Task<SystemDrawing.Bitmap>> _inFlightTasks = new();
+        private readonly object _taskLock = new();
         private Image<Rgba32> _largeBaseMap;
         private SystemDrawing.Bitmap _baseMap;
 
@@ -135,7 +137,32 @@ namespace StrategyGame
 
 
 
-        public async Task<System.Drawing.Bitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
+        public Task<System.Drawing.Bitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
+        {
+            int cellSize = GetCellSize(zoom);
+            var key = (cellSize, tileX, tileY);
+
+            lock (_taskLock)
+            {
+                if (_inFlightTasks.TryGetValue(key, out var existing))
+                    return existing;
+
+                var task = LoadTileInternalAsync(zoom, tileX, tileY, token);
+                _inFlightTasks[key] = task;
+
+                task.ContinueWith(_ =>
+                {
+                    lock (_taskLock)
+                    {
+                        _inFlightTasks.Remove(key);
+                    }
+                }, TaskScheduler.Default);
+
+                return task;
+            }
+        }
+
+        private async Task<System.Drawing.Bitmap> LoadTileInternalAsync(float zoom, int tileX, int tileY, CancellationToken token)
         {
             Debug.WriteLine($"[TILE LOAD] Starting tile ({tileX}, {tileY})");
             int cellSize = GetCellSize(zoom);
@@ -239,29 +266,7 @@ namespace StrategyGame
 
                 if (!File.Exists(tilePath))
                 {
-                    Task.Run(() =>
-                    {
-                        var fileLock = GetFileLock(tilePath); // use the correct variable
-                        fileLock.Wait();
-                        try
-                        {
-                            var tile = PixelMapGenerator.GenerateTileWithCountriesLarge(
-                                _baseWidth,
-                                _baseHeight,
-                                cellSize,
-                                coord.X,
-                                coord.Y,
-                                tileSize);
-
-                            Directory.CreateDirectory(Path.GetDirectoryName(tilePath));
-                            tile.Save(tilePath); // image saving  still needs lock
-                            tile.Dispose();
-                        }
-                        finally
-                        {
-                            fileLock.Release();
-                        }
-                    });
+                    _ = GetTileAsync(zoomLevel, coord.X, coord.Y, CancellationToken.None);
                 }
             }
         }
