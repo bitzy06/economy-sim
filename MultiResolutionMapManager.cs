@@ -75,10 +75,22 @@ namespace StrategyGame
         /// maximum cell size used when generating maps.
         /// </summary>
 
-        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80 };
+        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80,160,320,640 };
         private static readonly Dictionary<string, SemaphoreSlim> _fileLocks = new();
         private static readonly object _fileLockDictLock = new();
-
+        private Bitmap SafeLoadTile(string path)
+        {
+            var fileLock = GetFileLock(path);
+            fileLock.Wait();
+            try
+            {
+                // 1️⃣ copy the file into memory so the OS handle is released immediately
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var img = SixLabors.ImageSharp.Image.Load<Rgba32>(fs);
+                return ImageSharpToBitmap(img);            // returns a System.Drawing.Bitmap
+            }
+            finally { fileLock.Release(); }
+        }
         private static SemaphoreSlim GetFileLock(string path)
         {
             lock (_fileLockDictLock)
@@ -92,9 +104,7 @@ namespace StrategyGame
             }
         }
 
-        public static int MaxCellSize => PixelsPerCellLevels[PixelsPerCellLevels.Length - 1];
-        private const int MAX_DIMENSION = 100_000;
-        private const long MAX_PIXEL_COUNT = 6_000_000_000L;
+      
 
         private static readonly string RepoRoot =
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
@@ -122,189 +132,8 @@ namespace StrategyGame
             return new SystemDrawing.Size(_baseWidth * cellSize, _baseHeight * cellSize);
         }
 
-        /// <summary>
-
-        /// Generate maps for all zoom levels. Each level increases the pixel
-        /// density without creating excessively large bitmaps.
-        /// </summary>
-        public void GenerateMaps()
-        {
-            if (!IsTileCacheComplete(MaxCellSize))
-            {
-                GenerateTileCache();
-            }
-
-            ClearMapCache();
-            ClearTileCache();
-        }
 
 
-
-
-        /// <summary>
-        /// Generate tile cache for all predefined zoom levels.
-        /// </summary>
-        public void GenerateTileCache()
-        {
-            ClearTileCache();
-
-            int total = 0;
-            foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
-            {
-                var size = GetMapSize((int)level);
-                total += ((size.Width + TileSizePx - 1) / TileSizePx) *
-                         ((size.Height + TileSizePx - 1) / TileSizePx);
-            }
-
-            int count = 0;
-            foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
-            {
-                float z = (int)level;
-                int cellSize = GetCellSize(z);
-                var size = GetMapSize(z);
-                int tilesX = (size.Width + TileSizePx - 1) / TileSizePx;
-                int tilesY = (size.Height + TileSizePx - 1) / TileSizePx;
-
-                for (int x = 0; x < tilesX; x++)
-                {
-                    for (int y = 0; y < tilesY; y++)
-                    {
-                        LoadOrGenerateTileFromData(cellSize, x, y);
-                        count++;
-                        TileGenerationProgress?.Invoke(count, total);
-                    }
-                }
-            }
-
-            ClearTileCache();
-            ClearMapCache();
-        }
-
-        /// <summary>
-        /// Generate tile caches for zoom levels that are missing tiles on disk.
-        /// Existing caches are left untouched.
-        /// </summary>
-        public void GenerateMissingTileCaches()
-        {
-            int total = 0;
-            foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
-            {
-                float z = (int)level;
-                int cellSize = GetCellSize(z);
-                if (IsTileCacheComplete(cellSize))
-                    continue;
-
-                var size = GetMapSize(z);
-                int tilesX = (size.Width + TileSizePx - 1) / TileSizePx;
-                int tilesY = (size.Height + TileSizePx - 1) / TileSizePx;
-
-                for (int x = 0; x < tilesX; x++)
-                {
-                    for (int y = 0; y < tilesY; y++)
-                    {
-                        string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
-                        string path = System.IO.Path.Combine(dir, $"{x}_{y}.png");
-                        if (!File.Exists(path))
-                            total++;
-                    }
-                }
-            }
-
-            int count = 0;
-            foreach (ZoomLevel level in Enum.GetValues(typeof(ZoomLevel)))
-            {
-                float z = (int)level;
-                int cellSize = GetCellSize(z);
-                if (IsTileCacheComplete(cellSize))
-                    continue;
-
-                var size = GetMapSize(z);
-                int tilesX = (size.Width + TileSizePx - 1) / TileSizePx;
-                int tilesY = (size.Height + TileSizePx - 1) / TileSizePx;
-
-                for (int x = 0; x < tilesX; x++)
-                {
-                    for (int y = 0; y < tilesY; y++)
-                    {
-                        string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
-                        string path = System.IO.Path.Combine(dir, $"{x}_{y}.png");
-                        if (!File.Exists(path))
-                        {
-                            LoadOrGenerateTileFromData(cellSize, x, y);
-                            count++;
-                            TileGenerationProgress?.Invoke(count, total);
-                        }
-                    }
-                }
-            }
-
-            ClearTileCache();
-            ClearMapCache();
-        }
-
-        /// <summary>
-        /// Retrieve a single tile bitmap for the given zoom level and tile coordinates.
-        /// </summary>
-        public SystemDrawing.Bitmap GetTile(float zoom, int tileX, int tileY)
-        {
-            int cellSize = GetCellSize(zoom);
-            var key = (cellSize, tileX, tileY);
-            SystemDrawing.Bitmap bmp = null;
-
-            lock (_cacheLock)
-            {
-                if (_tileCache.TryGetValue(key, out var bmpCached))
-                {
-                    _tileLru.Remove(key);
-                    _tileLru.AddLast(key);
-                    return bmpCached;
-                }
-            }
-
-            string dir = Path.Combine(TileCacheDir, cellSize.ToString());
-            string path = Path.Combine(dir, $"{tileX}_{tileY}.png");
-
-            if (File.Exists(path))
-            {
-                try
-                {
-                    using var test = new System.Drawing.Bitmap(path);
-                    if (test.Width > 0 && test.Height > 0)
-                    {
-                        bmp = new System.Drawing.Bitmap(test); // make a copy
-                    }
-                    else
-                    {
-                        File.Delete(path);
-                    }
-                }
-                catch
-                {
-                    try { File.Delete(path); } catch { }
-                }
-            }
-
-            if (bmp == null)
-            {
-                bmp = LoadOrGenerateTileFromData(cellSize, tileX, tileY);
-                if (bmp != null)
-                {
-                    SaveTileToDisk(cellSize, tileX, tileY, bmp);
-                }
-            }
-
-            if (bmp != null)
-            {
-                lock (_cacheLock)
-                {
-                    _tileCache[key] = bmp;
-                    _tileLru.AddLast(key);
-                    EnforceTileLimit();
-                }
-            }
-
-            return bmp;
-        }
 
         public async Task<System.Drawing.Bitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
         {
@@ -482,72 +311,36 @@ namespace StrategyGame
 
                 var output = new System.Drawing.Bitmap(viewArea.Width, viewArea.Height);
                 using var g = System.Drawing.Graphics.FromImage(output);
-                g.Clear(System.Drawing.Color.DarkGray);
+                g.Clear(System.Drawing.Color.DarkGray); // Use a placeholder color
 
-            for (int ty = tileStartY; ty < tileEndY; ty++)
-            {
-                for (int tx = tileStartX; tx < tileEndX; tx++)
+                for (int ty = tileStartY; ty < tileEndY; ty++)
                 {
-                    var key = (cellSize, tx, ty);
-                    var rect = new System.Drawing.Rectangle(
-                        tx * tileSize - viewArea.X,
-                        ty * tileSize - viewArea.Y,
-                        tileSize,
-                        tileSize
-                    );
-
-                    if (rect.Width <= 0 || rect.Height <= 0)
-                        continue;
-
-                    System.Drawing.Bitmap tile = null;
-                    if (tile == null)
+                    for (int tx = tileStartX; tx < tileEndX; tx++)
                     {
-                        string tilePath = GetTilePath(cellSize, tx, ty);
-                            if (File.Exists(tilePath))
-                            {
-                                try
-                                {
-                                    var fileLock = GetFileLock(tilePath);
-                                    fileLock.Wait();
-                                    try
-                                    {
-                                        using var tmp = new System.Drawing.Bitmap(tilePath);
-                                        tile = new System.Drawing.Bitmap(tmp); // Deep copy for safety
-                                    }
-                                    finally
-                                    {
-                                        fileLock.Release();
-                                    }
+                        var key = (cellSize, tx, ty);
+                        var rect = new System.Drawing.Rectangle(
+                            tx * tileSize - viewArea.X,
+                            ty * tileSize - viewArea.Y,
+                            tileSize,
+                            tileSize
+                        );
 
-                                    lock (_cacheLock)
-                                    {
-                                        _tileCache[key] = tile;
-                                    }
+                        if (rect.Width <= 0 || rect.Height <= 0)
+                            continue;
 
-                                    Debug.WriteLine($"[SYNC LOAD] Loaded tile: {tilePath}");
-                                }
-                                catch (Exception ex)
-                                {
-                                    Debug.WriteLine($"[SYNC LOAD ERROR] Failed to load {tilePath}: {ex.Message}");
-                                    // Optionally: delete bad file
-                                    try { File.Delete(tilePath); } catch { }
-                                }
-                            }
+                        System.Drawing.Bitmap tile = null;
+                        lock (_cacheLock)
+                        {
+                            // First, try to get the tile from the in-memory cache.
+                            _tileCache.TryGetValue(key, out tile);
                         }
-                    lock (_cacheLock)
-                    {
-
-                        _tileCache.TryGetValue(key, out tile);
-                    }
 
                         if (tile != null && tile.Width > 0 && tile.Height > 0)
                         {
+                            // If the tile was in the cache, draw it.
                             try
                             {
-                                using (var safeTile = new Bitmap(tile))
-                                {
-                                    g.DrawImage(safeTile, rect);
-                                }
+                                g.DrawImage(tile, rect);
                             }
                             catch (ExternalException ex)
                             {
@@ -555,33 +348,40 @@ namespace StrategyGame
                             }
                         }
                         else
-                    {
-                        lock (_tileLoadLock)
                         {
-                            if (!_tilesBeingLoaded.Contains(key))
+                            // --- This is the new non-blocking logic ---
+                            // If the tile is NOT in the cache, request it asynchronously.
+                            // Do NOT block to wait for it. The UI will remain responsive.
+                            lock (_tileLoadLock)
                             {
-                                _tilesBeingLoaded.Add(key);
-                                _ = Task.Run(async () =>
+                                if (!_tilesBeingLoaded.Contains(key))
                                 {
-                                    try
+                                    _tilesBeingLoaded.Add(key);
+                                    // GetTileAsync will load from disk or generate if needed.
+                                    _ = Task.Run(async () =>
                                     {
-                                        await GetTileAsync(zoom, tx, ty, CancellationToken.None);
-                                        triggerRefresh?.Invoke();
-                                        Debug.WriteLine($"[TILE] Triggering redraw for tile ({tx},{ty})");
-                                    }
-                                    finally
-                                    {
-                                        lock (_tileLoadLock)
+                                        try
                                         {
-                                            _tilesBeingLoaded.Remove(key);
+                                            // This runs in the background.
+                                            await GetTileAsync(zoom, tx, ty, CancellationToken.None);
+                                            // Once the tile is loaded/generated, trigger a refresh to draw it.
+                                            triggerRefresh?.Invoke();
+                                            Debug.WriteLine($"[TILE] Triggering redraw for tile ({tx},{ty})");
                                         }
-                                    }
-                                });
+                                        finally
+                                        {
+                                            lock (_tileLoadLock)
+                                            {
+                                                _tilesBeingLoaded.Remove(key);
+                                            }
+                                        }
+                                    });
+                                }
                             }
+                            // A placeholder (the gray background) is drawn for the missing tile for now.
                         }
                     }
                 }
-            }
 
                 return output;
             }
@@ -749,32 +549,29 @@ namespace StrategyGame
 
         private int GetCellSize(float zoom)
         {
-            // Convert the pixel-per-cell configuration to a float array for interpolation
+            // 1) Interpolate between the discrete anchor values (3,4,6,10,40,80,160)
             float[] anchors = new float[PixelsPerCellLevels.Length];
             for (int i = 0; i < anchors.Length; i++)
                 anchors[i] = PixelsPerCellLevels[i];
 
             float size;
-            if (zoom <= 1f) size = anchors[0];
+            if (zoom <= 1f)
+                size = anchors[0];
             else if (zoom >= anchors.Length)
-                size = anchors[anchors.Length - 1];
+                size = anchors[^1];
             else
             {
-                int lowerIndex = (int)Math.Floor(zoom) - 1;
-                float t = zoom - (lowerIndex + 1);
-                size = anchors[lowerIndex] + t * (anchors[lowerIndex + 1] - anchors[lowerIndex]);
+                int lower = (int)Math.Floor(zoom) - 1;   // anchors are 1-based
+                float t = zoom - (lower + 1);            // fractional part
+                size = anchors[lower] + t * (anchors[lower + 1] - anchors[lower]);
             }
 
-            int maxDimSize = MAX_DIMENSION / Math.Max(_baseWidth, _baseHeight);
-            double maxPixelSize = Math.Sqrt((double)MAX_PIXEL_COUNT / ((long)_baseWidth * _baseHeight));
-            int maxAllowed = (int)Math.Floor(Math.Min(maxDimSize, maxPixelSize));
-
-            if (size > maxAllowed)
-                size = maxAllowed;
+            // 2) ***Removed*** the bitmap-size clamp that forced cellSize ≤ 100 000/_baseWidth
+            //    because we tile; we never build the full image in one piece.
+            //    If you really need that guard, put it behind a flag.
 
             if (size < 1f)
                 size = 1f;
-
 
             return (int)Math.Round(size);
         }
@@ -798,31 +595,13 @@ namespace StrategyGame
         /// <summary>
         /// Dispose all cached bitmaps without affecting tile caches.
         /// </summary>
-        public void ClearMapCache()
-        {
-            foreach (var bmp in _cachedMaps.Values)
-            {
-                bmp.Dispose();
-            }
-            _cachedMaps.Clear();
-        }
+       
 
 
         /// <summary>
         /// Dispose all cached tiles and clear the tile cache.
         /// </summary>
-        public void ClearTileCache()
-        {
-            lock (_cacheLock)
-            {
-                foreach (var tile in _tileCache.Values)
-                {
-                    tile.Dispose();
-                }
-                _tileCache.Clear();
-                _tileLru.Clear();
-            }
-        }
+       
 
         private void EnforceTileLimit()
         {

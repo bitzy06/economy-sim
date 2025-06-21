@@ -123,33 +123,7 @@ namespace StrategyGame
         }
 
 
-        /// <summary>
 
-        /// Generate a pixel-art map with country borders for very large maps
-        /// using ImageSharp to avoid System.Drawing size limits.
-        /// </summary>
-        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GeneratePixelArtMapWithCountriesLarge(int width, int height, int pixelsPerCell = 8)
-        {
-            lock (GdalConfigLock)
-            {
-                if (!_gdalConfigured)
-                {
-                    GdalBase.ConfigureAll();
-                    _gdalConfigured = true;
-                }
-            }
-
-            int fullW = width * pixelsPerCell;
-            int fullH = height * pixelsPerCell;
-            int[,] mask = CountryMaskGenerator.CreateCountryMask(
-                TerrainTifPath, ShpPath, fullW, fullH);
-
-            var baseMap = GenerateTerrainPixelArtMapLarge(width, height, pixelsPerCell, mask);
-
-            DrawBordersLarge(baseMap, mask);
-
-            return baseMap;
-        }
 
         /// <summary>
         /// Generate a single tile of the pixel-art map directly from the terrain
@@ -355,34 +329,7 @@ namespace StrategyGame
             return result;
         }
 
-        /// <summary>
-        /// Draw one-pixel-wide borders where adjacent mask values differ.
-        /// Using direct memory access avoids the overhead of SetPixel.
-        /// </summary>
-        private static void DrawBorders(
-      SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> image,
-      int[,] mask)
-        {
-            int width = image.Width;
-            int height = image.Height;
-
-            var black = new SixLabors.ImageSharp.PixelFormats.Rgba32(0, 0, 0, 255);
-
-            for (int y = 1; y < height - 1; y++)
-            {
-                Span<SixLabors.ImageSharp.PixelFormats.Rgba32> row = image.DangerousGetPixelRowMemory(y).Span;
-
-                for (int x = 1; x < width - 1; x++)
-                {
-                    int code = mask[y, x];
-                    if (code != mask[y - 1, x] || code != mask[y + 1, x] ||
-                        code != mask[y, x - 1] || code != mask[y, x + 1])
-                    {
-                        row[x] = black;
-                    }
-                }
-            }
-        }
+ 
 
         /// <summary>
         /// Draw borders directly on an ImageSharp image when the map exceeds
@@ -466,82 +413,6 @@ namespace StrategyGame
                 if (e2 >= dy) { err += dy; x0 += sx; }
                 if (e2 <= dx) { err += dx; y0 += sy; }
             }
-        }
-        /// <summary>
-        /// Generates a pixel-art map using the Natural Earth terrain raster.
-        /// Each logical cell is represented by multiple pixels which are
-        /// randomly chosen from a small palette derived from the terrain color.
-        /// </summary>
-        /// <param name="cellsX">Number of cells horizontally.</param>
-        /// <param name="cellsY">Number of cells vertically.</param>
-        /// <param name="pixelsPerCell">Size of each cell in pixels.</param>
-
-        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>
-      GenerateTerrainPixelArtMap(int cellsX, int cellsY, int pixelsPerCell, int[,] landMask = null)
-        {
-            string path = TerrainTifPath;
-            if (!File.Exists(path))
-                throw new FileNotFoundException("Missing terrain GeoTIFF", path);
-
-            int widthPx = cellsX * pixelsPerCell;
-            int heightPx = cellsY * pixelsPerCell;
-            if (widthPx > MaxBitmapDimension || heightPx > MaxBitmapDimension)
-                throw new ArgumentOutOfRangeException(nameof(pixelsPerCell),
-                    $"Bitmap size {widthPx}x{heightPx} exceeds supported dimensions ({MaxBitmapDimension}).");
-
-            // Load and resize terrain image to cell grid
-            using var terrainImage = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(path);
-            terrainImage.Mutate(ctx => ctx.Resize(cellsX, cellsY, KnownResamplers.NearestNeighbor));
-
-            landMask ??= CountryMaskGenerator.CreateCountryMask(TerrainTifPath, ShpPath, widthPx, heightPx);
-
-            var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(widthPx, heightPx);
-            int seed = Environment.TickCount;
-            var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
-            var waterColor = new Rgba32(135, 206, 250, 255); // LightSkyBlue
-
-            Parallel.For(0, cellsY, y =>
-            {
-                for (int x = 0; x < cellsX; x++)
-                {
-                    var baseColor = terrainImage[x, y];
-
-                    // Check if this whole cell contains land
-                    bool isLandCell = false;
-                    for (int py = 0; py < pixelsPerCell && !isLandCell; py++)
-                    {
-                        int destY = y * pixelsPerCell + py;
-                        for (int px = 0; px < pixelsPerCell && !isLandCell; px++)
-                        {
-                            int destX = x * pixelsPerCell + px;
-                            if (landMask[destY, destX] != 0)
-                                isLandCell = true;
-                        }
-                    }
-
-                    var palette = isLandCell ? BuildPalette(baseColor) : null;
-
-                    for (int py = 0; py < pixelsPerCell; py++)
-                    {
-                        int destY = y * pixelsPerCell + py;
-                        if (destY >= heightPx) continue;
-
-                        var row = dest.DangerousGetPixelRowMemory(destY).Span;
-
-                        for (int px = 0; px < pixelsPerCell; px++)
-                        {
-                            int destX = x * pixelsPerCell + px;
-                            if (destX >= widthPx) continue;
-
-                            row[destX] = (landMask[destY, destX] == 0)
-                                ? waterColor
-                                : palette[rngLocal.Value.Next(palette.Length)];
-                        }
-                    }
-                }
-            });
-
-            return dest;
         }
 
         /// <summary>
