@@ -26,7 +26,6 @@ namespace economy_sim
         // Or be removed if all interaction is through allCountries list and UI selection
         private StrategyGame.Country playerCountry; // Explicitly StrategyGame.Country
         private int simTurn = 0;
-        private Button buttonShowPopStats;
         private PopStatsForm popStatsForm;
         private FactoryStatsForm factoryStatsForm;
         private ConstructionForm constructionForm;
@@ -34,11 +33,6 @@ namespace economy_sim
         private PlayerRoleManager playerRoleManager;
         private Random random = new Random(); // Add a Random instance for AI and other uses
         private StrategyGame.DiplomacyManager diplomacyManager; // Added DiplomacyManager field
-        private ListView listViewDiplomacy; // Added ListView for diplomacy
-        // Government UI fields
-        private TabPage tabPageGovernment;
-        private ListView listViewParties;
-        private Button buttonOpenPolicyManager;
         private PolicyManagerForm policyManagerForm;
 
         // Fields to store previous values for change tracking
@@ -120,27 +114,9 @@ namespace economy_sim
             Console.WriteLine($"[Startup] Trade and GlobalMarket init took {sw.Elapsed.TotalSeconds:F2} seconds");
 
             sw.Restart();
-            listViewDiplomacy = new ListView
-            {
-                Location = new System.Drawing.Point(10, 10),
-                Size = new System.Drawing.Size(400, 180),
-                View = View.Details,
-                FullRowSelect = true,
-                GridLines = true
-            };
             pictureBox1.MouseDown += PictureBox1_MouseDown;
             pictureBox1.MouseMove += PictureBox1_MouseMove;
             pictureBox1.MouseUp += PictureBox1_MouseUp;
-
-            listViewDiplomacy.Columns.Add("Country", 120);
-            listViewDiplomacy.Columns.Add("Type", 80);
-            listViewDiplomacy.Columns.Add("Resource", 100);
-            listViewDiplomacy.Columns.Add("Quantity", 80);
-            listViewDiplomacy.Columns.Add("Price", 80);
-            listViewDiplomacy.Columns.Add("Remaining", 80);
-
-            tabPageDiplomacy.Controls.Add(listViewDiplomacy);
-            Console.WriteLine($"[Startup] listViewDiplomacy init took {sw.Elapsed.TotalSeconds:F2} seconds");
 
             sw.Restart();
             InitializeCorporations();
@@ -165,22 +141,8 @@ namespace economy_sim
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
 
-            // Button setup (you can optionally time this too)
-            this.buttonShowPopStats = new Button();
-            this.buttonShowPopStats.Text = "Show Pop Stats";
             this.buttonShowPopStats.Location = new System.Drawing.Point(buttonsTargetX, buttonsTargetY);
-            this.buttonShowPopStats.Size = new System.Drawing.Size(120, 23);
             this.buttonShowPopStats.Click += ButtonShowPopStats_Click;
-            if (this.tabControlMain.TabPages.ContainsKey("tabPageCity"))
-            {
-                this.tabControlMain.TabPages["tabPageCity"].Controls.Add(this.buttonShowPopStats);
-                this.buttonShowPopStats.BringToFront();
-            }
-            else if (this.tabPageCity != null)
-            {
-                this.tabPageCity.Controls.Add(this.buttonShowPopStats);
-                this.buttonShowPopStats.BringToFront();
-            }
 
             popStatsForm = new PopStatsForm();
             factoryStatsForm = new FactoryStatsForm();
@@ -194,37 +156,11 @@ namespace economy_sim
             this.listBoxFactoryStats.DrawItem += new DrawItemEventHandler(this.ListBox_DrawItemShared);
             this.listBoxMarketStats.DrawItem += new DrawItemEventHandler(this.ListBox_DrawItemShared);
 
-            Button buttonShowFactoryStats = new Button();
-            buttonShowFactoryStats.Text = "Building Details";
-            buttonShowFactoryStats.Location = new System.Drawing.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
-            buttonShowFactoryStats.Size = new System.Drawing.Size(120, 23);
-            buttonShowFactoryStats.Click += ButtonShowFactoryStats_Click;
-            if (this.tabControlMain.TabPages.ContainsKey("tabPageCity"))
-            {
-                this.tabControlMain.TabPages["tabPageCity"].Controls.Add(buttonShowFactoryStats);
-                buttonShowFactoryStats.BringToFront();
-            }
-            else if (this.tabPageCity != null)
-            {
-                this.tabPageCity.Controls.Add(buttonShowFactoryStats);
-                buttonShowFactoryStats.BringToFront();
-            }
+            this.buttonShowFactoryStats.Location = new System.Drawing.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
+            this.buttonShowFactoryStats.Click += ButtonShowFactoryStats_Click;
 
-            Button buttonShowConstruction = new Button();
-            buttonShowConstruction.Text = "Construction";
-            buttonShowConstruction.Location = new System.Drawing.Point(buttonShowFactoryStats.Right + 10, buttonsTargetY);
-            buttonShowConstruction.Size = new System.Drawing.Size(120, 23);
-            buttonShowConstruction.Click += ButtonShowConstruction_Click;
-            if (this.tabControlMain.TabPages.ContainsKey("tabPageCity"))
-            {
-                this.tabControlMain.TabPages["tabPageCity"].Controls.Add(buttonShowConstruction);
-                buttonShowConstruction.BringToFront();
-            }
-            else if (this.tabPageCity != null)
-            {
-                this.tabPageCity.Controls.Add(buttonShowConstruction);
-                buttonShowConstruction.BringToFront();
-            }
+            this.buttonShowConstruction.Location = new System.Drawing.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
+            this.buttonShowConstruction.Click += ButtonShowConstruction_Click;
 
             Console.WriteLine($"[Startup] TOTAL startup time: {totalSw.Elapsed.TotalSeconds:F2} seconds");
             this.Shown += (s, e) =>
@@ -1714,12 +1650,6 @@ namespace economy_sim
             UpdateCurrentRoleDisplay();
 
             // Extra toggle for detailed debug output
-            Button buttonToggleDebugMode = new Button
-            {
-                Location = new Point(10, 280),
-                Size = new Size(120, 23),
-                Text = "Toggle Debug Mode"
-            };
             buttonToggleDebugMode.Click += (sender, e) =>
             {
                 isDetailedDebugMode = !isDetailedDebugMode;
@@ -1727,7 +1657,6 @@ namespace economy_sim
                     isDetailedDebugMode ? "Detailed Debug Mode Enabled" : "General Debug Mode Enabled",
                     "Debug Mode Toggled");
             };
-            tabPageDebug.Controls.Add(buttonToggleDebugMode);
         }
 
         // Populate the country selection combobox
@@ -2012,32 +1941,6 @@ namespace economy_sim
         // --- Government Tab ---
         private void InitializeGovernmentTab()
         {
-            tabPageGovernment = new TabPage("Government");
-
-            listViewParties = new ListView
-            {
-                View = View.Details,
-                FullRowSelect = true,
-                GridLines = true,
-                Location = new System.Drawing.Point(10, 10),
-                Size = new System.Drawing.Size(400, 200)
-            };
-            listViewParties.Columns.Add("Party", 200);
-            listViewParties.Columns.Add("Share", 80);
-
-            buttonOpenPolicyManager = new Button
-            {
-                Text = "Open Policy Manager",
-                Location = new System.Drawing.Point(10, 220),
-                Size = new System.Drawing.Size(150, 30)
-            };
-            buttonOpenPolicyManager.Click += ButtonOpenPolicyManager_Click;
-
-            tabPageGovernment.Controls.Add(listViewParties);
-            tabPageGovernment.Controls.Add(buttonOpenPolicyManager);
-
-            tabControlMain.Controls.Add(tabPageGovernment);
-
             policyManagerForm = new PolicyManagerForm(playerCountry?.Government);
         }
 

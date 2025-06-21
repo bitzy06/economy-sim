@@ -39,6 +39,14 @@
             listBoxMarketStats = new ListBox();
             tabPageCompanies = new TabPage();
             listViewCompanies = new ListView();
+            listViewDiplomacy = new ListView();
+            buttonShowPopStats = new Button();
+            buttonShowFactoryStats = new Button();
+            buttonShowConstruction = new Button();
+            tabPageGovernment = new TabPage();
+            listViewParties = new ListView();
+            buttonOpenPolicyManager = new Button();
+            buttonToggleDebugMode = new Button();
             tabPageFinance = new TabPage();
             listViewFinance = new ListView();
             tabPageDebug = new TabPage();
@@ -81,6 +89,7 @@
             tabPageCompanies.SuspendLayout();
             tabPageFinance.SuspendLayout();
             tabPageDebug.SuspendLayout();
+            tabPageGovernment.SuspendLayout();
             tabPageDiplomacy.SuspendLayout();
             tabPageCity.SuspendLayout();
             tabPageCountry.SuspendLayout();
@@ -174,6 +183,7 @@
             tabPageDebug.Controls.Add(checkBoxLogBuildings);
             tabPageDebug.Controls.Add(checkBoxLogEconomy);
             tabPageDebug.Controls.Add(buttonGenerateTileCache);
+            tabPageDebug.Controls.Add(buttonToggleDebugMode);
             tabPageDebug.Location = new Point(4, 24);
             tabPageDebug.Margin = new Padding(4, 3, 4, 3);
             tabPageDebug.Name = "tabPageDebug";
@@ -331,7 +341,7 @@
             buttonGenerateTileCache.TabIndex = 13;
             buttonGenerateTileCache.Text = "Build Tile Cache";
             buttonGenerateTileCache.UseVisualStyleBackColor = true;
-            
+
             //
             // tabPageDiplomacy
             //
@@ -342,6 +352,7 @@
             tabPageDiplomacy.Controls.Add(buttonProposeTrade);
             tabPageDiplomacy.Controls.Add(buttonViewRelations);
             tabPageDiplomacy.Controls.Add(buttonOpenTradeManagement);
+            tabPageDiplomacy.Controls.Add(listViewDiplomacy);
             tabPageDiplomacy.Location = new Point(4, 24);
             tabPageDiplomacy.Margin = new Padding(4, 3, 4, 3);
             tabPageDiplomacy.Name = "tabPageDiplomacy";
@@ -350,6 +361,19 @@
             tabPageDiplomacy.TabIndex = 3;
             tabPageDiplomacy.Text = "Diplomacy";
             tabPageDiplomacy.UseVisualStyleBackColor = true;
+
+            //
+            // tabPageGovernment
+            //
+            tabPageGovernment.Controls.Add(listViewParties);
+            tabPageGovernment.Controls.Add(buttonOpenPolicyManager);
+            tabPageGovernment.Location = new Point(4, 24);
+            tabPageGovernment.Margin = new Padding(4, 3, 4, 3);
+            tabPageGovernment.Name = "tabPageGovernment";
+            tabPageGovernment.Size = new Size(960, 526);
+            tabPageGovernment.TabIndex = 6;
+            tabPageGovernment.Text = "Government";
+            tabPageGovernment.UseVisualStyleBackColor = true;
             // 
             // labelProposedTrades
             // 
@@ -425,6 +449,23 @@
             buttonOpenTradeManagement.Text = "Trade Management";
             buttonOpenTradeManagement.UseVisualStyleBackColor = true;
             buttonOpenTradeManagement.Click += ButtonOpenTradeManagement_Click;
+
+            //
+            // listViewDiplomacy
+            //
+            listViewDiplomacy.FullRowSelect = true;
+            listViewDiplomacy.GridLines = true;
+            listViewDiplomacy.Location = new Point(10, 10);
+            listViewDiplomacy.Name = "listViewDiplomacy";
+            listViewDiplomacy.Size = new Size(400, 180);
+            listViewDiplomacy.TabIndex = 7;
+            listViewDiplomacy.View = View.Details;
+            listViewDiplomacy.Columns.Add("Country", 120);
+            listViewDiplomacy.Columns.Add("Type", 80);
+            listViewDiplomacy.Columns.Add("Resource", 100);
+            listViewDiplomacy.Columns.Add("Quantity", 80);
+            listViewDiplomacy.Columns.Add("Price", 80);
+            listViewDiplomacy.Columns.Add("Remaining", 80);
             // 
             // tabPageCity
             // 
@@ -437,6 +478,9 @@
             tabPageCity.Controls.Add(listBoxSellOrders);
             tabPageCity.Controls.Add(listBoxCityStats);
             tabPageCity.Controls.Add(listBoxFactoryStats);
+            tabPageCity.Controls.Add(buttonShowPopStats);
+            tabPageCity.Controls.Add(buttonShowFactoryStats);
+            tabPageCity.Controls.Add(buttonShowConstruction);
             tabPageCity.Location = new Point(4, 24);
             tabPageCity.Margin = new Padding(4, 3, 4, 3);
             tabPageCity.Name = "tabPageCity";
@@ -529,6 +573,53 @@
             listBoxFactoryStats.Name = "listBoxFactoryStats";
             listBoxFactoryStats.Size = new Size(326, 214);
             listBoxFactoryStats.TabIndex = 8;
+
+            //
+            // buttonShowPopStats
+            //
+            buttonShowPopStats.Name = "buttonShowPopStats";
+            buttonShowPopStats.Size = new Size(120, 23);
+            buttonShowPopStats.Text = "Show Pop Stats";
+
+            //
+            // buttonShowFactoryStats
+            //
+            buttonShowFactoryStats.Name = "buttonShowFactoryStats";
+            buttonShowFactoryStats.Size = new Size(120, 23);
+            buttonShowFactoryStats.Text = "Building Details";
+
+            //
+            // buttonShowConstruction
+            //
+            buttonShowConstruction.Name = "buttonShowConstruction";
+            buttonShowConstruction.Size = new Size(120, 23);
+            buttonShowConstruction.Text = "Construction";
+
+            //
+            // listViewParties
+            //
+            listViewParties.View = View.Details;
+            listViewParties.FullRowSelect = true;
+            listViewParties.GridLines = true;
+            listViewParties.Location = new Point(10, 10);
+            listViewParties.Size = new Size(400, 200);
+            listViewParties.Columns.Add("Party", 200);
+            listViewParties.Columns.Add("Share", 80);
+
+            //
+            // buttonOpenPolicyManager
+            //
+            buttonOpenPolicyManager.Location = new Point(10, 220);
+            buttonOpenPolicyManager.Size = new Size(150, 30);
+            buttonOpenPolicyManager.Text = "Open Policy Manager";
+            buttonOpenPolicyManager.Click += ButtonOpenPolicyManager_Click;
+
+            //
+            // buttonToggleDebugMode
+            //
+            buttonToggleDebugMode.Location = new Point(10, 280);
+            buttonToggleDebugMode.Size = new Size(120, 23);
+            buttonToggleDebugMode.Text = "Toggle Debug Mode";
             // 
             // tabPageCountry
             // 
@@ -573,6 +664,7 @@
             tabControlMain.Controls.Add(tabPageCountry);
             tabControlMain.Controls.Add(tabPageCity);
             tabControlMain.Controls.Add(tabPageDiplomacy);
+            tabControlMain.Controls.Add(tabPageGovernment);
             tabControlMain.Controls.Add(tabPageDebug);
             tabControlMain.Controls.Add(tabPageFinance);
             tabControlMain.Location = new Point(12, 12);
@@ -597,6 +689,8 @@
             tabPageFinance.ResumeLayout(false);
             tabPageDebug.ResumeLayout(false);
             tabPageDebug.PerformLayout();
+            tabPageGovernment.ResumeLayout(false);
+            tabPageGovernment.PerformLayout();
             tabPageDiplomacy.ResumeLayout(false);
             tabPageDiplomacy.PerformLayout();
             tabPageCity.ResumeLayout(false);
@@ -646,6 +740,14 @@
         private System.Windows.Forms.ListBox listBoxSellOrders;
         private System.Windows.Forms.ListBox listBoxCityStats;
         private System.Windows.Forms.ListBox listBoxFactoryStats;
+        private System.Windows.Forms.ListView listViewDiplomacy;
+        private System.Windows.Forms.Button buttonShowPopStats;
+        private System.Windows.Forms.Button buttonShowFactoryStats;
+        private System.Windows.Forms.Button buttonShowConstruction;
+        private System.Windows.Forms.TabPage tabPageGovernment;
+        private System.Windows.Forms.ListView listViewParties;
+        private System.Windows.Forms.Button buttonOpenPolicyManager;
+        private System.Windows.Forms.Button buttonToggleDebugMode;
         private System.Windows.Forms.TabPage tabPageCountry;
         private System.Windows.Forms.PictureBox pictureBox1;
         private System.Windows.Forms.Panel panelMap;
