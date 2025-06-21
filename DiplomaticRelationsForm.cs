@@ -7,7 +7,6 @@ namespace economy_sim
 {
     public partial class DiplomaticRelationsForm : Form
     {
-        private ListView listViewRelations;
         private StrategyGame.Country playerCountry;
         private System.Collections.Generic.List<StrategyGame.Country> allCountries;
         private StrategyGame.DiplomacyManager diplomacyManager;
@@ -21,10 +20,6 @@ namespace economy_sim
             PopulateRelations();
         }
 
-        private void InitializeComponent()
-        {
-            // method generated in DiplomaticRelationsForm.Designer.cs
-        }
 
         private void PopulateRelations()
         {

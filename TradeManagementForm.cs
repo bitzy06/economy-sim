@@ -18,38 +18,6 @@ namespace economy_sim
         private System.Windows.Forms.Timer refreshTimer;
         private Button buttonRefresh;
         
-        private TabControl tabControlTrade;
-        private TabPage tabPageTradeRoutes;
-        private TabPage tabPageTradeAgreements;
-        private TabPage tabPageGlobalMarket;
-        
-        // Trade Routes controls
-        private ListView listViewTradeRoutes;
-        private Button buttonCreateRoute;
-        private Button buttonUpgradeRoute;
-        private Button buttonDeleteRoute;
-        private ComboBox comboBoxRouteType;
-        
-        // Trade Agreements controls
-        private ListView listViewTradeAgreements;
-        private Button buttonNewAgreement;
-        private Button buttonRenewAgreement;
-        private Button buttonCancelAgreement;
-        
-        // Global Market controls
-        private ListView listViewGlobalPrices;
-        private ListView listViewTradingPartners;
-        private Label labelGlobalTradeValue;
-        private ComboBox comboBoxCommodityFilter;
-        
-        // Trade Route creation panel
-        private Panel panelCreateRoute;
-        private ComboBox comboBoxStartCity;
-        private ComboBox comboBoxEndCity;
-        private ComboBox comboBoxNewRouteType;
-        private Button buttonConfirmNewRoute;
-        private Button buttonCancelNewRoute;
-        
         public TradeManagementForm(StrategyGame.Country playerCountry, List<StrategyGame.Country> allCountries, List<StrategyGame.City> allCities, 
                                  TradeRouteManager routeManager, EnhancedTradeManager tradeManager, 
                                  StrategyGame.GlobalMarket globalMarket)        {
@@ -73,30 +41,6 @@ namespace economy_sim
             PopulateGlobalMarket();
         }
 
-        private void InitializeComponent()
-        {
-            // method generated in TradeManagementForm.Designer.cs
-        }
-
-        private void InitializeTradeRoutesTab()
-        {
-            // method generated in TradeManagementForm.Designer.cs
-        }
-        
-        private void InitializeTradeAgreementsTab()
-        {
-            // method generated in TradeManagementForm.Designer.cs
-        }
-        
-        private void InitializeGlobalMarketTab()
-        {
-            // method generated in TradeManagementForm.Designer.cs
-        }
-        
-        private void InitializeRouteCreationPanel()
-        {
-            // method generated in TradeManagementForm.Designer.cs
-        }
         
         private void PopulateTradeRoutes()
         {
