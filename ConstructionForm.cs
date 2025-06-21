@@ -7,16 +7,6 @@ namespace economy_sim
 {
     public partial class ConstructionForm : Form
     {
-        private ListBox listBoxProjects;
-        private ComboBox comboBoxType;
-        private NumericUpDown numericCost;
-        private NumericUpDown numericDuration;
-        private NumericUpDown numericOutput;
-        private Label labelType;
-        private Label labelCost;
-        private Label labelDuration;
-        private Label labelOutput;
-        private Button buttonStart;
         private City currentCity;
         public City CurrentCity => currentCity;
 

@@ -13,7 +13,6 @@ namespace economy_sim // Assuming this is your project's namespace
 {
     public partial class FactoryStatsForm : Form
     {
-        private ListBox listBoxFactoryDetails;
 
         public FactoryStatsForm()
         {

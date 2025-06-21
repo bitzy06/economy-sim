@@ -6,19 +6,6 @@ namespace economy_sim
 {
     public partial class TradeProposalForm : Form
     {
-        private ComboBox comboBoxTargetCountry;
-        private ComboBox comboBoxResource;
-        private NumericUpDown numericQuantity;
-        private NumericUpDown numericPrice;
-        private NumericUpDown numericDuration;
-        private Button buttonPropose;
-        private Button buttonCancel;
-        private Label labelCountry;
-        private Label labelResource;
-        private Label labelQuantity;
-        private Label labelPrice;
-        private Label labelDuration;
-        private Label labelAvailableResources;
 
         private StrategyGame.Country playerCountry;
         private System.Collections.Generic.List<StrategyGame.Country> allCountries;
@@ -33,10 +20,6 @@ namespace economy_sim
             InitializeControls();
         }
 
-        private void InitializeComponent()
-        {
-            // method generated in TradeProposalForm.Designer.cs
-        }
 
         private void InitializeControls()
         {

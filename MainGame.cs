@@ -26,7 +26,6 @@ namespace economy_sim
         // Or be removed if all interaction is through allCountries list and UI selection
         private StrategyGame.Country playerCountry; // Explicitly StrategyGame.Country
         private int simTurn = 0;
-        private Button buttonShowPopStats;
         private PopStatsForm popStatsForm;
         private FactoryStatsForm factoryStatsForm;
         private ConstructionForm constructionForm;
@@ -34,11 +33,6 @@ namespace economy_sim
         private PlayerRoleManager playerRoleManager;
         private Random random = new Random(); // Add a Random instance for AI and other uses
         private StrategyGame.DiplomacyManager diplomacyManager; // Added DiplomacyManager field
-        private ListView listViewDiplomacy; // Added ListView for diplomacy
-        // Government UI fields
-        private TabPage tabPageGovernment;
-        private ListView listViewParties;
-        private Button buttonOpenPolicyManager;
         private PolicyManagerForm policyManagerForm;
 
         // Fields to store previous values for change tracking

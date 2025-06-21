@@ -7,7 +7,6 @@ namespace economy_sim
 {
     public partial class PopStatsForm : Form
     {
-        private ListBox listBoxPopStats;
 
         public PopStatsForm()
         {
