@@ -15,8 +15,9 @@
 		<!-- Target framework -->
 		<TargetFramework>net8.0-windows</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
-
+                <Nullable>enable</Nullable>
+                <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<UseWindowsForms>true</UseWindowsForms>
 		<!-- Disable auto-generated assembly attributes to avoid duplicates -->
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 
@@ -72,6 +73,8 @@
 		<PackageReference Include="MaxRev.Gdal.Core" Version="3.11.0.335" />
 		<PackageReference Include="MaxRev.Gdal.WindowsRuntime.Minimal" Version="3.11.0.335" />
 		<PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.0" />
+		<PackageReference Include="NetTopologySuite" Version="2.6.0" />
+		<PackageReference Include="NetTopologySuite.IO.ShapeFile" Version="2.1.0" />
 		<PackageReference Include="System.Buffers" Version="4.5.1" />
 		<PackageReference Include="System.IO.Pipelines" Version="9.0.4" />
 		<PackageReference Include="System.Memory" Version="4.5.5" />
@@ -80,10 +83,11 @@
 		<PackageReference Include="System.Text.Encodings.Web" Version="9.0.4" />
 		<PackageReference Include="System.Text.Json" Version="9.0.4" />
 		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
-		<PackageReference Include="System.ValueTuple" Version="4.5.0" />
-		<None Include="world_setup.json">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-		</None>
+                <PackageReference Include="System.ValueTuple" Version="4.5.0" />
+                <PackageReference Include="SixLabors.ImageSharp" Version="3.1.10" />
+                <None Include="world_setup.json">
+                        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+                </None>
 	</ItemGroup>
 
 	<!-- Rely on SDK implicit Compile and EmbeddedResource items -->

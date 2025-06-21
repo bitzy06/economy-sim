@@ -1,17 +1,20 @@
+﻿using MaxRev.Gdal.Core;
+using StrategyGame; // For game classes like Country, State, City, PopClass, Factory, Good, etc. AND DTOs
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO; // For File operations
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using StrategyGame; // For game classes like Country, State, City, PopClass, Factory, Good, etc. AND DTOs
-using System.Text.RegularExpressions; // Added for owner-drawing
-using System.IO; // For File operations
 using System.Text.Json; // For JSON deserialization
+using System.Text.RegularExpressions; // Added for owner-drawing
+using System.Threading.Tasks;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace economy_sim
 {
@@ -61,51 +64,73 @@ namespace economy_sim
         private bool isPanning = false;
         private Point panStart;
         private Point panPictureBoxStartLocation;
-
-
+        private DateTime _lastRedrawTime = DateTime.MinValue;
+        private MultiResolutionMapManager mapManager;
+        private Point mapViewOrigin = new Point(0, 0); // Origin for the map view
+        private int baseCellsWidth;
+        private int baseCellsHeight;
+        private System.Windows.Forms.Timer mapUpdateTimer;
+        private bool pendingMapUpdate = false;
+        private bool mapRenderInProgress = false;
+        private bool mapRenderQueued = false;
+        private readonly object _zoomLock = new();
+        private float _zoom = 1f;
 
         public MainGame()
         {
+            GdalBase.ConfigureAll(); 
+            System.Diagnostics.Debug.WriteLine("message here");
+            var totalSw = Stopwatch.StartNew();
+            var sw = Stopwatch.StartNew();
+
             InitializeComponent();
-            pictureBox1.MouseDown += PictureBox1_MouseDown;
-            pictureBox1.MouseMove += PictureBox1_MouseMove;
-            pictureBox1.MouseUp += PictureBox1_MouseUp;
+            // In your constructor, after InitializeComponent():
+            panelMap.TabStop = true;                        // make panel focusable
+            panelMap.MouseEnter += (s, e) => panelMap.Focus();
+            panelMap.MouseWheel += PanelMap_MouseWheel;
+            mapUpdateTimer = new System.Windows.Forms.Timer { Interval = 40 };
+            mapUpdateTimer.Tick += MapUpdateTimer_Tick;
+            mapUpdateTimer.Start();
             playerRoleManager = new PlayerRoleManager();
             allCitiesInWorld = new List<StrategyGame.City>();
             allCountries = new List<StrategyGame.Country>();
             states = new List<StrategyGame.State>();
-
-            // Adjust listBoxMarketStats height
+            panelMap.Resize += PanelMap_Resize;
             if (this.listBoxMarketStats != null)
             {
                 this.listBoxMarketStats.Height += 70;
             }
 
-            // Ensure event handlers for designer controls are attached
             comboBoxStates.SelectedIndexChanged += ComboBoxStates_SelectedIndexChanged;
             comboBoxCities.SelectedIndexChanged += ComboBoxCities_SelectedIndexChanged;
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
 
-
+            sw.Restart();
             InitializeGameData();
+            Console.WriteLine($"[Startup] InitializeGameData took {sw.Elapsed.TotalSeconds:F2} seconds");
 
-            // Initialize DiplomacyManager after allCountries is populated
+            sw.Restart();
             diplomacyManager = new StrategyGame.DiplomacyManager(allCountries);
+            Console.WriteLine($"[Startup] DiplomacyManager init took {sw.Elapsed.TotalSeconds:F2} seconds");
 
-            // Initialize enhanced trade systems
+            sw.Restart();
             tradeRouteManager = new TradeRouteManager();
             enhancedTradeManager = new EnhancedTradeManager(allCountries);
-            globalMarket = new StrategyGame.GlobalMarket(); // Ensured namespace qualification
+            globalMarket = new StrategyGame.GlobalMarket();
+            Console.WriteLine($"[Startup] Trade and GlobalMarket init took {sw.Elapsed.TotalSeconds:F2} seconds");
 
-            // Initialize listViewDiplomacy
+            sw.Restart();
             listViewDiplomacy = new ListView
             {
                 Location = new System.Drawing.Point(10, 10),
-                Size = new System.Drawing.Size(400, 180), // Adjusted size
+                Size = new System.Drawing.Size(400, 180),
                 View = View.Details,
                 FullRowSelect = true,
                 GridLines = true
             };
+            pictureBox1.MouseDown += PictureBox1_MouseDown;
+            pictureBox1.MouseMove += PictureBox1_MouseMove;
+            pictureBox1.MouseUp += PictureBox1_MouseUp;
 
             listViewDiplomacy.Columns.Add("Country", 120);
             listViewDiplomacy.Columns.Add("Type", 80);
@@ -115,28 +140,32 @@ namespace economy_sim
             listViewDiplomacy.Columns.Add("Remaining", 80);
 
             tabPageDiplomacy.Controls.Add(listViewDiplomacy);
+            Console.WriteLine($"[Startup] listViewDiplomacy init took {sw.Elapsed.TotalSeconds:F2} seconds");
 
-            // Initialize corporations and assign roles after game data is loaded
+            sw.Restart();
             InitializeCorporations();
+            Console.WriteLine($"[Startup] InitializeCorporations took {sw.Elapsed.TotalSeconds:F2} seconds");
 
-            // Initialize the Debug tab
+            sw.Restart();
             InitializeDebugTab();
-
-            // Initialize and populate Finance tab
             InitializeFinanceTab();
             UpdateFinanceTab();
-            // Initialize Government tab
             InitializeGovernmentTab();
             UpdateGovernmentTab();
+            Console.WriteLine($"[Startup] Tab setup took {sw.Elapsed.TotalSeconds:F2} seconds");
 
+            sw.Restart();
             UpdateOrderLists();
+            Console.WriteLine($"[Startup] UpdateOrderLists took {sw.Elapsed.TotalSeconds:F2} seconds");
+            pictureBox1.Dock = DockStyle.Fill;
+            pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
             timerSim.Tick += TimerSim_Tick;
             timerSim.Start();
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
 
-            // Initialize and position buttons
+            // Button setup (you can optionally time this too)
             this.buttonShowPopStats = new Button();
             this.buttonShowPopStats.Text = "Show Pop Stats";
             this.buttonShowPopStats.Location = new System.Drawing.Point(buttonsTargetX, buttonsTargetY);
@@ -145,12 +174,12 @@ namespace economy_sim
             if (this.tabControlMain.TabPages.ContainsKey("tabPageCity"))
             {
                 this.tabControlMain.TabPages["tabPageCity"].Controls.Add(this.buttonShowPopStats);
-                this.buttonShowPopStats.BringToFront(); // Ensure it's on top
+                this.buttonShowPopStats.BringToFront();
             }
-            else if (this.tabPageCity != null) // Fallback if tabPageCity is a direct field
+            else if (this.tabPageCity != null)
             {
                 this.tabPageCity.Controls.Add(this.buttonShowPopStats);
-                this.buttonShowPopStats.BringToFront(); // Ensure it's on top
+                this.buttonShowPopStats.BringToFront();
             }
 
             popStatsForm = new PopStatsForm();
@@ -158,7 +187,6 @@ namespace economy_sim
             constructionForm = new ConstructionForm();
             tabControlMain.SelectedIndexChanged += TabControlMain_SelectedIndexChanged;
 
-            // Setup ListBoxes for owner-drawing
             this.listBoxCityStats.DrawMode = DrawMode.OwnerDrawFixed;
             this.listBoxFactoryStats.DrawMode = DrawMode.OwnerDrawFixed;
             this.listBoxMarketStats.DrawMode = DrawMode.OwnerDrawFixed;
@@ -166,7 +194,6 @@ namespace economy_sim
             this.listBoxFactoryStats.DrawItem += new DrawItemEventHandler(this.ListBox_DrawItemShared);
             this.listBoxMarketStats.DrawItem += new DrawItemEventHandler(this.ListBox_DrawItemShared);
 
-            // Instantiate and position buttonShowFactoryStats (local variable for this constructor scope)
             Button buttonShowFactoryStats = new Button();
             buttonShowFactoryStats.Text = "Building Details";
             buttonShowFactoryStats.Location = new System.Drawing.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
@@ -175,12 +202,12 @@ namespace economy_sim
             if (this.tabControlMain.TabPages.ContainsKey("tabPageCity"))
             {
                 this.tabControlMain.TabPages["tabPageCity"].Controls.Add(buttonShowFactoryStats);
-                buttonShowFactoryStats.BringToFront(); // Ensure it's on top
+                buttonShowFactoryStats.BringToFront();
             }
             else if (this.tabPageCity != null)
             {
                 this.tabPageCity.Controls.Add(buttonShowFactoryStats);
-                buttonShowFactoryStats.BringToFront(); // Ensure it's on top
+                buttonShowFactoryStats.BringToFront();
             }
 
             Button buttonShowConstruction = new Button();
@@ -199,161 +226,236 @@ namespace economy_sim
                 buttonShowConstruction.BringToFront();
             }
 
-            // Example: Assign player a starting role for testing
-            if (playerCountry != null && states.Any() && allCitiesInWorld.Any())
+            Console.WriteLine($"[Startup] TOTAL startup time: {totalSw.Elapsed.TotalSeconds:F2} seconds");
+            this.Shown += (s, e) =>
             {
-                // Create player's corporation
-                Corporation playerCorp = new Corporation("PlayerCorp Global");
-                Market.AllCorporations.Add(playerCorp);
-                playerRoleManager.AssumeRoleCEO(playerCorp);
-
-                // Create AI Corporations with Specializations
-                List<Corporation> aiCorps = new List<Corporation>();
-                aiCorps.Add(new Corporation("General Industries Inc.", CorporationSpecialization.HeavyIndustry));
-                aiCorps.Add(new Corporation("Resource Group Ltd.", CorporationSpecialization.Mining));
-                aiCorps.Add(new Corporation("AgriCorp International", CorporationSpecialization.Agriculture));
-                aiCorps.Add(new Corporation("Everyday Goods Co.", CorporationSpecialization.LightIndustry));
-
-                foreach (var corp in aiCorps)
-                {
-                    Market.AllCorporations.Add(corp);
-                }
-
-                // Assign factory ownership
-                bool playerCorpHasFactory = false;
-                int currentAiCorpIndex = 0;
-
-                foreach (var cityToProcess in allCitiesInWorld) // Iterate through all cities in the 'allCitiesInWorld' list
-                {
-                    foreach (var factory in cityToProcess.Factories)
-                    {
-                        if (!playerCorpHasFactory && factory.Name == "Grain Farm" && cityToProcess.Name == "Metro City") // Assign a specific factory to player
-                        {
-                            factory.OwnerCorporation = playerCorp;
-                            playerCorp.AddFactory(factory);
-                            playerCorpHasFactory = true;
-                        }
-                        else
-                        {
-                            if (aiCorps.Any()) // Ensure there are AI corps to assign to
-                            {
-                                Corporation assignedCorp = aiCorps[currentAiCorpIndex];
-                                factory.OwnerCorporation = assignedCorp;
-                                assignedCorp.AddFactory(factory);
-                                currentAiCorpIndex = (currentAiCorpIndex + 1) % aiCorps.Count;
-                            }
-                            else
-                            {
-                                // Handle case where there are no AI corps (e.g., assign to city/state, or leave unowned for now)
-                                Console.WriteLine($"Warning: No AI corporations to assign factory {factory.Name} in {cityToProcess.Name}");
-                            }
-                        }
-                    }
-                }
-
-                // If playerCorp still doesn't have a factory (e.g. specific one not found), assign the very first one encountered.
-                if (!playerCorpHasFactory && allCitiesInWorld.Any() && allCitiesInWorld.First().Factories.Any())
-                {
-                    var firstCity = allCitiesInWorld.First();
-                    var firstFactoryInList = firstCity.Factories.First();
-                    // Check if it's already owned by an AI corp from the loop above due to logic change
-                    if (firstFactoryInList.OwnerCorporation == null || !aiCorps.Contains(firstFactoryInList.OwnerCorporation))
-                    {
-                        // If previously assigned player factory was not found, and this one is unassigned or not AI owned, assign it
-                        if (firstFactoryInList.OwnerCorporation != null && firstFactoryInList.OwnerCorporation != playerCorp)
-                        {
-                            firstFactoryInList.OwnerCorporation.OwnedFactories.Remove(firstFactoryInList); // Remove from previous temp owner if any
-                        }
-                        firstFactoryInList.OwnerCorporation = playerCorp;
-                        playerCorp.AddFactory(firstFactoryInList);
-                        Console.WriteLine($"Assigned fallback factory {firstFactoryInList.Name} to PlayerCorp Global");
-                    }
-                }
-            }
+                RefreshMap();
+            };
         }
 
         private void RefreshMap()
         {
             if (panelMap.ClientSize.Width == 0 || panelMap.ClientSize.Height == 0)
-            {
-                return;
-            }
-            if (pictureBox1.Width == 0 || pictureBox1.Height == 0)
                 return;
 
-            baseMap?.Dispose();
-
-            // Get the panel size instead of pictureBox size for consistent dimensions
-            int width = panelMap.ClientSize.Width;
-            int height = panelMap.ClientSize.Height;
-
-            baseMap = PixelMapGenerator.GeneratePixelArtMapWithCountries(width, height);
-            ApplyZoom();
-
-            // Logic to set pictureBox1.Location after ApplyZoom() in RefreshMap()
-            int pbWidth = pictureBox1.Width;
-            int pbHeight = pictureBox1.Height;
-            int panelWidth = panelMap.ClientSize.Width;
-            int panelHeight = panelMap.ClientSize.Height;
-
-            int newX, newY;
-
-            if (pbWidth < panelWidth)
+            if (mapManager == null)
             {
-                newX = (panelWidth - pbWidth) / 2;
-            }
-            else
-            {
-                newX = 0; // Default to (0,0) if larger, panning will handle the rest
+                mapManager = new MultiResolutionMapManager(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
+                var baseSize = mapManager.GetMapSize(1);
+                baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
+                baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
+
+                var viewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+
+                Task.Run(() =>
+                {
+                    string tileDir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "data", "tile_cache");
+
+                    mapManager.PreloadVisibleTiles(mapZoom, viewRect);
+
+                    this.Invoke((MethodInvoker)(() =>
+                    {
+                        pictureBox1.Image = mapManager.AssembleView(mapZoom, viewRect, () =>
+                        {
+                            this.Invoke((MethodInvoker)(() =>
+                            {
+                                var updatedViewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                                pictureBox1.Image = mapManager.AssembleView(mapZoom, updatedViewRect);
+                            }));
+                        });
+                    }));
+                });
             }
 
-            if (pbHeight < panelHeight)
+            pictureBox1.Size = panelMap.ClientSize;
+            pictureBox1.Location = new Point(0, 0);
+        }
+
+
+
+
+
+        private void RedrawThrottled()
+        {
+            if ((DateTime.Now - _lastRedrawTime).TotalMilliseconds > 100)
             {
-                newY = (panelHeight - pbHeight) / 2;
+                _lastRedrawTime = DateTime.Now;
+                this.BeginInvoke(new Action(Redraw));
             }
-            else
+        }
+
+       
+
+        private void Redraw()
+        {
+            if ((DateTime.Now - _lastRedrawTime).TotalMilliseconds < 100)
+                return;
+
+            _lastRedrawTime = DateTime.Now;
+
+            if (mapManager == null || panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
+                return;
+
+            Rectangle viewRect = new Rectangle(
+                -panelMap.AutoScrollPosition.X,
+                -panelMap.AutoScrollPosition.Y,
+                panelMap.ClientSize.Width,
+                panelMap.ClientSize.Height
+            );
+
+            if (viewRect.Width <= 0 || viewRect.Height <= 0)
+                return;
+
+            float zoomLevel = mapZoom;
+
+            DateTime lastInnerRedraw = DateTime.MinValue;
+
+            Bitmap bmp = null;
+            try
             {
-                newY = 0; // Default to (0,0) if larger
+                bmp = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                {
+                    if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
+                        return;
+
+                    lastInnerRedraw = DateTime.Now;
+
+                    if (this.InvokeRequired)
+                        this.BeginInvoke(new Action(Redraw));
+                    else
+                        Redraw();
+                });
             }
-            pictureBox1.Location = new Point(newX, newY);
+            catch (ArgumentException ex)
+            {
+                Debug.WriteLine($"Redraw bitmap generation failed: {ex.Message}");
+                return;
+            }
+
+            if (bmp == null)
+                return;
+
+            pictureBox1.Image?.Dispose();
+            pictureBox1.Image = bmp;
+        }
+        private CancellationTokenSource redrawCts;
+
+        private void RedrawAsync()
+        {
+            if (panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0 || mapManager == null)
+                return;
+
+            redrawCts?.Cancel();
+            redrawCts = new CancellationTokenSource();
+            var token = redrawCts.Token;
+
+            Rectangle viewRect = new Rectangle(
+                -panelMap.AutoScrollPosition.X,
+                -panelMap.AutoScrollPosition.Y,
+                panelMap.ClientSize.Width,
+                panelMap.ClientSize.Height
+            );
+
+            if (viewRect.Width <= 0 || viewRect.Height <= 0)
+                return;
+
+            DateTime lastInnerRedraw = DateTime.MinValue;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    var bmp = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    {
+                        if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
+                        {
+                            lastInnerRedraw = DateTime.Now;
+                            this.BeginInvoke(new Action(RedrawAsync));
+                        }
+                    });
+
+                    if (bmp != null && bmp.Width > 0 && bmp.Height > 0 && !token.IsCancellationRequested)
+                    {
+                        this.Invoke(() =>
+                        {
+                            pictureBox1.Image?.Dispose();
+                            pictureBox1.Image = bmp;
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"RedrawAsync failed: {ex.Message}");
+                }
+            }, token);
         }
 
         private void ApplyZoom()
         {
-            if (baseMap == null)
+            if (mapManager == null)
                 return;
 
-            // Calculate new dimensions
-            int newWidth = baseMap.Width * mapZoom;
-            int newHeight = baseMap.Height * mapZoom;
-
-            // Clamp to avoid zero or GDI+ limits
-            newWidth = Math.Max(1, Math.Min(newWidth, 32767));
-            newHeight = Math.Max(1, Math.Min(newHeight, 32767));
-
-            // Generate the scaled image
-            Bitmap scaled;
-            try
+            if (panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
             {
-                scaled = new Bitmap(newWidth, newHeight);
-                using (Graphics g = Graphics.FromImage(scaled))
+                Debug.WriteLine("ApplyZoom skipped: panelMap has invalid size.");
+                return;
+            }
+
+            Rectangle view;
+            int zoom;
+            lock (_zoomLock)
+            {
+                Size mapSize = mapManager.GetMapSize(mapZoom);
+                mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+                mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
+                zoom = mapZoom;
+                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+            }
+
+            if (mapRenderInProgress)
+            {
+                mapRenderQueued = true;
+                return;
+            }
+
+            mapManager.PreloadVisibleTiles(zoom, view);
+
+            mapRenderInProgress = true;
+
+            Task.Run(() =>
+            {
+                Bitmap map = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
-                    g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                    g.PixelOffsetMode = PixelOffsetMode.Half;
-                    g.DrawImage(baseMap, 0, 0, newWidth, newHeight);
-                }
-            }
-            catch
-            {
-                // If creation fails, just bail out and keep the old image alive
-                return;
-            }
+                    if (this.InvokeRequired)
+                        this.BeginInvoke(new Action(ApplyZoom));
+                    else
+                        ApplyZoom();
+                });
+                if (map == null) return;
 
-            // Swap in the new image, then dispose the old one
-            var old = pictureBox1.Image;
-            pictureBox1.Image = scaled;
-            pictureBox1.Size = new Size(newWidth, newHeight);
-            old?.Dispose();
+                void setImage()
+                {
+                    pictureBox1.Image?.Dispose();
+                    pictureBox1.Image = map;
+                    mapRenderInProgress = false;
+                    if (mapRenderQueued)
+                    {
+                        mapRenderQueued = false;
+                        ApplyZoom();
+                    }
+                }
+
+                if (pictureBox1.InvokeRequired)
+                {
+                    pictureBox1.Invoke((Action)setImage);
+                }
+                else
+                {
+                    setImage();
+                }
+            });
         }
 
 
@@ -388,7 +490,7 @@ namespace economy_sim
         }
         private void InitializeGameData()
         {
-            RefreshMap();
+           
             // 1. Clear all global static lists first
             Market.GoodDefinitions.Clear();
             Market.AllCorporations.Clear();
@@ -1964,123 +2066,124 @@ namespace economy_sim
         }
 
 
-        private void PictureBox1_MouseWheel(object sender, MouseEventArgs e)
+        private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
-            if (baseMap == null) return;
-            if (pictureBox1.Width == 0 || pictureBox1.Height == 0) return;
+            // 1) figure out the anchor in panel coords
+            Point anchor = panelMap.PointToClient(Cursor.Position);
+            if (!panelMap.ClientRectangle.Contains(anchor)) return;
 
-            // Point mousePosInPanel = panelMap.PointToClient(Control.MousePosition); 
-            // float relativeXInBase = (mousePosInPanel.X - pictureBox1.Left) / (float)pictureBox1.Width;
-            // float relativeYInBase = (mousePosInPanel.Y - pictureBox1.Top) / (float)pictureBox1.Height;
-
+            // 2) bump zoom
             int oldZoom = mapZoom;
-            mapZoom = Math.Max(1, Math.Min(5, mapZoom + Math.Sign(e.Delta)));
+            mapZoom = Math.Clamp(mapZoom + Math.Sign(e.Delta),
+                                1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
             if (mapZoom == oldZoom) return;
 
-            // Determine the center of the panelMap
-            int panelCenterX = panelMap.ClientSize.Width / 2;
-            int panelCenterY = panelMap.ClientSize.Height / 2;
+            // 3) compute old vs. new cell size
+            int oldCell = GetCellSizeForZoom(oldZoom);
+            int newCell = GetCellSizeForZoom(mapZoom);
 
-            // Calculate what proportional point of the PictureBox content is currently at the panel's center
-            // This must be done BEFORE pictureBox1.Size is changed by ApplyZoom
-            float contentRatioXAtPanelCenter = (float)(panelCenterX - pictureBox1.Left) / pictureBox1.Width;
-            float contentRatioYAtPanelCenter = (float)(panelCenterY - pictureBox1.Top) / pictureBox1.Height;
+            // 4) your raw re-anchor formula
+            int rawX = (int)Math.Round((mapViewOrigin.X + anchor.X) * (double)newCell / oldCell)
+                       - anchor.X;
+            int rawY = (int)Math.Round((mapViewOrigin.Y + anchor.Y) * (double)newCell / oldCell)
+                       - anchor.Y;
+
+            // 5) map bounds
+            var mapSize = mapManager.GetMapSize(mapZoom);
+            int maxX = mapSize.Width - panelMap.ClientSize.Width;
+            int maxY = mapSize.Height - panelMap.ClientSize.Height;
+
+            Debug.WriteLine($@"
+      ANCHOR={anchor}  
+      RAW_ORIGIN=({rawX},{rawY})  
+      CLAMP_RANGE X:[0..{maxX}], Y:[0..{maxY}]
+    ");
+
+            // 6) clamp
+            mapViewOrigin.X = Math.Clamp(rawX, 0, maxX);
+            mapViewOrigin.Y = Math.Clamp(rawY, 0, maxY);
+
+            Debug.WriteLine($"  FINAL_ORIGIN=({mapViewOrigin.X},{mapViewOrigin.Y})");
 
             ApplyZoom();
-
-            int newPbWidth = pictureBox1.Width;
-            int newPbHeight = pictureBox1.Height;
-
-            // Calculate the new PictureBox location to keep the content point (that was at panelCenter) at panelCenter
-            int newX = panelCenterX - (int)(contentRatioXAtPanelCenter * newPbWidth);
-            int newY = panelCenterY - (int)(contentRatioYAtPanelCenter * newPbHeight);
-
-            if (newPbWidth < panelMap.ClientSize.Width)
-            {
-                newX = (panelMap.ClientSize.Width - newPbWidth) / 2;
-            }
-            else
-            {
-                newX = Math.Min(0, Math.Max(newX, panelMap.ClientSize.Width - newPbWidth));
-            }
-
-            if (newPbHeight < panelMap.ClientSize.Height)
-            {
-                newY = (panelMap.ClientSize.Height - newPbHeight) / 2;
-            }
-            else
-            {
-                newY = Math.Min(0, Math.Max(newY, panelMap.ClientSize.Height - newPbHeight));
-            }
-
-            pictureBox1.Location = new Point(newX, newY);
+            PreloadMapTiles();
         }
-
+        private void PanelMap_Resize(object sender, EventArgs e)
+        {
+            // This method is called whenever the map panel is resized.
+            // We call ApplyZoom() to generate a new map image that fits the new dimensions.
+            ApplyZoom();
+        }
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
         {
-            if (this.pictureBox1 == null || this.panelMap == null) // Safety check
+            if (mapManager == null)
+                return;
+
+            if (e.KeyCode == Keys.Oemplus || e.KeyCode == Keys.Add)
             {
+                lock (_zoomLock)
+                {
+                    mapZoom = Math.Min(mapZoom + 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
+                }
+                ApplyZoom();
+                PreloadMapTiles();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+                return;
+            }
+
+            if (e.KeyCode == Keys.OemMinus || e.KeyCode == Keys.Subtract)
+            {
+                lock (_zoomLock)
+                {
+                    mapZoom = Math.Max(1, mapZoom - 1);
+                }
+                ApplyZoom();
+                PreloadMapTiles();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
                 return;
             }
 
             const int panAmount = 30; // Pixels to move per key press
-            int currentPbLeft = this.pictureBox1.Left;
-            int currentPbTop = this.pictureBox1.Top;
-
             bool keyProcessed = false;
 
-            switch (e.KeyCode)
+            lock (_zoomLock)
             {
-                case Keys.Left:
-                    currentPbLeft += panAmount;
-                    keyProcessed = true;
-                    break;
-                case Keys.Right:
-                    currentPbLeft -= panAmount;
-                    keyProcessed = true;
-                    break;
-                case Keys.Up:
-                    currentPbTop += panAmount;
-                    keyProcessed = true;
-                    break;
-                case Keys.Down:
-                    currentPbTop -= panAmount;
-                    keyProcessed = true;
-                    break;
+                switch (e.KeyCode)
+                {
+                    case Keys.Left:
+                        mapViewOrigin.X -= panAmount;
+                        keyProcessed = true;
+                        break;
+                    case Keys.Right:
+                        mapViewOrigin.X += panAmount;
+                        keyProcessed = true;
+                        break;
+                    case Keys.Up:
+                        mapViewOrigin.Y -= panAmount;
+                        keyProcessed = true;
+                        break;
+                    case Keys.Down:
+                        mapViewOrigin.Y += panAmount;
+                        keyProcessed = true;
+                        break;
+                }
             }
 
             if (keyProcessed)
             {
-                e.Handled = true; // Mark event as handled if we processed an arrow key
-                e.SuppressKeyPress = true; // Prevents further processing for this key press, like sound dings
+                e.Handled = true;
+                e.SuppressKeyPress = true;
 
-                int finalX;
-                int finalY;
-
-                // Apply clamping and centering logic, similar to mouse panning
-                // Clamp X coordinate
-                if (this.pictureBox1.Width > this.panelMap.ClientSize.Width)
+                lock (_zoomLock)
                 {
-                    finalX = Math.Min(0, Math.Max(currentPbLeft, this.panelMap.ClientSize.Width - this.pictureBox1.Width));
+                    Size mapSize = mapManager.GetMapSize(mapZoom);
+                    mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
+                    mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
                 }
-                else
-                {
-                    // If not wider than panel, keep it centered horizontally
-                    finalX = (this.panelMap.ClientSize.Width - this.pictureBox1.Width) / 2;
-                }
-
-                // Clamp Y coordinate
-                if (this.pictureBox1.Height > this.panelMap.ClientSize.Height)
-                {
-                    finalY = Math.Min(0, Math.Max(currentPbTop, this.panelMap.ClientSize.Height - this.pictureBox1.Height));
-                }
-                else
-                {
-                    // If not taller than panel, keep it centered vertically
-                    finalY = (this.panelMap.ClientSize.Height - this.pictureBox1.Height) / 2;
-                }
-
-                this.pictureBox1.Location = new Point(finalX, finalY);
+                ApplyZoom();
+                PreloadMapTiles();
             }
         }
 
@@ -2091,6 +2194,7 @@ namespace economy_sim
             if (e.Button == MouseButtons.Left)
             {
                 lastLocation = e.Location;
+                isPanning = true;
                 Cursor = Cursors.Hand; // Change cursor to indicate dragging
             }
         }
@@ -2099,20 +2203,22 @@ namespace economy_sim
 
         private void PictureBox1_MouseMove(object sender, MouseEventArgs e)
         {
-            if (e.Button == MouseButtons.Left)
+            if (isPanning && e.Button == MouseButtons.Left)
             {
-                if (pictureBox1.ClientRectangle.Contains(e.Location))
+                lock (_zoomLock)
                 {
-                    pictureBox1.Left += e.X - lastLocation.X;
-                    pictureBox1.Top += e.Y - lastLocation.Y;
+                    int dx = e.X - lastLocation.X;
+                    int dy = e.Y - lastLocation.Y;
+                    mapViewOrigin.X = Math.Max(0, mapViewOrigin.X - dx);
+                    mapViewOrigin.Y = Math.Max(0, mapViewOrigin.Y - dy);
+                    Size mapSize = mapManager.GetMapSize(mapZoom);
+                    mapViewOrigin.X = Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width);
+                    mapViewOrigin.Y = Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height);
+                    lastLocation = e.Location;
+                    pendingMapUpdate = true;
                 }
             }
         }
-
-
-
-
-
 
         private void PictureBox1_MouseUp(object sender, MouseEventArgs e)
         {
@@ -2120,6 +2226,7 @@ namespace economy_sim
             {
                 isPanning = false;
                 Cursor = Cursors.Default;
+                PreloadMapTiles();
             }
         }
 
@@ -2132,7 +2239,48 @@ namespace economy_sim
                 this.panelMap.Cursor = Cursors.Default; // Reset panelMap cursor
                 this.panelMap.BackColor = SystemColors.Control;
                 this.pictureBox1.BackColor = Color.Transparent; // Reset pictureBox backcolor
+                PreloadMapTiles();
             }
+        }
+
+        private void MapUpdateTimer_Tick(object sender, EventArgs e)
+        {
+            if (pendingMapUpdate)
+            {
+                lock (_zoomLock)
+                {
+                    ApplyZoom();
+                    pendingMapUpdate = false;
+                }
+            }
+        }
+
+        private void PreloadMapTiles()
+        {
+            if (mapManager == null)
+                return;
+            Rectangle view;
+            int zoom;
+            lock (_zoomLock)
+            {
+                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                zoom = mapZoom;
+            }
+            _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
+        }
+
+        private int GetCellSizeForZoom(int zoomLevel)
+        {
+            int[] levels = MultiResolutionMapManager.PixelsPerCellLevels;
+
+            // `zoomLevel` is 1-based (e.g., 1, 2, 3...), but array indices are 0-based.
+            // We subtract 1 to get the correct 0-based index.
+            int index = zoomLevel - 1;
+
+            // Clamp the index to ensure it's always within the valid bounds of the array.
+            index = Math.Clamp(index, 0, levels.Length - 1);
+
+            return levels[index];
         }
     }
 }

@@ -55,6 +55,7 @@
             checkBoxLogPops = new CheckBox();
             checkBoxLogBuildings = new CheckBox();
             checkBoxLogEconomy = new CheckBox();
+            buttonGenerateTileCache = new Button();
             tabPageDiplomacy = new TabPage();
             labelProposedTrades = new Label();
             listBoxProposedTradeAgreements = new ListBox();
@@ -172,6 +173,7 @@
             tabPageDebug.Controls.Add(checkBoxLogPops);
             tabPageDebug.Controls.Add(checkBoxLogBuildings);
             tabPageDebug.Controls.Add(checkBoxLogEconomy);
+            tabPageDebug.Controls.Add(buttonGenerateTileCache);
             tabPageDebug.Location = new Point(4, 24);
             tabPageDebug.Margin = new Padding(4, 3, 4, 3);
             tabPageDebug.Name = "tabPageDebug";
@@ -319,9 +321,20 @@
             checkBoxLogEconomy.Text = "Log Economy Stats";
             checkBoxLogEconomy.UseVisualStyleBackColor = true;
             checkBoxLogEconomy.CheckedChanged += CheckBoxLogEconomy_CheckedChanged;
-            // 
+            //
+            // buttonGenerateTileCache
+            //
+            buttonGenerateTileCache.Location = new Point(12, 323);
+            buttonGenerateTileCache.Margin = new Padding(4, 3, 4, 3);
+            buttonGenerateTileCache.Name = "buttonGenerateTileCache";
+            buttonGenerateTileCache.Size = new Size(140, 27);
+            buttonGenerateTileCache.TabIndex = 13;
+            buttonGenerateTileCache.Text = "Build Tile Cache";
+            buttonGenerateTileCache.UseVisualStyleBackColor = true;
+            
+            //
             // tabPageDiplomacy
-            // 
+            //
             tabPageDiplomacy.Controls.Add(labelProposedTrades);
             tabPageDiplomacy.Controls.Add(listBoxProposedTradeAgreements);
             tabPageDiplomacy.Controls.Add(buttonAcceptTrade);
@@ -539,6 +552,7 @@
             panelMap.AutoScroll = false;
             panelMap.TabStop = true;
             panelMap.KeyDown += new System.Windows.Forms.KeyEventHandler(this.panelMap_KeyDown);
+            
             this.panelMap.MouseUp += new System.Windows.Forms.MouseEventHandler(this.panelMap_MouseUp_ForPanning);
             // 
             // pictureBox1
@@ -551,7 +565,7 @@
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
             pictureBox1.TabIndex = 0;
             pictureBox1.TabStop = false;
-            pictureBox1.MouseWheel += new System.Windows.Forms.MouseEventHandler(this.PictureBox1_MouseWheel);
+       
             // 
             // tabControlMain
             // 
@@ -613,6 +627,7 @@
         private System.Windows.Forms.CheckBox checkBoxLogPops;
         private System.Windows.Forms.CheckBox checkBoxLogBuildings;
         private System.Windows.Forms.CheckBox checkBoxLogEconomy;
+        private System.Windows.Forms.Button buttonGenerateTileCache;
         private System.Windows.Forms.TabPage tabPageDiplomacy;
         private System.Windows.Forms.Label labelProposedTrades;
         private System.Windows.Forms.ListBox listBoxProposedTradeAgreements;
