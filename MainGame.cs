@@ -1909,6 +1909,7 @@ namespace economy_sim
                 item.SubItems.Add(fs.MoneySupply.ToString("C"));
                 item.SubItems.Add(fs.NationalReserves.ToString("C"));
                 item.SubItems.Add(fs.BaseInterestRate.ToString("P"));
+                item.SubItems.Add(fs.GetTotalOutstandingDebt().ToString("C"));
                 item.SubItems.Add(fs.DebtToGdpRatio.ToString("P"));
                 item.SubItems.Add(fs.InflationRate.ToString("P"));
                 item.SubItems.Add(fs.CreditRating.ToString("P"));
@@ -1921,7 +1922,7 @@ namespace economy_sim
                 }
             }
 
-            // Bond information no longer displayed
+            // Debt column now shows outstanding national bonds
         }
 
         private void InitializeFinanceTab()
@@ -1931,11 +1932,12 @@ namespace economy_sim
             listViewFinance.Columns.Add("Money Supply", 100);
             listViewFinance.Columns.Add("Reserves", 100);
             listViewFinance.Columns.Add("Base Rate", 80);
+            listViewFinance.Columns.Add("Debt", 100);
             listViewFinance.Columns.Add("Debt/GDP", 80);
             listViewFinance.Columns.Add("Inflation", 80);
             listViewFinance.Columns.Add("Credit Rating", 80);
 
-            // Bond UI removed
+            // Bonds are summarized in the Debt column
         }
 
         // --- Government Tab ---

@@ -50,11 +50,35 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         }
     }
 
+    // Representation of a single government bond
+    public class GovernmentBond
+    {
+        public Guid Id { get; }
+        public string HolderId { get; }
+        public decimal Principal { get; }
+        public decimal InterestRate { get; }
+        public DateTime IssueDate { get; }
+        public DateTime MaturityDate { get; }
+        public bool IsDefaulted { get; set; }
+
+        public GovernmentBond(string holderId, decimal principal, decimal interestRate, int maturityYears)
+        {
+            Id = Guid.NewGuid();
+            HolderId = holderId;
+            Principal = principal;
+            InterestRate = interestRate;
+            IssueDate = DateTime.UtcNow;
+            MaturityDate = IssueDate.AddYears(maturityYears);
+            IsDefaulted = false;
+        }
+    }
+
     public class NationalFinancialSystem
     {
         public string CountryId { get; }
-        // Bond system removed
+        private List<GovernmentBond> bonds;
         private List<TaxPolicy> taxPolicies;
+        private decimal lastKnownGdp;
         public IReadOnlyList<TaxPolicy> TaxPolicies => taxPolicies.AsReadOnly(); // Public accessor for tax policies
 
         // Simplified system: subsidies, tariffs, and stock market removed
@@ -72,6 +96,7 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         public NationalFinancialSystem(string countryId, decimal initialMoneySupply, decimal initialReserves, CurrencyStandard standard = CurrencyStandard.Fiat)
         {
             CountryId = countryId;
+            bonds = new List<GovernmentBond>();
             taxPolicies = new List<TaxPolicy>();
 
             MoneySupply = initialMoneySupply;
@@ -85,18 +110,77 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         }
 
         #region Debt and Bonds
-        // Bond mechanics removed for now. The game no longer models national debt via
-        // individual bond instruments, so these methods have been trimmed.
+        public GovernmentBond IssueBond(string holderId, decimal principal, decimal interestRate, int maturityYears)
+        {
+            var bond = new GovernmentBond(holderId, principal, interestRate, maturityYears);
+            bonds.Add(bond);
 
-        public decimal GetTotalOutstandingDebt() => 0m;
+            AdjustMoneySupply(principal);
+            AdjustReserves(principal);
 
-        public decimal GetAnnualDebtInterestPayment() => 0m;
+            return bond;
+        }
 
-        public void ProcessBondMaturity(Guid bondId) { }
+        public decimal GetTotalOutstandingDebt()
+        {
+            decimal total = 0m;
+            foreach (var b in bonds)
+            {
+                if (!b.IsDefaulted)
+                    total += b.Principal;
+            }
+            return total;
+        }
 
-        private void UpdateDebtToGdpRatio() => DebtToGdpRatio = 0m;
+        public decimal GetAnnualDebtInterestPayment()
+        {
+            decimal payment = 0m;
+            foreach (var b in bonds)
+            {
+                if (!b.IsDefaulted)
+                    payment += b.Principal * b.InterestRate;
+            }
+            return payment;
+        }
 
-        public void DefaultOnBond(Guid bondId) { }
+        public void ProcessBondMaturity(Guid bondId)
+        {
+            var bond = bonds.Find(b => b.Id == bondId);
+            if (bond == null || bond.IsDefaulted)
+                return;
+
+            AdjustMoneySupply(-bond.Principal);
+            AdjustReserves(-bond.Principal);
+            bonds.Remove(bond);
+        }
+
+        public void ProcessMaturingBonds(DateTime currentDate)
+        {
+            var matured = bonds.FindAll(b => !b.IsDefaulted && currentDate >= b.MaturityDate);
+            foreach (var bond in matured)
+            {
+                ProcessBondMaturity(bond.Id);
+            }
+        }
+
+        public void DefaultOnBond(Guid bondId)
+        {
+            var bond = bonds.Find(b => b.Id == bondId);
+            if (bond == null)
+                return;
+
+            bond.IsDefaulted = true;
+            CreditRating = Math.Max(0.1f, CreditRating - 0.2f);
+            bonds.Remove(bond);
+        }
+
+        private void UpdateDebtToGdpRatio()
+        {
+            if (lastKnownGdp > 0)
+            {
+                DebtToGdpRatio = GetTotalOutstandingDebt() / lastKnownGdp;
+            }
+        }
         #endregion
 
         #region Central Bank
@@ -252,6 +336,7 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         {
             if (currentGdp > 0)
             {
+                lastKnownGdp = currentGdp;
                 DebtToGdpRatio = GetTotalOutstandingDebt() / currentGdp;
 
                 // Simple inflation model based on money supply relative to GDP
