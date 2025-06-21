@@ -565,7 +565,7 @@
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
             pictureBox1.TabIndex = 0;
             pictureBox1.TabStop = false;
-            pictureBox1.MouseWheel += new System.Windows.Forms.MouseEventHandler(this.PictureBox1_MouseWheel);
+       
             // 
             // tabControlMain
             // 
