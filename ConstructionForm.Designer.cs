@@ -47,7 +47,8 @@ namespace economy_sim
             // comboBoxType
             //
             comboBoxType.DropDownStyle = ComboBoxStyle.DropDownList;
-            comboBoxType.Items.AddRange(Enum.GetNames(typeof(ProjectType)));
+            comboBoxType.Items.AddRange(new string[] { "Type1", "Type2", "Type3" });
+            comboBoxType.SelectedIndex = 0;
             comboBoxType.SelectedIndex = 0;
             comboBoxType.Location = new Point(120, 188);
             //

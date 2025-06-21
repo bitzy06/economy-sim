@@ -5,8 +5,7 @@ namespace economy_sim
 {
     public partial class TradeManagementForm : Form
     {
-        private System.Windows.Forms.Timer refreshTimer;
-        private Button buttonRefresh;
+       
         private TabControl tabControlTrade;
         private TabPage tabPageTradeRoutes;
         private TabPage tabPageTradeAgreements;
