@@ -180,6 +180,7 @@ namespace StrategyGame
             Log($"Money Supply: {fs.MoneySupply:C}", LogCategory.Economy);
             Log($"Reserves: {fs.NationalReserves:C}", LogCategory.Economy);
             Log($"Base Rate: {fs.BaseInterestRate:P}", LogCategory.Economy);
+            Log($"Outstanding Debt: {fs.GetTotalOutstandingDebt():C}", LogCategory.Economy);
             Log($"Debt/GDP: {fs.DebtToGdpRatio:P}", LogCategory.Economy);
             Log($"Inflation: {fs.InflationRate:P}", LogCategory.Economy);
             Log($"Credit Rating: {fs.CreditRating:P}", LogCategory.Economy);

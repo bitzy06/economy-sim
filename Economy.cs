@@ -52,7 +52,8 @@ namespace StrategyGame
             country.Budget -= country.NationalExpenses;
             fs.AdjustMoneySupply((decimal)country.NationalExpenses * 0.01m);
 
-            // 4. Bond system removed; no maturities to process
+            // 4. Process any bond maturities for this turn
+            fs.ProcessMaturingBonds(DateTime.UtcNow);
 
             // 5. Update other financial indicators
             decimal currentGdp = totalAssessablePopIncome + totalCorporateProfits; // Highly simplified GDP
