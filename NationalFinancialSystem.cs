@@ -1,6 +1,7 @@
 // NationalFinancialSystem.cs
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace StrategyGame // Changed from EconomySim to StrategyGame
 {
@@ -289,31 +290,76 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
             taxPolicies.RemoveAll(p => p.Id == policyId);
         }
 
-        public decimal CalculateTaxRevenue(decimal totalAssessableIncome, decimal totalCorporateProfits, decimal totalLandValue, decimal totalConsumptionValue)
+        public decimal CalculateTaxRevenue(Dictionary<string, decimal> popGroupIncome,
+                                           decimal totalCorporateProfits,
+                                           decimal totalLandValue,
+                                           decimal totalConsumptionValue,
+                                           int totalPopulation)
         {
             decimal totalRevenue = 0;
+
             foreach (var policy in taxPolicies)
             {
                 decimal revenueFromPolicy = 0;
+
                 switch (policy.Type)
                 {
                     case TaxType.IncomeTax:
-                        // Simplified: apply flat or base rate. Progressive needs POP income data.
-                        revenueFromPolicy = totalAssessableIncome * policy.Rate;
+                        decimal applicableIncome = 0;
+                        if (!string.IsNullOrEmpty(policy.AppliesToPopGroup))
+                        {
+                            if (popGroupIncome.TryGetValue(policy.AppliesToPopGroup, out var groupInc))
+                                applicableIncome = groupInc;
+                        }
+                        else
+                        {
+                            foreach (var val in popGroupIncome.Values) applicableIncome += val;
+                        }
+
+                        if (policy.Progressivity == TaxProgressivity.Progressive && policy.ProgressiveBrackets.Count > 0)
+                        {
+                            decimal remaining = applicableIncome;
+                            decimal progressiveRevenue = 0;
+                            decimal previous = 0;
+                            foreach (var bracket in policy.ProgressiveBrackets.OrderBy(b => b.Key))
+                            {
+                                decimal taxable = Math.Max(0, Math.Min(remaining, bracket.Key - previous));
+                                progressiveRevenue += taxable * bracket.Value;
+                                remaining -= taxable;
+                                previous = bracket.Key;
+                                if (remaining <= 0) break;
+                            }
+                            if (remaining > 0)
+                                progressiveRevenue += remaining * policy.Rate;
+
+                            revenueFromPolicy = progressiveRevenue;
+                        }
+                        else
+                        {
+                            revenueFromPolicy = applicableIncome * policy.Rate;
+                        }
                         break;
+
                     case TaxType.CorporateTax:
                         revenueFromPolicy = totalCorporateProfits * policy.Rate;
                         break;
+
                     case TaxType.LandTax:
                         revenueFromPolicy = totalLandValue * policy.Rate;
                         break;
+
                     case TaxType.ConsumptionTax:
                         revenueFromPolicy = totalConsumptionValue * policy.Rate;
                         break;
-                    // Tariffs handled separately for now
+
+                    case TaxType.PollTax:
+                        revenueFromPolicy = totalPopulation * policy.Rate;
+                        break;
                 }
+
                 totalRevenue += revenueFromPolicy;
             }
+
             return totalRevenue * TaxEfficiency;
         }
 
