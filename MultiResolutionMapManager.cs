@@ -117,11 +117,13 @@ namespace StrategyGame
 
         private readonly int _baseWidth;
         private readonly int _baseHeight;
+        private readonly List<City> _cities;
 
-        public MultiResolutionMapManager(int baseWidth, int baseHeight)
+        public MultiResolutionMapManager(int baseWidth, int baseHeight, List<City> cities = null)
         {
             _baseWidth = baseWidth;
             _baseHeight = baseHeight;
+            _cities = cities;
         }
 
         /// <summary>
@@ -883,7 +885,7 @@ namespace StrategyGame
                 }
             }
 
-            NaturalEarthOverlayGenerator.ApplyOverlays(image, mapWidth, mapHeight, cellSize, tileX, tileY);
+            NaturalEarthOverlayGenerator.ApplyOverlays(image, mapWidth, mapHeight, cellSize, tileX, tileY, _cities);
 
   
 

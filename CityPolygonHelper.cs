@@ -105,6 +105,40 @@ namespace StrategyGame
             return result;
         }
 
+        public static void InitializeCityPolygons(List<City> cities, string placesShpPath, string urbanShpPath)
+        {
+            var placeDict = new Dictionary<string, (double lat, double lon, int pop)>();
+            using (var reader = new ShapefileDataReader(placesShpPath, GeometryFactory.Default))
+            {
+                int nameIdx = reader.GetOrdinal("NAME");
+                int popIdx = reader.GetOrdinal("POP_MAX");
+                while (reader.Read())
+                {
+                    if (reader.Geometry is Point pt)
+                    {
+                        string name = reader.GetString(nameIdx);
+                        placeDict[name] = (pt.Y, pt.X, reader.GetInt32(popIdx));
+                    }
+                }
+            }
+
+            var urbanPolys = LoadUrbanPolygons(urbanShpPath);
+
+            foreach (var city in cities)
+            {
+                if (placeDict.TryGetValue(city.Name, out var info))
+                {
+                    city.Latitude = info.lat;
+                    city.Longitude = info.lon;
+                    if (city.Population <= 0)
+                        city.Population = info.pop;
+                }
+            }
+
+            AssignUrbanPolygons(cities, urbanPolys);
+            UpdateAllCityPolygons(cities);
+        }
+
         public static void UpdateAllCityPolygons(List<City> cities)
         {
             foreach (var city in cities)

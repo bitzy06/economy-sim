@@ -130,7 +130,9 @@ namespace StrategyGame
         /// Apply all overlays (state borders and cities) on the provided tile image.
         /// </summary>
         public static void ApplyOverlays(Image<Rgba32> img, int mapWidth, int mapHeight,
-                                         int cellSize, int tileX, int tileY, int tileSizePx = 512)
+                                         int cellSize, int tileX, int tileY,
+                                         List<City> cities = null,
+                                         int tileSizePx = 512)
         {
             lock (GdalLock)
             {
@@ -158,7 +160,11 @@ namespace StrategyGame
 
             TintCountries(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
             DrawStateBorders(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
-            DrawCities(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
+
+            if (cities != null && cities.Count > 0)
+                DrawCityPolygons(img, cities, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
+            else
+                DrawCities(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
         }
         public static void DrawUrbanAreasOnTile(
      Image<Rgba32> img,
@@ -406,6 +412,46 @@ namespace StrategyGame
                     }
                 }
             });
+        }
+
+        private static void DrawCityPolygons(Image<Rgba32> img,
+                                              List<City> cities,
+                                              int mapWidth,
+                                              int mapHeight,
+                                              int cellSize,
+                                              int tileX,
+                                              int tileY,
+                                              int tileSizePx = 512)
+        {
+            if (cities == null || cities.Count == 0)
+                return;
+
+            int mapWidthPx = mapWidth * cellSize;
+            int mapHeightPx = mapHeight * cellSize;
+            int offsetX = tileX * tileSizePx;
+            int offsetY = tileY * tileSizePx;
+
+            double west = -180.0 + 360.0 * offsetX / mapWidthPx;
+            double east = west + 360.0 * img.Width / mapWidthPx;
+            double north = 90.0 - 180.0 * offsetY / mapHeightPx;
+            double south = north - 180.0 * img.Height / mapHeightPx;
+            var bbox = new Envelope(west, east, south, north);
+
+            foreach (var city in cities)
+            {
+                if (city.CurrentPolygon == null)
+                    continue;
+                if (!city.CurrentPolygon.EnvelopeInternal.Intersects(bbox))
+                    continue;
+
+                CityPolygonHelper.DrawCityPolygonOnTile(
+                    img,
+                    city,
+                    mapWidthPx,
+                    mapHeightPx,
+                    offsetX,
+                    offsetY);
+            }
         }
 
         private static Dictionary<string, string> LoadDataFiles()
