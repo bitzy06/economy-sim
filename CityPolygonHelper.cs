@@ -47,6 +47,27 @@ namespace StrategyGame
             Rgba32? fillColor = null,
             Rgba32? outlineColor = null)
         {
+            DrawCityPolygonOnTile(
+                image,
+                city,
+                mapWidthPx,
+                mapHeightPx,
+                0,
+                0,
+                fillColor,
+                outlineColor);
+        }
+
+        public static void DrawCityPolygonOnTile(
+            Image<Rgba32> image,
+            City city,
+            int mapWidthPx,
+            int mapHeightPx,
+            int offsetX,
+            int offsetY,
+            Rgba32? fillColor = null,
+            Rgba32? outlineColor = null)
+        {
             if (city.CurrentPolygon == null)
                 return;
 
@@ -55,8 +76,8 @@ namespace StrategyGame
 
             var exterior = city.CurrentPolygon.ExteriorRing.Coordinates
                 .Select(c => new PointF(
-                    (float)((c.X + 180.0) / 360.0 * mapWidthPx),
-                    (float)(((90.0 - c.Y) / 180.0) * mapHeightPx)))
+                    (float)((c.X + 180.0) / 360.0 * mapWidthPx) - offsetX,
+                    (float)(((90.0 - c.Y) / 180.0 * mapHeightPx) - offsetY)))
                 .ToArray();
 
             image.Mutate(ctx => ctx.FillPolygon(fill, exterior));

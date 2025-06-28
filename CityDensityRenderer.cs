@@ -54,11 +54,21 @@ namespace StrategyGame
             Image<Rgba32> image,
             City city,
             int mapWidthPx,
-            int mapHeightPx)
+            int mapHeightPx,
+            int offsetX = 0,
+            int offsetY = 0)
         {
             var fill = new Rgba32(120, 120, 120, 100);
             var outline = new Rgba32(30, 30, 30, 180);
-            CityPolygonHelper.DrawCityPolygon(image, city, mapWidthPx, mapHeightPx, fill, outline);
+            CityPolygonHelper.DrawCityPolygonOnTile(
+                image,
+                city,
+                mapWidthPx,
+                mapHeightPx,
+                offsetX,
+                offsetY,
+                fill,
+                outline);
         }
     }
 }
