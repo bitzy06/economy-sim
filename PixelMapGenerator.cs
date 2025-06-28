@@ -285,6 +285,8 @@ namespace StrategyGame
         internal static int[,] CreateCountryMaskTile(int fullWidth, int fullHeight,
             int offsetX, int offsetY, int width, int height)
         {
+            if (fullWidth == 0 || fullHeight == 0 || width == 0 || height == 0)
+                return new int[Math.Max(1, height), Math.Max(1, width)];
             using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
             double[] gt = new double[6];
             dem.GetGeoTransform(gt);

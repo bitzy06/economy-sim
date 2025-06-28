@@ -176,7 +176,9 @@ namespace economy_sim
 
             if (mapManager == null)
             {
-                mapManager = new MultiResolutionMapManager(panelMap.ClientSize.Width, panelMap.ClientSize.Height);
+                const int WORLD_CELLS_X = 360;   // Number of degrees longitude
+                const int WORLD_CELLS_Y = 180;   // Number of degrees latitude
+                mapManager = new MultiResolutionMapManager(WORLD_CELLS_X, WORLD_CELLS_Y);
                 var baseSize = mapManager.GetMapSize(1);
                 baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
@@ -189,7 +191,7 @@ namespace economy_sim
                         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                         "data", "tile_cache");
 
-                    mapManager.PreloadVisibleTiles(mapZoom, viewRect);
+                    mapManager.PreloadTilesAsync(mapZoom, viewRect);
 
                     this.Invoke((MethodInvoker)(() =>
                     {
@@ -343,7 +345,7 @@ namespace economy_sim
                 return;
             }
 
-            mapManager.PreloadVisibleTiles(zoom, view);
+            mapManager.PreloadTilesAsync(zoom, view);
 
             mapRenderInProgress = true;
 
@@ -2002,9 +2004,7 @@ namespace economy_sim
         }
         private void PanelMap_Resize(object sender, EventArgs e)
         {
-            // This method is called whenever the map panel is resized.
-            // We call ApplyZoom() to generate a new map image that fits the new dimensions.
-            ApplyZoom();
+            RedrawAsync();
         }
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
         {

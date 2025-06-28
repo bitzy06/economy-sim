@@ -1,5 +1,7 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Drawing; // Needed for Path and PointF
+using SixLabors.ImageSharp.Drawing.Processing; // Needed for DrawLines
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Processing.Processors.Transforms;
@@ -13,12 +15,9 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using SystemDrawing = System.Drawing;
 using DrawingPoint = System.Drawing.Point;
 using DrawingRectangle = System.Drawing.Rectangle;
-
-
-
+using SystemDrawing = System.Drawing;
 
 namespace StrategyGame
 {
@@ -112,9 +111,9 @@ namespace StrategyGame
             System.IO.Path.GetFullPath(System.IO.Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
 
-        private static readonly string TileCacheDir = Path.Combine(
-     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-     "data", "tile_cache");
+        private static readonly string TileCacheDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "data", "tile_cache");
 
         private readonly int _baseWidth;
         private readonly int _baseHeight;
@@ -181,8 +180,8 @@ namespace StrategyGame
             }
 
             // Build file path
-            string dir = Path.Combine(TileCacheDir, cellSize.ToString());
-            string path = Path.Combine(dir, $"{tileX}_{tileY}.png");
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
 
             // Try disk cache (locked)
             if (File.Exists(path))
@@ -253,48 +252,55 @@ namespace StrategyGame
 
             return bmp;
         }
-        public void PreloadVisibleTiles(int zoomLevel, DrawingRectangle viewRect)
+        public async Task PreloadTilesAsync(
+     float zoom,
+     SixLabors.ImageSharp.Rectangle view,               // unambiguous: System.Drawing.Rectangle
+     int radius = 1,
+     CancellationToken token = default)
         {
-            int cellSize = GetCellSize(zoomLevel);
-            int tileSize = TileSizePx;
-            var tiles = GetTilesForView(zoomLevel, viewRect);
-
-            foreach (var tileCoord in tiles)
+            await _preloadSemaphore.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                var coord = tileCoord; // prevent closure bug
-                string tilePath = GetTilePath(cellSize, coord.X, coord.Y);
+                var size = GetMapSize(zoom);
+                int minX = Math.Max(0, view.X / TileSizePx - radius);
+                int maxX = Math.Min((size.Width - 1) / TileSizePx + radius, (size.Width - 1) / TileSizePx);
+                int minY = Math.Max(0, view.Y / TileSizePx - radius);
+                int maxY = Math.Min((size.Height - 1) / TileSizePx + radius, (size.Height - 1) / TileSizePx);
 
-                if (!File.Exists(tilePath))
+                var maxParallel = Environment.ProcessorCount;
+                using var throttler = new SemaphoreSlim(maxParallel);
+
+                var tasks = new List<Task>();
+                for (int tx = minX; tx <= maxX; tx++)
                 {
-                    _ = GetTileAsync(zoomLevel, coord.X, coord.Y, CancellationToken.None);
+                    for (int ty = minY; ty <= maxY; ty++)
+                    {
+                        await throttler.WaitAsync(token).ConfigureAwait(false);
+                        tasks.Add(Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await GetTileAsync(zoom, tx, ty, token).ConfigureAwait(false);
+                            }
+                            finally
+                            {
+                                throttler.Release();
+                            }
+                        }, token));
+                    }
                 }
+
+                await Task.WhenAll(tasks).ConfigureAwait(false);
             }
-        }
-        public int GetTileSizeForZoom(int zoomLevel) => 512;
-        private List<DrawingPoint> GetTilesForView(int zoomLevel, DrawingRectangle viewRect)
-        {
-            int tileSize = GetTileSizeForZoom(zoomLevel);
-            int startX = viewRect.Left / tileSize;
-            int endX = (viewRect.Right + tileSize - 1) / tileSize;
-            int startY = viewRect.Top / tileSize;
-            int endY = (viewRect.Bottom + tileSize - 1) / tileSize;
-
-            List<DrawingPoint> tiles = new List<DrawingPoint>();
-
-            for (int x = startX; x < endX; x++)
+            finally
             {
-                for (int y = startY; y < endY; y++)
-                {
-                    tiles.Add(new DrawingPoint(x, y));
-                }
+                _preloadSemaphore.Release();
             }
-
-            return tiles;
         }
         public string GetTilePath(int cellSize, int tileX, int tileY)
         {
-            string tileFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "tile_cache", $"{cellSize}");
-            return Path.Combine(tileFolder, $"{tileX}_{tileY}.png");
+            string tileFolder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "tile_cache", $"{cellSize}");
+            return System.IO.Path.Combine(tileFolder, $"{tileX}_{tileY}.png");
         }
         /// <summary>
         /// Assemble a view rectangle from cached tiles.
@@ -303,75 +309,84 @@ namespace StrategyGame
         {
             lock (_assembleLock)
             {
-                int cellSize = GetCellSize(zoom);
-                int tileSize = TileSizePx;
+                // === 1. Calculate core sizes ===
+                int cellSize = GetCellSize(zoom);                   // Your per-zoom cell size
+                int tileSize = TileSizePx;                          // Your tile pixel size, probably 512
+                int mapPixelWidth = _baseWidth * cellSize;
+                int mapPixelHeight = _baseHeight * cellSize;
 
-                if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
-                    return new System.Drawing.Bitmap(1, 1); // Safe fallback
+                // === 2. Center the map if viewArea is bigger than map ===
+                int offsetX = 0, offsetY = 0;
+                if (viewArea.Width > mapPixelWidth)
+                    offsetX = (viewArea.Width - mapPixelWidth) / 2;
+                if (viewArea.Height > mapPixelHeight)
+                    offsetY = (viewArea.Height - mapPixelHeight) / 2;
 
-                int tileStartX = Math.Max(0, viewArea.X / tileSize);
-                int tileStartY = Math.Max(0, viewArea.Y / tileSize);
-                int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
-                int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
+                // === 3. Clamp which tiles are in view (never outside map bounds) ===
+                int tileStartX = Math.Max(0, viewArea.Left / tileSize);
+                int tileStartY = Math.Max(0, viewArea.Top / tileSize);
+                int lastTileX = Math.Min((mapPixelWidth - 1) / tileSize, (viewArea.Right - 1) / tileSize);
+                int lastTileY = Math.Min((mapPixelHeight - 1) / tileSize, (viewArea.Bottom - 1) / tileSize);
 
+                // === 4. Create the output bitmap ===
                 var output = new System.Drawing.Bitmap(viewArea.Width, viewArea.Height);
                 using var g = System.Drawing.Graphics.FromImage(output);
-                g.Clear(System.Drawing.Color.DarkGray); // Use a placeholder color
+                g.Clear(System.Drawing.Color.DarkGray); // change if you want another color
 
-                for (int ty = tileStartY; ty < tileEndY; ty++)
+                // === 5. Draw each tile ===
+                for (int ty = tileStartY; ty <= lastTileY; ty++)
                 {
-                    for (int tx = tileStartX; tx < tileEndX; tx++)
+                    for (int tx = tileStartX; tx <= lastTileX; tx++)
                     {
                         var key = (cellSize, tx, ty);
-                        var rect = new System.Drawing.Rectangle(
-                            tx * tileSize - viewArea.X,
-                            ty * tileSize - viewArea.Y,
-                            tileSize,
-                            tileSize
-                        );
 
-                        if (rect.Width <= 0 || rect.Height <= 0)
+                        int destX = tx * tileSize - viewArea.Left;
+                        int destY = ty * tileSize - viewArea.Top;
+
+                        // Edge cropping
+                        int tilePixelX = tx * tileSize;
+                        int tilePixelY = ty * tileSize;
+                        int visibleWidth = Math.Min(tileSize, mapPixelWidth - tilePixelX);
+                        int visibleHeight = Math.Min(tileSize, mapPixelHeight - tilePixelY);
+
+                        // Clamp if our panel is even smaller than the map tile (shouldn't happen but safe)
+                        if (destX + visibleWidth > output.Width)
+                            visibleWidth = output.Width - destX;
+                        if (destY + visibleHeight > output.Height)
+                            visibleHeight = output.Height - destY;
+
+                        if (visibleWidth <= 0 || visibleHeight <= 0)
                             continue;
 
                         System.Drawing.Bitmap tile = null;
                         lock (_cacheLock)
                         {
-                            // First, try to get the tile from the in-memory cache.
                             _tileCache.TryGetValue(key, out tile);
                         }
 
                         if (tile != null && tile.Width > 0 && tile.Height > 0)
                         {
-                            // If the tile was in the cache, draw it.
-                            try
-                            {
-                                g.DrawImage(tile, rect);
-                            }
-                            catch (ExternalException ex)
-                            {
-                                Debug.WriteLine($"DrawImage ExternalException at ({tx},{ty}): {ex.Message}");
-                            }
+                            var srcRect = new System.Drawing.Rectangle(0, 0, visibleWidth, visibleHeight);
+                            var destRect = new System.Drawing.Rectangle(destX + offsetX, destY + offsetY, visibleWidth, visibleHeight);
+                            g.DrawImage(tile, destRect, srcRect, System.Drawing.GraphicsUnit.Pixel);
+
+                            // Optional: Draw tile border for debugging
+                            // g.DrawRectangle(System.Drawing.Pens.Red, destRect);
                         }
                         else
                         {
-                            // --- This is the new non-blocking logic ---
-                            // If the tile is NOT in the cache, request it asynchronously.
-                            // Do NOT block to wait for it. The UI will remain responsive.
+                            // Async request tile if missing
                             lock (_tileLoadLock)
                             {
                                 if (!_tilesBeingLoaded.Contains(key))
                                 {
                                     _tilesBeingLoaded.Add(key);
-                                    // GetTileAsync will load from disk or generate if needed.
                                     _ = Task.Run(async () =>
                                     {
                                         try
                                         {
-                                            // This runs in the background.
                                             await GetTileAsync(zoom, tx, ty, CancellationToken.None);
-                                            // Once the tile is loaded/generated, trigger a refresh to draw it.
                                             triggerRefresh?.Invoke();
-                                            Debug.WriteLine($"[TILE] Triggering redraw for tile ({tx},{ty})");
                                         }
                                         finally
                                         {
@@ -383,7 +398,7 @@ namespace StrategyGame
                                     });
                                 }
                             }
-                            // A placeholder (the gray background) is drawn for the missing tile for now.
+                            // Draw nothing if tile is missing, or fill with placeholder if you like
                         }
                     }
                 }
@@ -720,8 +735,8 @@ namespace StrategyGame
 
         private void SaveTileToDisk(int cellSize, int tileX, int tileY, System.Drawing.Bitmap bmp)
         {
-            string dir = Path.Combine(TileCacheDir, cellSize.ToString());
-            string path = Path.Combine(dir, $"{tileX}_{tileY}.png");
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
 
             try
             {
@@ -754,8 +769,8 @@ namespace StrategyGame
 
         private async Task SaveTileToDiskAsync(int cellSize, int tileX, int tileY, System.Drawing.Bitmap bmp, CancellationToken token)
         {
-            string dir = Path.Combine(TileCacheDir, cellSize.ToString());
-            string path = Path.Combine(dir, $"{tileX}_{tileY}.png");
+            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
 
             try
             {
@@ -817,128 +832,77 @@ namespace StrategyGame
             }
             return img;
         }
-        private SystemDrawing.Bitmap LoadOrGenerateTileFromData(int cellSize, int tileX, int tileY)
+
+
+        private static Rgba32 GetCountryColor(int countryId)
         {
-            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
-            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
-
-            if (!PixelMapGenerator.TileContainsLand(_baseWidth, _baseHeight, cellSize, tileX, tileY))
-            {
-                if (File.Exists(path))
-                {
-                    try { File.Delete(path); } catch { }
-                }
-                int fullW = _baseWidth * cellSize;
-                int fullH = _baseHeight * cellSize;
-                int offsetX = tileX * TileSizePx;
-                int offsetY = tileY * TileSizePx;
-                int widthPx = Math.Min(TileSizePx, fullW - offsetX);
-                int heightPx = Math.Min(TileSizePx, fullH - offsetY);
-                return CreateWaterTile(widthPx, heightPx);
-            }
-
-            if (File.Exists(path))
-            {
-                try
-                {
-                    return new SystemDrawing.Bitmap(path);
-                }
-                catch (Exception ex)
-                {
-#if DEBUG
-                    DebugLogger.Log($"[Tile Load Error] Failed to load tile '{path}' for ({tileX},{tileY}): {ex}");
-#endif
-                    try { File.Delete(path); } catch { }
-                }
-            }
-
-            SystemDrawing.Bitmap bmp;
-            using var img = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
-            NaturalEarthOverlayGenerator.ApplyOverlays(img, _baseWidth, _baseHeight, cellSize, tileX, tileY, TileSizePx);
-            bmp = ImageSharpToBitmap(img);
-
-            try
-            {
-                Directory.CreateDirectory(dir);
-                using var imgSharp = ConvertBitmapToImageSharpFast(bmp);
-                imgSharp.Save(path); // PNG
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-
-                DebugLogger.Log($"[Tile Save Error] Failed to save generated tile '{path}' for ({tileX},{tileY}): {ex}");
-
-#endif
-            }
-
-            return bmp;
+            var rng = new Random(countryId * 997);
+            return new Rgba32((byte)rng.Next(40, 200), (byte)rng.Next(40, 200), (byte)rng.Next(40, 200), 40);
         }
 
-        private async Task<SystemDrawing.Bitmap> LoadOrGenerateTileFromDataAsync(int cellSize, int tileX, int tileY, CancellationToken token)
+        private static Rgba32 BlendColors(Rgba32 baseColor, Rgba32 overlay)
         {
-            string dir = System.IO.Path.Combine(TileCacheDir, cellSize.ToString());
-            string path = System.IO.Path.Combine(dir, $"{tileX}_{tileY}.png");
-
-            if (!PixelMapGenerator.TileContainsLand(_baseWidth, _baseHeight, cellSize, tileX, tileY))
-            {
-                if (File.Exists(path))
-                {
-                    try { File.Delete(path); } catch { }
-                }
-                int fullW = _baseWidth * cellSize;
-                int fullH = _baseHeight * cellSize;
-                int offsetX = tileX * TileSizePx;
-                int offsetY = tileY * TileSizePx;
-                int widthPx = Math.Min(TileSizePx, fullW - offsetX);
-                int heightPx = Math.Min(TileSizePx, fullH - offsetY);
-                return CreateWaterTile(widthPx, heightPx);
-            }
-
-            if (File.Exists(path))
-            {
-                try
-                {
-                    await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
-                    using var imageSharpImg = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
-                    return ImageSharpToBitmap(imageSharpImg);
-                }
-                catch (Exception ex)
-                {
-#if DEBUG
-                    DebugLogger.Log($"[Tile Load Error] Failed to load tile '{path}' for ({tileX},{tileY}): {ex}");
-#endif
-                    try { File.Delete(path); } catch { }
-                }
-            }
-
-            SystemDrawing.Bitmap bmp;
-            using var img = await Task.Run(() =>
-                {
-                    var generated = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
-                    NaturalEarthOverlayGenerator.ApplyOverlays(generated, _baseWidth, _baseHeight, cellSize, tileX, tileY, TileSizePx);
-                    return generated;
-                }, token).ConfigureAwait(false);
-
-            bmp = ImageSharpToBitmap(img);
-
-
-            try
-            {
-                Directory.CreateDirectory(dir);
-                using var imgSharp = ConvertBitmapToImageSharpFast(bmp);
-                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
-                await imgSharp.SaveAsPngAsync(fs, token).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                DebugLogger.Log($"[Tile Save Error] Failed to save generated tile '{path}' for ({tileX},{tileY}): {ex}");
-#endif
-            }
-
-            return bmp;
+            float alpha = overlay.A / 255f;
+            return new Rgba32(
+                (byte)(baseColor.R * (1 - alpha) + overlay.R * alpha),
+                (byte)(baseColor.G * (1 - alpha) + overlay.G * alpha),
+                (byte)(baseColor.B * (1 - alpha) + overlay.B * alpha),
+                255);
         }
+
+        private async Task<Bitmap> LoadOrGenerateTileFromDataAsync(int cellSize, int tileX, int tileY, CancellationToken token)
+        {
+            int mapWidth = GetBaseMapWidth();
+            int mapHeight = GetBaseMapHeight();
+            int tileSizePx = 512;
+
+            var image = PixelMapGenerator.GenerateTileWithCountriesLarge(
+                mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
+
+            var countryMask = PixelMapGenerator.CreateCountryMaskTile(
+                mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
+
+            int width = image.Width;
+            int height = image.Height;
+
+            if (countryMask.GetLength(0) != width || countryMask.GetLength(1) != height)
+            {
+                Console.WriteLine($"[WARN] countryMask dimensions ({countryMask.GetLength(0)}x{countryMask.GetLength(1)}) don't match image ({width}x{height})");
+            }
+
+            for (int y = 0; y < height && y < countryMask.GetLength(1); y++)
+            {
+                for (int x = 0; x < width && x < countryMask.GetLength(0); x++)
+                {
+                    int countryId = countryMask[x, y]; // assume layout is [x, y]
+                    if (countryId > 0)
+                    {
+                        var tint = GetCountryColor(countryId);
+                        image[x, y] = BlendColors(image[x, y], tint);
+                    }
+                }
+            }
+
+            NaturalEarthOverlayGenerator.ApplyOverlays(image, mapWidth, mapHeight, cellSize, tileX, tileY);
+
+  
+
+            return ConvertImageToBitmap(image);
+        }
+
+        private Bitmap ConvertImageToBitmap(Image<Rgba32> image)
+        {
+            using var ms = new MemoryStream();
+            image.SaveAsBmp(ms);
+            ms.Seek(0, SeekOrigin.Begin);
+            return new Bitmap(ms);
+        }
+
+        private int GetBaseMapWidth() => _baseWidth;
+        private int GetBaseMapHeight() => _baseHeight;
+
+
+
 
         public bool IsTileCacheComplete(int cellSize)
         {

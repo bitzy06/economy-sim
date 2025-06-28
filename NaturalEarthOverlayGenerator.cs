@@ -1,12 +1,18 @@
-using System;
-using System.IO;
 using MaxRev.Gdal.Core;
+using NetTopologySuite.Geometries;
+using NetTopologySuite.IO;
 using OSGeo.GDAL;
 using OSGeo.OGR;
 using OSGeo.OSR;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using System;
 using System.Collections.Generic;
+using System.IO;
+using GdalDriver = OSGeo.GDAL.Driver;
+using OgrDriver = OSGeo.OGR.Driver;
 
 namespace StrategyGame
 {
@@ -17,6 +23,7 @@ namespace StrategyGame
     /// </summary>
     public static class NaturalEarthOverlayGenerator
     {
+
         private static readonly object GdalLock = new object();
         private static bool _gdalConfigured = false;
 
@@ -93,7 +100,7 @@ namespace StrategyGame
         private static readonly string TerrainTifPath = GetDataFile("NE1_HR_LC.tif");
         private static readonly string Admin1Path = GetDataFile("ne_10m_admin_1_states_provinces.shp");
         private static readonly string CitiesPath = GetDataFile("ne_10m_populated_places.shp");
-
+        private static readonly string UrbanAreasShpPath = GetDataFile("ne_10m_urban_areas.shp");
         private static readonly Dictionary<int, Rgba32> StateColors = new();
         private static readonly Dictionary<int, Rgba32> CountryColors = new();
 
@@ -145,13 +152,59 @@ namespace StrategyGame
                     _cityDs = Ogr.Open(CitiesPath, 0);
                     _cityLayer = _cityDs.GetLayerByIndex(0);
                 }
+                Console.WriteLine($"[Overlay] Admin1 Layer: {(_admin1Layer != null)}");
+                Console.WriteLine($"[Overlay] City Layer: {(_cityLayer != null)}");
             }
 
             TintCountries(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
             DrawStateBorders(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
             DrawCities(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
         }
+        public static void DrawUrbanAreasOnTile(
+     Image<Rgba32> img,
+     string urbanAreasShpPath,
+     int mapWidthPx,
+     int mapHeightPx)
+        {
+            var urbanFill = new Rgba32(150, 150, 150, 90);   // Soft gray, semi-transparent
+            var urbanOutline = new Rgba32(70, 70, 70, 180);  // Dark gray outline
 
+            using var reader = new ShapefileDataReader(urbanAreasShpPath, GeometryFactory.Default);
+            while (reader.Read())
+            {
+                var geometry = reader.Geometry;
+                if (geometry is Polygon poly)
+                {
+                    DrawUrbanPolygon(img, poly, mapWidthPx, mapHeightPx, urbanFill, urbanOutline);
+                }
+                else if (geometry is MultiPolygon multi)
+                {
+                    for (int i = 0; i < multi.NumGeometries; i++)
+                    {
+                        DrawUrbanPolygon(img, (Polygon)multi.GetGeometryN(i), mapWidthPx, mapHeightPx, urbanFill, urbanOutline);
+                    }
+                }
+            }
+        }
+
+        // Helper function to draw and fill the polygon
+        public static void DrawUrbanPolygon(
+     Image<Rgba32> image,
+     Polygon polygon,
+     int mapWidthPx,
+     int mapHeightPx,
+     Rgba32 fillColor,
+     Rgba32 outlineColor)
+        {
+            var exterior = polygon.ExteriorRing.Coordinates
+                .Select(c => new SixLabors.ImageSharp.PointF(
+                    (float)(c.X * mapWidthPx),
+                    (float)((1.0 - c.Y) * mapHeightPx)))
+                .ToArray();
+
+            image.Mutate(ctx => ctx.FillPolygon(fillColor, exterior));
+            image.Mutate(ctx => ctx.DrawPolygon(outlineColor, 2, exterior));
+        }
         private static void DrawStateBorders(Image<Rgba32> img, int mapWidth, int mapHeight,
                                              int cellSize, int tileX, int tileY, int tileSizePx)
         {
@@ -167,104 +220,92 @@ namespace StrategyGame
 
             int[,] mask = CreateMaskTile(_admin1Layer, "adm1_code", offsetX, offsetY, widthPx, heightPx, mapWidthPx, mapHeightPx);
             Rgba32 borderColor = new Rgba32(255, 255, 255, 180);
-            for (int y = 0; y < heightPx; y++)
-            {
-                Span<Rgba32> row = img.DangerousGetPixelRowMemory(y).Span;
-                for (int x = 0; x < widthPx; x++)
-                {
-                    int v = mask[y, x];
-                    if (v == 0) continue;
-                    // tint pixel with state color
-                    Rgba32 tint = GetStateColor(v);
-                    float a = tint.A / 255f;
-                    Rgba32 basePix = row[x];
-                    basePix.R = (byte)(basePix.R * (1 - a) + tint.R * a);
-                    basePix.G = (byte)(basePix.G * (1 - a) + tint.G * a);
-                    basePix.B = (byte)(basePix.B * (1 - a) + tint.B * a);
-                    row[x] = basePix;
-                }
-            }
 
-            for (int y = 1; y < heightPx - 1; y++)
+            img.ProcessPixelRows(accessor =>
             {
-                Span<Rgba32> row = img.DangerousGetPixelRowMemory(y).Span;
-                for (int x = 1; x < widthPx - 1; x++)
+                for (int y = 0; y < heightPx; y++)
                 {
-                    int v = mask[y, x];
-                    if (v == 0) continue;
-                    if (mask[y - 1, x] != v || mask[y + 1, x] != v || mask[y, x - 1] != v || mask[y, x + 1] != v)
+                    Span<Rgba32> row = accessor.GetRowSpan(y);
+                    for (int x = 0; x < widthPx; x++)
                     {
-                        row[x] = borderColor;
+                        int v = mask[y, x];
+                        if (v == 0) continue;
+                        Rgba32 tint = GetStateColor(v);
+                        float a = tint.A / 255f;
+                        Rgba32 basePix = row[x];
+                        basePix.R = (byte)(basePix.R * (1 - a) + tint.R * a);
+                        basePix.G = (byte)(basePix.G * (1 - a) + tint.G * a);
+                        basePix.B = (byte)(basePix.B * (1 - a) + tint.B * a);
+                        row[x] = basePix;
                     }
                 }
-            }
+
+                for (int y = 1; y < heightPx - 1; y++)
+                {
+                    Span<Rgba32> row = accessor.GetRowSpan(y);
+                    for (int x = 1; x < widthPx - 1; x++)
+                    {
+                        int v = mask[y, x];
+                        if (v == 0) continue;
+                        if (mask[y - 1, x] != v || mask[y + 1, x] != v || mask[y, x - 1] != v || mask[y, x + 1] != v)
+                        {
+                            row[x] = borderColor;
+                        }
+                    }
+                }
+            });
         }
 
-        private static void DrawCities(Image<Rgba32> img, int mapWidth, int mapHeight,
-                                       int cellSize, int tileX, int tileY, int tileSizePx)
+       private static void DrawCities(Image<Rgba32> img,
+                               int mapWidth, int mapHeight,
+                               int cellSize, int tileX, int tileY,
+                               int tileSizePx = 512)
+{
+    if (_cityLayer == null) return;
+
+    // global map size in *screen* pixels
+    int mapWidthPx  = mapWidth  * cellSize;
+    int mapHeightPx = mapHeight * cellSize;
+
+    // where this tile starts in the global image
+    int offsetX = tileX * tileSizePx;
+    int offsetY = tileY * tileSizePx;
+
+    // build a lon/lat bounding box for a quick spatial filter
+    double west  = -180.0 + 360.0 *  offsetX            / mapWidthPx;
+    double east  =  west   + 360.0 *  img.Width         / mapWidthPx;
+    double north =  90.0  - 180.0 *  offsetY            / mapHeightPx;
+    double south =  north  - 180.0 *  img.Height        / mapHeightPx;
+    _cityLayer.SetSpatialFilterRect(west, south, east, north);
+
+    Feature f; _cityLayer.ResetReading();
+    while ((f = _cityLayer.GetNextFeature()) != null)
+    {
+        var g = f.GetGeometryRef();
+        if (g == null || g.GetGeometryType() != wkbGeometryType.wkbPoint) { f.Dispose(); continue; }
+
+        double lon = g.GetX(0), lat = g.GetY(0);   // WGS-84
+                (int gx, int gy) = LonLatToPixel(lon, lat, mapWidthPx, mapHeightPx);
+
+                int px = gx - offsetX;
+        int py = gy - offsetY;
+        if (px < 0 || py < 0 || px >= img.Width || py >= img.Height) { f.Dispose(); continue; }
+
+        int pop  = f.GetFieldAsInteger("POP_MAX");
+        int size = pop > 500_000 ? 4 : pop > 100_000 ? 3 : 2;
+        var col  = pop > 1_000_000 ? new Rgba32(255,215,0) : new Rgba32(200,50,50);
+        DrawSquare(img, px - size/2, py - size/2, size, col);
+
+        f.Dispose();
+    }
+    _cityLayer.SetSpatialFilter(null);
+}
+        private static (int x, int y) LonLatToPixel(double lon, double lat,
+                                            int mapWidthPx, int mapHeightPx)
         {
-            if (_cityLayer == null)
-                return;
-
-            using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
-            double[] gt = new double[6];
-            dem.GetGeoTransform(gt);
-            int srcCols = dem.RasterXSize;
-            int srcRows = dem.RasterYSize;
-
-            double scaleX = (double)srcCols / (mapWidth * cellSize);
-            double scaleY = (double)srcRows / (mapHeight * cellSize);
-
-            double originX = gt[0] + tileX * tileSizePx * scaleX * gt[1];
-            double originY = gt[3] + tileY * tileSizePx * scaleY * gt[5];
-            double pixelW = gt[1] * scaleX;
-            double pixelH = gt[5] * scaleY;
-
-            SpatialReference layerSrs = _cityLayer.GetSpatialRef();
-            SpatialReference demSrs = new SpatialReference(dem.GetProjection());
-            using CoordinateTransformation transform = new CoordinateTransformation(layerSrs, demSrs);
-
-            double left = originX;
-            double top = originY;
-            double right = originX + img.Width * pixelW;
-            double bottom = originY + img.Height * pixelH;
-            if (bottom > top) { double tmp = bottom; bottom = top; top = tmp; }
-
-            _cityLayer.SetSpatialFilterRect(left, bottom, right, top);
-
-            Feature feat;
-            _cityLayer.ResetReading();
-            while ((feat = _cityLayer.GetNextFeature()) != null)
-            {
-                Geometry geom = feat.GetGeometryRef();
-                if (geom == null) { feat.Dispose(); continue; }
-                if (geom.GetGeometryType() != wkbGeometryType.wkbPoint && geom.GetGeometryType() != wkbGeometryType.wkbPoint25D)
-                {
-                    feat.Dispose();
-                    continue;
-                }
-
-                double[] pt = new double[3];
-                transform.TransformPoint(pt, geom.GetX(0), geom.GetY(0), 0);
-                double lon = pt[0];
-                double lat = pt[1];
-
-                int px = (int)Math.Round((lon - originX) / pixelW);
-                int py = (int)Math.Round((lat - originY) / pixelH);
-                if (px < 0 || py < 0 || px >= img.Width || py >= img.Height)
-                {
-                    feat.Dispose();
-                    continue;
-                }
-
-                int pop = feat.GetFieldAsInteger("POP_MAX");
-                int size = pop > 500000 ? 4 : pop > 100000 ? 3 : 2;
-                Rgba32 color = pop > 1000000 ? new Rgba32(255, 215, 0) : new Rgba32(200, 50, 50);
-                DrawSquare(img, px - size / 2, py - size / 2, size, color);
-                feat.Dispose();
-            }
-
-            _cityLayer.SetSpatialFilter(null);
+            int x = (int)Math.Round((lon + 180.0) / 360.0 * mapWidthPx);
+            int y = (int)Math.Round((90.0 - lat) / 180.0 * mapHeightPx);
+            return (x, y);
         }
 
         private static void TintCountries(Image<Rgba32> img, int mapWidth, int mapHeight,
@@ -280,22 +321,25 @@ namespace StrategyGame
             int[,] mask = PixelMapGenerator.CreateCountryMaskTile(mapWidthPx, mapHeightPx,
                 offsetX, offsetY, widthPx, heightPx);
 
-            for (int y = 0; y < heightPx; y++)
+            img.ProcessPixelRows(accessor =>
             {
-                Span<Rgba32> row = img.DangerousGetPixelRowMemory(y).Span;
-                for (int x = 0; x < widthPx; x++)
+                for (int y = 0; y < heightPx; y++)
                 {
-                    int v = mask[y, x];
-                    if (v == 0) continue;
-                    Rgba32 tint = GetCountryColor(v);
-                    float a = tint.A / 255f;
-                    Rgba32 basePix = row[x];
-                    basePix.R = (byte)(basePix.R * (1 - a) + tint.R * a);
-                    basePix.G = (byte)(basePix.G * (1 - a) + tint.G * a);
-                    basePix.B = (byte)(basePix.B * (1 - a) + tint.B * a);
-                    row[x] = basePix;
+                    Span<Rgba32> row = accessor.GetRowSpan(y);
+                    for (int x = 0; x < widthPx; x++)
+                    {
+                        int v = mask[y, x];
+                        if (v == 0) continue;
+                        Rgba32 tint = GetCountryColor(v);
+                        float a = tint.A / 255f;
+                        Rgba32 basePix = row[x];
+                        basePix.R = (byte)(basePix.R * (1 - a) + tint.R * a);
+                        basePix.G = (byte)(basePix.G * (1 - a) + tint.G * a);
+                        basePix.B = (byte)(basePix.B * (1 - a) + tint.B * a);
+                        row[x] = basePix;
+                    }
                 }
-            }
+            });
         }
 
         private static int[,] CreateMaskTile(Layer layer, string attr, int offsetX, int offsetY, int width, int height, int fullWidth, int fullHeight)
@@ -317,7 +361,7 @@ namespace StrategyGame
             newGt[4] = 0;
             newGt[5] = gt[5] * scaleY;
 
-            Driver memDrv = Gdal.GetDriverByName("MEM");
+            GdalDriver memDrv = Gdal.GetDriverByName("MEM");
             using var maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
             maskDs.SetGeoTransform(newGt);
             maskDs.SetProjection(dem.GetProjection());
@@ -347,18 +391,21 @@ namespace StrategyGame
 
         private static void DrawSquare(Image<Rgba32> img, int x, int y, int size, Rgba32 color)
         {
-            for (int yy = 0; yy < size; yy++)
+            img.ProcessPixelRows(accessor =>
             {
-                int py = y + yy;
-                if (py < 0 || py >= img.Height) continue;
-                var row = img.DangerousGetPixelRowMemory(py).Span;
-                for (int xx = 0; xx < size; xx++)
+                for (int yy = 0; yy < size; yy++)
                 {
-                    int px = x + xx;
-                    if (px < 0 || px >= img.Width) continue;
-                    row[px] = color;
+                    int py = y + yy;
+                    if (py < 0 || py >= img.Height) continue;
+                    Span<Rgba32> row = accessor.GetRowSpan(py);
+                    for (int xx = 0; xx < size; xx++)
+                    {
+                        int px = x + xx;
+                        if (px < 0 || px >= img.Width) continue;
+                        row[px] = color;
+                    }
                 }
-            }
+            });
         }
 
         private static Dictionary<string, string> LoadDataFiles()
