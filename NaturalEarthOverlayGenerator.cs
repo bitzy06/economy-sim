@@ -6,6 +6,8 @@ using OSGeo.OSR;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using System.Collections.Generic;
+using GdalDriver = OSGeo.GDAL.Driver;
+using OgrDriver = OSGeo.OGR.Driver;
 
 namespace StrategyGame
 {
@@ -101,16 +103,19 @@ namespace StrategyGame
             Rgba32 borderColor = new Rgba32(255, 255, 255, 180);
             for (int y = 1; y < heightPx - 1; y++)
             {
-                var row = img.DangerousGetPixelRowMemory(y).Span;
-                for (int x = 1; x < widthPx - 1; x++)
+                img.ProcessPixelRows(accessor =>
                 {
-                    int v = mask[y, x];
-                    if (v == 0) continue;
-                    if (mask[y - 1, x] != v || mask[y + 1, x] != v || mask[y, x - 1] != v || mask[y, x + 1] != v)
+                    var row = accessor.GetRowSpan(y);
+                    for (int x = 1; x < widthPx - 1; x++)
                     {
-                        row[x] = borderColor;
+                        int v = mask[y, x];
+                        if (v == 0) continue;
+                        if (mask[y - 1, x] != v || mask[y + 1, x] != v || mask[y, x - 1] != v || mask[y, x + 1] != v)
+                        {
+                            row[x] = borderColor;
+                        }
                     }
-                }
+                });
             }
         }
 
@@ -192,7 +197,7 @@ namespace StrategyGame
             newGt[4] = 0;
             newGt[5] = gt[5] * scaleY;
 
-            Driver memDrv = Gdal.GetDriverByName("MEM");
+            GdalDriver memDrv = Gdal.GetDriverByName("MEM");
             using var maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
             maskDs.SetGeoTransform(newGt);
             maskDs.SetProjection(dem.GetProjection());
@@ -221,13 +226,16 @@ namespace StrategyGame
             {
                 int py = y + yy;
                 if (py < 0 || py >= img.Height) continue;
-                var row = img.DangerousGetPixelRowMemory(py).Span;
-                for (int xx = 0; xx < size; xx++)
+                img.ProcessPixelRows(accessor =>
                 {
-                    int px = x + xx;
-                    if (px < 0 || px >= img.Width) continue;
-                    row[px] = color;
-                }
+                    var row = accessor.GetRowSpan(py);
+                    for (int xx = 0; xx < size; xx++)
+                    {
+                        int px = x + xx;
+                        if (px < 0 || px >= img.Width) continue;
+                        row[px] = color;
+                    }
+                });
             }
         }
 
