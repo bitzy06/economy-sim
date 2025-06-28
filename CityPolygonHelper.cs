@@ -5,6 +5,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing.Processing;
 using SixLabors.ImageSharp.PixelFormats;
 using NetTopologySuite.IO;
+using SixLabors.ImageSharp.Processing;
 
 namespace StrategyGame
 {
@@ -14,7 +15,7 @@ namespace StrategyGame
         {
             foreach (var city in cities)
             {
-                var point = new Point(city.Longitude, city.Latitude);
+                var point = new NetTopologySuite.Geometries.Point(city.Longitude, city.Latitude);
                 Polygon best = null;
                 double bestDist = double.MaxValue;
 
@@ -48,7 +49,7 @@ namespace StrategyGame
             var outline = new Rgba32(70, 70, 70, 180);
 
             var exterior = city.CurrentPolygon.ExteriorRing.Coordinates
-                .Select(c => new PointF(
+                .Select(c => new SixLabors.ImageSharp.PointF(
                     (float)((c.X + 180.0) / 360.0 * mapWidthPx),
                     (float)(((90.0 - c.Y) / 180.0) * mapHeightPx)))
                 .ToArray();
