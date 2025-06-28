@@ -435,7 +435,7 @@ namespace StrategyGame
             double east = west + 360.0 * img.Width / mapWidthPx;
             double north = 90.0 - 180.0 * offsetY / mapHeightPx;
             double south = north - 180.0 * img.Height / mapHeightPx;
-            var bbox = new Envelope(west, east, south, north);
+            var bbox = new NetTopologySuite.Geometries.Envelope(west, east, south, north);
 
             foreach (var city in cities)
             {

@@ -115,7 +115,7 @@ namespace StrategyGame
                 int popIdx = reader.GetOrdinal("POP_MAX");
                 while (reader.Read())
                 {
-                    if (reader.Geometry is Point pt)
+                    if (reader.Geometry is NetTopologySuite.Geometries.Point pt)
                     {
                         string name = reader.GetString(nameIdx);
                         placeDict[name] = (pt.Y, pt.X, reader.GetInt32(popIdx));
