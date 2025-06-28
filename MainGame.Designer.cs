@@ -87,9 +87,9 @@
             pictureBox1 = new PictureBox();
             tabControlMain = new TabControl();
             tabPageCompanies.SuspendLayout();
+            tabPageGovernment.SuspendLayout();
             tabPageFinance.SuspendLayout();
             tabPageDebug.SuspendLayout();
-            tabPageGovernment.SuspendLayout();
             tabPageDiplomacy.SuspendLayout();
             tabPageCity.SuspendLayout();
             tabPageCountry.SuspendLayout();
@@ -105,10 +105,10 @@
             // labelSimTime
             // 
             labelSimTime.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            labelSimTime.Location = new Point(12, 577);
-            labelSimTime.Margin = new Padding(4, 0, 4, 0);
+            labelSimTime.Location = new Point(14, 769);
+            labelSimTime.Margin = new Padding(5, 0, 5, 0);
             labelSimTime.Name = "labelSimTime";
-            labelSimTime.Size = new Size(140, 27);
+            labelSimTime.Size = new Size(160, 36);
             labelSimTime.TabIndex = 1;
             labelSimTime.Text = "Turn: 0";
             // 
@@ -116,11 +116,10 @@
             // 
             listBoxMarketStats.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             listBoxMarketStats.FormattingEnabled = true;
-            listBoxMarketStats.ItemHeight = 15;
-            listBoxMarketStats.Location = new Point(175, 577);
-            listBoxMarketStats.Margin = new Padding(4, 3, 4, 3);
+            listBoxMarketStats.Location = new Point(200, 769);
+            listBoxMarketStats.Margin = new Padding(5, 4, 5, 4);
             listBoxMarketStats.Name = "listBoxMarketStats";
-            listBoxMarketStats.Size = new Size(804, 34);
+            listBoxMarketStats.Size = new Size(918, 44);
             listBoxMarketStats.TabIndex = 2;
             // 
             // tabPageCompanies
@@ -144,13 +143,95 @@
             listViewCompanies.UseCompatibleStateImageBehavior = false;
             listViewCompanies.View = View.Details;
             // 
+            // listViewDiplomacy
+            // 
+            listViewDiplomacy.FullRowSelect = true;
+            listViewDiplomacy.GridLines = true;
+            listViewDiplomacy.Location = new Point(11, 13);
+            listViewDiplomacy.Margin = new Padding(3, 4, 3, 4);
+            listViewDiplomacy.Name = "listViewDiplomacy";
+            listViewDiplomacy.Size = new Size(457, 239);
+            listViewDiplomacy.TabIndex = 7;
+            listViewDiplomacy.UseCompatibleStateImageBehavior = false;
+            listViewDiplomacy.View = View.Details;
+            // 
+            // buttonShowPopStats
+            // 
+            buttonShowPopStats.Location = new Point(0, 0);
+            buttonShowPopStats.Margin = new Padding(3, 4, 3, 4);
+            buttonShowPopStats.Name = "buttonShowPopStats";
+            buttonShowPopStats.Size = new Size(137, 31);
+            buttonShowPopStats.TabIndex = 9;
+            buttonShowPopStats.Text = "Show Pop Stats";
+            // 
+            // buttonShowFactoryStats
+            // 
+            buttonShowFactoryStats.Location = new Point(0, 0);
+            buttonShowFactoryStats.Margin = new Padding(3, 4, 3, 4);
+            buttonShowFactoryStats.Name = "buttonShowFactoryStats";
+            buttonShowFactoryStats.Size = new Size(137, 31);
+            buttonShowFactoryStats.TabIndex = 10;
+            buttonShowFactoryStats.Text = "Building Details";
+            // 
+            // buttonShowConstruction
+            // 
+            buttonShowConstruction.Location = new Point(0, 0);
+            buttonShowConstruction.Margin = new Padding(3, 4, 3, 4);
+            buttonShowConstruction.Name = "buttonShowConstruction";
+            buttonShowConstruction.Size = new Size(137, 31);
+            buttonShowConstruction.TabIndex = 11;
+            buttonShowConstruction.Text = "Construction";
+            // 
+            // tabPageGovernment
+            // 
+            tabPageGovernment.Controls.Add(listViewParties);
+            tabPageGovernment.Controls.Add(buttonOpenPolicyManager);
+            tabPageGovernment.Location = new Point(4, 29);
+            tabPageGovernment.Margin = new Padding(5, 4, 5, 4);
+            tabPageGovernment.Name = "tabPageGovernment";
+            tabPageGovernment.Size = new Size(1098, 706);
+            tabPageGovernment.TabIndex = 6;
+            tabPageGovernment.Text = "Government";
+            tabPageGovernment.UseVisualStyleBackColor = true;
+            // 
+            // listViewParties
+            // 
+            listViewParties.FullRowSelect = true;
+            listViewParties.GridLines = true;
+            listViewParties.Location = new Point(11, 13);
+            listViewParties.Margin = new Padding(3, 4, 3, 4);
+            listViewParties.Name = "listViewParties";
+            listViewParties.Size = new Size(457, 265);
+            listViewParties.TabIndex = 0;
+            listViewParties.UseCompatibleStateImageBehavior = false;
+            listViewParties.View = View.Details;
+            // 
+            // buttonOpenPolicyManager
+            // 
+            buttonOpenPolicyManager.Location = new Point(11, 293);
+            buttonOpenPolicyManager.Margin = new Padding(3, 4, 3, 4);
+            buttonOpenPolicyManager.Name = "buttonOpenPolicyManager";
+            buttonOpenPolicyManager.Size = new Size(171, 40);
+            buttonOpenPolicyManager.TabIndex = 1;
+            buttonOpenPolicyManager.Text = "Open Policy Manager";
+            buttonOpenPolicyManager.Click += ButtonOpenPolicyManager_Click;
+            // 
+            // buttonToggleDebugMode
+            // 
+            buttonToggleDebugMode.Location = new Point(14, 389);
+            buttonToggleDebugMode.Margin = new Padding(3, 4, 3, 4);
+            buttonToggleDebugMode.Name = "buttonToggleDebugMode";
+            buttonToggleDebugMode.Size = new Size(137, 31);
+            buttonToggleDebugMode.TabIndex = 14;
+            buttonToggleDebugMode.Text = "Toggle Debug Mode";
+            // 
             // tabPageFinance
             // 
             tabPageFinance.Controls.Add(listViewFinance);
-            tabPageFinance.Location = new Point(4, 24);
-            tabPageFinance.Margin = new Padding(4, 3, 4, 3);
+            tabPageFinance.Location = new Point(4, 29);
+            tabPageFinance.Margin = new Padding(5, 4, 5, 4);
             tabPageFinance.Name = "tabPageFinance";
-            tabPageFinance.Size = new Size(960, 526);
+            tabPageFinance.Size = new Size(1098, 706);
             tabPageFinance.TabIndex = 5;
             tabPageFinance.Text = "Finance";
             tabPageFinance.UseVisualStyleBackColor = true;
@@ -159,10 +240,10 @@
             // 
             listViewFinance.FullRowSelect = true;
             listViewFinance.GridLines = true;
-            listViewFinance.Location = new Point(12, 12);
-            listViewFinance.Margin = new Padding(4, 3, 4, 3);
+            listViewFinance.Location = new Point(14, 16);
+            listViewFinance.Margin = new Padding(5, 4, 5, 4);
             listViewFinance.Name = "listViewFinance";
-            listViewFinance.Size = new Size(933, 496);
+            listViewFinance.Size = new Size(1066, 660);
             listViewFinance.TabIndex = 0;
             listViewFinance.UseCompatibleStateImageBehavior = false;
             listViewFinance.View = View.Details;
@@ -184,21 +265,21 @@
             tabPageDebug.Controls.Add(checkBoxLogEconomy);
             tabPageDebug.Controls.Add(buttonGenerateTileCache);
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
-            tabPageDebug.Location = new Point(4, 24);
-            tabPageDebug.Margin = new Padding(4, 3, 4, 3);
+            tabPageDebug.Location = new Point(4, 29);
+            tabPageDebug.Margin = new Padding(5, 4, 5, 4);
             tabPageDebug.Name = "tabPageDebug";
-            tabPageDebug.Padding = new Padding(4, 3, 4, 3);
-            tabPageDebug.Size = new Size(960, 526);
+            tabPageDebug.Padding = new Padding(5, 4, 5, 4);
+            tabPageDebug.Size = new Size(1098, 706);
             tabPageDebug.TabIndex = 4;
             tabPageDebug.Text = "Debug";
             tabPageDebug.UseVisualStyleBackColor = true;
             // 
             // buttonToggleDebug
             // 
-            buttonToggleDebug.Location = new Point(12, 12);
-            buttonToggleDebug.Margin = new Padding(4, 3, 4, 3);
+            buttonToggleDebug.Location = new Point(14, 16);
+            buttonToggleDebug.Margin = new Padding(5, 4, 5, 4);
             buttonToggleDebug.Name = "buttonToggleDebug";
-            buttonToggleDebug.Size = new Size(140, 27);
+            buttonToggleDebug.Size = new Size(160, 36);
             buttonToggleDebug.TabIndex = 0;
             buttonToggleDebug.Text = "Toggle Debug";
             buttonToggleDebug.UseVisualStyleBackColor = true;
@@ -207,20 +288,20 @@
             // labelCurrentRole
             // 
             labelCurrentRole.AutoSize = true;
-            labelCurrentRole.Location = new Point(12, 58);
-            labelCurrentRole.Margin = new Padding(4, 0, 4, 0);
+            labelCurrentRole.Location = new Point(14, 77);
+            labelCurrentRole.Margin = new Padding(5, 0, 5, 0);
             labelCurrentRole.Name = "labelCurrentRole";
-            labelCurrentRole.Size = new Size(76, 15);
+            labelCurrentRole.Size = new Size(94, 20);
             labelCurrentRole.TabIndex = 1;
             labelCurrentRole.Text = "Current Role:";
             // 
             // labelRoleType
             // 
             labelRoleType.AutoSize = true;
-            labelRoleType.Location = new Point(12, 92);
-            labelRoleType.Margin = new Padding(4, 0, 4, 0);
+            labelRoleType.Location = new Point(14, 123);
+            labelRoleType.Margin = new Padding(5, 0, 5, 0);
             labelRoleType.Name = "labelRoleType";
-            labelRoleType.Size = new Size(61, 15);
+            labelRoleType.Size = new Size(77, 20);
             labelRoleType.TabIndex = 2;
             labelRoleType.Text = "Role Type:";
             // 
@@ -228,19 +309,19 @@
             // 
             comboBoxRoleType.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxRoleType.FormattingEnabled = true;
-            comboBoxRoleType.Location = new Point(93, 92);
-            comboBoxRoleType.Margin = new Padding(4, 3, 4, 3);
+            comboBoxRoleType.Location = new Point(106, 123);
+            comboBoxRoleType.Margin = new Padding(5, 4, 5, 4);
             comboBoxRoleType.Name = "comboBoxRoleType";
-            comboBoxRoleType.Size = new Size(233, 23);
+            comboBoxRoleType.Size = new Size(266, 28);
             comboBoxRoleType.TabIndex = 3;
             // 
             // labelEntitySelection
             // 
             labelEntitySelection.AutoSize = true;
-            labelEntitySelection.Location = new Point(12, 127);
-            labelEntitySelection.Margin = new Padding(4, 0, 4, 0);
+            labelEntitySelection.Location = new Point(14, 169);
+            labelEntitySelection.Margin = new Padding(5, 0, 5, 0);
             labelEntitySelection.Name = "labelEntitySelection";
-            labelEntitySelection.Size = new Size(91, 15);
+            labelEntitySelection.Size = new Size(114, 20);
             labelEntitySelection.TabIndex = 4;
             labelEntitySelection.Text = "Entity Selection:";
             // 
@@ -248,38 +329,38 @@
             // 
             comboBoxCountrySelection.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxCountrySelection.FormattingEnabled = true;
-            comboBoxCountrySelection.Location = new Point(12, 150);
-            comboBoxCountrySelection.Margin = new Padding(4, 3, 4, 3);
+            comboBoxCountrySelection.Location = new Point(14, 200);
+            comboBoxCountrySelection.Margin = new Padding(5, 4, 5, 4);
             comboBoxCountrySelection.Name = "comboBoxCountrySelection";
-            comboBoxCountrySelection.Size = new Size(233, 23);
+            comboBoxCountrySelection.Size = new Size(266, 28);
             comboBoxCountrySelection.TabIndex = 5;
             // 
             // comboBoxStateSelection
             // 
             comboBoxStateSelection.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxStateSelection.FormattingEnabled = true;
-            comboBoxStateSelection.Location = new Point(12, 185);
-            comboBoxStateSelection.Margin = new Padding(4, 3, 4, 3);
+            comboBoxStateSelection.Location = new Point(14, 247);
+            comboBoxStateSelection.Margin = new Padding(5, 4, 5, 4);
             comboBoxStateSelection.Name = "comboBoxStateSelection";
-            comboBoxStateSelection.Size = new Size(233, 23);
+            comboBoxStateSelection.Size = new Size(266, 28);
             comboBoxStateSelection.TabIndex = 6;
             // 
             // comboBoxCorporationSelection
             // 
             comboBoxCorporationSelection.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxCorporationSelection.FormattingEnabled = true;
-            comboBoxCorporationSelection.Location = new Point(12, 219);
-            comboBoxCorporationSelection.Margin = new Padding(4, 3, 4, 3);
+            comboBoxCorporationSelection.Location = new Point(14, 292);
+            comboBoxCorporationSelection.Margin = new Padding(5, 4, 5, 4);
             comboBoxCorporationSelection.Name = "comboBoxCorporationSelection";
-            comboBoxCorporationSelection.Size = new Size(233, 23);
+            comboBoxCorporationSelection.Size = new Size(266, 28);
             comboBoxCorporationSelection.TabIndex = 7;
             // 
             // buttonAssumeRole
             // 
-            buttonAssumeRole.Location = new Point(12, 254);
-            buttonAssumeRole.Margin = new Padding(4, 3, 4, 3);
+            buttonAssumeRole.Location = new Point(11, 615);
+            buttonAssumeRole.Margin = new Padding(5, 4, 5, 4);
             buttonAssumeRole.Name = "buttonAssumeRole";
-            buttonAssumeRole.Size = new Size(140, 27);
+            buttonAssumeRole.Size = new Size(160, 36);
             buttonAssumeRole.TabIndex = 8;
             buttonAssumeRole.Text = "Assume Role";
             buttonAssumeRole.UseVisualStyleBackColor = true;
@@ -287,10 +368,10 @@
             // 
             // buttonRelinquishRole
             // 
-            buttonRelinquishRole.Location = new Point(12, 288);
-            buttonRelinquishRole.Margin = new Padding(4, 3, 4, 3);
+            buttonRelinquishRole.Location = new Point(10, 662);
+            buttonRelinquishRole.Margin = new Padding(5, 4, 5, 4);
             buttonRelinquishRole.Name = "buttonRelinquishRole";
-            buttonRelinquishRole.Size = new Size(140, 27);
+            buttonRelinquishRole.Size = new Size(160, 36);
             buttonRelinquishRole.TabIndex = 9;
             buttonRelinquishRole.Text = "Relinquish Role";
             buttonRelinquishRole.UseVisualStyleBackColor = true;
@@ -299,10 +380,10 @@
             // checkBoxLogPops
             // 
             checkBoxLogPops.AutoSize = true;
-            checkBoxLogPops.Location = new Point(175, 323);
-            checkBoxLogPops.Margin = new Padding(4, 3, 4, 3);
+            checkBoxLogPops.Location = new Point(14, 428);
+            checkBoxLogPops.Margin = new Padding(5, 4, 5, 4);
             checkBoxLogPops.Name = "checkBoxLogPops";
-            checkBoxLogPops.Size = new Size(98, 19);
+            checkBoxLogPops.Size = new Size(121, 24);
             checkBoxLogPops.TabIndex = 10;
             checkBoxLogPops.Text = "Log Pop Stats";
             checkBoxLogPops.UseVisualStyleBackColor = true;
@@ -311,10 +392,10 @@
             // checkBoxLogBuildings
             // 
             checkBoxLogBuildings.AutoSize = true;
-            checkBoxLogBuildings.Location = new Point(175, 346);
-            checkBoxLogBuildings.Margin = new Padding(4, 3, 4, 3);
+            checkBoxLogBuildings.Location = new Point(14, 458);
+            checkBoxLogBuildings.Margin = new Padding(5, 4, 5, 4);
             checkBoxLogBuildings.Name = "checkBoxLogBuildings";
-            checkBoxLogBuildings.Size = new Size(121, 19);
+            checkBoxLogBuildings.Size = new Size(151, 24);
             checkBoxLogBuildings.TabIndex = 11;
             checkBoxLogBuildings.Text = "Log Building Stats";
             checkBoxLogBuildings.UseVisualStyleBackColor = true;
@@ -323,28 +404,27 @@
             // checkBoxLogEconomy
             // 
             checkBoxLogEconomy.AutoSize = true;
-            checkBoxLogEconomy.Location = new Point(175, 369);
-            checkBoxLogEconomy.Margin = new Padding(4, 3, 4, 3);
+            checkBoxLogEconomy.Location = new Point(14, 489);
+            checkBoxLogEconomy.Margin = new Padding(5, 4, 5, 4);
             checkBoxLogEconomy.Name = "checkBoxLogEconomy";
-            checkBoxLogEconomy.Size = new Size(127, 19);
+            checkBoxLogEconomy.Size = new Size(157, 24);
             checkBoxLogEconomy.TabIndex = 12;
             checkBoxLogEconomy.Text = "Log Economy Stats";
             checkBoxLogEconomy.UseVisualStyleBackColor = true;
             checkBoxLogEconomy.CheckedChanged += CheckBoxLogEconomy_CheckedChanged;
-            //
+            // 
             // buttonGenerateTileCache
-            //
-            buttonGenerateTileCache.Location = new Point(12, 323);
-            buttonGenerateTileCache.Margin = new Padding(4, 3, 4, 3);
+            // 
+            buttonGenerateTileCache.Location = new Point(182, 662);
+            buttonGenerateTileCache.Margin = new Padding(5, 4, 5, 4);
             buttonGenerateTileCache.Name = "buttonGenerateTileCache";
-            buttonGenerateTileCache.Size = new Size(140, 27);
+            buttonGenerateTileCache.Size = new Size(160, 36);
             buttonGenerateTileCache.TabIndex = 13;
             buttonGenerateTileCache.Text = "Build Tile Cache";
             buttonGenerateTileCache.UseVisualStyleBackColor = true;
-
-            //
+            // 
             // tabPageDiplomacy
-            //
+            // 
             tabPageDiplomacy.Controls.Add(labelProposedTrades);
             tabPageDiplomacy.Controls.Add(listBoxProposedTradeAgreements);
             tabPageDiplomacy.Controls.Add(buttonAcceptTrade);
@@ -353,54 +433,40 @@
             tabPageDiplomacy.Controls.Add(buttonViewRelations);
             tabPageDiplomacy.Controls.Add(buttonOpenTradeManagement);
             tabPageDiplomacy.Controls.Add(listViewDiplomacy);
-            tabPageDiplomacy.Location = new Point(4, 24);
-            tabPageDiplomacy.Margin = new Padding(4, 3, 4, 3);
+            tabPageDiplomacy.Location = new Point(4, 29);
+            tabPageDiplomacy.Margin = new Padding(5, 4, 5, 4);
             tabPageDiplomacy.Name = "tabPageDiplomacy";
-            tabPageDiplomacy.Padding = new Padding(4, 3, 4, 3);
-            tabPageDiplomacy.Size = new Size(960, 526);
+            tabPageDiplomacy.Padding = new Padding(5, 4, 5, 4);
+            tabPageDiplomacy.Size = new Size(1098, 706);
             tabPageDiplomacy.TabIndex = 3;
             tabPageDiplomacy.Text = "Diplomacy";
             tabPageDiplomacy.UseVisualStyleBackColor = true;
-
-            //
-            // tabPageGovernment
-            //
-            tabPageGovernment.Controls.Add(listViewParties);
-            tabPageGovernment.Controls.Add(buttonOpenPolicyManager);
-            tabPageGovernment.Location = new Point(4, 24);
-            tabPageGovernment.Margin = new Padding(4, 3, 4, 3);
-            tabPageGovernment.Name = "tabPageGovernment";
-            tabPageGovernment.Size = new Size(960, 526);
-            tabPageGovernment.TabIndex = 6;
-            tabPageGovernment.Text = "Government";
-            tabPageGovernment.UseVisualStyleBackColor = true;
             // 
             // labelProposedTrades
             // 
             labelProposedTrades.AutoSize = true;
-            labelProposedTrades.Location = new Point(12, 219);
-            labelProposedTrades.Margin = new Padding(4, 0, 4, 0);
+            labelProposedTrades.Location = new Point(14, 292);
+            labelProposedTrades.Margin = new Padding(5, 0, 5, 0);
             labelProposedTrades.Name = "labelProposedTrades";
-            labelProposedTrades.Size = new Size(204, 15);
+            labelProposedTrades.Size = new Size(256, 20);
             labelProposedTrades.TabIndex = 0;
             labelProposedTrades.Text = "Proposed Trade Agreements (to you):";
             // 
             // listBoxProposedTradeAgreements
             // 
             listBoxProposedTradeAgreements.FormattingEnabled = true;
-            listBoxProposedTradeAgreements.ItemHeight = 15;
-            listBoxProposedTradeAgreements.Location = new Point(12, 242);
-            listBoxProposedTradeAgreements.Margin = new Padding(4, 3, 4, 3);
+            listBoxProposedTradeAgreements.Location = new Point(14, 323);
+            listBoxProposedTradeAgreements.Margin = new Padding(5, 4, 5, 4);
             listBoxProposedTradeAgreements.Name = "listBoxProposedTradeAgreements";
-            listBoxProposedTradeAgreements.Size = new Size(443, 169);
+            listBoxProposedTradeAgreements.Size = new Size(506, 224);
             listBoxProposedTradeAgreements.TabIndex = 1;
             // 
             // buttonAcceptTrade
             // 
-            buttonAcceptTrade.Location = new Point(12, 427);
-            buttonAcceptTrade.Margin = new Padding(4, 3, 4, 3);
+            buttonAcceptTrade.Location = new Point(14, 569);
+            buttonAcceptTrade.Margin = new Padding(5, 4, 5, 4);
             buttonAcceptTrade.Name = "buttonAcceptTrade";
-            buttonAcceptTrade.Size = new Size(105, 27);
+            buttonAcceptTrade.Size = new Size(120, 36);
             buttonAcceptTrade.TabIndex = 2;
             buttonAcceptTrade.Text = "Accept Trade";
             buttonAcceptTrade.UseVisualStyleBackColor = true;
@@ -408,10 +474,10 @@
             // 
             // buttonRejectTrade
             // 
-            buttonRejectTrade.Location = new Point(128, 427);
-            buttonRejectTrade.Margin = new Padding(4, 3, 4, 3);
+            buttonRejectTrade.Location = new Point(146, 569);
+            buttonRejectTrade.Margin = new Padding(5, 4, 5, 4);
             buttonRejectTrade.Name = "buttonRejectTrade";
-            buttonRejectTrade.Size = new Size(105, 27);
+            buttonRejectTrade.Size = new Size(120, 36);
             buttonRejectTrade.TabIndex = 3;
             buttonRejectTrade.Text = "Reject Trade";
             buttonRejectTrade.UseVisualStyleBackColor = true;
@@ -419,10 +485,10 @@
             // 
             // buttonProposeTrade
             // 
-            buttonProposeTrade.Location = new Point(525, 35);
-            buttonProposeTrade.Margin = new Padding(4, 3, 4, 3);
+            buttonProposeTrade.Location = new Point(600, 47);
+            buttonProposeTrade.Margin = new Padding(5, 4, 5, 4);
             buttonProposeTrade.Name = "buttonProposeTrade";
-            buttonProposeTrade.Size = new Size(140, 27);
+            buttonProposeTrade.Size = new Size(160, 36);
             buttonProposeTrade.TabIndex = 4;
             buttonProposeTrade.Text = "Propose New Trade";
             buttonProposeTrade.UseVisualStyleBackColor = true;
@@ -430,10 +496,10 @@
             // 
             // buttonViewRelations
             // 
-            buttonViewRelations.Location = new Point(525, 69);
-            buttonViewRelations.Margin = new Padding(4, 3, 4, 3);
+            buttonViewRelations.Location = new Point(600, 92);
+            buttonViewRelations.Margin = new Padding(5, 4, 5, 4);
             buttonViewRelations.Name = "buttonViewRelations";
-            buttonViewRelations.Size = new Size(140, 27);
+            buttonViewRelations.Size = new Size(160, 36);
             buttonViewRelations.TabIndex = 5;
             buttonViewRelations.Text = "View Relations";
             buttonViewRelations.UseVisualStyleBackColor = true;
@@ -441,31 +507,14 @@
             // 
             // buttonOpenTradeManagement
             // 
-            buttonOpenTradeManagement.Location = new Point(525, 104);
-            buttonOpenTradeManagement.Margin = new Padding(4, 3, 4, 3);
+            buttonOpenTradeManagement.Location = new Point(600, 139);
+            buttonOpenTradeManagement.Margin = new Padding(5, 4, 5, 4);
             buttonOpenTradeManagement.Name = "buttonOpenTradeManagement";
-            buttonOpenTradeManagement.Size = new Size(140, 27);
+            buttonOpenTradeManagement.Size = new Size(160, 36);
             buttonOpenTradeManagement.TabIndex = 6;
             buttonOpenTradeManagement.Text = "Trade Management";
             buttonOpenTradeManagement.UseVisualStyleBackColor = true;
             buttonOpenTradeManagement.Click += ButtonOpenTradeManagement_Click;
-
-            //
-            // listViewDiplomacy
-            //
-            listViewDiplomacy.FullRowSelect = true;
-            listViewDiplomacy.GridLines = true;
-            listViewDiplomacy.Location = new Point(10, 10);
-            listViewDiplomacy.Name = "listViewDiplomacy";
-            listViewDiplomacy.Size = new Size(400, 180);
-            listViewDiplomacy.TabIndex = 7;
-            listViewDiplomacy.View = View.Details;
-            listViewDiplomacy.Columns.Add("Country", 120);
-            listViewDiplomacy.Columns.Add("Type", 80);
-            listViewDiplomacy.Columns.Add("Resource", 100);
-            listViewDiplomacy.Columns.Add("Quantity", 80);
-            listViewDiplomacy.Columns.Add("Price", 80);
-            listViewDiplomacy.Columns.Add("Remaining", 80);
             // 
             // tabPageCity
             // 
@@ -481,10 +530,10 @@
             tabPageCity.Controls.Add(buttonShowPopStats);
             tabPageCity.Controls.Add(buttonShowFactoryStats);
             tabPageCity.Controls.Add(buttonShowConstruction);
-            tabPageCity.Location = new Point(4, 24);
-            tabPageCity.Margin = new Padding(4, 3, 4, 3);
+            tabPageCity.Location = new Point(4, 29);
+            tabPageCity.Margin = new Padding(5, 4, 5, 4);
             tabPageCity.Name = "tabPageCity";
-            tabPageCity.Size = new Size(960, 526);
+            tabPageCity.Size = new Size(1098, 706);
             tabPageCity.TabIndex = 2;
             tabPageCity.Text = "Economy";
             // 
@@ -492,142 +541,91 @@
             // 
             comboBoxCountry.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxCountry.FormattingEnabled = true;
-            comboBoxCountry.Location = new Point(35, 12);
-            comboBoxCountry.Margin = new Padding(4, 3, 4, 3);
+            comboBoxCountry.Location = new Point(40, 16);
+            comboBoxCountry.Margin = new Padding(5, 4, 5, 4);
             comboBoxCountry.Name = "comboBoxCountry";
-            comboBoxCountry.Size = new Size(233, 23);
+            comboBoxCountry.Size = new Size(266, 28);
             comboBoxCountry.TabIndex = 0;
             // 
             // labelCountryStats
             // 
-            labelCountryStats.Location = new Point(292, 12);
-            labelCountryStats.Margin = new Padding(4, 0, 4, 0);
+            labelCountryStats.Location = new Point(334, 16);
+            labelCountryStats.Margin = new Padding(5, 0, 5, 0);
             labelCountryStats.Name = "labelCountryStats";
-            labelCountryStats.Size = new Size(642, 24);
+            labelCountryStats.Size = new Size(734, 32);
             labelCountryStats.TabIndex = 1;
             // 
             // comboBoxStates
             // 
             comboBoxStates.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxStates.FormattingEnabled = true;
-            comboBoxStates.Location = new Point(35, 46);
-            comboBoxStates.Margin = new Padding(4, 3, 4, 3);
+            comboBoxStates.Location = new Point(40, 61);
+            comboBoxStates.Margin = new Padding(5, 4, 5, 4);
             comboBoxStates.Name = "comboBoxStates";
-            comboBoxStates.Size = new Size(233, 23);
+            comboBoxStates.Size = new Size(266, 28);
             comboBoxStates.TabIndex = 2;
             // 
             // labelStateStats
             // 
-            labelStateStats.Location = new Point(292, 46);
-            labelStateStats.Margin = new Padding(4, 0, 4, 0);
+            labelStateStats.Location = new Point(334, 61);
+            labelStateStats.Margin = new Padding(5, 0, 5, 0);
             labelStateStats.Name = "labelStateStats";
-            labelStateStats.Size = new Size(642, 24);
+            labelStateStats.Size = new Size(734, 32);
             labelStateStats.TabIndex = 3;
             // 
             // comboBoxCities
             // 
             comboBoxCities.DropDownStyle = ComboBoxStyle.DropDownList;
             comboBoxCities.FormattingEnabled = true;
-            comboBoxCities.Location = new Point(35, 81);
-            comboBoxCities.Margin = new Padding(4, 3, 4, 3);
+            comboBoxCities.Location = new Point(40, 108);
+            comboBoxCities.Margin = new Padding(5, 4, 5, 4);
             comboBoxCities.Name = "comboBoxCities";
-            comboBoxCities.Size = new Size(233, 23);
+            comboBoxCities.Size = new Size(266, 28);
             comboBoxCities.TabIndex = 4;
             // 
             // listBoxBuyOrders
             // 
             listBoxBuyOrders.FormattingEnabled = true;
-            listBoxBuyOrders.ItemHeight = 15;
-            listBoxBuyOrders.Location = new Point(12, 115);
-            listBoxBuyOrders.Margin = new Padding(4, 3, 4, 3);
+            listBoxBuyOrders.Location = new Point(14, 153);
+            listBoxBuyOrders.Margin = new Padding(5, 4, 5, 4);
             listBoxBuyOrders.Name = "listBoxBuyOrders";
-            listBoxBuyOrders.Size = new Size(291, 334);
+            listBoxBuyOrders.Size = new Size(332, 444);
             listBoxBuyOrders.TabIndex = 5;
             // 
             // listBoxSellOrders
             // 
             listBoxSellOrders.FormattingEnabled = true;
-            listBoxSellOrders.ItemHeight = 15;
-            listBoxSellOrders.Location = new Point(315, 115);
-            listBoxSellOrders.Margin = new Padding(4, 3, 4, 3);
+            listBoxSellOrders.Location = new Point(360, 153);
+            listBoxSellOrders.Margin = new Padding(5, 4, 5, 4);
             listBoxSellOrders.Name = "listBoxSellOrders";
-            listBoxSellOrders.Size = new Size(291, 334);
+            listBoxSellOrders.Size = new Size(332, 444);
             listBoxSellOrders.TabIndex = 6;
             // 
             // listBoxCityStats
             // 
             listBoxCityStats.FormattingEnabled = true;
-            listBoxCityStats.ItemHeight = 15;
-            listBoxCityStats.Location = new Point(618, 115);
-            listBoxCityStats.Margin = new Padding(4, 3, 4, 3);
+            listBoxCityStats.Location = new Point(706, 153);
+            listBoxCityStats.Margin = new Padding(5, 4, 5, 4);
             listBoxCityStats.Name = "listBoxCityStats";
-            listBoxCityStats.Size = new Size(326, 109);
+            listBoxCityStats.Size = new Size(372, 144);
             listBoxCityStats.TabIndex = 7;
             // 
             // listBoxFactoryStats
             // 
             listBoxFactoryStats.FormattingEnabled = true;
-            listBoxFactoryStats.ItemHeight = 15;
-            listBoxFactoryStats.Location = new Point(618, 242);
-            listBoxFactoryStats.Margin = new Padding(4, 3, 4, 3);
+            listBoxFactoryStats.Location = new Point(706, 323);
+            listBoxFactoryStats.Margin = new Padding(5, 4, 5, 4);
             listBoxFactoryStats.Name = "listBoxFactoryStats";
-            listBoxFactoryStats.Size = new Size(326, 214);
+            listBoxFactoryStats.Size = new Size(372, 284);
             listBoxFactoryStats.TabIndex = 8;
-
-            //
-            // buttonShowPopStats
-            //
-            buttonShowPopStats.Name = "buttonShowPopStats";
-            buttonShowPopStats.Size = new Size(120, 23);
-            buttonShowPopStats.Text = "Show Pop Stats";
-
-            //
-            // buttonShowFactoryStats
-            //
-            buttonShowFactoryStats.Name = "buttonShowFactoryStats";
-            buttonShowFactoryStats.Size = new Size(120, 23);
-            buttonShowFactoryStats.Text = "Building Details";
-
-            //
-            // buttonShowConstruction
-            //
-            buttonShowConstruction.Name = "buttonShowConstruction";
-            buttonShowConstruction.Size = new Size(120, 23);
-            buttonShowConstruction.Text = "Construction";
-
-            //
-            // listViewParties
-            //
-            listViewParties.View = View.Details;
-            listViewParties.FullRowSelect = true;
-            listViewParties.GridLines = true;
-            listViewParties.Location = new Point(10, 10);
-            listViewParties.Size = new Size(400, 200);
-            listViewParties.Columns.Add("Party", 200);
-            listViewParties.Columns.Add("Share", 80);
-
-            //
-            // buttonOpenPolicyManager
-            //
-            buttonOpenPolicyManager.Location = new Point(10, 220);
-            buttonOpenPolicyManager.Size = new Size(150, 30);
-            buttonOpenPolicyManager.Text = "Open Policy Manager";
-            buttonOpenPolicyManager.Click += ButtonOpenPolicyManager_Click;
-
-            //
-            // buttonToggleDebugMode
-            //
-            buttonToggleDebugMode.Location = new Point(10, 280);
-            buttonToggleDebugMode.Size = new Size(120, 23);
-            buttonToggleDebugMode.Text = "Toggle Debug Mode";
             // 
             // tabPageCountry
             // 
             tabPageCountry.Controls.Add(panelMap);
-            tabPageCountry.Location = new Point(4, 24);
-            tabPageCountry.Margin = new Padding(4, 3, 4, 3);
+            tabPageCountry.Location = new Point(4, 29);
+            tabPageCountry.Margin = new Padding(5, 4, 5, 4);
             tabPageCountry.Name = "tabPageCountry";
-            tabPageCountry.Size = new Size(960, 526);
+            tabPageCountry.Size = new Size(1098, 706);
             tabPageCountry.TabIndex = 0;
             tabPageCountry.Text = "Map";
             // 
@@ -636,27 +634,22 @@
             panelMap.Controls.Add(pictureBox1);
             panelMap.Dock = DockStyle.Fill;
             panelMap.Location = new Point(0, 0);
-            panelMap.Margin = new Padding(4, 3, 4, 3);
+            panelMap.Margin = new Padding(5, 4, 5, 4);
             panelMap.Name = "panelMap";
-            panelMap.Size = new Size(960, 526);
+            panelMap.Size = new Size(1098, 706);
             panelMap.TabIndex = 1;
-            panelMap.AutoScroll = false;
             panelMap.TabStop = true;
-            panelMap.KeyDown += new System.Windows.Forms.KeyEventHandler(this.panelMap_KeyDown);
-            
-            this.panelMap.MouseUp += new System.Windows.Forms.MouseEventHandler(this.panelMap_MouseUp_ForPanning);
+            panelMap.KeyDown += panelMap_KeyDown;
+            panelMap.MouseUp += panelMap_MouseUp_ForPanning;
             // 
             // pictureBox1
             // 
-            pictureBox1.Dock = DockStyle.None;
             pictureBox1.Location = new Point(0, 0);
-            pictureBox1.Margin = new Padding(4, 3, 4, 3);
+            pictureBox1.Margin = new Padding(5, 4, 5, 4);
             pictureBox1.Name = "pictureBox1";
-            pictureBox1.Size = new Size(960, 526);
-            pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
+            pictureBox1.Size = new Size(1097, 701);
             pictureBox1.TabIndex = 0;
             pictureBox1.TabStop = false;
-       
             // 
             // tabControlMain
             // 
@@ -667,36 +660,34 @@
             tabControlMain.Controls.Add(tabPageGovernment);
             tabControlMain.Controls.Add(tabPageDebug);
             tabControlMain.Controls.Add(tabPageFinance);
-            tabControlMain.Location = new Point(12, 12);
-            tabControlMain.Margin = new Padding(4, 3, 4, 3);
+            tabControlMain.Location = new Point(14, 16);
+            tabControlMain.Margin = new Padding(5, 4, 5, 4);
             tabControlMain.Name = "tabControlMain";
             tabControlMain.SelectedIndex = 0;
-            tabControlMain.Size = new Size(968, 554);
+            tabControlMain.Size = new Size(1106, 739);
             tabControlMain.TabIndex = 0;
             // 
             // MainGame
             // 
-            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1082, 740);
+            ClientSize = new Size(1237, 987);
             Controls.Add(tabControlMain);
             Controls.Add(labelSimTime);
             Controls.Add(listBoxMarketStats);
-            Margin = new Padding(4, 3, 4, 3);
+            Margin = new Padding(5, 4, 5, 4);
             Name = "MainGame";
             Text = "MainGame";
             tabPageCompanies.ResumeLayout(false);
+            tabPageGovernment.ResumeLayout(false);
             tabPageFinance.ResumeLayout(false);
             tabPageDebug.ResumeLayout(false);
             tabPageDebug.PerformLayout();
-            tabPageGovernment.ResumeLayout(false);
-            tabPageGovernment.PerformLayout();
             tabPageDiplomacy.ResumeLayout(false);
             tabPageDiplomacy.PerformLayout();
             tabPageCity.ResumeLayout(false);
             tabPageCountry.ResumeLayout(false);
             panelMap.ResumeLayout(false);
-            panelMap.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             tabControlMain.ResumeLayout(false);
             ResumeLayout(false);

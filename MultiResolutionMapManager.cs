@@ -77,7 +77,7 @@ namespace StrategyGame
         /// maximum cell size used when generating maps.
         /// </summary>
 
-        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80,160,320,640 };
+        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80,160,320,640,1280 };
         private static readonly Dictionary<string, SemaphoreSlim> _fileLocks = new();
         private static readonly object _fileLockDictLock = new();
         private Bitmap SafeLoadTile(string path)

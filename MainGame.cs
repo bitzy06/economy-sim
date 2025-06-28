@@ -209,19 +209,6 @@ namespace economy_sim
             pictureBox1.Location = new Point(0, 0);
         }
 
-
-
-
-
-        private void RedrawThrottled()
-        {
-            if ((DateTime.Now - _lastRedrawTime).TotalMilliseconds > 100)
-            {
-                _lastRedrawTime = DateTime.Now;
-                this.BeginInvoke(new Action(Redraw));
-            }
-        }
-
        
 
         private void Redraw()
