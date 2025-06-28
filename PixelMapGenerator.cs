@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using System.Collections.Generic;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -105,6 +106,10 @@ namespace StrategyGame
             GetDataFile("ETOPO1_Bed_g_geotiff.tif");
         private static readonly string ShpPath =
             GetDataFile("ne_10m_admin_0_countries.shp");
+        private static readonly string Admin1Path =
+            GetDataFile("ne_10m_admin_1_states_provinces.shp");
+        private static readonly string CitiesPath =
+            GetDataFile("ne_10m_populated_places.shp");
 
         // Terrain map used for pixel-art generation.
         private static readonly string TerrainTifPath =
@@ -245,6 +250,29 @@ namespace StrategyGame
         }
 
         /// <summary>
+        /// Generate a terrain tile and overlay country, state borders and city points.
+        /// </summary>
+        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTileWithWorldDataLarge(
+            int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
+        {
+            var fullW = mapWidth * cellSize;
+            var fullH = mapHeight * cellSize;
+            int offsetX = tileX * tileSizePx;
+            int offsetY = tileY * tileSizePx;
+
+            int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY,
+                Math.Min(tileSizePx, fullW - offsetX), Math.Min(tileSizePx, fullH - offsetY));
+
+            var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
+
+            DrawBordersLarge(img, mask);
+            DrawStateBordersLarge(img, mask);
+            DrawCitiesLarge(img, widthPx: mask.GetLength(1), heightPx: mask.GetLength(0));
+
+            return img;
+        }
+
+        /// <summary>
         /// Determine if a tile contains any land pixels.
         /// </summary>
         public static bool TileContainsLand(int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
@@ -370,6 +398,67 @@ namespace StrategyGame
             }
 
             return result;
+        }
+
+        private static void DrawStateBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> image, int[,] landMask)
+        {
+            if (!System.IO.File.Exists(Admin1Path))
+                return;
+
+            int heightPx = landMask.GetLength(0);
+            int widthPx = landMask.GetLength(1);
+
+            var borderColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(80, 80, 80, 255);
+            var reader = new NetTopologySuite.IO.ShapefileDataReader(Admin1Path, NetTopologySuite.Geometries.GeometryFactory.Default);
+
+            while (reader.Read())
+            {
+                var geometry = reader.Geometry;
+                if (geometry is NetTopologySuite.Geometries.MultiPolygon multi)
+                {
+                    for (int i = 0; i < multi.NumGeometries; i++)
+                    {
+                        var poly = (NetTopologySuite.Geometries.Polygon)multi.GetGeometryN(i);
+                        DrawPolygonOutline(image, poly, widthPx, heightPx, borderColor);
+                    }
+                }
+                else if (geometry is NetTopologySuite.Geometries.Polygon poly)
+                {
+                    DrawPolygonOutline(image, poly, widthPx, heightPx, borderColor);
+                }
+            }
+        }
+
+        private static void DrawCitiesLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> image, int widthPx, int heightPx)
+        {
+            if (!System.IO.File.Exists(CitiesPath))
+                return;
+
+            var color = new SixLabors.ImageSharp.PixelFormats.Rgba32(200, 20, 20, 255);
+            var reader = new NetTopologySuite.IO.ShapefileDataReader(CitiesPath, NetTopologySuite.Geometries.GeometryFactory.Default);
+
+            int scalerankIndex = -1;
+            for (int i = 0; i < reader.DbaseHeader.NumFields; i++)
+            {
+                if (string.Equals(reader.DbaseHeader.Fields[i].Name, "SCALERANK", StringComparison.OrdinalIgnoreCase))
+                {
+                    scalerankIndex = i;
+                    break;
+                }
+            }
+
+            while (reader.Read())
+            {
+                if (scalerankIndex >= 0 && reader.GetInt32(scalerankIndex) > 4)
+                    continue;
+
+                if (reader.Geometry is NetTopologySuite.Geometries.Point pt)
+                {
+                    int x = (int)(pt.X * widthPx);
+                    int y = (int)((1.0 - pt.Y) * heightPx);
+                    FillRect(image, x - 1, y - 1, 3, 3, color);
+                }
+            }
         }
         private static void DrawPolygonOutline(
     SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> image,

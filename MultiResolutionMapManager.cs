@@ -853,7 +853,7 @@ namespace StrategyGame
             }
 
             SystemDrawing.Bitmap bmp;
-            using var img = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
+            using var img = PixelMapGenerator.GenerateTileWithWorldDataLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
             OverlayFeaturesLarge(img, ZoomLevel.City);
             bmp = ImageSharpToBitmap(img);
 
@@ -915,7 +915,7 @@ namespace StrategyGame
             SystemDrawing.Bitmap bmp;
             using var img = await Task.Run(() =>
                 {
-                    var generated = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
+                    var generated = PixelMapGenerator.GenerateTileWithWorldDataLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
                     OverlayFeaturesLarge(generated, ZoomLevel.City);
                     return generated;
                 }, token).ConfigureAwait(false);
