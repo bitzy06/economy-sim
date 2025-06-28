@@ -40,13 +40,40 @@ namespace StrategyGame
             }
         }
 
-        public static void DrawCityPolygon(Image<Rgba32> image, City city, int mapWidthPx, int mapHeightPx)
+        public static void DrawCityPolygon(
+            Image<Rgba32> image,
+            City city,
+            int mapWidthPx,
+            int mapHeightPx,
+            Rgba32? fillColor = null,
+            Rgba32? outlineColor = null)
+        {
+            DrawCityPolygonOnTile(
+                image,
+                city,
+                mapWidthPx,
+                mapHeightPx,
+                0,
+                0,
+                fillColor,
+                outlineColor);
+        }
+
+        public static void DrawCityPolygonOnTile(
+            Image<Rgba32> image,
+            City city,
+            int mapWidthPx,
+            int mapHeightPx,
+            int offsetX,
+            int offsetY,
+            Rgba32? fillColor = null,
+            Rgba32? outlineColor = null)
         {
             if (city.CurrentPolygon == null)
                 return;
 
-            var fill = new Rgba32(150, 150, 150, 90);
-            var outline = new Rgba32(70, 70, 70, 180);
+            var fill = fillColor ?? new Rgba32(150, 150, 150, 90);
+            var outline = outlineColor ?? new Rgba32(70, 70, 70, 180);
 
             var exterior = city.CurrentPolygon.ExteriorRing.Coordinates
                 .Select(c => new SixLabors.ImageSharp.PointF(
