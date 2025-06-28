@@ -28,7 +28,7 @@ namespace StrategyGame
             int popIdx = reader.GetOrdinal("POP_MAX");
             while (reader.Read())
             {
-                if (reader.Geometry is not Point pt)
+                if (reader.Geometry is not NetTopologySuite.Geometries.Point pt)
                     continue;
 
                 var city = new City(reader.GetString(nameIdx))
