@@ -9,7 +9,7 @@ Natural Earth provides free, small-sized, and high-quality GIS datasets that are
 
 ## Recommended Dataset: States/Provinces
 
-**File**: `ne_10m_admin_1_states_provinces.shp`  
+**File**: `ne_10m_admin_1_states_provinces.shp` in data\states
 Also available at 50m and 110m resolution for lower detail
 
 ### ✅ Includes:
