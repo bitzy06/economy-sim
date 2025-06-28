@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System; // Added for Console
+using NetTopologySuite.Geometries;
 using StrategyGame; // Added to reference Suburb class
 using StrategyGame; // Ensure namespace for ProjectType and ConstructionProject is included
 
@@ -10,7 +11,20 @@ namespace StrategyGame
     {
         public string Name { get; set; }
         public double Budget { get; set; }
-        public int Population { get; set; }
+        private int population;
+        public int Population
+        {
+            get => population;
+            set
+            {
+                population = value;
+                UpdateCurrentPolygon();
+            }
+        }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public Polygon OriginalPolygon { get; set; }
+        public Polygon CurrentPolygon { get; set; }
         public double TaxRate { get; set; } // Percentage (e.g., 0.1 for 10%)
         public double CityExpenses { get; set; }
         public List<Factory> Factories { get; set; }
@@ -38,6 +52,10 @@ namespace StrategyGame
             Name = name;
             Budget = 10000; // Example starting budget
             Population = 100000; // Example starting population
+            Latitude = 0;
+            Longitude = 0;
+            OriginalPolygon = null;
+            CurrentPolygon = null;
             Factories = new List<Factory>();
             Stockpile = new Dictionary<string, Good>();
             Happiness = 50; // Out of 100
@@ -223,6 +241,15 @@ namespace StrategyGame
             {
                 suburb.RailwayKilometers += value / Suburbs.Count; // Distribute railway kilometers
             }
+        }
+
+        private void UpdateCurrentPolygon()
+        {
+            if (OriginalPolygon == null)
+                return;
+
+            double bufferDist = Math.Log(Population / 100000.0 + 1) * 0.01;
+            CurrentPolygon = (Polygon)OriginalPolygon.Buffer(bufferDist);
         }
     }
 }

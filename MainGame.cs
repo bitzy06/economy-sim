@@ -924,6 +924,7 @@ namespace economy_sim
                     Market.UpdateCityPrices(city);
                 }
             }
+            CityPolygonHelper.UpdateAllCityPolygons(allCitiesInWorld);
             // --- End City Economies Update Phase ---
 
             // --- Inter-City Trade Resolution Phase ---
