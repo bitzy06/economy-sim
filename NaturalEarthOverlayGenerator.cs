@@ -40,27 +40,51 @@ namespace StrategyGame
 
         private static string GetDataFile(string name)
         {
-            if (DataFiles.TryGetValue(name, out var mapped) && File.Exists(mapped))
-                return mapped;
+            string CheckPath(string basePath)
+            {
+                if (File.Exists(basePath))
+                    return basePath;
+
+                string zipPath = Path.ChangeExtension(basePath, ".zip");
+                if (File.Exists(zipPath))
+                    return $"/vsizip/{zipPath}/{name}";
+
+                return null;
+            }
+
+            if (DataFiles.TryGetValue(name, out var mapped))
+            {
+                var found = CheckPath(mapped);
+                if (found != null)
+                    return found;
+            }
 
             string userPath = Path.Combine(DataDir, name);
-            if (File.Exists(userPath))
-                return userPath;
+            var userFound = CheckPath(userPath);
+            if (userFound != null)
+                return userFound;
             if (Directory.Exists(DataDir))
             {
                 var matches = Directory.GetFiles(DataDir, name, SearchOption.AllDirectories);
                 if (matches.Length > 0)
                     return matches[0];
+                var matchesZip = Directory.GetFiles(DataDir, Path.GetFileNameWithoutExtension(name) + ".zip", SearchOption.AllDirectories);
+                if (matchesZip.Length > 0)
+                    return $"/vsizip/{matchesZip[0]}/{name}";
             }
 
             string repoPath = Path.Combine(RepoDataDir, name);
-            if (File.Exists(repoPath))
-                return repoPath;
+            var repoFound = CheckPath(repoPath);
+            if (repoFound != null)
+                return repoFound;
             if (Directory.Exists(RepoDataDir))
             {
                 var matches = Directory.GetFiles(RepoDataDir, name, SearchOption.AllDirectories);
                 if (matches.Length > 0)
                     return matches[0];
+                var matchesZip = Directory.GetFiles(RepoDataDir, Path.GetFileNameWithoutExtension(name) + ".zip", SearchOption.AllDirectories);
+                if (matchesZip.Length > 0)
+                    return $"/vsizip/{matchesZip[0]}/{name}";
             }
 
             return userPath;
