@@ -282,7 +282,7 @@ namespace StrategyGame
             return false;
         }
 
-        private static int[,] CreateCountryMaskTile(int fullWidth, int fullHeight,
+        internal static int[,] CreateCountryMaskTile(int fullWidth, int fullHeight,
             int offsetX, int offsetY, int width, int height)
         {
             using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);

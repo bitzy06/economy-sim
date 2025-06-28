@@ -95,6 +95,7 @@ namespace StrategyGame
         private static readonly string CitiesPath = GetDataFile("ne_10m_populated_places.shp");
 
         private static readonly Dictionary<int, Rgba32> StateColors = new();
+        private static readonly Dictionary<int, Rgba32> CountryColors = new();
 
         private static Rgba32 GetStateColor(int code)
         {
@@ -103,6 +104,17 @@ namespace StrategyGame
                 var rng = new Random(code);
                 color = new Rgba32((byte)rng.Next(40, 200), (byte)rng.Next(40, 200), (byte)rng.Next(40, 200), 60);
                 StateColors[code] = color;
+            }
+            return color;
+        }
+
+        private static Rgba32 GetCountryColor(int code)
+        {
+            if (!CountryColors.TryGetValue(code, out var color))
+            {
+                var rng = new Random(code * 997);
+                color = new Rgba32((byte)rng.Next(40, 200), (byte)rng.Next(40, 200), (byte)rng.Next(40, 200), 40);
+                CountryColors[code] = color;
             }
             return color;
         }
@@ -135,6 +147,7 @@ namespace StrategyGame
                 }
             }
 
+            TintCountries(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
             DrawStateBorders(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
             DrawCities(img, mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx);
         }
@@ -252,6 +265,37 @@ namespace StrategyGame
             }
 
             _cityLayer.SetSpatialFilter(null);
+        }
+
+        private static void TintCountries(Image<Rgba32> img, int mapWidth, int mapHeight,
+                                           int cellSize, int tileX, int tileY, int tileSizePx)
+        {
+            int mapWidthPx = mapWidth * cellSize;
+            int mapHeightPx = mapHeight * cellSize;
+            int offsetX = tileX * tileSizePx;
+            int offsetY = tileY * tileSizePx;
+            int widthPx = Math.Min(tileSizePx, mapWidthPx - offsetX);
+            int heightPx = Math.Min(tileSizePx, mapHeightPx - offsetY);
+
+            int[,] mask = PixelMapGenerator.CreateCountryMaskTile(mapWidthPx, mapHeightPx,
+                offsetX, offsetY, widthPx, heightPx);
+
+            for (int y = 0; y < heightPx; y++)
+            {
+                Span<Rgba32> row = img.DangerousGetPixelRowMemory(y).Span;
+                for (int x = 0; x < widthPx; x++)
+                {
+                    int v = mask[y, x];
+                    if (v == 0) continue;
+                    Rgba32 tint = GetCountryColor(v);
+                    float a = tint.A / 255f;
+                    Rgba32 basePix = row[x];
+                    basePix.R = (byte)(basePix.R * (1 - a) + tint.R * a);
+                    basePix.G = (byte)(basePix.G * (1 - a) + tint.G * a);
+                    basePix.B = (byte)(basePix.B * (1 - a) + tint.B * a);
+                    row[x] = basePix;
+                }
+            }
         }
 
         private static int[,] CreateMaskTile(Layer layer, string attr, int offsetX, int offsetY, int width, int height, int fullWidth, int fullHeight)
