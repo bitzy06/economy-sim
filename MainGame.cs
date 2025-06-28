@@ -178,7 +178,7 @@ namespace economy_sim
             {
                 const int WORLD_CELLS_X = 360;   // Number of degrees longitude
                 const int WORLD_CELLS_Y = 180;   // Number of degrees latitude
-                mapManager = new MultiResolutionMapManager(WORLD_CELLS_X, WORLD_CELLS_Y, allCitiesInWorld);
+                mapManager = new MultiResolutionMapManager(WORLD_CELLS_X, WORLD_CELLS_Y);
                 var baseSize = mapManager.GetMapSize(1);
                 baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
@@ -564,25 +564,6 @@ namespace economy_sim
             // Initialize DiplomacyManager after countries are loaded
             diplomacyManager = new StrategyGame.DiplomacyManager(allCountries);
 
-            try
-            {
-                string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
-                string placesPath = Path.Combine(dataDir, "ne_10m_populated_places.shp");
-                string urbanPath = Path.Combine(dataDir, "ne_10m_urban_areas.shp");
-                if (File.Exists(placesPath) && File.Exists(urbanPath))
-                {
-                    CityPolygonHelper.InitializeCityPolygons(allCitiesInWorld, placesPath, urbanPath);
-                }
-                else
-                {
-                    Console.WriteLine("[WARN] Natural Earth shapefiles not found; city polygons will be missing.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WARN] Failed to initialize city polygons: {ex.Message}");
-            }
-
             // Update UI selection after all countries are loaded
             if (allCountries.Any() && comboBoxCountry.Items.Count > 0)
             {
@@ -943,7 +924,6 @@ namespace economy_sim
                     Market.UpdateCityPrices(city);
                 }
             }
-            CityPolygonHelper.UpdateAllCityPolygons(allCitiesInWorld);
             // --- End City Economies Update Phase ---
 
             // --- Inter-City Trade Resolution Phase ---

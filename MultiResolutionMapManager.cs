@@ -117,13 +117,11 @@ namespace StrategyGame
 
         private readonly int _baseWidth;
         private readonly int _baseHeight;
-        private readonly List<City> _cities;
 
-        public MultiResolutionMapManager(int baseWidth, int baseHeight, List<City> cities = null)
+        public MultiResolutionMapManager(int baseWidth, int baseHeight)
         {
             _baseWidth = baseWidth;
             _baseHeight = baseHeight;
-            _cities = cities;
         }
 
         /// <summary>
@@ -225,7 +223,7 @@ namespace StrategyGame
             {
                 try
                 {
-                    bmp = await LoadOrGenerateTileFromDataAsync(cellSize, tileX, tileY, token).ConfigureAwait(false);
+                    bmp = await LoadOrGenerateTileFromDataAsync(cellSize, tileX, tileY, zoom, token).ConfigureAwait(false);
                     if (bmp != null && bmp.Width > 0 && bmp.Height > 0)
                     {
                         await SaveTileToDiskAsync(cellSize, tileX, tileY, bmp, token).ConfigureAwait(false);
@@ -852,7 +850,7 @@ namespace StrategyGame
                 255);
         }
 
-        private async Task<Bitmap> LoadOrGenerateTileFromDataAsync(int cellSize, int tileX, int tileY, CancellationToken token)
+        private async Task<Bitmap> LoadOrGenerateTileFromDataAsync(int cellSize, int tileX, int tileY, float zoom, CancellationToken token)
         {
             int mapWidth = GetBaseMapWidth();
             int mapHeight = GetBaseMapHeight();
@@ -885,7 +883,7 @@ namespace StrategyGame
                 }
             }
 
-            NaturalEarthOverlayGenerator.ApplyOverlays(image, mapWidth, mapHeight, cellSize, tileX, tileY, _cities);
+            NaturalEarthOverlayGenerator.ApplyOverlays(image, mapWidth, mapHeight, cellSize, tileX, tileY, zoom);
 
   
 
