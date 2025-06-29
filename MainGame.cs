@@ -516,9 +516,11 @@ namespace economy_sim
             }
         }
 
+
         private Task InitializeGameDataAsync()
         {
             return Task.Run(() => InitializeGameData());
+
         }
 
         private void CreateDefaultFallbackWorld()
