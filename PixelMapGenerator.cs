@@ -37,6 +37,11 @@ namespace StrategyGame
         private static Image<Rgba32> _cachedUrbanTexture;
         private static readonly object _urbanTextureLock = new();
 
+        // NEW: Reusable GDAL data sources
+        private static readonly object _dataSourceLock = new();
+        private static Dataset _terrainDataset;
+        private static DataSource _countryDataSource;
+
         // NEW: Thread-safe random number generator
         private static readonly ThreadLocal<Random> _threadLocalRandom = new(() => new Random(Environment.TickCount + Thread.CurrentThread.ManagedThreadId));
 
@@ -155,6 +160,13 @@ namespace StrategyGame
                 // Initialize memory pool
                 InitializeMemoryPool();
 
+                // Initialize shared GDAL datasets
+                lock (_dataSourceLock)
+                {
+                    _terrainDataset ??= Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+                    _countryDataSource ??= Ogr.Open(ShpPath, 0);
+                }
+
                 Console.WriteLine("[DEBUG] PixelMapGenerator initialized with caching optimizations");
             });
         }
@@ -220,6 +232,25 @@ namespace StrategyGame
             if (array.Length == PooledArraySize && _byteArrayPool.Count < MaxPooledArrays)
             {
                 _byteArrayPool.Enqueue(array);
+            }
+        }
+
+        // NEW: Accessors for shared GDAL datasets
+        private static Dataset GetTerrainDataset()
+        {
+            lock (_dataSourceLock)
+            {
+                _terrainDataset ??= Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+                return _terrainDataset;
+            }
+        }
+
+        private static DataSource GetCountryDataSource()
+        {
+            lock (_dataSourceLock)
+            {
+                _countryDataSource ??= Ogr.Open(ShpPath, 0);
+                return _countryDataSource;
             }
         }
 
@@ -293,7 +324,7 @@ namespace StrategyGame
                 }
             }
 
-            using var dsTerrain = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            var dsTerrain = GetTerrainDataset();
             if (dsTerrain == null) throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
 
             int srcW = dsTerrain.RasterXSize;
@@ -469,7 +500,7 @@ namespace StrategyGame
                 }
             }
 
-            using var dsTerrain = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            var dsTerrain = GetTerrainDataset();
             if (dsTerrain == null) throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
 
             int srcW = dsTerrain.RasterXSize;
@@ -574,13 +605,16 @@ namespace StrategyGame
             if (tileWidth <= 0 || tileHeight <= 0)
                 return false;
 
-            // Use cached country mask
-            int[,] mask = GetCachedCountryMask(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
+            // Retrieve the relevant slice from the full-world mask cache
+            int[,] mask = GetCountryMaskTile(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
 
-            foreach (var value in mask)
+            for (int y = 0; y < tileHeight; y++)
             {
-                if (value != 0)
-                    return true;
+                for (int x = 0; x < tileWidth; x++)
+                {
+                    if (mask[y, x] != 0)
+                        return true;
+                }
             }
 
             return false;
@@ -592,7 +626,7 @@ namespace StrategyGame
             if (fullWidth == 0 || fullHeight == 0 || width <= 0 || height <= 0)
                 return new int[Math.Max(1, height), Math.Max(1, width)];
                 
-            using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            var dem = GetTerrainDataset();
             double[] gt = new double[6];
             dem.GetGeoTransform(gt);
             int srcCols = dem.RasterXSize;
@@ -623,7 +657,7 @@ namespace StrategyGame
             maskDs.SetGeoTransform(newGt);
             maskDs.SetProjection(dem.GetProjection());
 
-            using DataSource ds = Ogr.Open(ShpPath, 0);
+            var ds = GetCountryDataSource();
             Layer layer = ds.GetLayerByIndex(0);
 
             Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
@@ -656,10 +690,9 @@ namespace StrategyGame
             if (!_fullCountryMaskCache.TryGetValue(fullMaskKey, out var fullMask))
             {
                 // It's not in the cache, so we generate it once for the entire map resolution
-                using (var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly))
-                {
-                    double[] gt = new double[6];
-                    dem.GetGeoTransform(gt);
+                var dem = GetTerrainDataset();
+                double[] gt = new double[6];
+                dem.GetGeoTransform(gt);
 
                     // Create a memory dataset for the ENTIRE map
                     using (var maskDs = Gdal.GetDriverByName("MEM").Create("", fullWidth, fullHeight, 1, DataType.GDT_Int32, null))
@@ -672,12 +705,10 @@ namespace StrategyGame
                         maskDs.SetProjection(dem.GetProjection());
 
                         // Rasterize the entire country shapefile onto our full-map dataset
-                        using (var ds = Ogr.Open(ShpPath, 0))
-                        {
-                            var layer = ds.GetLayerByIndex(0);
-                            Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
-                                0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
-                        }
+                        var ds = GetCountryDataSource();
+                        var layer = ds.GetLayerByIndex(0);
+                        Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
+                            0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
 
                         // Read the entire generated mask into a C# array
                         var band = maskDs.GetRasterBand(1);
@@ -796,87 +827,7 @@ namespace StrategyGame
             }
         }
 
-        /// <summary>
-        /// Generate a pixel-art terrain map for dimensions larger than System.Drawing supports.
-        /// This uses ImageSharp to avoid the 32k bitmap limit.
-        /// </summary>
 
-        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>
-    GenerateTerrainPixelArtMapLarge(int cellsX, int cellsY, int pixelsPerCell, int[,] landMask = null)
-        {
-            string path = TerrainTifPath;
-            if (!File.Exists(path))
-                throw new FileNotFoundException("Missing terrain GeoTIFF", path);
-
-            int widthPx = cellsX * pixelsPerCell;
-            int heightPx = cellsY * pixelsPerCell;
-
-            // Load and resize terrain image using ImageSharp only
-            using SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> terrainImage =
-                SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Rgba32>(path);
-
-            terrainImage.Mutate(ctx => ctx.Resize(cellsX, cellsY, SixLabors.ImageSharp.Processing.KnownResamplers.NearestNeighbor));
-
-            // Use our own CreateCountryMaskTile method instead of CountryMaskGenerator
-            landMask ??= CreateCountryMaskForFullMap(widthPx, heightPx);
-
-            var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(widthPx, heightPx);
-            var waterColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(135, 206, 250, 255); // LightSkyBlue
-
-            int seed = Environment.TickCount;
-
-            Parallel.For(0, cellsY, y =>
-            {
-                var localRandom = _threadLocalRandom.Value;
-
-                for (int x = 0; x < cellsX; x++)
-                {
-                    SixLabors.ImageSharp.PixelFormats.Rgba32 baseColor = terrainImage[x, y];
-
-                    bool isLandCell = false;
-                    for (int py = 0; py < pixelsPerCell && !isLandCell; py++)
-                    {
-                        int destY = y * pixelsPerCell + py;
-                        for (int px = 0; px < pixelsPerCell && !isLandCell; px++)
-                        {
-                            int destX = x * pixelsPerCell + px;
-                            if (landMask[destY, destX] != 0)
-                                isLandCell = true;
-                        }
-                    }
-
-                    var palette = isLandCell ? BuildPalette(baseColor) : null;
-
-                    for (int py = 0; py < pixelsPerCell; py++)
-                    {
-                        int destY = y * pixelsPerCell + py;
-                        if (destY >= heightPx) continue;
-
-                        Span<SixLabors.ImageSharp.PixelFormats.Rgba32> row = dest.DangerousGetPixelRowMemory(destY).Span;
-
-                        for (int px = 0; px < pixelsPerCell; px++)
-                        {
-                            int destX = x * pixelsPerCell + px;
-                            if (destX >= widthPx) continue;
-
-                            row[destX] = (landMask[destY, destX] == 0)
-                                ? waterColor
-                                : palette[localRandom.Next(palette.Length)];
-                        }
-                    }
-                }
-            });
-
-            return dest;
-        }
-
-        /// <summary>
-        /// NEW: Create country mask for full map (wrapper around CreateCountryMaskTile)
-        /// </summary>
-        private static int[,] CreateCountryMaskForFullMap(int widthPx, int heightPx)
-        {
-            return CreateCountryMaskTile(widthPx, heightPx, 0, 0, widthPx, heightPx);
-        }
 
         // Builds a small palette of colors around the provided base color.  A
         // darker and lighter variant are included to add variety when filling
@@ -936,6 +887,14 @@ namespace StrategyGame
             _countryMaskCache.Clear();
             _terrainDataCache.Clear();
             _fullCountryMaskCache.Clear();
+
+            lock (_dataSourceLock)
+            {
+                _terrainDataset?.Dispose();
+                _terrainDataset = null;
+                _countryDataSource?.Dispose();
+                _countryDataSource = null;
+            }
 
             lock (_urbanTextureLock)
             {
