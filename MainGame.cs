@@ -178,7 +178,7 @@ namespace economy_sim
             {
                 const int WORLD_CELLS_X = 360;   // Number of degrees longitude
                 const int WORLD_CELLS_Y = 180;   // Number of degrees latitude
-                mapManager = new MultiResolutionMapManager(WORLD_CELLS_X, WORLD_CELLS_Y, allCitiesInWorld);
+                mapManager = new MultiResolutionMapManager(WORLD_CELLS_X, WORLD_CELLS_Y);
                 var baseSize = mapManager.GetMapSize(1);
                 baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
@@ -564,25 +564,6 @@ namespace economy_sim
             // Initialize DiplomacyManager after countries are loaded
             diplomacyManager = new StrategyGame.DiplomacyManager(allCountries);
 
-            try
-            {
-                string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
-                string placesPath = Path.Combine(dataDir, "ne_10m_populated_places.shp");
-                string urbanPath = Path.Combine(dataDir, "ne_10m_urban_areas.shp");
-                if (File.Exists(placesPath) && File.Exists(urbanPath))
-                {
-                    CityPolygonHelper.InitializeCityPolygons(allCitiesInWorld, placesPath, urbanPath);
-                }
-                else
-                {
-                    Console.WriteLine("[WARN] Natural Earth shapefiles not found; city polygons will be missing.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[WARN] Failed to initialize city polygons: {ex.Message}");
-            }
-
             // Update UI selection after all countries are loaded
             if (allCountries.Any() && comboBoxCountry.Items.Count > 0)
             {
@@ -943,7 +924,6 @@ namespace economy_sim
                     Market.UpdateCityPrices(city);
                 }
             }
-            CityPolygonHelper.UpdateAllCityPolygons(allCitiesInWorld);
             // --- End City Economies Update Phase ---
 
             // --- Inter-City Trade Resolution Phase ---
@@ -1645,6 +1625,12 @@ namespace economy_sim
         // Initialize Debug tab UI
         private void InitializeDebugTab()
         {
+            // Populate role type combobox
+            comboBoxRoleType.Items.Clear();
+            comboBoxRoleType.Items.Add("Prime Minister");
+            comboBoxRoleType.Items.Add("Governor");
+            comboBoxRoleType.Items.Add("CEO");
+            
             // Hide entity selection boxes until a role is chosen
             comboBoxCountrySelection.Visible = false;
             comboBoxStateSelection.Visible = false;
@@ -1657,6 +1643,9 @@ namespace economy_sim
 
             // Show initial role text
             UpdateCurrentRoleDisplay();
+
+            // Set up event handler for role type selection
+            comboBoxRoleType.SelectedIndexChanged += ComboBoxRoleType_SelectedIndexChanged;
 
             // Extra toggle for detailed debug output
             buttonToggleDebugMode.Click += (sender, e) =>
@@ -1979,6 +1968,28 @@ namespace economy_sim
             policyManagerForm.BringToFront();
         }
 
+        private void btnGenerateUrbanLayer_Click(object sender, EventArgs e)
+        {
+            var btnGenerateUrbanLayer = (Button)sender;
+            btnGenerateUrbanLayer.Enabled = false;
+            btnGenerateUrbanLayer.Text = "Generating...";
+            MessageBox.Show("Starting urban texture generation. This is a one-time process and may take a few minutes. The application may seem unresponsive, but please be patient. A message will appear when it is complete.", "Urban Generation Started", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            
+            Task.Run(async () =>
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                await UrbanAreaRenderer.GenerateUrbanTextureLayer();
+                sw.Stop();
+                
+                // When done, show a confirmation message back on the UI thread
+                this.Invoke((MethodInvoker)delegate
+                {
+                    MessageBox.Show($"Urban texture layer has been generated successfully in {sw.Elapsed.TotalSeconds:F2} seconds. Please restart the application to see the changes.", "Generation Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    btnGenerateUrbanLayer.Text = "Generate Urban Layer";
+                    btnGenerateUrbanLayer.Enabled = true;
+                });
+            });
+        }
 
         private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
@@ -1993,8 +2004,8 @@ namespace economy_sim
             if (mapZoom == oldZoom) return;
 
             // 3) compute old vs. new cell size
-            int oldCell = GetCellSizeForZoom(oldZoom);
-            int newCell = GetCellSizeForZoom(mapZoom);
+            int oldCell = mapManager.GetCellSize(oldZoom);
+            int newCell = mapManager.GetCellSize(mapZoom);
 
             // 4) your raw re-anchor formula
             int rawX = (int)Math.Round((mapViewOrigin.X + anchor.X) * (double)newCell / oldCell)
@@ -2022,6 +2033,7 @@ namespace economy_sim
             ApplyZoom();
             PreloadMapTiles();
         }
+
         private void PanelMap_Resize(object sender, EventArgs e)
         {
             RedrawAsync();
@@ -2179,20 +2191,6 @@ namespace economy_sim
                 zoom = mapZoom;
             }
             _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
-        }
-
-        private int GetCellSizeForZoom(int zoomLevel)
-        {
-            int[] levels = MultiResolutionMapManager.PixelsPerCellLevels;
-
-            // `zoomLevel` is 1-based (e.g., 1, 2, 3...), but array indices are 0-based.
-            // We subtract 1 to get the correct 0-based index.
-            int index = zoomLevel - 1;
-
-            // Clamp the index to ensure it's always within the valid bounds of the array.
-            index = Math.Clamp(index, 0, levels.Length - 1);
-
-            return levels[index];
         }
     }
 }

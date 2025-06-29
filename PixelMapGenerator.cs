@@ -5,13 +5,12 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-
-
 
 namespace StrategyGame
 {
@@ -24,6 +23,24 @@ namespace StrategyGame
     {
         private static readonly object GdalConfigLock = new object();
         private static bool _gdalConfigured = false;
+
+        // NEW: Cache for country masks to avoid regenerating them
+        private static readonly ConcurrentDictionary<(int width, int height, int offsetX, int offsetY), int[,]> _countryMaskCache = new();
+
+        // NEW: Cache for terrain data to avoid repeated GDAL reads
+        private static readonly ConcurrentDictionary<(int startX, int startY, int width, int height, int mapSize), (byte[] r, byte[] g, byte[] b)> _terrainDataCache = new();
+
+        // NEW: Pre-loaded urban texture cache
+        private static Image<Rgba32> _cachedUrbanTexture;
+        private static readonly object _urbanTextureLock = new();
+
+        // NEW: Thread-safe random number generator
+        private static readonly ThreadLocal<Random> _threadLocalRandom = new(() => new Random(Environment.TickCount + Thread.CurrentThread.ManagedThreadId));
+
+        // NEW: Memory pool for byte arrays to reduce allocations
+        private static readonly ConcurrentQueue<byte[]> _byteArrayPool = new();
+        private const int MaxPooledArrays = 100;
+        private const int PooledArraySize = 1024 * 1024; // 1MB arrays
 
         // Resolve paths relative to the repository root so the application does
         // not depend on developer specific locations. The executable lives in
@@ -110,6 +127,98 @@ namespace StrategyGame
         private static readonly string TerrainTifPath =
             GetDataFile("NE1_HR_LC.tif");
 
+        // NEW: Urban texture layer for blending with terrain
+        private static readonly string UrbanTexturePath = Path.Combine(DataDir, "urban_texture.png");
+
+        /// <summary>
+        /// NEW: Initialize caches and preload frequently used data
+        /// </summary>
+        public static async Task InitializeAsync()
+        {
+            await Task.Run(() =>
+            {
+                lock (GdalConfigLock)
+                {
+                    if (!_gdalConfigured)
+                    {
+                        GdalBase.ConfigureAll();
+                        _gdalConfigured = true;
+                    }
+                }
+
+                // Preload urban texture if available
+                PreloadUrbanTexture();
+
+                // Initialize memory pool
+                InitializeMemoryPool();
+
+                Console.WriteLine("[DEBUG] PixelMapGenerator initialized with caching optimizations");
+            });
+        }
+
+        /// <summary>
+        /// NEW: Preload urban texture to avoid loading it for every tile
+        /// </summary>
+        private static void PreloadUrbanTexture()
+        {
+            lock (_urbanTextureLock)
+            {
+                if (_cachedUrbanTexture != null) return;
+
+                try
+                {
+                    if (File.Exists(UrbanTexturePath))
+                    {
+                        _cachedUrbanTexture = SixLabors.ImageSharp.Image.Load<Rgba32>(UrbanTexturePath);
+                        Console.WriteLine($"[DEBUG] Urban texture preloaded: {_cachedUrbanTexture.Width}x{_cachedUrbanTexture.Height}");
+                    }
+                    else
+                    {
+                        _cachedUrbanTexture = new Image<Rgba32>(1, 1, new Rgba32(0, 0, 0, 0));
+                        Console.WriteLine("[DEBUG] Urban texture not found, using empty texture");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[ERROR] Failed to preload urban texture: {ex.Message}");
+                    _cachedUrbanTexture = new Image<Rgba32>(1, 1, new Rgba32(0, 0, 0, 0));
+                }
+            }
+        }
+
+        /// <summary>
+        /// NEW: Initialize memory pool for byte arrays
+        /// </summary>
+        private static void InitializeMemoryPool()
+        {
+            for (int i = 0; i < MaxPooledArrays; i++)
+            {
+                _byteArrayPool.Enqueue(new byte[PooledArraySize]);
+            }
+        }
+
+        /// <summary>
+        /// NEW: Get a pooled byte array to reduce allocations
+        /// </summary>
+        private static byte[] GetPooledByteArray(int minSize)
+        {
+            if (minSize <= PooledArraySize && _byteArrayPool.TryDequeue(out var pooled))
+            {
+                return pooled;
+            }
+            return new byte[minSize];
+        }
+
+        /// <summary>
+        /// NEW: Return a byte array to the pool
+        /// </summary>
+        private static void ReturnPooledByteArray(byte[] array)
+        {
+            if (array.Length == PooledArraySize && _byteArrayPool.Count < MaxPooledArrays)
+            {
+                _byteArrayPool.Enqueue(array);
+            }
+        }
 
         /// <summary>
         /// Ensures the GeoTIFF file exists by invoking fetch_etopo1.py if needed.
@@ -118,19 +227,59 @@ namespace StrategyGame
         {
             if (File.Exists(TifPath))
                 return;
-
-          
         }
 
+        /// <summary>
+        /// NEW: Get cached country mask or create if not cached
+        /// </summary>
+        private static int[,] GetCachedCountryMask(int fullWidth, int fullHeight, int offsetX, int offsetY, int width, int height)
+        {
+            var key = (width, height, offsetX, offsetY);
 
+            if (_countryMaskCache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
 
+            var mask = CreateCountryMaskTile(fullWidth, fullHeight, offsetX, offsetY, width, height);
+
+            // Only cache if the cache isn't too large (prevent memory bloat)
+            if (_countryMaskCache.Count < 1000)
+            {
+                _countryMaskCache.TryAdd(key, mask);
+            }
+
+            return mask;
+        }
 
         /// <summary>
-        /// Generate a single tile of the pixel-art map directly from the terrain
-        /// raster. Only the required region is read using GDAL.
+        /// NEW: Get cached terrain data or load if not cached (LEGACY - for cell-based access)
         /// </summary>
-        private static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>
-     GenerateTerrainTileLarge(int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512, int[,] landMask = null)
+        private static (byte[] r, byte[] g, byte[] b) GetCachedTerrainDataLegacy(int cellSize, int startCellX, int startCellY, int cellsX, int cellsY, int mapWidth, int mapHeight)
+        {
+            var key = (startCellX, startCellY, cellsX, cellsY, mapWidth * mapHeight);
+            
+            if (_terrainDataCache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            // Load terrain data
+            var terrainData = LoadTerrainData(startCellX, startCellY, cellsX, cellsY, mapWidth, mapHeight);
+
+            // Only cache if the cache isn't too large
+            if (_terrainDataCache.Count < 500)
+            {
+                _terrainDataCache.TryAdd(key, terrainData);
+            }
+
+            return terrainData;
+        }
+
+        /// <summary>
+        /// NEW: Load terrain data from GDAL (separated for caching)
+        /// </summary>
+        private static (byte[] r, byte[] g, byte[] b) LoadTerrainData(int startCellX, int startCellY, int cellsX, int cellsY, int mapWidth, int mapHeight)
         {
             lock (GdalConfigLock)
             {
@@ -141,82 +290,137 @@ namespace StrategyGame
                 }
             }
 
-            using var ds = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
-            if (ds == null)
-                throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
+            using var dsTerrain = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            if (dsTerrain == null) throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
 
-            int srcW = ds.RasterXSize;
-            int srcH = ds.RasterYSize;
-
-            int mapWidthPx = mapWidth * cellSize;
-            int mapHeightPx = mapHeight * cellSize;
-
-            int pixelX = tileX * tileSizePx;
-            int pixelY = tileY * tileSizePx;
-            int tileWidth = Math.Min(tileSizePx, mapWidthPx - pixelX);
-            int tileHeight = Math.Min(tileSizePx, mapHeightPx - pixelY);
-            if (tileWidth <= 0 || tileHeight <= 0)
-                return new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(1, 1);
-
-            landMask ??= CreateCountryMaskTile(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
-
-            int startCellX = pixelX / cellSize;
-            int startCellY = pixelY / cellSize;
-            int cellsX = (tileWidth + cellSize - 1) / cellSize;
-            int cellsY = (tileHeight + cellSize - 1) / cellSize;
+            int srcW = dsTerrain.RasterXSize;
+            int srcH = dsTerrain.RasterYSize;
 
             double scaleX = (double)srcW / mapWidth;
             double scaleY = (double)srcH / mapHeight;
-
-            int srcX = (int)Math.Floor(startCellX * scaleX);
-            int srcY = (int)Math.Floor(startCellY * scaleY);
+            int srcX = (int)(startCellX * scaleX);
+            int srcY = (int)(startCellY * scaleY);
             int readW = (int)Math.Ceiling(cellsX * scaleX);
             int readH = (int)Math.Ceiling(cellsY * scaleY);
 
-            byte[] r = new byte[cellsX * cellsY];
-            byte[] g = new byte[cellsX * cellsY];
-            byte[] b = new byte[cellsX * cellsY];
+            byte[] r = GetPooledByteArray(cellsX * cellsY);
+            byte[] g = GetPooledByteArray(cellsX * cellsY);
+            byte[] b = GetPooledByteArray(cellsX * cellsY);
 
-            ds.GetRasterBand(1).ReadRaster(srcX, srcY, readW, readH, r, cellsX, cellsY, 0, 0);
-            ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
-            ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
-
-            var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(tileWidth, tileHeight);
-            int seed = Environment.TickCount;
-            var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
-            var waterColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(135, 206, 250, 255); // LightSkyBlue
-
-            Parallel.For(0, cellsY, y =>
+            try
             {
-                for (int x = 0; x < cellsX; x++)
+                dsTerrain.GetRasterBand(1).ReadRaster(srcX, srcY, readW, readH, r, cellsX, cellsY, 0, 0);
+                dsTerrain.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
+                dsTerrain.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
+
+                // Create copies for caching (the pooled arrays will be returned)
+                var rCopy = new byte[cellsX * cellsY];
+                var gCopy = new byte[cellsX * cellsY];
+                var bCopy = new byte[cellsX * cellsY];
+                Array.Copy(r, rCopy, cellsX * cellsY);
+                Array.Copy(g, gCopy, cellsX * cellsY);
+                Array.Copy(b, bCopy, cellsX * cellsY);
+
+                return (rCopy, gCopy, bCopy);
+            }
+            finally
+            {
+                ReturnPooledByteArray(r);
+                ReturnPooledByteArray(g);
+                ReturnPooledByteArray(b);
+            }
+        }
+
+        /// <summary>
+        /// Generate a single tile of the pixel-art map directly from the terrain
+        /// raster. Only the required region is read using GDAL.
+        /// OPTIMIZED: Now with caching and multithreading support
+        /// FIXED: Correct coordinate transformation to prevent tiling artifacts
+        /// FIXED: Properly handle actual tile dimensions for edge tiles
+        /// </summary>
+        private static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>
+     GenerateTerrainTileLarge(int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512, int[,] landMask = null)
+        {
+            // --- Coordinate and Size Calculations ---
+            int mapWidthPx = mapWidth * cellSize;
+            int mapHeightPx = mapHeight * cellSize;
+            int pixelX = tileX * 512; // Always use standard tile size for offset calculation
+            int pixelY = tileY * 512; // Always use standard tile size for offset calculation
+            
+            // Use the actual tile dimensions (which may be smaller for edge tiles)
+            int tileWidth = Math.Min(tileSizePx, mapWidthPx - pixelX);
+            int tileHeight = Math.Min(tileSizePx, mapHeightPx - pixelY);
+            
+            if (tileWidth <= 0 || tileHeight <= 0) return new Image<Rgba32>(1, 1);
+
+            // Use provided land mask or create one with actual dimensions
+            if (landMask == null)
+            {
+                landMask = GetCachedCountryMask(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
+            }
+
+            // --- FIXED: Calculate terrain data requirements in PIXEL space, not cell space ---
+            // The terrain raster should be sampled at pixel resolution, not cell resolution
+            int startPixelX = pixelX;
+            int startPixelY = pixelY;
+            
+            // Sample terrain data at the actual pixel resolution needed
+            var (r, g, b) = GetCachedTerrainDataForPixels(startPixelX, startPixelY, tileWidth, tileHeight, mapWidthPx, mapHeightPx);
+
+            // Get cached urban texture
+            Image<Rgba32> urbanTexture;
+            lock (_urbanTextureLock)
+            {
+                urbanTexture = _cachedUrbanTexture ?? new Image<Rgba32>(1, 1, new Rgba32(0, 0, 0, 0));
+            }
+
+            // --- Main Rendering Loop with Parallel Processing ---
+            var dest = new Image<Rgba32>(tileWidth, tileHeight);
+            var waterColor = new Rgba32(135, 206, 250, 255); // LightSkyBlue
+
+            // Process pixels directly without cell-based subdivision
+            var parallelOptions = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount
+            };
+
+            Parallel.For(0, tileHeight, parallelOptions, y =>
+            {
+                var localRandom = _threadLocalRandom.Value;
+                var row = dest.DangerousGetPixelRowMemory(y).Span;
+
+                for (int x = 0; x < tileWidth; x++)
                 {
-                    int idx = y * cellsX + x;
-                    var baseColor = new Rgba32(r[idx], g[idx], b[idx], 255);
-                    var palette = BuildPalette(baseColor);
-
-                    for (int py = 0; py < cellSize; py++)
+                    if (landMask[y, x] == 0)
                     {
-                        int destY = y * cellSize + py;
-                        if (destY >= tileHeight) continue;
+                        row[x] = waterColor;
+                    }
+                    else
+                    {
+                        // Sample terrain color for this specific pixel
+                        int idx = y * tileWidth + x;
+                        var terrainColor = new Rgba32(r[idx], g[idx], b[idx], 255);
+                        var palette = BuildPalette(terrainColor);
 
-                        var row = dest.DangerousGetPixelRowMemory(destY).Span;
+                        // --- Sample and Blend Urban Texture ---
+                        int globalPixelX = pixelX + x;
+                        int globalPixelY = pixelY + y;
+                        int urbanTexX = (int)((double)globalPixelX / mapWidthPx * urbanTexture.Width);
+                        int urbanTexY = (int)((double)globalPixelY / mapHeightPx * urbanTexture.Height);
 
-                        for (int px = 0; px < cellSize; px++)
-                        {
-                            int destX = x * cellSize + px;
-                            if (destX >= tileWidth) continue;
+                        Rgba32 urbanColor = urbanTexture[
+                            Math.Clamp(urbanTexX, 0, urbanTexture.Width - 1),
+                            Math.Clamp(urbanTexY, 0, urbanTexture.Height - 1)
+                        ];
 
-                            var isLand = landMask[destY, destX] != 0;
-                            if (!isLand)
-                            {
-                                row[destX] = waterColor;
-                            }
-                            else
-                            {
-                                var c = palette[rngLocal.Value.Next(palette.Length)];
-                                row[destX] = new SixLabors.ImageSharp.PixelFormats.Rgba32(c.R, c.G, c.B, c.A);
-                            }
-                        }
+                        // Blend the dithered terrain color with the urban color
+                        var ditheredTerrain = palette[localRandom.Next(palette.Length)];
+                        float urbanAlpha = urbanColor.A / 255f;
+                        byte finalR = (byte)(ditheredTerrain.R * (1 - urbanAlpha) + urbanColor.R * urbanAlpha);
+                        byte finalG = (byte)(ditheredTerrain.G * (1 - urbanAlpha) + urbanColor.G * urbanAlpha);
+                        byte finalB = (byte)(ditheredTerrain.B * (1 - urbanAlpha) + urbanColor.B * urbanAlpha);
+
+                        row[x] = new Rgba32(finalR, finalG, finalB);
                     }
                 }
             });
@@ -225,18 +429,121 @@ namespace StrategyGame
         }
 
         /// <summary>
+        /// NEW: Get cached terrain data for pixels (not cells) to fix coordinate issues
+        /// </summary>
+        private static (byte[] r, byte[] g, byte[] b) GetCachedTerrainDataForPixels(int startPixelX, int startPixelY, int widthPx, int heightPx, int mapWidthPx, int mapHeightPx)
+        {
+            var key = (startPixelX, startPixelY, widthPx, heightPx, mapWidthPx);
+            
+            if (_terrainDataCache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            // Load terrain data at pixel resolution
+            var terrainData = LoadTerrainDataForPixels(startPixelX, startPixelY, widthPx, heightPx, mapWidthPx, mapHeightPx);
+
+            // Only cache if the cache isn't too large
+            if (_terrainDataCache.Count < 500)
+            {
+                _terrainDataCache.TryAdd(key, terrainData);
+            }
+
+            return terrainData;
+        }
+
+        /// <summary>
+        /// NEW: Load terrain data for pixel coordinates (not cells) to fix scaling issues
+        /// </summary>
+        private static (byte[] r, byte[] g, byte[] b) LoadTerrainDataForPixels(int startPixelX, int startPixelY, int widthPx, int heightPx, int mapWidthPx, int mapHeightPx)
+        {
+            lock (GdalConfigLock)
+            {
+                if (!_gdalConfigured)
+                {
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
+                }
+            }
+
+            using var dsTerrain = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            if (dsTerrain == null) throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
+
+            int srcW = dsTerrain.RasterXSize;
+            int srcH = dsTerrain.RasterYSize;
+
+            // Calculate what portion of the source raster we need for this pixel region
+            double scaleX = (double)srcW / mapWidthPx;  // FIXED: Use pixel dimensions, not cell dimensions
+            double scaleY = (double)srcH / mapHeightPx;  // FIXED: Use pixel dimensions, not cell dimensions
+            
+            int srcX = (int)(startPixelX * scaleX);
+            int srcY = (int)(startPixelY * scaleY);
+            int readW = (int)Math.Ceiling(widthPx * scaleX);
+            int readH = (int)Math.Ceiling(heightPx * scaleY);
+
+            // Clamp to source bounds
+            srcX = Math.Max(0, Math.Min(srcX, srcW - 1));
+            srcY = Math.Max(0, Math.Min(srcY, srcH - 1));
+            readW = Math.Max(1, Math.Min(readW, srcW - srcX));
+            readH = Math.Max(1, Math.Min(readH, srcH - srcY));
+
+            byte[] r = GetPooledByteArray(widthPx * heightPx);
+            byte[] g = GetPooledByteArray(widthPx * heightPx);
+            byte[] b = GetPooledByteArray(widthPx * heightPx);
+
+            try
+            {
+                // Read the terrain data and resample to exact pixel dimensions needed
+                dsTerrain.GetRasterBand(1).ReadRaster(srcX, srcY, readW, readH, r, widthPx, heightPx, 0, 0);
+                dsTerrain.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, widthPx, heightPx, 0, 0);
+                dsTerrain.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, widthPx, heightPx, 0, 0);
+
+                // Create copies for caching (the pooled arrays will be returned)
+                var rCopy = new byte[widthPx * heightPx];
+                var gCopy = new byte[widthPx * heightPx];
+                var bCopy = new byte[widthPx * heightPx];
+                Array.Copy(r, rCopy, widthPx * heightPx);
+                Array.Copy(g, gCopy, widthPx * heightPx);
+                Array.Copy(b, bCopy, widthPx * heightPx);
+
+                return (rCopy, gCopy, bCopy);
+            }
+            finally
+            {
+                ReturnPooledByteArray(r);
+                ReturnPooledByteArray(g);
+                ReturnPooledByteArray(b);
+            }
+        }
+
+        /// <summary>
         /// Generate a terrain tile and overlay country borders.
+        /// FIXED: Improved coordinate handling to prevent tiling artifacts
+        /// FIXED: Properly handle partial tiles with correct dimensions
         /// </summary>
         public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTileWithCountriesLarge(
      int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
         {
             int fullW = mapWidth * cellSize;
             int fullH = mapHeight * cellSize;
-            int offsetX = tileX * tileSizePx;
-            int offsetY = tileY * tileSizePx;
+            int offsetX = tileX * 512; // Always use standard tile size for offset calculation
+            int offsetY = tileY * 512; // Always use standard tile size for offset calculation
 
-            int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, Math.Min(tileSizePx, fullW - offsetX), Math.Min(tileSizePx, fullH - offsetY));
+            // Calculate the actual dimensions for this tile (may be smaller for edge tiles)
+            int actualWidthPx = Math.Min(tileSizePx, fullW - offsetX);
+            int actualHeightPx = Math.Min(tileSizePx, fullH - offsetY);
 
+            // Guard against off-map tiles
+            if (actualWidthPx <= 0 || actualHeightPx <= 0)
+                return new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(1, 1);
+
+            // Debug output to help diagnose coordinate issues
+            Console.WriteLine($"[TILE DEBUG] Tile ({tileX},{tileY}): map={mapWidth}x{mapHeight}, cellSize={cellSize}, fullMap={fullW}x{fullH}, offset=({offsetX},{offsetY}), actualSize={actualWidthPx}x{actualHeightPx}, requestedSize={tileSizePx}");
+
+            // Use cached country mask with actual tile dimensions
+            int[,] mask = GetCachedCountryMask(fullW, fullH, offsetX, offsetY, actualWidthPx, actualHeightPx);
+
+            // Generate terrain tile with original tileSizePx
             var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
 
             DrawBordersLarge(img, mask);
@@ -268,10 +575,8 @@ namespace StrategyGame
             if (tileWidth <= 0 || tileHeight <= 0)
                 return false;
 
-            // Use the rasterized country mask instead of raw terrain colors. The
-            // mask precisely marks land areas and avoids false negatives when the
-            // terrain imagery uses near-white colors for beaches or deserts.
-            int[,] mask = CreateCountryMaskTile(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
+            // Use cached country mask
+            int[,] mask = GetCachedCountryMask(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
 
             foreach (var value in mask)
             {
@@ -285,24 +590,34 @@ namespace StrategyGame
         internal static int[,] CreateCountryMaskTile(int fullWidth, int fullHeight,
             int offsetX, int offsetY, int width, int height)
         {
-            if (fullWidth == 0 || fullHeight == 0 || width == 0 || height == 0)
+            if (fullWidth == 0 || fullHeight == 0 || width <= 0 || height <= 0)
                 return new int[Math.Max(1, height), Math.Max(1, width)];
+                
             using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
             double[] gt = new double[6];
             dem.GetGeoTransform(gt);
             int srcCols = dem.RasterXSize;
             int srcRows = dem.RasterYSize;
 
-            double scaleX = (double)srcCols / fullWidth;
-            double scaleY = (double)srcRows / fullHeight;
+            // FIXED: Create a geotransform that properly maps the tile region to world coordinates
+            // Calculate the world extents for this tile
+            double worldWidth = gt[1] * srcCols;   // Total world width in geo units
+            double worldHeight = Math.Abs(gt[5]) * srcRows; // Total world height in geo units
+            
+            double pixelSizeX = worldWidth / fullWidth;   // Geo units per pixel
+            double pixelSizeY = worldHeight / fullHeight; // Geo units per pixel
+            
+            // Calculate the geo bounds for this tile
+            double tileWorldX = gt[0] + offsetX * pixelSizeX;
+            double tileWorldY = gt[3] - offsetY * pixelSizeY; // Note: Y goes down in pixel space, up in geo space
 
             double[] newGt = new double[6];
-            newGt[0] = gt[0] + offsetX * scaleX * gt[1];
-            newGt[1] = gt[1] * scaleX;
-            newGt[2] = 0;
-            newGt[3] = gt[3] + offsetY * scaleY * gt[5];
-            newGt[4] = 0;
-            newGt[5] = gt[5] * scaleY;
+            newGt[0] = tileWorldX;        // Top-left X coordinate
+            newGt[1] = pixelSizeX;        // Pixel width in geo units
+            newGt[2] = 0;                 // Rotation (typically 0)
+            newGt[3] = tileWorldY;        // Top-left Y coordinate  
+            newGt[4] = 0;                 // Rotation (typically 0)
+            newGt[5] = -pixelSizeY;       // Pixel height in geo units (negative because Y decreases)
 
             OSGeo.GDAL.Driver memDrv = Gdal.GetDriverByName("MEM");
             using var maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
@@ -330,8 +645,6 @@ namespace StrategyGame
 
             return result;
         }
-
- 
 
         /// <summary>
         /// Draw borders directly on an ImageSharp image when the map exceeds
@@ -386,10 +699,12 @@ namespace StrategyGame
                 var c0 = exterior[i];
                 var c1 = exterior[i + 1];
 
-                int x0 = (int)(c0.X * widthPx);
-                int y0 = (int)((1.0 - c0.Y) * heightPx);
-                int x1 = (int)(c1.X * widthPx);
-                int y1 = (int)((1.0 - c1.Y) * heightPx);
+                // FIXED: Ensure coordinates are properly normalized to the tile bounds
+                // Convert from lon/lat space (-180 to 180, -90 to 90) to pixel space
+                int x0 = (int)Math.Round((c0.X + 180.0) / 360.0 * widthPx);
+                int y0 = (int)Math.Round((90.0 - c0.Y) / 180.0 * heightPx);
+                int x1 = (int)Math.Round((c1.X + 180.0) / 360.0 * widthPx);
+                int y1 = (int)Math.Round((90.0 - c1.Y) / 180.0 * heightPx);
 
                 DrawLine(image, x0, y0, x1, y1, color);
             }
@@ -438,16 +753,18 @@ namespace StrategyGame
 
             terrainImage.Mutate(ctx => ctx.Resize(cellsX, cellsY, SixLabors.ImageSharp.Processing.KnownResamplers.NearestNeighbor));
 
-            landMask ??= CountryMaskGenerator.CreateCountryMask(TerrainTifPath, ShpPath, widthPx, heightPx);
+            // Use our own CreateCountryMaskTile method instead of CountryMaskGenerator
+            landMask ??= CreateCountryMaskForFullMap(widthPx, heightPx);
 
             var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(widthPx, heightPx);
             var waterColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(135, 206, 250, 255); // LightSkyBlue
 
             int seed = Environment.TickCount;
-            var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
 
             Parallel.For(0, cellsY, y =>
             {
+                var localRandom = _threadLocalRandom.Value;
+
                 for (int x = 0; x < cellsX; x++)
                 {
                     SixLabors.ImageSharp.PixelFormats.Rgba32 baseColor = terrainImage[x, y];
@@ -480,7 +797,7 @@ namespace StrategyGame
 
                             row[destX] = (landMask[destY, destX] == 0)
                                 ? waterColor
-                                : palette[rngLocal.Value.Next(palette.Length)];
+                                : palette[localRandom.Next(palette.Length)];
                         }
                     }
                 }
@@ -489,14 +806,17 @@ namespace StrategyGame
             return dest;
         }
 
-       
-
-       
+        /// <summary>
+        /// NEW: Create country mask for full map (wrapper around CreateCountryMaskTile)
+        /// </summary>
+        private static int[,] CreateCountryMaskForFullMap(int widthPx, int heightPx)
+        {
+            return CreateCountryMaskTile(widthPx, heightPx, 0, 0, widthPx, heightPx);
+        }
 
         // Builds a small palette of colors around the provided base color.  A
         // darker and lighter variant are included to add variety when filling
         // each cell with multiple pixels.
-
 
         private static Rgba32[] BuildPalette(Rgba32 baseColor)
         {
@@ -517,7 +837,6 @@ namespace StrategyGame
         Lerp(baseColor, new Rgba32(255, 255, 255, baseColor.A), 0.2f)
     };
         }
-
 
         private static Dictionary<string, string> LoadDataFiles()
         {
@@ -543,6 +862,35 @@ namespace StrategyGame
                 }
             }
             return dict;
+        }
+
+        /// <summary>
+        /// NEW: Clear all caches to free memory or force regeneration
+        /// </summary>
+        public static void ClearCaches()
+        {
+            _countryMaskCache.Clear();
+            _terrainDataCache.Clear();
+
+            lock (_urbanTextureLock)
+            {
+                _cachedUrbanTexture?.Dispose();
+                _cachedUrbanTexture = null;
+            }
+
+            // Clear memory pool
+            while (_byteArrayPool.TryDequeue(out _)) { }
+            InitializeMemoryPool();
+
+            Console.WriteLine("[DEBUG] PixelMapGenerator caches cleared");
+        }
+
+        /// <summary>
+        /// NEW: Get cache statistics for monitoring
+        /// </summary>
+        public static (int countryMasks, int terrainData, int memoryPoolSize) GetCacheStats()
+        {
+            return (_countryMaskCache.Count, _terrainDataCache.Count, _byteArrayPool.Count);
         }
     }
 }

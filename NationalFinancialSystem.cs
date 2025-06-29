@@ -249,16 +249,33 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         // Simulate the impact of current monetary policy and economic conditions
         public void SimulateMonetaryEffects()
         {
-            // Money supply changes each tick based on current inflation
-            MoneySupply *= (1.0m + InflationRate);
+            // Check for potential overflow before multiplication
+            decimal growthFactor = (1.0m + InflationRate);
+            if (MoneySupply > decimal.MaxValue / growthFactor)
+            {
+                // Cap money supply to prevent overflow
+                MoneySupply = decimal.MaxValue / 2m; // Use half of max value as safety margin
+                InflationRate = 0.0m; // Reset inflation to prevent further exponential growth
+            }
+            else
+            {
+                // Money supply changes each tick based on current inflation
+                MoneySupply *= growthFactor;
+            }
+
+            // Add natural inflation decay to prevent sustained high inflation
+            if (InflationRate > 0.02m) // Above 2% baseline
+            {
+                // Gradually reduce inflation towards baseline (economic self-correction)
+                decimal decayRate = 0.95m; // 5% reduction per tick
+                InflationRate = Math.Max(0.02m, InflationRate * decayRate);
+            }
 
             // Inflation effects on credit rating when it gets high
             if (InflationRate > 0.1m) // High inflation scenario
             {
                 CreditRating = Math.Max(0.1f, CreditRating - 0.005f); // High inflation hurts credit rating
             }
-
-            // Interest rate effects no longer account for bonds since the bond system was removed
 
             // Reserve effects
             if (NationalReserves < MoneySupply * 0.1m) // Low reserves scenario
@@ -267,8 +284,12 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
             }
             else
             {
-                // Very small passive increase to represent investment returns
-                NationalReserves *= 1.001m;
+                // Check for potential overflow in reserves as well
+                decimal reserveGrowthFactor = 1.001m;
+                if (NationalReserves <= decimal.MaxValue / reserveGrowthFactor)
+                {
+                    NationalReserves *= reserveGrowthFactor;
+                }
             }
         }
 
@@ -376,8 +397,6 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         }
         #endregion
 
-        
-        
         public void UpdateFinancialIndicators(decimal currentGdp) // Called periodically
         {
             if (currentGdp > 0)
@@ -385,9 +404,14 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
                 lastKnownGdp = currentGdp;
                 DebtToGdpRatio = GetTotalOutstandingDebt() / currentGdp;
 
-                // Simple inflation model based on money supply relative to GDP
+                // Improved inflation model with better normalization
                 decimal moneyRatio = MoneySupply / currentGdp;
-                InflationRate = Clamp(0.02m + (moneyRatio - 1m) * 0.02m, 0m, 0.5m);
+                
+                // Use logarithmic scaling to prevent extreme inflation rates
+                decimal baseInflation = 0.02m; // 2% baseline
+                decimal inflationFromMoneySupply = Math.Min(0.3m, (decimal)Math.Log((double)Math.Max(1m, moneyRatio)) * 0.1m);
+                
+                InflationRate = Clamp(baseInflation + inflationFromMoneySupply, 0m, 0.25m); // Cap at 25% instead of 50%
 
                 // Adjust credit rating based on debt burden
                 if (DebtToGdpRatio > 1m)

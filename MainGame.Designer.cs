@@ -11,6 +11,54 @@
         private System.Windows.Forms.ListBox listBoxMarketStats;
         private System.Windows.Forms.TabPage tabPageCompanies;
         private System.Windows.Forms.ListView listViewCompanies;
+        private System.Windows.Forms.ListView listViewDiplomacy;
+        private System.Windows.Forms.Button buttonShowPopStats;
+        private System.Windows.Forms.Button buttonShowFactoryStats;
+        private System.Windows.Forms.Button buttonShowConstruction;
+        private System.Windows.Forms.TabPage tabPageGovernment;
+        private System.Windows.Forms.ListView listViewParties;
+        private System.Windows.Forms.Button buttonOpenPolicyManager;
+        private System.Windows.Forms.Button buttonToggleDebugMode;
+        private System.Windows.Forms.TabPage tabPageFinance;
+        private System.Windows.Forms.ListView listViewFinance;
+        private System.Windows.Forms.TabPage tabPageDebug;
+        private System.Windows.Forms.Button buttonToggleDebug;
+        private System.Windows.Forms.Label labelCurrentRole;
+        private System.Windows.Forms.Label labelRoleType;
+        private System.Windows.Forms.ComboBox comboBoxRoleType;
+        private System.Windows.Forms.Label labelEntitySelection;
+        private System.Windows.Forms.ComboBox comboBoxCountrySelection;
+        private System.Windows.Forms.ComboBox comboBoxStateSelection;
+        private System.Windows.Forms.ComboBox comboBoxCorporationSelection;
+        private System.Windows.Forms.Button buttonAssumeRole;
+        private System.Windows.Forms.Button buttonRelinquishRole;
+        private System.Windows.Forms.CheckBox checkBoxLogPops;
+        private System.Windows.Forms.CheckBox checkBoxLogBuildings;
+        private System.Windows.Forms.CheckBox checkBoxLogEconomy;
+        private System.Windows.Forms.Button buttonGenerateTileCache;
+        private System.Windows.Forms.Button buttonGenerateUrbanLayer;
+        private System.Windows.Forms.TabPage tabPageDiplomacy;
+        private System.Windows.Forms.Label labelProposedTrades;
+        private System.Windows.Forms.ListBox listBoxProposedTradeAgreements;
+        private System.Windows.Forms.Button buttonAcceptTrade;
+        private System.Windows.Forms.Button buttonRejectTrade;
+        private System.Windows.Forms.Button buttonProposeTrade;
+        private System.Windows.Forms.Button buttonViewRelations;
+        private System.Windows.Forms.Button buttonOpenTradeManagement;
+        private System.Windows.Forms.TabPage tabPageCity;
+        private System.Windows.Forms.ComboBox comboBoxCountry;
+        private System.Windows.Forms.Label labelCountryStats;
+        private System.Windows.Forms.ComboBox comboBoxStates;
+        private System.Windows.Forms.Label labelStateStats;
+        private System.Windows.Forms.ComboBox comboBoxCities;
+        private System.Windows.Forms.ListBox listBoxBuyOrders;
+        private System.Windows.Forms.ListBox listBoxSellOrders;
+        private System.Windows.Forms.ListBox listBoxCityStats;
+        private System.Windows.Forms.ListBox listBoxFactoryStats;
+        private System.Windows.Forms.TabPage tabPageCountry;
+        private System.Windows.Forms.PictureBox pictureBox1;
+        private System.Windows.Forms.Panel panelMap;
+        private System.Windows.Forms.TabControl tabControlMain;
 
         /// <summary>
         /// Clean up any resources being used.
@@ -64,6 +112,7 @@
             checkBoxLogBuildings = new CheckBox();
             checkBoxLogEconomy = new CheckBox();
             buttonGenerateTileCache = new Button();
+            buttonGenerateUrbanLayer = new Button();
             tabPageDiplomacy = new TabPage();
             labelProposedTrades = new Label();
             listBoxProposedTradeAgreements = new ListBox();
@@ -90,7 +139,9 @@
             tabPageGovernment.SuspendLayout();
             tabPageFinance.SuspendLayout();
             tabPageDebug.SuspendLayout();
+            tabPageDebug.PerformLayout();
             tabPageDiplomacy.SuspendLayout();
+            tabPageDiplomacy.PerformLayout();
             tabPageCity.SuspendLayout();
             tabPageCountry.SuspendLayout();
             panelMap.SuspendLayout();
@@ -264,6 +315,7 @@
             tabPageDebug.Controls.Add(checkBoxLogBuildings);
             tabPageDebug.Controls.Add(checkBoxLogEconomy);
             tabPageDebug.Controls.Add(buttonGenerateTileCache);
+            tabPageDebug.Controls.Add(buttonGenerateUrbanLayer);
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
             tabPageDebug.Location = new Point(4, 29);
             tabPageDebug.Margin = new Padding(5, 4, 5, 4);
@@ -422,6 +474,17 @@
             buttonGenerateTileCache.TabIndex = 13;
             buttonGenerateTileCache.Text = "Build Tile Cache";
             buttonGenerateTileCache.UseVisualStyleBackColor = true;
+            // 
+            // buttonGenerateUrbanLayer
+            // 
+            buttonGenerateUrbanLayer.Location = new Point(352, 662);
+            buttonGenerateUrbanLayer.Margin = new Padding(5, 4, 5, 4);
+            buttonGenerateUrbanLayer.Name = "buttonGenerateUrbanLayer";
+            buttonGenerateUrbanLayer.Size = new Size(160, 36);
+            buttonGenerateUrbanLayer.TabIndex = 14;
+            buttonGenerateUrbanLayer.Text = "Generate Urban Layer";
+            buttonGenerateUrbanLayer.UseVisualStyleBackColor = true;
+            buttonGenerateUrbanLayer.Click += btnGenerateUrbanLayer_Click;
             // 
             // tabPageDiplomacy
             // 
@@ -695,56 +758,5 @@
         }
 
         #endregion
-
-        private System.Windows.Forms.TabPage tabPageFinance;
-        private System.Windows.Forms.ListView listViewFinance;
-        private System.Windows.Forms.TabPage tabPageDebug;
-        private System.Windows.Forms.Button buttonToggleDebug;
-        private System.Windows.Forms.Label labelCurrentRole;
-        private System.Windows.Forms.Label labelRoleType;
-        private System.Windows.Forms.ComboBox comboBoxRoleType;
-        private System.Windows.Forms.Label labelEntitySelection;
-        private System.Windows.Forms.ComboBox comboBoxCountrySelection;
-        private System.Windows.Forms.ComboBox comboBoxStateSelection;
-        private System.Windows.Forms.ComboBox comboBoxCorporationSelection;
-        private System.Windows.Forms.Button buttonAssumeRole;
-        private System.Windows.Forms.Button buttonRelinquishRole;
-        private System.Windows.Forms.CheckBox checkBoxLogPops;
-        private System.Windows.Forms.CheckBox checkBoxLogBuildings;
-        private System.Windows.Forms.CheckBox checkBoxLogEconomy;
-        private System.Windows.Forms.Button buttonGenerateTileCache;
-        private System.Windows.Forms.TabPage tabPageDiplomacy;
-        private System.Windows.Forms.Label labelProposedTrades;
-        private System.Windows.Forms.ListBox listBoxProposedTradeAgreements;
-        private System.Windows.Forms.Button buttonAcceptTrade;
-        private System.Windows.Forms.Button buttonRejectTrade;
-        private System.Windows.Forms.Button buttonProposeTrade;
-        private System.Windows.Forms.Button buttonViewRelations;
-        private System.Windows.Forms.Button buttonOpenTradeManagement;
-        private System.Windows.Forms.TabPage tabPageCity;
-        private System.Windows.Forms.ComboBox comboBoxCountry;
-        private System.Windows.Forms.Label labelCountryStats;
-        private System.Windows.Forms.ComboBox comboBoxStates;
-        private System.Windows.Forms.Label labelStateStats;
-        private System.Windows.Forms.ComboBox comboBoxCities;
-        private System.Windows.Forms.ListBox listBoxBuyOrders;
-        private System.Windows.Forms.ListBox listBoxSellOrders;
-        private System.Windows.Forms.ListBox listBoxCityStats;
-        private System.Windows.Forms.ListBox listBoxFactoryStats;
-        private System.Windows.Forms.ListView listViewDiplomacy;
-        private System.Windows.Forms.Button buttonShowPopStats;
-        private System.Windows.Forms.Button buttonShowFactoryStats;
-        private System.Windows.Forms.Button buttonShowConstruction;
-        private System.Windows.Forms.TabPage tabPageGovernment;
-        private System.Windows.Forms.ListView listViewParties;
-        private System.Windows.Forms.Button buttonOpenPolicyManager;
-        private System.Windows.Forms.Button buttonToggleDebugMode;
-        private System.Windows.Forms.TabPage tabPageCountry;
-        private System.Windows.Forms.PictureBox pictureBox1;
-        private System.Windows.Forms.Panel panelMap;
-
-        private System.Windows.Forms.TabControl tabControlMain;
-
-
     }
 }
