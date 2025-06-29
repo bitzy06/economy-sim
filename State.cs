@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace StrategyGame
 {
@@ -10,6 +11,7 @@ namespace StrategyGame
         public int Population { get; set; }
         public double TaxRate { get; set; } // Percentage (e.g., 0.1 for 10%)
         public double StateExpenses { get; set; }
+        public SixLabors.ImageSharp.PixelFormats.Rgba32 TintColor { get; set; }
 
         public State(string name)
         {

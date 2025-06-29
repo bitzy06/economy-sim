@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace StrategyGame
 {
@@ -9,6 +10,7 @@ namespace StrategyGame
         // Budget now reflects the treasury, managed more closely with FinancialSystem
         public double Budget { get; set; }
         public int Population { get; set; }
+        public SixLabors.ImageSharp.PixelFormats.Rgba32 TintColor { get; set; }
         // public double TaxRate { get; set; } // Replaced by FinancialSystem.TaxPolicies
         public double NationalExpenses { get; set; } // General national expenses
         public Dictionary<string, double> Resources { get; private set; }

@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO; // For File operations
+using SixLabors.ImageSharp.PixelFormats;
 using System.Linq;
 using System.Text;
 using System.Text.Json; // For JSON deserialization
@@ -68,6 +69,9 @@ namespace economy_sim
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
 
+        // Bitmap reused between draw calls to reduce allocations
+        private Bitmap _reusableViewBitmap;
+
         private CancellationTokenSource _mapRenderCts;
 
         public MainGame()
@@ -100,8 +104,14 @@ namespace economy_sim
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
 
             sw.Restart();
-            InitializeGameData();
-            Console.WriteLine($"[Startup] InitializeGameData took {sw.Elapsed.TotalSeconds:F2} seconds");
+            Task.Run(() => InitializeGameDataAsync()).ContinueWith(t =>
+            {
+                if (t.Exception != null)
+                {
+                    Debug.WriteLine($"InitializeGameDataAsync error: {t.Exception.InnerException?.Message}");
+                }
+            }, TaskScheduler.FromCurrentSynchronizationContext());
+            Console.WriteLine($"[Startup] InitializeGameData launched in background after {sw.Elapsed.TotalSeconds:F2} seconds");
 
             sw.Restart();
             diplomacyManager = new StrategyGame.DiplomacyManager(allCountries);
@@ -243,7 +253,10 @@ namespace economy_sim
                 try
                 {
                     // Call AssembleView, which no longer has the recursive callback
-                    var bmp = mapManager.AssembleView(zoomLevel, viewRect);
+                    Bitmap reuse = null;
+                    if (_reusableViewBitmap != null && _reusableViewBitmap.Width == viewRect.Width && _reusableViewBitmap.Height == viewRect.Height)
+                        reuse = _reusableViewBitmap;
+                    var bmp = mapManager.AssembleView(zoomLevel, viewRect, reuse);
 
                     if (bmp != null && !token.IsCancellationRequested)
                     {
@@ -255,8 +268,10 @@ namespace economy_sim
                                 bmp.Dispose();
                                 return;
                             }
-                            pictureBox1.Image?.Dispose();
+                            if (!ReferenceEquals(pictureBox1.Image, bmp))
+                                pictureBox1.Image?.Dispose();
                             pictureBox1.Image = bmp;
+                            _reusableViewBitmap = bmp;
                         }));
                     }
                     else
@@ -372,6 +387,8 @@ namespace economy_sim
             foreach (StrategyGame.CountryData countryData in worldData.Countries)
             {
                 StrategyGame.Country currentCountry = new StrategyGame.Country(countryData.Name);
+                var cRng = new Random(countryData.Name.GetHashCode() * 997);
+                currentCountry.TintColor = new Rgba32((byte)cRng.Next(40, 200), (byte)cRng.Next(40, 200), (byte)cRng.Next(40, 200), 100);
                 // Set up tax policies instead of a single TaxRate
                 currentCountry.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.IncomeTax, (decimal)countryData.TaxRate));
                 currentCountry.NationalExpenses = countryData.NationalExpenses;
@@ -383,6 +400,8 @@ namespace economy_sim
                     foreach (StrategyGame.StateData stateData in countryData.States)
                     {
                         StrategyGame.State currentState = new StrategyGame.State(stateData.Name);
+                        var sRng = new Random((countryData.Name + stateData.Name).GetHashCode());
+                        currentState.TintColor = new Rgba32((byte)sRng.Next(40, 200), (byte)sRng.Next(40, 200), (byte)sRng.Next(40, 200), 120);
                         currentState.TaxRate = stateData.TaxRate;
                         currentState.StateExpenses = stateData.StateExpenses;
                         currentState.Budget = stateData.InitialBudget;
@@ -497,6 +516,11 @@ namespace economy_sim
             }
         }
 
+        private Task InitializeGameDataAsync()
+        {
+            return Task.Run(() => InitializeGameData());
+        }
+
         private void CreateDefaultFallbackWorld()
         {
             Console.WriteLine("Creating a default fallback world as world_setup.json was not found or was invalid.");
@@ -507,6 +531,8 @@ namespace economy_sim
             }
 
             StrategyGame.Country defaultCountry = new StrategyGame.Country("Default Nation");
+            var dcRng = new Random("Default Nation".GetHashCode() * 997);
+            defaultCountry.TintColor = new Rgba32((byte)dcRng.Next(40, 200), (byte)dcRng.Next(40, 200), (byte)dcRng.Next(40, 200), 100);
             // Set up default tax policy
             defaultCountry.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.IncomeTax, 0.1m));
             defaultCountry.NationalExpenses = 10000;
@@ -514,6 +540,8 @@ namespace economy_sim
             defaultCountry.Population = 100000; // Simplified total population
 
             StrategyGame.State defaultState = new StrategyGame.State("Default Province");
+            var dsRng = new Random("Default Province".GetHashCode());
+            defaultState.TintColor = new Rgba32((byte)dsRng.Next(40, 200), (byte)dsRng.Next(40, 200), (byte)dsRng.Next(40, 200), 120);
             defaultState.TaxRate = 0.08;
             defaultState.StateExpenses = 2000;
             defaultState.Budget = defaultCountry.Budget * 0.1; // Example budget portion
