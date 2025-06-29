@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using SystemDrawing = System.Drawing;
+using System.Collections.Concurrent;
 
 namespace StrategyGame
 {
@@ -32,6 +33,7 @@ namespace StrategyGame
         private readonly LinkedList<(int cellSize, int x, int y)> _tileLru = new();
         private readonly object _cacheLock = new();
         private readonly object _assembleLock = new();
+        private static readonly ConcurrentQueue<MemoryStream> _msPool = new();
 
         /// <summary>
         /// Raised during tile cache generation. The first parameter is the
@@ -90,9 +92,9 @@ namespace StrategyGame
             });
             
             // Load cities off the UI thread
-            _ = Task.Run(() =>
+            _ = Task.Run(async () =>
             {
-                var loaded = CityDensityRenderer.LoadCitiesFromNaturalEarth(
+                var loaded = await CityDensityRenderer.LoadCitiesFromNaturalEarthAsync(
                     NaturalEarthOverlayGenerator.CitiesPath,
                     NaturalEarthOverlayGenerator.UrbanAreasShpPath
                 );
@@ -332,7 +334,7 @@ namespace StrategyGame
             return ImageSharpToBitmap(image);
         }
 
-        public SystemDrawing.Bitmap AssembleView(float zoom, SystemDrawing.Rectangle viewArea)
+        public SystemDrawing.Bitmap AssembleView(float zoom, SystemDrawing.Rectangle viewArea, SystemDrawing.Bitmap reuse = null)
         {
             lock (_assembleLock)
             {
@@ -354,10 +356,21 @@ namespace StrategyGame
                 int lastTileX = Math.Min((mapPixelWidth - 1) / tileSize, (viewArea.Right - 1) / tileSize);
                 int lastTileY = Math.Min((mapPixelHeight - 1) / tileSize, (viewArea.Bottom - 1) / tileSize);
 
-                // Create the output bitmap
-                var output = new SystemDrawing.Bitmap(viewArea.Width, viewArea.Height);
+                // Create or clear the output bitmap
+                SystemDrawing.Bitmap output;
+                if (reuse != null && reuse.Width == viewArea.Width && reuse.Height == viewArea.Height)
+                {
+                    output = reuse;
+                    using var gg = SystemDrawing.Graphics.FromImage(output);
+                    gg.Clear(SystemDrawing.Color.DarkGray);
+                }
+                else
+                {
+                    output = new SystemDrawing.Bitmap(viewArea.Width, viewArea.Height);
+                    using var gg = SystemDrawing.Graphics.FromImage(output);
+                    gg.Clear(SystemDrawing.Color.DarkGray);
+                }
                 using var g = SystemDrawing.Graphics.FromImage(output);
-                g.Clear(SystemDrawing.Color.DarkGray);
 
                 // Draw each tile
                 for (int ty = tileStartY; ty <= lastTileY; ty++)
@@ -462,10 +475,16 @@ namespace StrategyGame
 
         private static SystemDrawing.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
         {
-            using var ms = new MemoryStream();
+            if (!_msPool.TryDequeue(out var ms))
+            {
+                ms = new MemoryStream();
+            }
             img.SaveAsBmp(ms);
             ms.Position = 0;
-            return new SystemDrawing.Bitmap(ms);
+            var bmp = new SystemDrawing.Bitmap(ms);
+            ms.SetLength(0);
+            _msPool.Enqueue(ms);
+            return bmp;
         }
 
         private static SystemDrawing.Bitmap CreateWaterTile(int width, int height)

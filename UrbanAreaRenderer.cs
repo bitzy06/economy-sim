@@ -26,11 +26,11 @@ namespace StrategyGame
 
         public static async Task GenerateUrbanTextureLayer()
         {
-            await Task.Run(() =>
+            await Task.Run(async () =>
             {
                 // Load the required shapefiles
                 var urbanPolygons = LoadGeometries(NaturalEarthOverlayGenerator.UrbanAreasShpPath);
-                var cities = CityDensityRenderer.LoadCitiesFromNaturalEarth(
+                var cities = await CityDensityRenderer.LoadCitiesFromNaturalEarthAsync(
                     NaturalEarthOverlayGenerator.CitiesPath,
                     NaturalEarthOverlayGenerator.UrbanAreasShpPath
                 );
@@ -48,7 +48,7 @@ namespace StrategyGame
 
                 // --- Step 2: Render Smaller Towns and Cities ---
                 Console.WriteLine("[Urban Gen] Rendering smaller towns...");
-                var smallerCities = cities.Where(c => !urbanPolygons.Any(p => p.Contains(new NTSPoint(c.Longitude, c.Latitude)))).ToList();
+                var smallerCities = cities.Where(c => !urbanPolygons.Any(p => p.Contains(new NTSPoint(c.Longitude, c.Latitude))));
                 foreach (var city in smallerCities)
                 {
                     // Draw a soft "blotch" for smaller towns not in a major urban area
@@ -70,6 +70,7 @@ namespace StrategyGame
                 );
                 Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
                 image.Save(outputPath);
+                urbanPolygons.Clear();
                 Console.WriteLine($"[Urban Gen] Urban texture layer saved successfully to: {outputPath}");
             });
         }
