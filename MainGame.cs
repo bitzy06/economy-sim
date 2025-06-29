@@ -1196,8 +1196,14 @@ namespace economy_sim
             else if (listBoxFactoryStats.Items.Count > 0) listBoxFactoryStats.TopIndex = 0;
         }
 
-        private void UpdateMarketStats() // Now displays LOCAL market for selected city
+        private void UpdateMarketStats()
         {
+            if (listBoxMarketStats.InvokeRequired)
+            {
+                listBoxMarketStats.Invoke(new Action(UpdateMarketStats));
+                return;
+            }
+
             var city = GetSelectedCity();
             if (city == null)
             {

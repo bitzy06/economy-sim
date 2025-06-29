@@ -605,7 +605,6 @@ namespace StrategyGame
             if (tileWidth <= 0 || tileHeight <= 0)
                 return false;
 
-            // Retrieve the relevant slice from the full-world mask cache
             int[,] mask = GetCountryMaskTile(mapWidthPx, mapHeightPx, pixelX, pixelY, tileWidth, tileHeight);
 
             for (int y = 0; y < tileHeight; y++)
@@ -694,33 +693,32 @@ namespace StrategyGame
                 double[] gt = new double[6];
                 dem.GetGeoTransform(gt);
 
-                    // Create a memory dataset for the ENTIRE map
-                    using (var maskDs = Gdal.GetDriverByName("MEM").Create("", fullWidth, fullHeight, 1, DataType.GDT_Int32, null))
-                    {
-                        // Scale the original GeoTransform to the new full-map dimensions
-                        double[] newGt = (double[])gt.Clone();
-                        newGt[1] = gt[1] * dem.RasterXSize / fullWidth;
-                        newGt[5] = gt[5] * dem.RasterYSize / fullHeight;
-                        maskDs.SetGeoTransform(newGt);
-                        maskDs.SetProjection(dem.GetProjection());
+                // Create a memory dataset for the ENTIRE map
+                using (var maskDs = Gdal.GetDriverByName("MEM").Create("", fullWidth, fullHeight, 1, DataType.GDT_Int32, null))
+                {
+                    // Scale the original GeoTransform to the new full-map dimensions
+                    double[] newGt = (double[])gt.Clone();
+                    newGt[1] = gt[1] * dem.RasterXSize / fullWidth;
+                    newGt[5] = gt[5] * dem.RasterYSize / fullHeight;
+                    maskDs.SetGeoTransform(newGt);
+                    maskDs.SetProjection(dem.GetProjection());
 
-                        // Rasterize the entire country shapefile onto our full-map dataset
-                        var ds = GetCountryDataSource();
-                        var layer = ds.GetLayerByIndex(0);
-                        Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
-                            0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
+                    // Rasterize the entire country shapefile onto our full-map dataset
+                    var ds = GetCountryDataSource();
+                    var layer = ds.GetLayerByIndex(0);
+                    Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
+                        0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
 
-                        // Read the entire generated mask into a C# array
-                        var band = maskDs.GetRasterBand(1);
-                        int[] flat = new int[fullWidth * fullHeight];
-                        band.ReadRaster(0, 0, fullWidth, fullHeight, flat, fullWidth, fullHeight, 0, 0);
+                    // Read the entire generated mask into a C# array
+                    var band = maskDs.GetRasterBand(1);
+                    int[] flat = new int[fullWidth * fullHeight];
+                    band.ReadRaster(0, 0, fullWidth, fullHeight, flat, fullWidth, fullHeight, 0, 0);
 
-                        fullMask = new int[fullHeight, fullWidth];
-                        Buffer.BlockCopy(flat, 0, fullMask, 0, flat.Length * sizeof(int));
+                    fullMask = new int[fullHeight, fullWidth];
+                    Buffer.BlockCopy(flat, 0, fullMask, 0, flat.Length * sizeof(int));
 
-                        // Cache the full mask for future tile requests at this resolution
-                        _fullCountryMaskCache.TryAdd(fullMaskKey, fullMask);
-                    }
+                    // Cache the full mask for future tile requests at this resolution
+                    _fullCountryMaskCache.TryAdd(fullMaskKey, fullMask);
                 }
             }
 
@@ -738,6 +736,7 @@ namespace StrategyGame
                     }
                 }
             }
+            
             return tileMask;
         }
 
