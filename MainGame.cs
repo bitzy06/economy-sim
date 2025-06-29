@@ -69,6 +69,9 @@ namespace economy_sim
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
 
+        // Bitmap reused between draw calls to reduce allocations
+        private Bitmap _reusableViewBitmap;
+
         private CancellationTokenSource _mapRenderCts;
 
         public MainGame()
@@ -101,8 +104,14 @@ namespace economy_sim
             comboBoxCountry.SelectedIndexChanged += ComboBoxCountry_SelectedIndexChanged;
 
             sw.Restart();
-            InitializeGameData();
-            Console.WriteLine($"[Startup] InitializeGameData took {sw.Elapsed.TotalSeconds:F2} seconds");
+            Task.Run(() => InitializeGameDataAsync()).ContinueWith(t =>
+            {
+                if (t.Exception != null)
+                {
+                    Debug.WriteLine($"InitializeGameDataAsync error: {t.Exception.InnerException?.Message}");
+                }
+            }, TaskScheduler.FromCurrentSynchronizationContext());
+            Console.WriteLine($"[Startup] InitializeGameData launched in background after {sw.Elapsed.TotalSeconds:F2} seconds");
 
             sw.Restart();
             diplomacyManager = new StrategyGame.DiplomacyManager(allCountries);
@@ -507,11 +516,11 @@ namespace economy_sim
             }
         }
 
-        private async Task InitializeGameDataAsync()
+
+        private Task InitializeGameDataAsync()
         {
-            UI(() => loadingLabel.Visible = true);
-            await Task.Run(() => InitializeGameData());
-            UI(() => loadingLabel.Visible = false);
+            return Task.Run(() => InitializeGameData());
+
         }
 
         private void CreateDefaultFallbackWorld()
