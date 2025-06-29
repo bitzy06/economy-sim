@@ -195,14 +195,20 @@ namespace economy_sim
 
                     this.Invoke((MethodInvoker)(() =>
                     {
-                        pictureBox1.Image = mapManager.AssembleView(mapZoom, viewRect, () =>
+                        var img = mapManager.AssembleView(mapZoom, viewRect, () =>
                         {
                             this.Invoke((MethodInvoker)(() =>
                             {
                                 var updatedViewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                                var oldInner = pictureBox1.Image;
                                 pictureBox1.Image = mapManager.AssembleView(mapZoom, updatedViewRect);
+                                oldInner?.Dispose();
                             }));
                         });
+
+                        var old = pictureBox1.Image;
+                        pictureBox1.Image = img;
+                        old?.Dispose();
                     }));
                 });
             }
