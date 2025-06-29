@@ -45,6 +45,12 @@ namespace StrategyGame
         // NEW: Cache for country tint masks
         private static readonly ConcurrentDictionary<(int width, int height, int offsetX, int offsetY), int[,]> _countryTintCache = new();
 
+        // ADD this new cache for full-world state masks
+        private static readonly ConcurrentDictionary<(int width, int height), int[,]> _fullStateMaskCache = new();
+
+        // ADD this new cache for full-world country masks (for tinting)
+        private static readonly ConcurrentDictionary<(int width, int height), int[,]> _fullCountryMaskCache = new();
+
         // Paths follow the same resolution logic as PixelMapGenerator
         private static readonly string RepoRoot =
             Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
@@ -97,6 +103,7 @@ namespace StrategyGame
 
         private static readonly string TerrainTifPath = GetDataFile("NE1_HR_LC.tif");
         private static readonly string Admin1Path = GetDataFile("ne_10m_admin_1_states_provinces.shp");
+        private static readonly string CountriesPath = GetDataFile("ne_10m_admin_0_countries.shp");
         public static readonly string CitiesPath = GetDataFile("ne_10m_populated_places.shp");
         public static readonly string UrbanAreasShpPath = GetDataFile("ne_10m_urban_areas.shp");
         private static readonly Dictionary<int, Rgba32> StateColors = new();
@@ -205,29 +212,17 @@ namespace StrategyGame
             if (_admin1Layer == null)
                 return;
 
-            // Guard against off-map tiles
             if (actualWidthPx <= 0 || actualHeightPx <= 0)
                 return;
 
-            // NEW: Use cached state mask with actual dimensions
-            var maskKey = (actualWidthPx, actualHeightPx, offsetX, offsetY);
-            int[,] mask;
-            
-            if (!_stateMaskCache.TryGetValue(maskKey, out mask))
-            {
-                int mapWidthPx = mapWidth * cellSize;
-                int mapHeightPx = mapHeight * cellSize;
-                mask = CreateMaskTile(_admin1Layer, "adm1_code", offsetX, offsetY, actualWidthPx, actualHeightPx, mapWidthPx, mapHeightPx);
-                
-                // Only cache if not too many cached (prevent memory bloat)
-                if (_stateMaskCache.Count < 500)
-                {
-                    _stateMaskCache.TryAdd(maskKey, mask);
-                }
-            }
-            
+            // Use the same robust slicing pattern for state masks
+            int mapWidthPx = mapWidth * cellSize;
+            int mapHeightPx = mapHeight * cellSize;
+            int[,] mask = GetStateMaskTile(mapWidthPx, mapHeightPx, offsetX, offsetY, actualWidthPx, actualHeightPx);
+
             Rgba32 borderColor = new Rgba32(255, 255, 255, 180);
 
+            // The rest of this method (the ProcessPixelRows part) remains unchanged...
             img.ProcessPixelRows(accessor =>
             {
                 for (int y = 0; y < actualHeightPx; y++)
@@ -338,23 +333,10 @@ namespace StrategyGame
             if (actualWidthPx <= 0 || actualHeightPx <= 0)
                 return;
 
-            // NEW: Use cached country tint mask with actual dimensions
-            var maskKey = (actualWidthPx, actualHeightPx, offsetX, offsetY);
-            int[,] mask;
-            
-            if (!_countryTintCache.TryGetValue(maskKey, out mask))
-            {
-                int mapWidthPx = mapWidth * cellSize;
-                int mapHeightPx = mapHeight * cellSize;
-                mask = PixelMapGenerator.CreateCountryMaskTile(mapWidthPx, mapHeightPx,
-                    offsetX, offsetY, actualWidthPx, actualHeightPx);
-                    
-                // Only cache if not too many cached (prevent memory bloat)
-                if (_countryTintCache.Count < 500)
-                {
-                    _countryTintCache.TryAdd(maskKey, mask);
-                }
-            }
+            // Use the same robust slicing pattern for country masks as state masks
+            int mapWidthPx = mapWidth * cellSize;
+            int mapHeightPx = mapHeight * cellSize;
+            int[,] mask = GetCountryMaskTile(mapWidthPx, mapHeightPx, offsetX, offsetY, actualWidthPx, actualHeightPx);
 
             img.ProcessPixelRows(accessor =>
             {
@@ -378,62 +360,108 @@ namespace StrategyGame
             });
         }
 
-        private static int[,] CreateMaskTile(Layer layer, string attr, int offsetX, int offsetY, int width, int height, int fullWidth, int fullHeight)
+        // ADD this new helper method for country mask tiles (mirrors GetStateMaskTile)
+        private static int[,] GetCountryMaskTile(int fullWidth, int fullHeight, int offsetX, int offsetY, int tileWidth, int tileHeight)
         {
-            if (fullWidth == 0 || fullHeight == 0 || width <= 0 || height <= 0)
-                return new int[Math.Max(1, height), Math.Max(1, width)];
+            var fullMaskKey = (fullWidth, fullHeight);
+            if (!_fullCountryMaskCache.TryGetValue(fullMaskKey, out var fullMask))
+            {
+                using (var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly))
+                {
+                    double[] gt = new double[6];
+                    dem.GetGeoTransform(gt);
+                    using (var maskDs = Gdal.GetDriverByName("MEM").Create("", fullWidth, fullHeight, 1, DataType.GDT_Int32, null))
+                    {
+                        double[] newGt = (double[])gt.Clone();
+                        newGt[1] = gt[1] * dem.RasterXSize / fullWidth;
+                        newGt[5] = gt[5] * dem.RasterYSize / fullHeight;
+                        maskDs.SetGeoTransform(newGt);
+                        maskDs.SetProjection(dem.GetProjection());
 
-            using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
-            double[] gt = new double[6];
-            dem.GetGeoTransform(gt);
-            int srcCols = dem.RasterXSize;
-            int srcRows = dem.RasterYSize;
+                        // Note: Using CountriesPath for country tinting
+                        using (var ds = Ogr.Open(CountriesPath, 0))
+                        {
+                            var layer = ds.GetLayerByIndex(0);
+                            Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
+                                0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
+                        }
 
-            // FIXED: Use the same coordinate system as PixelMapGenerator
-            double worldWidth = gt[1] * srcCols;   
-            double worldHeight = Math.Abs(gt[5]) * srcRows; 
-            
-            double pixelSizeX = worldWidth / fullWidth;   
-            double pixelSizeY = worldHeight / fullHeight; 
-            
-            double tileWorldX = gt[0] + offsetX * pixelSizeX;
-            double tileWorldY = gt[3] - offsetY * pixelSizeY;
+                        var band = maskDs.GetRasterBand(1);
+                        int[] flat = new int[fullWidth * fullHeight];
+                        band.ReadRaster(0, 0, fullWidth, fullHeight, flat, fullWidth, fullHeight, 0, 0);
+                        fullMask = new int[fullHeight, fullWidth];
+                        Buffer.BlockCopy(flat, 0, fullMask, 0, flat.Length * sizeof(int));
+                        _fullCountryMaskCache.TryAdd(fullMaskKey, fullMask);
+                    }
+                }
+            }
 
-            double[] newGt = new double[6];
-            newGt[0] = tileWorldX;        
-            newGt[1] = pixelSizeX;        
-            newGt[2] = 0;                 
-            newGt[3] = tileWorldY;        
-            newGt[4] = 0;                 
-            newGt[5] = -pixelSizeY;       
+            var tileMask = new int[tileHeight, tileWidth];
+            for (int y = 0; y < tileHeight; y++)
+            {
+                for (int x = 0; x < tileWidth; x++)
+                {
+                    int sourceY = offsetY + y;
+                    int sourceX = offsetX + x;
+                    if (sourceY < fullHeight && sourceX < fullWidth && sourceY >= 0 && sourceX >= 0)
+                    {
+                        tileMask[y, x] = fullMask[sourceY, sourceX];
+                    }
+                }
+            }
+            return tileMask;
+        }
 
-            GdalDriver memDrv = Gdal.GetDriverByName("MEM");
-            using var maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
-            maskDs.SetGeoTransform(newGt);
-            maskDs.SetProjection(dem.GetProjection());
+        // ADD this new helper method and its cache, which mirrors the logic from PixelMapGenerator.
+        private static int[,] GetStateMaskTile(int fullWidth, int fullHeight, int offsetX, int offsetY, int tileWidth, int tileHeight)
+        {
+            var fullMaskKey = (fullWidth, fullHeight);
+            if (!_fullStateMaskCache.TryGetValue(fullMaskKey, out var fullMask))
+            {
+                using (var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly))
+                {
+                    double[] gt = new double[6];
+                    dem.GetGeoTransform(gt);
+                    using (var maskDs = Gdal.GetDriverByName("MEM").Create("", fullWidth, fullHeight, 1, DataType.GDT_Int32, null))
+                    {
+                        double[] newGt = (double[])gt.Clone();
+                        newGt[1] = gt[1] * dem.RasterXSize / fullWidth;
+                        newGt[5] = gt[5] * dem.RasterYSize / fullHeight;
+                        maskDs.SetGeoTransform(newGt);
+                        maskDs.SetProjection(dem.GetProjection());
 
-            // Set spatial filter based on the actual geographic bounds
-            double left = tileWorldX;
-            double right = tileWorldX + width * pixelSizeX;
-            double top = tileWorldY;
-            double bottom = tileWorldY - height * pixelSizeY;
-            
-            layer.SetSpatialFilterRect(left, bottom, right, top);
+                        // Note: Using Admin1Path for states/provinces
+                        using (var ds = Ogr.Open(Admin1Path, 0))
+                        {
+                            var layer = ds.GetLayerByIndex(0);
+                            Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
+                                0, null, new[] { "ATTRIBUTE=adm1_code" }, null, "");
+                        }
 
-            Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
-                0, null, new[] { $"ATTRIBUTE={attr}" }, null, "");
-            layer.SetSpatialFilter(null);
+                        var band = maskDs.GetRasterBand(1);
+                        int[] flat = new int[fullWidth * fullHeight];
+                        band.ReadRaster(0, 0, fullWidth, fullHeight, flat, fullWidth, fullHeight, 0, 0);
+                        fullMask = new int[fullHeight, fullWidth];
+                        Buffer.BlockCopy(flat, 0, fullMask, 0, flat.Length * sizeof(int));
+                        _fullStateMaskCache.TryAdd(fullMaskKey, fullMask);
+                    }
+                }
+            }
 
-            Band band = maskDs.GetRasterBand(1);
-            int[] flat = new int[width * height];
-            band.ReadRaster(0, 0, width, height, flat, width, height, 0, 0);
-
-            int[,] result = new int[height, width];
-            for (int r = 0; r < height; r++)
-                for (int c = 0; c < width; c++)
-                    result[r, c] = flat[r * width + c];
-
-            return result;
+            var tileMask = new int[tileHeight, tileWidth];
+            for (int y = 0; y < tileHeight; y++)
+            {
+                for (int x = 0; x < tileWidth; x++)
+                {
+                    int sourceY = offsetY + y;
+                    int sourceX = offsetX + x;
+                    if (sourceY < fullHeight && sourceX < fullWidth && sourceY >= 0 && sourceX >= 0)
+                    {
+                        tileMask[y, x] = fullMask[sourceY, sourceX];
+                    }
+                }
+            }
+            return tileMask;
         }
 
         private static void DrawSquare(Image<Rgba32> img, int x, int y, int size, Rgba32 color)
@@ -619,20 +647,22 @@ namespace StrategyGame
             ClearUrbanMaskCache();
             _stateMaskCache.Clear();
             _countryTintCache.Clear();
+            _fullStateMaskCache.Clear();
+            _fullCountryMaskCache.Clear();
             Console.WriteLine("[DEBUG] All overlay caches cleared");
         }
 
         /// <summary>
         /// NEW: Get cache statistics for monitoring
         /// </summary>
-        public static (int urbanMasks, int stateMasks, int countryTints) GetOverlayCacheStats()
+        public static (int urbanMasks, int stateMasks, int countryTints, int fullStateMasks, int fullCountryMasks) GetOverlayCacheStats()
         {
             int urbanCount;
             lock (_urbanMaskLock)
             {
                 urbanCount = _urbanMaskCache.Count;
             }
-            return (urbanCount, _stateMaskCache.Count, _countryTintCache.Count);
+            return (urbanCount, _stateMaskCache.Count, _countryTintCache.Count, _fullStateMaskCache.Count, _fullCountryMaskCache.Count);
         }
     }
 }

@@ -41,6 +41,11 @@ namespace StrategyGame
         public event Action<int, int> TileGenerationProgress;
 
         /// <summary>
+        /// Raised when a tile is loaded.
+        /// </summary>
+        public event Action OnTileLoaded;
+
+        /// <summary>
         /// Maximum number of tiles kept in the cache.
         /// </summary>
         private const int TileCacheLimit = 1024;
@@ -327,7 +332,7 @@ namespace StrategyGame
             return ImageSharpToBitmap(image);
         }
 
-        public SystemDrawing.Bitmap AssembleView(float zoom, SystemDrawing.Rectangle viewArea, Action triggerRefresh = null)
+        public SystemDrawing.Bitmap AssembleView(float zoom, SystemDrawing.Rectangle viewArea)
         {
             lock (_assembleLock)
             {
@@ -411,7 +416,7 @@ namespace StrategyGame
                                         try
                                         {
                                             await GetTileAsync(zoom, tx, ty, CancellationToken.None);
-                                            triggerRefresh?.Invoke();
+                                            OnTileLoaded?.Invoke();
                                         }
                                         finally
                                         {

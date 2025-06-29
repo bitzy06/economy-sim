@@ -24,6 +24,9 @@ namespace StrategyGame
         private static readonly object GdalConfigLock = new object();
         private static bool _gdalConfigured = false;
 
+        // NEW: Cache for full-map masks, near your other cache declarations
+        private static readonly ConcurrentDictionary<(int width, int height), int[,]> _fullCountryMaskCache = new();
+
         // NEW: Cache for country masks to avoid regenerating them
         private static readonly ConcurrentDictionary<(int width, int height, int offsetX, int offsetY), int[,]> _countryMaskCache = new();
 
@@ -522,31 +525,27 @@ namespace StrategyGame
         /// FIXED: Properly handle partial tiles with correct dimensions
         /// </summary>
         public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTileWithCountriesLarge(
-     int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
+            int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
         {
             int fullW = mapWidth * cellSize;
             int fullH = mapHeight * cellSize;
-            int offsetX = tileX * 512; // Always use standard tile size for offset calculation
-            int offsetY = tileY * 512; // Always use standard tile size for offset calculation
+            int offsetX = tileX * tileSizePx;
+            int offsetY = tileY * tileSizePx;
 
-            // Calculate the actual dimensions for this tile (may be smaller for edge tiles)
             int actualWidthPx = Math.Min(tileSizePx, fullW - offsetX);
             int actualHeightPx = Math.Min(tileSizePx, fullH - offsetY);
 
-            // Guard against off-map tiles
             if (actualWidthPx <= 0 || actualHeightPx <= 0)
                 return new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(1, 1);
 
-            // Debug output to help diagnose coordinate issues
-            Console.WriteLine($"[TILE DEBUG] Tile ({tileX},{tileY}): map={mapWidth}x{mapHeight}, cellSize={cellSize}, fullMap={fullW}x{fullH}, offset=({offsetX},{offsetY}), actualSize={actualWidthPx}x{actualHeightPx}, requestedSize={tileSizePx}");
+            // *** THIS IS THE KEY CHANGE ***
+            // We now call a new method to get the mask slice from a full-world mask.
+            int[,] mask = GetCountryMaskTile(fullW, fullH, offsetX, offsetY, actualWidthPx, actualHeightPx);
 
-            // Use cached country mask with actual tile dimensions
-            int[,] mask = GetCachedCountryMask(fullW, fullH, offsetX, offsetY, actualWidthPx, actualHeightPx);
-
-            // Generate terrain tile with original tileSizePx
             var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
 
-            DrawBordersLarge(img, mask);
+            // NOTE: The original code had a call to DrawBordersLarge here which was incorrect.
+            // Borders are handled by NaturalEarthOverlayGenerator. This is now correct.
 
             return img;
         }
@@ -644,6 +643,71 @@ namespace StrategyGame
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// NEW: Get a tile-sized country mask from a full-world mask.
+        /// </summary>
+        private static int[,] GetCountryMaskTile(int fullWidth, int fullHeight, int offsetX, int offsetY, int tileWidth, int tileHeight)
+        {
+            var fullMaskKey = (fullWidth, fullHeight);
+
+            // 1. Get or create the full-world mask from the cache
+            if (!_fullCountryMaskCache.TryGetValue(fullMaskKey, out var fullMask))
+            {
+                // It's not in the cache, so we generate it once for the entire map resolution
+                using (var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly))
+                {
+                    double[] gt = new double[6];
+                    dem.GetGeoTransform(gt);
+
+                    // Create a memory dataset for the ENTIRE map
+                    using (var maskDs = Gdal.GetDriverByName("MEM").Create("", fullWidth, fullHeight, 1, DataType.GDT_Int32, null))
+                    {
+                        // Scale the original GeoTransform to the new full-map dimensions
+                        double[] newGt = (double[])gt.Clone();
+                        newGt[1] = gt[1] * dem.RasterXSize / fullWidth;
+                        newGt[5] = gt[5] * dem.RasterYSize / fullHeight;
+                        maskDs.SetGeoTransform(newGt);
+                        maskDs.SetProjection(dem.GetProjection());
+
+                        // Rasterize the entire country shapefile onto our full-map dataset
+                        using (var ds = Ogr.Open(ShpPath, 0))
+                        {
+                            var layer = ds.GetLayerByIndex(0);
+                            Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
+                                0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
+                        }
+
+                        // Read the entire generated mask into a C# array
+                        var band = maskDs.GetRasterBand(1);
+                        int[] flat = new int[fullWidth * fullHeight];
+                        band.ReadRaster(0, 0, fullWidth, fullHeight, flat, fullWidth, fullHeight, 0, 0);
+
+                        fullMask = new int[fullHeight, fullWidth];
+                        Buffer.BlockCopy(flat, 0, fullMask, 0, flat.Length * sizeof(int));
+
+                        // Cache the full mask for future tile requests at this resolution
+                        _fullCountryMaskCache.TryAdd(fullMaskKey, fullMask);
+                    }
+                }
+            }
+
+            // 2. Now that we have the full mask, copy the requested tile section from it.
+            var tileMask = new int[tileHeight, tileWidth];
+            for (int y = 0; y < tileHeight; y++)
+            {
+                for (int x = 0; x < tileWidth; x++)
+                {
+                    int sourceY = offsetY + y;
+                    int sourceX = offsetX + x;
+                    if (sourceY < fullHeight && sourceX < fullWidth && sourceY >= 0 && sourceX >= 0)
+                    {
+                        tileMask[y, x] = fullMask[sourceY, sourceX];
+                    }
+                }
+            }
+            return tileMask;
         }
 
         /// <summary>
@@ -871,6 +935,7 @@ namespace StrategyGame
         {
             _countryMaskCache.Clear();
             _terrainDataCache.Clear();
+            _fullCountryMaskCache.Clear();
 
             lock (_urbanTextureLock)
             {
@@ -888,9 +953,9 @@ namespace StrategyGame
         /// <summary>
         /// NEW: Get cache statistics for monitoring
         /// </summary>
-        public static (int countryMasks, int terrainData, int memoryPoolSize) GetCacheStats()
+        public static (int countryMasks, int terrainData, int fullCountryMasks, int memoryPoolSize) GetCacheStats()
         {
-            return (_countryMaskCache.Count, _terrainDataCache.Count, _byteArrayPool.Count);
+            return (_countryMaskCache.Count, _terrainDataCache.Count, _fullCountryMaskCache.Count, _byteArrayPool.Count);
         }
     }
 }

@@ -65,10 +65,10 @@ namespace economy_sim
         private int baseCellsHeight;
         private System.Windows.Forms.Timer mapUpdateTimer;
         private bool pendingMapUpdate = false;
-        private bool mapRenderInProgress = false;
-        private bool mapRenderQueued = false;
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
+
+        private CancellationTokenSource _mapRenderCts;
 
         public MainGame()
         {
@@ -183,6 +183,15 @@ namespace economy_sim
                 baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
 
+                mapManager.OnTileLoaded += () =>
+                {
+                    if (!IsDisposed && IsHandleCreated)
+                    {
+                        // When a tile loads, trigger a redraw on the UI thread.
+                        BeginInvoke(new Action(RedrawAsync));
+                    }
+                };
+
                 var viewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
 
                 Task.Run(() =>
@@ -195,16 +204,7 @@ namespace economy_sim
 
                     this.Invoke((MethodInvoker)(() =>
                     {
-                        var img = mapManager.AssembleView(mapZoom, viewRect, () =>
-                        {
-                            this.Invoke((MethodInvoker)(() =>
-                            {
-                                var updatedViewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
-                                var oldInner = pictureBox1.Image;
-                                pictureBox1.Image = mapManager.AssembleView(mapZoom, updatedViewRect);
-                                oldInner?.Dispose();
-                            }));
-                        });
+                        var img = mapManager.AssembleView(mapZoom, viewRect);
 
                         var old = pictureBox1.Image;
                         pictureBox1.Image = img;
@@ -217,178 +217,79 @@ namespace economy_sim
             pictureBox1.Location = new Point(0, 0);
         }
 
-       
-
-        private void Redraw()
+        private void RedrawAsync()
         {
-            if ((DateTime.Now - _lastRedrawTime).TotalMilliseconds < 100)
-                return;
-
-            _lastRedrawTime = DateTime.Now;
-
             if (mapManager == null || panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
                 return;
 
-            Rectangle viewRect = new Rectangle(
-                -panelMap.AutoScrollPosition.X,
-                -panelMap.AutoScrollPosition.Y,
-                panelMap.ClientSize.Width,
-                panelMap.ClientSize.Height
-            );
+            // Cancel any previous, now-obsolete rendering task
+            _mapRenderCts?.Cancel();
+            _mapRenderCts = new CancellationTokenSource();
+            var token = _mapRenderCts.Token;
+
+            Rectangle viewRect;
+            float zoomLevel;
+            lock (_zoomLock)
+            {
+                viewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                zoomLevel = mapZoom;
+            }
 
             if (viewRect.Width <= 0 || viewRect.Height <= 0)
                 return;
-
-            float zoomLevel = mapZoom;
-
-            DateTime lastInnerRedraw = DateTime.MinValue;
-
-            Bitmap bmp = null;
-            try
-            {
-                bmp = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
-                {
-                    if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
-                        return;
-
-                    lastInnerRedraw = DateTime.Now;
-
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(Redraw));
-                    else
-                        Redraw();
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                Debug.WriteLine($"Redraw bitmap generation failed: {ex.Message}");
-                return;
-            }
-
-            if (bmp == null)
-                return;
-
-            pictureBox1.Image?.Dispose();
-            pictureBox1.Image = bmp;
-        }
-        private CancellationTokenSource redrawCts;
-
-        private void RedrawAsync()
-        {
-            if (panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0 || mapManager == null)
-                return;
-
-            redrawCts?.Cancel();
-            redrawCts = new CancellationTokenSource();
-            var token = redrawCts.Token;
-
-            Rectangle viewRect = new Rectangle(
-                -panelMap.AutoScrollPosition.X,
-                -panelMap.AutoScrollPosition.Y,
-                panelMap.ClientSize.Width,
-                panelMap.ClientSize.Height
-            );
-
-            if (viewRect.Width <= 0 || viewRect.Height <= 0)
-                return;
-
-            DateTime lastInnerRedraw = DateTime.MinValue;
 
             Task.Run(() =>
             {
                 try
                 {
-                    var bmp = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
-                    {
-                        if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
-                        {
-                            lastInnerRedraw = DateTime.Now;
-                            this.BeginInvoke(new Action(RedrawAsync));
-                        }
-                    });
+                    // Call AssembleView, which no longer has the recursive callback
+                    var bmp = mapManager.AssembleView(zoomLevel, viewRect);
 
-                    if (bmp != null && bmp.Width > 0 && bmp.Height > 0 && !token.IsCancellationRequested)
+                    if (bmp != null && !token.IsCancellationRequested)
                     {
-                        this.Invoke(() =>
+                        // Update the UI on the UI thread
+                        this.Invoke((Action)(() =>
                         {
+                            if (token.IsCancellationRequested)
+                            {
+                                bmp.Dispose();
+                                return;
+                            }
                             pictureBox1.Image?.Dispose();
                             pictureBox1.Image = bmp;
-                        });
+                        }));
+                    }
+                    else
+                    {
+                        bmp?.Dispose();
                     }
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"RedrawAsync failed: {ex.Message}");
+                    if (!token.IsCancellationRequested)
+                    {
+                        Debug.WriteLine($"RedrawAsync failed: {ex.Message}");
+                    }
                 }
             }, token);
         }
 
         private void ApplyZoom()
         {
-            if (mapManager == null)
-                return;
+            if (mapManager == null) return;
 
-            if (panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
-            {
-                Debug.WriteLine("ApplyZoom skipped: panelMap has invalid size.");
-                return;
-            }
-
-            Rectangle view;
-            int zoom;
+            // The logic to calculate the view and zoom is now inside ApplyZoom/RedrawAsync
+            // which makes the whole flow more robust.
             lock (_zoomLock)
             {
                 Size mapSize = mapManager.GetMapSize(mapZoom);
                 mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
                 mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
-                zoom = mapZoom;
-                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
             }
 
-            if (mapRenderInProgress)
-            {
-                mapRenderQueued = true;
-                return;
-            }
-
-            mapManager.PreloadTilesAsync(zoom, view);
-
-            mapRenderInProgress = true;
-
-            Task.Run(() =>
-            {
-                Bitmap map = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
-                {
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(ApplyZoom));
-                    else
-                        ApplyZoom();
-                });
-                if (map == null) return;
-
-                void setImage()
-                {
-                    pictureBox1.Image?.Dispose();
-                    pictureBox1.Image = map;
-                    mapRenderInProgress = false;
-                    if (mapRenderQueued)
-                    {
-                        mapRenderQueued = false;
-                        ApplyZoom();
-                    }
-                }
-
-                if (pictureBox1.InvokeRequired)
-                {
-                    pictureBox1.Invoke((Action)setImage);
-                }
-                else
-                {
-                    setImage();
-                }
-            });
+            RedrawAsync(); // Perform the actual drawing.
+            PreloadMapTiles(); // Preload tiles for the new view.
         }
-
 
         private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
         {
@@ -2179,7 +2080,7 @@ namespace economy_sim
             {
                 lock (_zoomLock)
                 {
-                    ApplyZoom();
+                    RedrawAsync();
                     pendingMapUpdate = false;
                 }
             }
