@@ -479,11 +479,21 @@ namespace StrategyGame
             {
                 ms = new MemoryStream();
             }
+
+            // Save the ImageSharp image to the pooled memory stream
             img.SaveAsBmp(ms);
             ms.Position = 0;
-            var bmp = new SystemDrawing.Bitmap(ms);
+
+            // Bitmap constructed from a stream keeps that stream alive for the
+            // lifetime of the bitmap. Clone the bitmap to detach it so the
+            // stream can be reused.
+            using var temp = new SystemDrawing.Bitmap(ms);
+            var bmp = new SystemDrawing.Bitmap(temp);
+
+            // Reset and return the memory stream to the pool
             ms.SetLength(0);
             _msPool.Enqueue(ms);
+
             return bmp;
         }
 
