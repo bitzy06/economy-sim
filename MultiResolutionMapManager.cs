@@ -90,9 +90,9 @@ namespace StrategyGame
             });
             
             // Load cities off the UI thread
-            _ = Task.Run(() =>
+            _ = Task.Run(async () =>
             {
-                var loaded = CityDensityRenderer.LoadCitiesFromNaturalEarth(
+                var loaded = await CityDensityRenderer.LoadCitiesFromNaturalEarthAsync(
                     NaturalEarthOverlayGenerator.CitiesPath,
                     NaturalEarthOverlayGenerator.UrbanAreasShpPath
                 );

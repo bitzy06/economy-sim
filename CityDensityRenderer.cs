@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace StrategyGame
 {
@@ -211,6 +212,11 @@ namespace StrategyGame
 
             return cities;
         }
+        public static Task<List<City>> LoadCitiesFromNaturalEarthAsync(string placesShpPath, string urbanAreasShpPath, CancellationToken token = default)
+        {
+            return Task.Run(() => LoadCitiesFromNaturalEarth(placesShpPath, urbanAreasShpPath), token);
+        }
+
 
         /// <summary>
         /// Renders urban areas as pixel art on the provided image
@@ -247,6 +253,11 @@ namespace StrategyGame
                 }
             }
         }
+        public static Task RenderUrbanAreasAsync(Image<Rgba32> image, string urbanAreasShpPath, int mapWidth, int mapHeight, CancellationToken token = default)
+        {
+            return Task.Run(() => RenderUrbanAreas(image, urbanAreasShpPath, mapWidth, mapHeight), token);
+        }
+
 
         /// <summary>
         /// Renders city icons (visible at all zoom levels) on the provided image.
@@ -303,6 +314,11 @@ namespace StrategyGame
                 });
             }
         }
+        public static Task RenderCitiesAsync(Image<Rgba32> image, List<City> cities, int mapWidth, int mapHeight, string urbanAreasShpPath, double maxDistanceDegrees = 0.2, CancellationToken token = default)
+        {
+            return Task.Run(() => RenderCities(image, cities, mapWidth, mapHeight, urbanAreasShpPath, maxDistanceDegrees), token);
+        }
+
 
         private static void AssignUrbanAreas(List<City> cities, string urbanAreasShpPath)
         {
@@ -373,7 +389,7 @@ namespace StrategyGame
                     
                     // Pick the nearest from the candidates
                     var nearest = candidates.OrderBy(x => x.geom.Distance(pt)).First();
-                    if (nearest.geom.Distance(pt) < 0.1) // 0.1° ~ 11 km
+                    if (nearest.geom.Distance(pt) < 0.1) // 0.1Â° ~ 11 km
                     {
                         city.Name = $"{city.Name} ({nearest.name} Urban Area)";
                     }
@@ -419,7 +435,7 @@ namespace StrategyGame
                             && Random.NextDouble() < density)
                         {
                             var c = palette[Random.Next(palette.Length)];
-                            // 2×2 “building”
+                            // 2Ã—2 Â“buildingÂ”
                             ctx.Fill(c, new RectangularPolygon(x, y, 2, 2));
                         }
                     }
