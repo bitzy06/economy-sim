@@ -122,7 +122,7 @@ namespace StrategyGame
             {
                 if (_cachedUrbanTexture == null && File.Exists(UrbanTexturePath))
                 {
-                    _cachedUrbanTexture = Image.Load<Rgba32>(UrbanTexturePath);
+                    _cachedUrbanTexture = SixLabors.ImageSharp.Image.Load<Rgba32>(UrbanTexturePath);
                 }
                 return _cachedUrbanTexture;
             }
