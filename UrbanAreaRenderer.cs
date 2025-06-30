@@ -4,6 +4,8 @@ using OSGeo.OGR;
 using OSGeo.OSR;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Advanced;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -74,7 +76,9 @@ namespace StrategyGame
             ds.SetGeoTransform(gt);
             using var srs = new SpatialReference(string.Empty);
             srs.ImportFromEPSG(4326);
-            ds.SetProjection(srs.ExportToWkt());
+            string wkt;
+            srs.ExportToWkt(out wkt, null);
+            ds.SetProjection(wkt);
 
             using DataSource urbanDs = Ogr.Open(urbanPath, 0);
             Layer urbanLayer = urbanDs.GetLayerByIndex(0);
