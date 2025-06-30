@@ -3,7 +3,9 @@ using OSGeo.GDAL;
 using OSGeo.OGR;
 using OSGeo.OSR;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Advanced; // Add this using directive
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing; // Add this using directive
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -74,7 +76,8 @@ namespace StrategyGame
             ds.SetGeoTransform(gt);
             using var srs = new SpatialReference(string.Empty);
             srs.ImportFromEPSG(4326);
-            ds.SetProjection(srs.ExportToWkt());
+            srs.ExportToWkt(out string wkt, null);
+            ds.SetProjection(wkt);
 
             using DataSource urbanDs = Ogr.Open(urbanPath, 0);
             Layer urbanLayer = urbanDs.GetLayerByIndex(0);
@@ -91,7 +94,7 @@ namespace StrategyGame
             var grey = new Rgba32(130, 130, 130, 180);
 
             using var img = new Image<Rgba32>(TextureWidth, TextureHeight);
-            img.Mutate(ctx => ctx.Clear(Color.Transparent));
+            // Image starts with transparent pixels by default
 
             // Transfer existing mask to image
             for (int y = 0; y < TextureHeight; y++)
