@@ -159,6 +159,8 @@ namespace economy_sim
             this.buttonShowFactoryStats.Location = new System.Drawing.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
             this.buttonShowFactoryStats.Click += ButtonShowFactoryStats_Click;
 
+            this.buttonGenerateUrbanLayer.Click += ButtonGenerateUrbanLayer_Click;
+
             this.buttonShowConstruction.Location = new System.Drawing.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
             this.buttonShowConstruction.Click += ButtonShowConstruction_Click;
 
@@ -1882,6 +1884,19 @@ namespace economy_sim
         private void CheckBoxLogEconomy_CheckedChanged(object sender, EventArgs e)
         {
             DebugLogger.EnableEconomyLogging(checkBoxLogEconomy.Checked);
+        }
+
+        private async void ButtonGenerateUrbanLayer_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                await Task.Run(() => StrategyGame.UrbanAreaRenderer.GenerateUrbanTextureLayer());
+                MessageBox.Show("Urban texture generated", "Generation Complete");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to generate urban layer: {ex.Message}");
+            }
         }
 
         // Update the Finance tab UI
