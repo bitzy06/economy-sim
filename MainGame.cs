@@ -431,7 +431,6 @@ namespace economy_sim
 
             // Load urban area polygons for procedural generation
             UrbanAreaManager.LoadUrbanAreas();
-            Task.Run(() => UrbanAreaManager.PrecomputeAllRoadNetworks());
 
             // 3. Load World Setup from JSON
             string jsonFilePath = "world_setup.json";
