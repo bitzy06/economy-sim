@@ -54,8 +54,6 @@ namespace StrategyGame
 
         private static readonly Dictionary<string, string> DataFiles = LoadDataFiles();
 
-        private static Image<Rgba32> _cachedUrbanTexture;
-        private static readonly object UrbanLock = new();
 
         // System.Drawing fails with "Parameter is not valid" when width or height
         // exceed approximately 32k pixels.  Clamp generated bitmap dimensions to
@@ -113,20 +111,7 @@ namespace StrategyGame
         private static readonly string TerrainTifPath =
             GetDataFile("NE1_HR_LC.tif");
 
-        private static readonly string UrbanTexturePath =
-            GetDataFile("urban_texture.png");
-
-        private static Image<Rgba32> GetUrbanTexture()
-        {
-            lock (UrbanLock)
-            {
-                if (_cachedUrbanTexture == null && File.Exists(UrbanTexturePath))
-                {
-                    _cachedUrbanTexture = SixLabors.ImageSharp.Image.Load<Rgba32>(UrbanTexturePath);
-                }
-                return _cachedUrbanTexture;
-            }
-        }
+        // Urban texture is no longer used; procedural generation handles urban areas.
 
 
         /// <summary>
@@ -242,38 +227,6 @@ namespace StrategyGame
             return dest;
         }
 
-        private static void OverlayUrban(Image<Rgba32> tile, int offsetX, int offsetY, int fullWidth, int fullHeight)
-        {
-            var texture = GetUrbanTexture();
-            if (texture == null)
-                return;
-
-            float scaleX = (float)texture.Width / fullWidth;
-            float scaleY = (float)texture.Height / fullHeight;
-
-            for (int y = 0; y < tile.Height; y++)
-            {
-                Span<Rgba32> row = tile.DangerousGetPixelRowMemory(y).Span;
-                for (int x = 0; x < tile.Width; x++)
-                {
-                    int ux = (int)((offsetX + x) * scaleX);
-                    int uy = (int)((offsetY + y) * scaleY);
-                    if (ux < 0 || ux >= texture.Width || uy < 0 || uy >= texture.Height)
-                        continue;
-
-                    Rgba32 urban = texture[ux, uy];
-                    if (urban.A == 0)
-                        continue;
-
-                    Rgba32 basePix = row[x];
-                    float a = urban.A / 255f;
-                    byte r = (byte)(basePix.R * (1 - a) + urban.R * a);
-                    byte g = (byte)(basePix.G * (1 - a) + urban.G * a);
-                    byte b = (byte)(basePix.B * (1 - a) + urban.B * a);
-                    row[x] = new Rgba32(r, g, b, 255);
-                }
-            }
-        }
 
         /// <summary>
         /// Generate a terrain tile and overlay country borders.
@@ -292,7 +245,66 @@ namespace StrategyGame
 
             DrawBordersLarge(img, mask);
 
-            OverlayUrban(img, offsetX, offsetY, fullW, fullH);
+            int tileWidth = Math.Min(tileSizePx, fullW - offsetX);
+            int tileHeight = Math.Min(tileSizePx, fullH - offsetY);
+
+            GeoBounds bounds = new GeoBounds
+            {
+                MinLon = -180 + (double)offsetX / fullW * 360.0,
+                MaxLon = -180 + (double)(offsetX + tileWidth) / fullW * 360.0,
+                MaxLat = 90 - (double)offsetY / fullH * 180.0,
+                MinLat = 90 - (double)(offsetY + tileHeight) / fullH * 180.0
+            };
+            var factory = NetTopologySuite.Geometries.GeometryFactory.Default;
+            var tilePoly = factory.CreatePolygon(new[]
+            {
+                new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat),
+                new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MinLat),
+                new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MaxLat),
+                new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MaxLat),
+                new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat)
+            });
+
+            var roadColor = new Rgba32(50, 50, 50, 255);
+            var fillColor = new Rgba32(100, 100, 100, 80);
+
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
+                    continue;
+                if (!urban.Intersects(tilePoly))
+                    continue;
+
+                var network = RoadNetworkGenerator.GetOrGenerateFor(urban);
+                foreach (var road in network)
+                {
+                    double x1 = road.X1, y1 = road.Y1, x2 = road.X2, y2 = road.Y2;
+                    if (!GeometryUtil.ClipLine(bounds, ref x1, ref y1, ref x2, ref y2))
+                        continue;
+                    int px1 = (int)((x1 - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
+                    int py1 = (int)((bounds.MaxLat - y1) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
+                    int px2 = (int)((x2 - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
+                    int py2 = (int)((bounds.MaxLat - y2) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
+                    DrawLine(img, px1, py1, px2, py2, roadColor);
+                }
+
+                var visible = urban.Intersection(tilePoly);
+                if (visible != null && !visible.IsEmpty)
+                {
+                    if (visible is NetTopologySuite.Geometries.Polygon p)
+                    {
+                        RenderPolygon(img, p, bounds, tileWidth, tileHeight, fillColor);
+                    }
+                    else if (visible is NetTopologySuite.Geometries.MultiPolygon mp)
+                    {
+                        for (int i = 0; i < mp.NumGeometries; i++)
+                        {
+                            if (mp.GetGeometryN(i) is NetTopologySuite.Geometries.Polygon pp)
+                                RenderPolygon(img, pp, bounds, tileWidth, tileHeight, fillColor);
+                        }
+                    }
+                }
+            }
 
             return img;
         }
@@ -466,6 +478,69 @@ namespace StrategyGame
                 if (e2 >= dy) { err += dy; x0 += sx; }
                 if (e2 <= dx) { err += dx; y0 += sy; }
             }
+        }
+
+        private static void FillPolygon(
+            SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> img,
+            List<(int X, int Y)> points,
+            SixLabors.ImageSharp.PixelFormats.Rgba32 color)
+        {
+            if (points.Count < 3) return;
+            int minY = int.MaxValue, maxY = int.MinValue;
+            foreach (var p in points)
+            {
+                if (p.Y < minY) minY = p.Y;
+                if (p.Y > maxY) maxY = p.Y;
+            }
+            for (int y = minY; y <= maxY; y++)
+            {
+                List<int> nodeX = new();
+                for (int i = 0, j = points.Count - 1; i < points.Count; j = i++)
+                {
+                    var pi = points[i];
+                    var pj = points[j];
+                    if ((pi.Y < y && pj.Y >= y) || (pj.Y < y && pi.Y >= y))
+                    {
+                        int x = (int)(pi.X + (double)(y - pi.Y) / (pj.Y - pi.Y) * (pj.X - pi.X));
+                        nodeX.Add(x);
+                    }
+                }
+                nodeX.Sort();
+                for (int k = 0; k < nodeX.Count - 1; k += 2)
+                {
+                    int start = nodeX[k];
+                    int end = nodeX[k + 1];
+                    for (int x = start; x <= end; x++)
+                    {
+                        if (x < 0 || x >= img.Width || y < 0 || y >= img.Height) continue;
+                        var basePix = img[x, y];
+                        float a = color.A / 255f;
+                        byte r = (byte)(basePix.R * (1 - a) + color.R * a);
+                        byte g = (byte)(basePix.G * (1 - a) + color.G * a);
+                        byte b = (byte)(basePix.B * (1 - a) + color.B * a);
+                        img[x, y] = new Rgba32(r, g, b, 255);
+                    }
+                }
+            }
+        }
+
+        private static void RenderPolygon(
+            SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> img,
+            NetTopologySuite.Geometries.Polygon poly,
+            GeoBounds bounds,
+            int tileWidth,
+            int tileHeight,
+            SixLabors.ImageSharp.PixelFormats.Rgba32 color)
+        {
+            var coords = poly.ExteriorRing.Coordinates;
+            var pts = new List<(int X, int Y)>(coords.Length);
+            foreach (var c in coords)
+            {
+                int px = (int)((c.X - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
+                int py = (int)((bounds.MaxLat - c.Y) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
+                pts.Add((px, py));
+            }
+            FillPolygon(img, pts, color);
         }
 
         /// <summary>
