@@ -123,68 +123,71 @@ namespace StrategyGame
 
             var result = new CityDataModel { Id = Guid.NewGuid() };
 
+            // --- START: Copied and adapted from GetOrGenerateFor ---
             var env = urbanArea.EnvelopeInternal;
-            double step = Math.Min(env.Width, env.Height) / 20.0;
-            var rnd = new Random();
+            double diagonal = System.Math.Sqrt(env.Width * env.Width + env.Height * env.Height);
+            int divisions = System.Math.Clamp((int)(diagonal * 40.0), 10, 150);
+
+            double stepX = env.Width / divisions;
+            double stepY = env.Height / divisions;
+
+            var gridLines = new List<LineSegment>();
+            for (int i = 0; i <= divisions; i++)
+            {
+                double x = env.MinX + i * stepX;
+                gridLines.Add(new LineSegment(x, env.MinY, x, env.MaxY));
+            }
+            for (int j = 0; j <= divisions; j++)
+            {
+                double y = env.MinY + j * stepY;
+                gridLines.Add(new LineSegment(env.MinX, y, env.MaxX, y));
+            }
+
+            var clippedNetwork = new List<LineSegment>();
             var factory = Nts.GeometryFactory.Default;
 
-            var network = new List<LineSegment>();
-            var queue = new Queue<(Nts.Coordinate start, double angle, int depth)>();
-            var center = new Nts.Coordinate((env.MinX + env.MaxX) / 2.0, (env.MinY + env.MaxY) / 2.0);
-            queue.Enqueue((center, 0.0, 0));
-            int maxDepth = 5;
-
-            while (queue.Count > 0)
+            foreach (var line in gridLines)
             {
-                var (start, angle, depth) = queue.Dequeue();
-                double len = step * (1.0 + rnd.NextDouble() * 0.5);
-                var end = new Nts.Coordinate(start.X + Math.Cos(angle) * len, start.Y + Math.Sin(angle) * len);
-                var seg = new LineSegment(start.X, start.Y, end.X, end.Y);
-
-                seg = globalGoals(seg, popDensity, env);
-                var constrained = localConstraints(seg, network, waterMap, terrain, env);
-                if (constrained == null)
-                    continue;
-
-                var ls = factory.CreateLineString(new[]
+                var lineString = factory.CreateLineString(new[]
                 {
-                    new Nts.Coordinate(constrained.X1, constrained.Y1),
-                    new Nts.Coordinate(constrained.X2, constrained.Y2)
+                    new Nts.Coordinate(line.X1, line.Y1),
+                    new Nts.Coordinate(line.X2, line.Y2)
                 });
 
-                if (!urbanArea.Intersects(ls))
+                if (!urbanArea.Intersects(lineString))
                     continue;
 
-                var clipped = urbanArea.Intersection(ls);
+                var intersection = urbanArea.Intersection(lineString);
 
-                if (clipped is Nts.LineString cl)
+                if (intersection is Nts.LineString ls)
                 {
-                    var coords = cl.Coordinates;
-                    for (int i = 0; i < coords.Length - 1; i++)
-                        network.Add(new LineSegment(coords[i].X, coords[i].Y, coords[i + 1].X, coords[i + 1].Y));
+                    var coords = ls.Coordinates;
+                    for (int c = 0; c < coords.Length - 1; c++)
+                    {
+                        clippedNetwork.Add(new LineSegment(
+                            coords[c].X, coords[c].Y,
+                            coords[c + 1].X, coords[c + 1].Y));
+                    }
                 }
-                else if (clipped is Nts.MultiLineString mls)
+                else if (intersection is Nts.MultiLineString mls)
                 {
                     foreach (var geom in mls.Geometries)
                     {
-                        if (geom is Nts.LineString sub)
+                        if (geom is Nts.LineString subLs)
                         {
-                            var coords = sub.Coordinates;
-                            for (int i = 0; i < coords.Length - 1; i++)
-                                network.Add(new LineSegment(coords[i].X, coords[i].Y, coords[i + 1].X, coords[i + 1].Y));
+                            var coords = subLs.Coordinates;
+                            for (int c = 0; c < coords.Length - 1; c++)
+                            {
+                                clippedNetwork.Add(new LineSegment(
+                                    coords[c].X, coords[c].Y,
+                                    coords[c + 1].X, coords[c + 1].Y));
+                            }
                         }
                     }
                 }
-
-                if (depth < maxDepth)
-                {
-                    double branch = Math.PI / 6.0;
-                    queue.Enqueue((new Nts.Coordinate(constrained.X2, constrained.Y2), angle + branch, depth + 1));
-                    queue.Enqueue((new Nts.Coordinate(constrained.X2, constrained.Y2), angle - branch, depth + 1));
-                }
             }
-
-            result.RoadNetwork = network;
+            result.RoadNetwork = clippedNetwork;
+            // --- END: Copied logic ---
 
             ParcelGenerator.GenerateParcels(result);
             LandUseAssigner.AssignLandUse(result);
