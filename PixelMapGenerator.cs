@@ -54,6 +54,9 @@ namespace StrategyGame
 
         private static readonly Dictionary<string, string> DataFiles = LoadDataFiles();
 
+        private static Image<Rgba32> _cachedUrbanTexture;
+        private static readonly object UrbanLock = new();
+
         // System.Drawing fails with "Parameter is not valid" when width or height
         // exceed approximately 32k pixels.  Clamp generated bitmap dimensions to
         // stay below this threshold.
@@ -109,6 +112,21 @@ namespace StrategyGame
         // Terrain map used for pixel-art generation.
         private static readonly string TerrainTifPath =
             GetDataFile("NE1_HR_LC.tif");
+
+        private static readonly string UrbanTexturePath =
+            GetDataFile("urban_texture.png");
+
+        private static Image<Rgba32> GetUrbanTexture()
+        {
+            lock (UrbanLock)
+            {
+                if (_cachedUrbanTexture == null && File.Exists(UrbanTexturePath))
+                {
+                    _cachedUrbanTexture = SixLabors.ImageSharp.Image.Load<Rgba32>(UrbanTexturePath);
+                }
+                return _cachedUrbanTexture;
+            }
+        }
 
 
         /// <summary>
@@ -224,6 +242,39 @@ namespace StrategyGame
             return dest;
         }
 
+        private static void OverlayUrban(Image<Rgba32> tile, int offsetX, int offsetY, int fullWidth, int fullHeight)
+        {
+            var texture = GetUrbanTexture();
+            if (texture == null)
+                return;
+
+            float scaleX = (float)texture.Width / fullWidth;
+            float scaleY = (float)texture.Height / fullHeight;
+
+            for (int y = 0; y < tile.Height; y++)
+            {
+                Span<Rgba32> row = tile.DangerousGetPixelRowMemory(y).Span;
+                for (int x = 0; x < tile.Width; x++)
+                {
+                    int ux = (int)((offsetX + x) * scaleX);
+                    int uy = (int)((offsetY + y) * scaleY);
+                    if (ux < 0 || ux >= texture.Width || uy < 0 || uy >= texture.Height)
+                        continue;
+
+                    Rgba32 urban = texture[ux, uy];
+                    if (urban.A == 0)
+                        continue;
+
+                    Rgba32 basePix = row[x];
+                    float a = urban.A / 255f;
+                    byte r = (byte)(basePix.R * (1 - a) + urban.R * a);
+                    byte g = (byte)(basePix.G * (1 - a) + urban.G * a);
+                    byte b = (byte)(basePix.B * (1 - a) + urban.B * a);
+                    row[x] = new Rgba32(r, g, b, 255);
+                }
+            }
+        }
+
         /// <summary>
         /// Generate a terrain tile and overlay country borders.
         /// </summary>
@@ -240,6 +291,8 @@ namespace StrategyGame
             var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
 
             DrawBordersLarge(img, mask);
+
+            OverlayUrban(img, offsetX, offsetY, fullW, fullH);
 
             return img;
         }
