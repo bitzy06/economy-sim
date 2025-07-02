@@ -47,7 +47,7 @@ namespace StrategyGame
         private static Bitmap ImageSharpToBitmap(Image<Rgba32> img)
         {
             using var ms = new MemoryStream();
-            img.SaveAsBmp(ms);
+            img.SaveAsPng(ms);
             ms.Position = 0;
             return new Bitmap(ms);
         }

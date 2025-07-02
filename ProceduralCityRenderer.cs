@@ -117,11 +117,16 @@ namespace StrategyGame
                     {
                         if (x < 0 || x >= img.Width || y < 0 || y >= img.Height) continue;
                         var basePix = img[x, y];
-                        float a = color.A / 255f;
-                        byte r = (byte)(basePix.R * (1 - a) + color.R * a);
-                        byte g = (byte)(basePix.G * (1 - a) + color.G * a);
-                        byte b = (byte)(basePix.B * (1 - a) + color.B * a);
-                        img[x, y] = new Rgba32(r, g, b, 255);
+                        float srcA = color.A / 255f;
+                        float dstA = basePix.A / 255f;
+                        float outA = srcA + dstA * (1 - srcA);
+                        if (outA <= 0)
+                            continue;
+                        byte outAlpha = (byte)(outA * 255);
+                        byte r = (byte)((color.R * srcA + basePix.R * dstA * (1 - srcA)) / outA);
+                        byte g = (byte)((color.G * srcA + basePix.G * dstA * (1 - srcA)) / outA);
+                        byte b = (byte)((color.B * srcA + basePix.B * dstA * (1 - srcA)) / outA);
+                        img[x, y] = new Rgba32(r, g, b, outAlpha);
                     }
                 }
             }
