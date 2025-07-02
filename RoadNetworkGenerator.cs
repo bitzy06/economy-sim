@@ -65,7 +65,7 @@ namespace StrategyGame
                             coords[c + 1].X, coords[c + 1].Y));
                     }
                 }
-                else if (intersection is MultiLineString mls)
+                else if (intersection is Nts.MultiLineString mls)
                 {
                     foreach (var geom in mls.Geometries)
                     {
