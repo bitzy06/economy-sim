@@ -210,7 +210,7 @@ namespace economy_sim
                 });
             }
 
-            pictureBox1.SD.Size = panelMap.ClientSize;
+            pictureBox1.Size = panelMap.ClientSize;
             pictureBox1.Location = new SD.Point(0, 0);
         }
 
@@ -460,8 +460,8 @@ namespace economy_sim
             SD.Bitmap dest = new SD.Bitmap(width, height);
             using (var g = SD.Graphics.FromImage(dest))
             {
-                g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.InterpolationMode = SDD.InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = SDD.PixelOffsetMode.Half;
                 g.DrawImage(src, 0, 0, width, height);
             }
             return dest;
@@ -1576,9 +1576,9 @@ namespace economy_sim
             TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.NoPadding; // Removed VerticalCenter
 
             // Draw main text part
-            SD.Size mainTextSize = TextRenderer.MeasureText(e.SD.Graphics, mainTextPart, itemFont, itemDrawBounds.SD.Size, flags);
+            SD.Size mainTextSize = TextRenderer.MeasureText(e.Graphics, mainTextPart, itemFont, itemDrawBounds.Size, flags);
             SD.Rectangle mainTextRect = new SD.Rectangle(itemDrawBounds.Left, itemDrawBounds.Top, mainTextSize.Width, itemDrawBounds.Height);
-            TextRenderer.DrawText(e.SD.Graphics, mainTextPart, itemFont, mainTextRect, defaultTextColor, flags);
+            TextRenderer.DrawText(e.Graphics, mainTextPart, itemFont, mainTextRect, defaultTextColor, flags);
 
             if (!string.IsNullOrEmpty(changeTextWithSpaceAndParens))
             {
@@ -1588,9 +1588,9 @@ namespace economy_sim
                 else if (contentInsideParens.Contains("-"))
                     changeColor = SD.Color.Red;
 
-                SD.Size changeTextSize = TextRenderer.MeasureText(e.SD.Graphics, changeTextWithSpaceAndParens, itemFont, itemDrawBounds.SD.Size, flags);
+                SD.Size changeTextSize = TextRenderer.MeasureText(e.Graphics, changeTextWithSpaceAndParens, itemFont, itemDrawBounds.Size, flags);
                 SD.Rectangle changeTextRect = new SD.Rectangle(itemDrawBounds.Left + mainTextSize.Width, itemDrawBounds.Top, changeTextSize.Width, itemDrawBounds.Height);
-                TextRenderer.DrawText(e.SD.Graphics, changeTextWithSpaceAndParens, itemFont, changeTextRect, changeColor, flags);
+                TextRenderer.DrawText(e.Graphics, changeTextWithSpaceAndParens, itemFont, changeTextRect, changeColor, flags);
             }
 
             // Draw focus rectangle if the item has focus
