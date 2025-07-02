@@ -1,97 +1,21 @@
 using Nts = NetTopologySuite.Geometries;
-using System.Collections.Generic;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace StrategyGame
 {
     public static class RoadNetworkGenerator
     {
-        private static readonly Dictionary<Nts.Polygon, List<LineSegment>> networkCache = new();
         private static readonly Dictionary<string, CityDataModel> modelCache = new();
-
-        public static List<LineSegment> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
-        {
-            // Low zoom levels use a simple fill instead of detailed roads
-            if (cellSize < 40)
-                return new List<LineSegment>();
-
-            if (networkCache.TryGetValue(urbanArea, out var cached))
-                return cached;
-
-            var env = urbanArea.EnvelopeInternal;
-            double diagonal = System.Math.Sqrt(env.Width * env.Width + env.Height * env.Height);
-            int divisions = System.Math.Clamp((int)(diagonal * 40.0), 5, 100);
-
-            double stepX = env.Width / divisions;
-            double stepY = env.Height / divisions;
-
-            var gridLines = new List<LineSegment>();
-            for (int i = 0; i <= divisions; i++)
-            {
-                double x = env.MinX + i * stepX;
-                gridLines.Add(new LineSegment(x, env.MinY, x, env.MaxY));
-            }
-            for (int j = 0; j <= divisions; j++)
-            {
-                double y = env.MinY + j * stepY;
-                gridLines.Add(new LineSegment(env.MinX, y, env.MaxX, y));
-            }
-
-            var clippedNetwork = new List<LineSegment>();
-            var factory = Nts.GeometryFactory.Default;
-
-            foreach (var line in gridLines)
-            {
-                var lineString = factory.CreateLineString(new[]
-                {
-                    new Nts.Coordinate(line.X1, line.Y1),
-                    new Nts.Coordinate(line.X2, line.Y2)
-                });
-
-                if (!urbanArea.Intersects(lineString))
-                    continue;
-
-                var intersection = urbanArea.Intersection(lineString);
-
-                if (intersection is Nts.LineString ls)
-                {
-                    var coords = ls.Coordinates;
-                    for (int c = 0; c < coords.Length - 1; c++)
-                    {
-                        clippedNetwork.Add(new LineSegment(
-                            coords[c].X, coords[c].Y,
-                            coords[c + 1].X, coords[c + 1].Y));
-                    }
-                }
-                else if (intersection is Nts.MultiLineString mls)
-                {
-                    foreach (var geom in mls.Geometries)
-                    {
-                        if (geom is Nts.LineString subLs)
-                        {
-                            var coords = subLs.Coordinates;
-                            for (int c = 0; c < coords.Length - 1; c++)
-                            {
-                                clippedNetwork.Add(new LineSegment(
-                                    coords[c].X, coords[c].Y,
-                                    coords[c + 1].X, coords[c + 1].Y));
-                            }
-                        }
-                    }
-                }
-            }
-
-            networkCache[urbanArea] = clippedNetwork;
-            return clippedNetwork;
-        }
 
         public static async Task<CityDataModel?> LoadModelAsync(Nts.Polygon urbanArea)
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
-            string hash = Math.Abs(urbanArea.EnvelopeInternal.GetHashCode()).ToString();
+            string hash = Math.Abs(urbanArea.GetHashCode()).ToString();
             string path = Path.Combine(dir, $"{hash}.json");
 
             if (modelCache.TryGetValue(hash, out var cachedModel))
@@ -101,8 +25,11 @@ namespace StrategyGame
             {
                 var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
                 var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(json);
-                modelCache[hash] = model;
-                return model;
+                if (model != null)
+                {
+                    modelCache[hash] = model;
+                    return model;
+                }
             }
             return null;
         }
@@ -115,80 +42,65 @@ namespace StrategyGame
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
-            string hash = Math.Abs(urbanArea.EnvelopeInternal.GetHashCode()).ToString();
+            string hash = Math.Abs(urbanArea.GetHashCode()).ToString();
             string path = Path.Combine(dir, $"{hash}.json");
 
             if (modelCache.TryGetValue(hash, out var cachedModel))
                 return cachedModel;
 
             var result = new CityDataModel { Id = Guid.NewGuid() };
-
-            // --- START: Copied and adapted from GetOrGenerateFor ---
             var env = urbanArea.EnvelopeInternal;
-            double diagonal = System.Math.Sqrt(env.Width * env.Width + env.Height * env.Height);
-            int divisions = System.Math.Clamp((int)(diagonal * 40.0), 10, 150);
-
-            double stepX = env.Width / divisions;
-            double stepY = env.Height / divisions;
-
-            var gridLines = new List<LineSegment>();
-            for (int i = 0; i <= divisions; i++)
-            {
-                double x = env.MinX + i * stepX;
-                gridLines.Add(new LineSegment(x, env.MinY, x, env.MaxY));
-            }
-            for (int j = 0; j <= divisions; j++)
-            {
-                double y = env.MinY + j * stepY;
-                gridLines.Add(new LineSegment(env.MinX, y, env.MaxX, y));
-            }
-
-            var clippedNetwork = new List<LineSegment>();
+            var network = new List<Nts.LineString>();
+            var queue = new Queue<(Nts.Coordinate start, double angle, int depth)>();
+            var rnd = new Random();
             var factory = Nts.GeometryFactory.Default;
 
-            foreach (var line in gridLines)
+            // Seed initial road growth points
+            var center = urbanArea.InteriorPoint;
+            queue.Enqueue((center.Coordinate, rnd.NextDouble() * 2 * Math.PI, 0));
+            queue.Enqueue((center.Coordinate, rnd.NextDouble() * 2 * Math.PI, 0));
+
+            int roadsGenerated = 0;
+            const int roadLimit = 300; // Stop after a certain number of segments
+
+            while (queue.Count > 0 && roadsGenerated < roadLimit)
             {
-                var lineString = factory.CreateLineString(new[]
+                var (start, angle, depth) = queue.Dequeue();
+
+                // Propose a new segment
+                var proposedSegment = globalGoals(start, angle, env, popDensity, rnd);
+                if (!urbanArea.Intersects(proposedSegment)) continue;
+
+                // Check constraints and handle intersections (noding)
+                var finalSegments = localConstraints(proposedSegment, network, waterMap, env, factory);
+
+                foreach (var segment in finalSegments)
                 {
-                    new Nts.Coordinate(line.X1, line.Y1),
-                    new Nts.Coordinate(line.X2, line.Y2)
-                });
+                    network.Add(segment);
+                    roadsGenerated++;
 
-                if (!urbanArea.Intersects(lineString))
-                    continue;
-
-                var intersection = urbanArea.Intersection(lineString);
-
-                if (intersection is Nts.LineString ls)
-                {
-                    var coords = ls.Coordinates;
-                    for (int c = 0; c < coords.Length - 1; c++)
+                    // Add new growth points to the queue
+                    if (depth < 8 && rnd.NextDouble() < 0.7) // Branching probability
                     {
-                        clippedNetwork.Add(new LineSegment(
-                            coords[c].X, coords[c].Y,
-                            coords[c + 1].X, coords[c + 1].Y));
-                    }
-                }
-                else if (intersection is Nts.MultiLineString mls)
-                {
-                    foreach (var geom in mls.Geometries)
-                    {
-                        if (geom is Nts.LineString subLs)
+                        var endPoint = segment.EndPoint.Coordinate;
+                        var newAngle = Math.Atan2(endPoint.Y - segment.StartPoint.Y, endPoint.X - segment.StartPoint.X);
+
+                        // Main branch continues forward
+                        queue.Enqueue((endPoint, newAngle + (rnd.NextDouble() - 0.5) * 0.2, depth + 1));
+
+                        // Side branch
+                        if (rnd.NextDouble() < 0.3) // Chance of a side branch
                         {
-                            var coords = subLs.Coordinates;
-                            for (int c = 0; c < coords.Length - 1; c++)
-                            {
-                                clippedNetwork.Add(new LineSegment(
-                                    coords[c].X, coords[c].Y,
-                                    coords[c + 1].X, coords[c + 1].Y));
-                            }
+                            double branchAngle = Math.PI / 2 * (rnd.Next(0, 2) == 0 ? 1 : -1);
+                            queue.Enqueue((endPoint, newAngle + branchAngle + (rnd.NextDouble() - 0.5) * 0.3, depth + 1));
                         }
                     }
                 }
             }
-            result.RoadNetwork = clippedNetwork;
-            // --- END: Copied logic ---
 
+            result.RoadNetwork = network.Select(ls => new LineSegment(ls.StartPoint.X, ls.StartPoint.Y, ls.EndPoint.X, ls.EndPoint.Y)).ToList();
+
+            // This part will now work correctly
             ParcelGenerator.GenerateParcels(result);
             LandUseAssigner.AssignLandUse(result);
             BuildingGenerator.GenerateBuildings(result);
@@ -199,60 +111,80 @@ namespace StrategyGame
             return result;
         }
 
-        private static LineSegment globalGoals(LineSegment proposed, PopulationDensityMap density, Nts.Envelope env)
+        private static Nts.LineString globalGoals(Nts.Coordinate start, double angle, Nts.Envelope env, PopulationDensityMap density, Random rnd)
         {
-            double normX = (proposed.X2 - env.MinX) / env.Width;
-            double normY = (proposed.Y2 - env.MinY) / env.Height;
-            float center = density.GetDensity(normX, normY);
-            float ahead = density.GetDensity(Math.Clamp(normX + 0.02, 0, 1), Math.Clamp(normY + 0.02, 0, 1));
-            double factor = 1.0 + (ahead - center) * 0.5;
-            double dx = proposed.X2 - proposed.X1;
-            double dy = proposed.Y2 - proposed.Y1;
-            double newLen = Math.Sqrt(dx * dx + dy * dy) * factor;
-            double angle = Math.Atan2(dy, dx);
-            return new LineSegment(proposed.X1, proposed.Y1,
-                proposed.X1 + Math.Cos(angle) * newLen,
-                proposed.Y1 + Math.Sin(angle) * newLen);
-        }
+            double step = Math.Min(env.Width, env.Height) / 15.0;
+            double bestAngle = angle;
+            float maxDensity = -1f;
 
-        private static LineSegment? localConstraints(
-            LineSegment proposed,
-            List<LineSegment> network,
-            WaterBodyMap water,
-            TerrainData terrain,
-            Nts.Envelope env)
-        {
-            var factory = Nts.GeometryFactory.Default;
-            var ls = factory.CreateLineString(new[]
+            // Sample angles to find the most promising direction based on population density
+            for (int i = 0; i < 5; i++)
             {
-                new Nts.Coordinate(proposed.X1, proposed.Y1),
-                new Nts.Coordinate(proposed.X2, proposed.Y2)
-            });
+                double testAngle = angle + (rnd.NextDouble() - 0.5) * (Math.PI / 2);
+                var testEnd = new Nts.Coordinate(start.X + Math.Cos(testAngle) * step, start.Y + Math.Sin(testAngle) * step);
+                double normX = (testEnd.X - env.MinX) / env.Width;
+                double normY = (testEnd.Y - env.MinY) / env.Height;
 
-            // snap to existing roads
-            foreach (var existing in network)
-            {
-                var ex = factory.CreateLineString(new[]
+                float currentDensity = density.GetDensity(normX, normY);
+                if (currentDensity > maxDensity)
                 {
-                    new Nts.Coordinate(existing.X1, existing.Y1),
-                    new Nts.Coordinate(existing.X2, existing.Y2)
-                });
-                if (ls.Distance(ex) < env.Width * 0.01)
-                {
-                    var inter = ls.Intersection(ex);
-                    if (inter is Nts.Point p)
-                        return new LineSegment(proposed.X1, proposed.Y1, p.X, p.Y);
+                    maxDensity = currentDensity;
+                    bestAngle = testAngle;
                 }
             }
 
-            double midX = (proposed.X1 + proposed.X2) / 2.0;
-            double midY = (proposed.Y1 + proposed.Y2) / 2.0;
-            double nx = (midX - env.MinX) / env.Width;
-            double ny = (midY - env.MinY) / env.Height;
-            if (water.IsWater(nx, ny))
-                return null;
+            double len = step * (0.8 + rnd.NextDouble() * 0.4);
+            var end = new Nts.Coordinate(start.X + Math.Cos(bestAngle) * len, start.Y + Math.Sin(bestAngle) * len);
+            return new Nts.LineString(new[] { start, end });
+        }
 
-            return proposed;
+        private static List<Nts.LineString> localConstraints(
+            Nts.LineString proposed,
+            List<Nts.LineString> network,
+            WaterBodyMap water,
+            Nts.Envelope env,
+            Nts.GeometryFactory factory)
+        {
+            var segmentsToAdd = new List<Nts.LineString> { proposed };
+            double snapThreshold = env.Width * 0.02;
+
+            // Water check
+            double normX = (proposed.EndPoint.X - env.MinX) / env.Width;
+            double normY = (proposed.EndPoint.Y - env.MinY) / env.Height;
+            if (water.IsWater(normX, normY))
+            {
+                return new List<Nts.LineString>(); // Discard if it ends in water
+            }
+
+            // Intersection and Noding Check
+            for (int i = 0; i < network.Count; i++)
+            {
+                var existing = network[i];
+                if (proposed.Distance(existing) < snapThreshold)
+                {
+                    var intersectionPoint = proposed.Intersection(existing);
+                    if (intersectionPoint is Nts.Point p && p.IsEmpty == false)
+                    {
+                        // An intersection exists. We must "node" the network.
+                        // 1. Remove the existing segment from the network.
+                        network.RemoveAt(i);
+
+                        // 2. Add back the two new segments created by splitting the existing road.
+                        if (existing.StartPoint.Coordinate.Distance(p.Coordinate) > 1e-6)
+                            network.Add(factory.CreateLineString(new[] { existing.StartPoint.Coordinate, p.Coordinate }));
+                        if (existing.EndPoint.Coordinate.Distance(p.Coordinate) > 1e-6)
+                            network.Add(factory.CreateLineString(new[] { p.Coordinate, existing.EndPoint.Coordinate }));
+
+                        // 3. Shorten the proposed segment so it ends at the new intersection.
+                        var shortenedProposed = factory.CreateLineString(new[] { proposed.StartPoint.Coordinate, p.Coordinate });
+
+                        // 4. Return the new, valid segment to be added.
+                        return new List<Nts.LineString> { shortenedProposed };
+                    }
+                }
+            }
+
+            return segmentsToAdd;
         }
     }
 }
