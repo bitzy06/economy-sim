@@ -1,3 +1,7 @@
 files to be used that are local not on git
 NE1_HR_LC.tif
 ne_10m_admin_0_countries.shp
+
+ne_10m_urban_areas.shp
+ne_10m_populated_places.shp
+urban_texture.png
