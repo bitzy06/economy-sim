@@ -1,8 +1,10 @@
 using Nts = NetTopologySuite.Geometries;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace StrategyGame
@@ -11,6 +13,11 @@ namespace StrategyGame
     {
         private static readonly Dictionary<Nts.Polygon, List<LineSegment>> networkCache = new();
         private static readonly Dictionary<string, CityDataModel> modelCache = new();
+        private static readonly JsonSerializerOptions jsonOptions = new()
+        {
+            IncludeFields = true,
+            WriteIndented = true
+        };
 
         public static List<LineSegment> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
         {
@@ -91,7 +98,7 @@ namespace StrategyGame
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
-            string hash = Math.Abs(urbanArea.GetHashCode()).ToString();
+            string hash = Math.Abs(urbanArea.EnvelopeInternal.GetHashCode()).ToString();
             string path = Path.Combine(dir, $"{hash}.json");
 
             if (modelCache.TryGetValue(hash, out var cachedModel))
@@ -100,10 +107,11 @@ namespace StrategyGame
             if (File.Exists(path))
             {
                 var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
-                var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(json);
+                var model = JsonSerializer.Deserialize<CityDataModel>(json, jsonOptions);
                 if (model != null)
                 {
                     modelCache[hash] = model;
+                    Debug.WriteLine($"Loaded model {hash}: {model.RoadNetwork.Count} segments, {model.Parcels.Count} parcels");
                     return model;
                 }
             }
@@ -118,7 +126,7 @@ namespace StrategyGame
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
-            string hash = Math.Abs(urbanArea.GetHashCode()).ToString();
+            string hash = Math.Abs(urbanArea.EnvelopeInternal.GetHashCode()).ToString();
             string path = Path.Combine(dir, $"{hash}.json");
 
             if (modelCache.TryGetValue(hash, out var cachedModel))
@@ -197,7 +205,7 @@ namespace StrategyGame
             LandUseAssigner.AssignLandUse(result);
             BuildingGenerator.GenerateBuildings(result);
 
-            var jsonOut = System.Text.Json.JsonSerializer.Serialize(result);
+            var jsonOut = JsonSerializer.Serialize(result, jsonOptions);
             await File.WriteAllTextAsync(path, jsonOut).ConfigureAwait(false);
             modelCache[hash] = result;
             return result;
