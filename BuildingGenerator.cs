@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
 using System.Collections.Generic;
 
 namespace StrategyGame
@@ -8,10 +8,10 @@ namespace StrategyGame
         public static List<Building> GenerateBuildings(CityDataModel model)
         {
             var buildings = new List<Building>();
-            var gf = GeometryFactory.Default;
+            var gf = Nts.GeometryFactory.Default;
             foreach (var parcel in model.Parcels)
             {
-                Geometry foot = parcel.Shape;
+                Nts.Geometry foot = parcel.Shape;
                 switch (parcel.LandUse)
                 {
                     case LandUseType.Residential:
@@ -26,7 +26,7 @@ namespace StrategyGame
                     case LandUseType.Park:
                         continue;
                 }
-                if (foot is Polygon p && !foot.IsEmpty)
+                if (foot is Nts.Polygon p && !foot.IsEmpty)
                     buildings.Add(new Building { Footprint = p, LandUse = parcel.LandUse });
             }
             model.Buildings = buildings;

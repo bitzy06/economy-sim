@@ -3,8 +3,8 @@ using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Imaging;
+using SD = System.Drawing;
+using SDI = System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,8 +15,8 @@ namespace StrategyGame
     {
         private readonly int _baseWidth;
         private readonly int _baseHeight;
-        private readonly Dictionary<(int cellSize, int x, int y), Bitmap> _tileCache = new();
-        private readonly Dictionary<(int cellSize, int x, int y), Task<Bitmap>> _inFlight = new();
+        private readonly Dictionary<(int cellSize, int x, int y), SD.Bitmap> _tileCache = new();
+        private readonly Dictionary<(int cellSize, int x, int y), Task<SD.Bitmap>> _inFlight = new();
         private readonly object _cacheLock = new();
         private static readonly object _fileLockDictLock = new();
         private static readonly Dictionary<string, SemaphoreSlim> _fileLocks = new();
@@ -44,12 +44,12 @@ namespace StrategyGame
             }
         }
 
-        private static Bitmap ImageSharpToBitmap(Image<Rgba32> img)
+        private static SD.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
         {
             using var ms = new MemoryStream();
             img.SaveAsPng(ms);
             ms.Position = 0;
-            return new Bitmap(ms);
+            return new SD.Bitmap(ms);
         }
 
         private int GetCellSize(float zoom)
@@ -100,7 +100,7 @@ namespace StrategyGame
             return Path.Combine(tileFolder, $"{tileX}_{tileY}.png");
         }
 
-        public Task<Bitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
+        public Task<SD.Bitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
         {
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
@@ -121,7 +121,7 @@ namespace StrategyGame
             }
         }
 
-        private async Task<Bitmap> LoadTileInternalAsync(int cellSize, int tileX, int tileY, CancellationToken token)
+        private async Task<SD.Bitmap> LoadTileInternalAsync(int cellSize, int tileX, int tileY, CancellationToken token)
         {
             var key = (cellSize, tileX, tileY);
             lock (_cacheLock)
@@ -173,13 +173,13 @@ namespace StrategyGame
             return bitmap;
         }
 
-        public Bitmap AssembleView(float zoom, Rectangle viewArea, Action triggerRefresh = null)
+        public SD.Bitmap AssembleView(float zoom, SD.Rectangle viewArea, Action triggerRefresh = null)
         {
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
-            var output = new Bitmap(viewArea.Width, viewArea.Height, PixelFormat.Format32bppArgb);
-            using var g = Graphics.FromImage(output);
-            g.Clear(Color.Transparent);
+            var output = new SD.Bitmap(viewArea.Width, viewArea.Height, SDI.PixelFormat.Format32bppArgb);
+            using var g = SD.Graphics.FromImage(output);
+            g.Clear(SD.Color.Transparent);
 
             int tileStartX = Math.Max(0, viewArea.X / tileSize);
             int tileStartY = Math.Max(0, viewArea.Y / tileSize);
@@ -191,13 +191,13 @@ namespace StrategyGame
                 for (int tx = tileStartX; tx < tileEndX; tx++)
                 {
                     var key = (cellSize, tx, ty);
-                    var rect = new Rectangle(
+                    var rect = new SD.Rectangle(
                         tx * tileSize - viewArea.X,
                         ty * tileSize - viewArea.Y,
                         tileSize,
                         tileSize);
 
-                    Bitmap tile = null;
+                    SD.Bitmap tile = null;
                     lock (_cacheLock)
                         _tileCache.TryGetValue(key, out tile);
 
@@ -219,7 +219,7 @@ namespace StrategyGame
             return output;
         }
 
-        public void PreloadVisibleTiles(float zoom, Rectangle viewRect)
+        public void PreloadVisibleTiles(float zoom, SD.Rectangle viewRect)
         {
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;

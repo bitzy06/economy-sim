@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
 using System.Collections.Generic;
 
 namespace StrategyGame
@@ -9,7 +9,7 @@ namespace StrategyGame
         {
             if (model.Parcels == null)
                 return;
-            var gf = GeometryFactory.Default;
+            var gf = Nts.GeometryFactory.Default;
             foreach (var parcel in model.Parcels)
             {
                 double best = double.MaxValue;
@@ -17,8 +17,8 @@ namespace StrategyGame
                 {
                     var ls = gf.CreateLineString(new[]
                     {
-                        new Coordinate(seg.X1, seg.Y1),
-                        new Coordinate(seg.X2, seg.Y2)
+                        new Nts.Coordinate(seg.X1, seg.Y1),
+                        new Nts.Coordinate(seg.X2, seg.Y2)
                     });
                     double d = ls.Distance(parcel.Shape);
                     if (d < best) best = d;
