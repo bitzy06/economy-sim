@@ -24,14 +24,14 @@ namespace StrategyGame
 
             foreach (Nts.Polygon poly in pizer.GetPolygons())
             {
-                Subdivide(poly, parcels, 0);
+                SubdivideBlock(poly, parcels);
             }
 
             model.Parcels = parcels;
             return parcels;
         }
 
-        private static void Subdivide(Nts.Polygon poly, List<Parcel> output, int depth)
+        private static void RecursiveOBBSplitting(Nts.Polygon poly, List<Parcel> output, int depth)
         {
             const double MinArea = 0.0001; // arbitrary small area threshold
             if (poly.Area < MinArea || depth > 4)
@@ -50,9 +50,9 @@ namespace StrategyGame
                 var left = poly.Intersection(leftRect);
                 var right = poly.Intersection(rightRect);
                 if (left is Nts.Polygon lp)
-                    Subdivide(lp, output, depth + 1);
+                    RecursiveOBBSplitting(lp, output, depth + 1);
                 if (right is Nts.Polygon rp)
-                    Subdivide(rp, output, depth + 1);
+                    RecursiveOBBSplitting(rp, output, depth + 1);
             }
             else
             {
@@ -62,10 +62,27 @@ namespace StrategyGame
                 var bot = poly.Intersection(botRect);
                 var top = poly.Intersection(topRect);
                 if (bot is Nts.Polygon bp)
-                    Subdivide(bp, output, depth + 1);
+                    RecursiveOBBSplitting(bp, output, depth + 1);
                 if (top is Nts.Polygon tp)
-                    Subdivide(tp, output, depth + 1);
+                    RecursiveOBBSplitting(tp, output, depth + 1);
             }
+        }
+
+        private static void SkeletonBasedSubdivision(Nts.Polygon poly, List<Parcel> output)
+        {
+            // Placeholder: simply add the polygon as a parcel
+            output.Add(new Parcel { Shape = poly });
+        }
+
+        private static void SubdivideBlock(Nts.Polygon poly, List<Parcel> output)
+        {
+            var env = poly.EnvelopeInternal;
+            double aspect = env.Width / env.Height;
+            bool regular = aspect > 0.5 && aspect < 2.0 && poly.NumPoints <= 6;
+            if (regular)
+                RecursiveOBBSplitting(poly, output, 0);
+            else
+                SkeletonBasedSubdivision(poly, output);
         }
     }
 }

@@ -107,7 +107,11 @@ namespace StrategyGame
             return null;
         }
 
-        public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea)
+        public static async Task<CityDataModel> GenerateModelAsync(
+            Nts.Polygon urbanArea,
+            PopulationDensityMap popDensity,
+            WaterBodyMap waterMap,
+            TerrainData terrain)
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
@@ -120,33 +124,15 @@ namespace StrategyGame
             var result = new CityDataModel { Id = Guid.NewGuid() };
 
             var env = urbanArea.EnvelopeInternal;
+            double step = Math.Min(env.Width, env.Height) / 20.0;
             var rnd = new Random();
             var factory = Nts.GeometryFactory.Default;
-            var lines = new List<LineSegment>();
 
-            double step = Math.Min(env.Width, env.Height) / 12.0;
+            var network = new List<LineSegment>();
+            var queue = new Queue<(Nts.Coordinate start, double angle, int depth)>();
             var center = new Nts.Coordinate((env.MinX + env.MaxX) / 2.0, (env.MinY + env.MaxY) / 2.0);
-            var initial = new (Nts.Coordinate start, double angle, int depth)[]
-            {
-                (center, 0.0, 0)
-            };
-
-            var queue = new Queue<(Nts.Coordinate start, double angle, int depth)>(initial);
-            int maxDepth = 4;
-
-            bool IsValid(LineSegment s)
-            {
-                var ls = factory.CreateLineString(new[] { new Nts.Coordinate(s.X1, s.Y1), new Nts.Coordinate(s.X2, s.Y2) });
-                if (!urbanArea.Contains(ls.EndPoint))
-                    return false;
-                foreach (var existing in lines)
-                {
-                    var existingLs = factory.CreateLineString(new[] { new Nts.Coordinate(existing.X1, existing.Y1), new Nts.Coordinate(existing.X2, existing.Y2) });
-                    if (ls.Distance(existingLs) < step * 0.5)
-                        return false;
-                }
-                return true;
-            }
+            queue.Enqueue((center, 0.0, 0));
+            int maxDepth = 5;
 
             while (queue.Count > 0)
             {
@@ -154,19 +140,51 @@ namespace StrategyGame
                 double len = step * (1.0 + rnd.NextDouble() * 0.5);
                 var end = new Nts.Coordinate(start.X + Math.Cos(angle) * len, start.Y + Math.Sin(angle) * len);
                 var seg = new LineSegment(start.X, start.Y, end.X, end.Y);
-                if (IsValid(seg))
+
+                seg = globalGoals(seg, popDensity, env);
+                var constrained = localConstraints(seg, network, waterMap, terrain, env);
+                if (constrained == null)
+                    continue;
+
+                var ls = factory.CreateLineString(new[]
                 {
-                    lines.Add(seg);
-                    if (depth < maxDepth)
+                    new Nts.Coordinate(constrained.X1, constrained.Y1),
+                    new Nts.Coordinate(constrained.X2, constrained.Y2)
+                });
+
+                if (!urbanArea.Intersects(ls))
+                    continue;
+
+                var clipped = urbanArea.Intersection(ls);
+
+                if (clipped is Nts.LineString cl)
+                {
+                    var coords = cl.Coordinates;
+                    for (int i = 0; i < coords.Length - 1; i++)
+                        network.Add(new LineSegment(coords[i].X, coords[i].Y, coords[i + 1].X, coords[i + 1].Y));
+                }
+                else if (clipped is Nts.MultiLineString mls)
+                {
+                    foreach (var geom in mls.Geometries)
                     {
-                        double branch = Math.PI / 6.0; // ~30 degrees
-                        queue.Enqueue((end, angle + branch, depth + 1));
-                        queue.Enqueue((end, angle - branch, depth + 1));
+                        if (geom is Nts.LineString sub)
+                        {
+                            var coords = sub.Coordinates;
+                            for (int i = 0; i < coords.Length - 1; i++)
+                                network.Add(new LineSegment(coords[i].X, coords[i].Y, coords[i + 1].X, coords[i + 1].Y));
+                        }
                     }
+                }
+
+                if (depth < maxDepth)
+                {
+                    double branch = Math.PI / 6.0;
+                    queue.Enqueue((new Nts.Coordinate(constrained.X2, constrained.Y2), angle + branch, depth + 1));
+                    queue.Enqueue((new Nts.Coordinate(constrained.X2, constrained.Y2), angle - branch, depth + 1));
                 }
             }
 
-            result.RoadNetwork = lines;
+            result.RoadNetwork = network;
 
             ParcelGenerator.GenerateParcels(result);
             LandUseAssigner.AssignLandUse(result);
@@ -176,6 +194,62 @@ namespace StrategyGame
             await File.WriteAllTextAsync(path, jsonOut).ConfigureAwait(false);
             modelCache[hash] = result;
             return result;
+        }
+
+        private static LineSegment globalGoals(LineSegment proposed, PopulationDensityMap density, Nts.Envelope env)
+        {
+            double normX = (proposed.X2 - env.MinX) / env.Width;
+            double normY = (proposed.Y2 - env.MinY) / env.Height;
+            float center = density.GetDensity(normX, normY);
+            float ahead = density.GetDensity(Math.Clamp(normX + 0.02, 0, 1), Math.Clamp(normY + 0.02, 0, 1));
+            double factor = 1.0 + (ahead - center) * 0.5;
+            double dx = proposed.X2 - proposed.X1;
+            double dy = proposed.Y2 - proposed.Y1;
+            double newLen = Math.Sqrt(dx * dx + dy * dy) * factor;
+            double angle = Math.Atan2(dy, dx);
+            return new LineSegment(proposed.X1, proposed.Y1,
+                proposed.X1 + Math.Cos(angle) * newLen,
+                proposed.Y1 + Math.Sin(angle) * newLen);
+        }
+
+        private static LineSegment? localConstraints(
+            LineSegment proposed,
+            List<LineSegment> network,
+            WaterBodyMap water,
+            TerrainData terrain,
+            Nts.Envelope env)
+        {
+            var factory = Nts.GeometryFactory.Default;
+            var ls = factory.CreateLineString(new[]
+            {
+                new Nts.Coordinate(proposed.X1, proposed.Y1),
+                new Nts.Coordinate(proposed.X2, proposed.Y2)
+            });
+
+            // snap to existing roads
+            foreach (var existing in network)
+            {
+                var ex = factory.CreateLineString(new[]
+                {
+                    new Nts.Coordinate(existing.X1, existing.Y1),
+                    new Nts.Coordinate(existing.X2, existing.Y2)
+                });
+                if (ls.Distance(ex) < env.Width * 0.01)
+                {
+                    var inter = ls.Intersection(ex);
+                    if (inter is Nts.Point p)
+                        return new LineSegment(proposed.X1, proposed.Y1, p.X, p.Y);
+                }
+            }
+
+            double midX = (proposed.X1 + proposed.X2) / 2.0;
+            double midY = (proposed.Y1 + proposed.Y2) / 2.0;
+            double nx = (midX - env.MinX) / env.Width;
+            double ny = (midY - env.MinY) / env.Height;
+            if (water.IsWater(nx, ny))
+                return null;
+
+            return proposed;
         }
     }
 }
