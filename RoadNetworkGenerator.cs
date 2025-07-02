@@ -109,38 +109,47 @@ namespace StrategyGame
 
             var env = urbanArea.EnvelopeInternal;
             var rnd = new Random();
-            var lines = new List<LineSegment>();
-            var queue = new Queue<LineSegment>();
-            queue.Enqueue(new LineSegment(env.MinX, env.MinY, env.MaxX, env.MaxY));
-
-            int iterations = 3;
             var factory = GeometryFactory.Default;
+            var lines = new List<LineSegment>();
 
-            for (int i = 0; i < iterations && queue.Count < 100; i++)
+            double step = Math.Min(env.Width, env.Height) / 12.0;
+            var center = new Coordinate((env.MinX + env.MaxX) / 2.0, (env.MinY + env.MaxY) / 2.0);
+            var initial = new (Coordinate start, double angle, int depth)[]
             {
-                int count = queue.Count;
-                for (int j = 0; j < count; j++)
+                (center, 0.0, 0)
+            };
+
+            var queue = new Queue<(Coordinate start, double angle, int depth)>(initial);
+            int maxDepth = 4;
+
+            bool IsValid(LineSegment s)
+            {
+                var ls = factory.CreateLineString(new[] { new Coordinate(s.X1, s.Y1), new Coordinate(s.X2, s.Y2) });
+                if (!urbanArea.Contains(ls.EndPoint))
+                    return false;
+                foreach (var existing in lines)
                 {
-                    var seg = queue.Dequeue();
-                    var ls = factory.CreateLineString(new[] { new Coordinate(seg.X1, seg.Y1), new Coordinate(seg.X2, seg.Y2) });
-                    if (!urbanArea.Intersects(ls))
-                        continue;
-                    var inter = urbanArea.Intersection(ls);
-                    if (inter is LineString l)
+                    var existingLs = factory.CreateLineString(new[] { new Coordinate(existing.X1, existing.Y1), new Coordinate(existing.X2, existing.Y2) });
+                    if (ls.Distance(existingLs) < step * 0.5)
+                        return false;
+                }
+                return true;
+            }
+
+            while (queue.Count > 0)
+            {
+                var (start, angle, depth) = queue.Dequeue();
+                double len = step * (1.0 + rnd.NextDouble() * 0.5);
+                var end = new Coordinate(start.X + Math.Cos(angle) * len, start.Y + Math.Sin(angle) * len);
+                var seg = new LineSegment(start.X, start.Y, end.X, end.Y);
+                if (IsValid(seg))
+                {
+                    lines.Add(seg);
+                    if (depth < maxDepth)
                     {
-                        var coords = l.Coordinates;
-                        for (int k = 0; k < coords.Length - 1; k++)
-                        {
-                            var s = new LineSegment(coords[k].X, coords[k].Y, coords[k + 1].X, coords[k + 1].Y);
-                            lines.Add(s);
-                            double midX = (s.X1 + s.X2) / 2.0;
-                            double midY = (s.Y1 + s.Y2) / 2.0;
-                            double angle = rnd.NextDouble() * Math.PI;
-                            double len = (env.Width + env.Height) / 40.0;
-                            var nx = midX + Math.Cos(angle) * len;
-                            var ny = midY + Math.Sin(angle) * len;
-                            queue.Enqueue(new LineSegment(midX, midY, nx, ny));
-                        }
+                        double branch = Math.PI / 6.0; // ~30 degrees
+                        queue.Enqueue((end, angle + branch, depth + 1));
+                        queue.Enqueue((end, angle - branch, depth + 1));
                     }
                 }
             }

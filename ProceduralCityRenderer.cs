@@ -10,34 +10,54 @@ namespace StrategyGame
     {
         public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
         {
-            var img = new Image<Rgba32>(MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx);
-            var fillColor = new Rgba32(100, 100, 100, 80);
-            await Task.Run(() =>
+            var img = new Image<Rgba32>(Configuration.Default,
+                MultiResolutionMapManager.TileSizePx,
+                MultiResolutionMapManager.TileSizePx,
+                new Rgba32(0, 0, 0, 0));
+            var tilePoly = ToPolygon(tileBounds);
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
             {
-                var tilePoly = ToPolygon(tileBounds);
-                foreach (var urban in UrbanAreaManager.UrbanPolygons)
-                {
-                    if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
-                        continue;
-                    if (!urban.Intersects(tilePoly))
-                        continue;
+                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
+                    continue;
+                if (!urban.Intersects(tilePoly))
+                    continue;
 
-                    var visible = urban.Intersection(tilePoly);
+                var model = await RoadNetworkGenerator.GenerateOrLoadModelAsync(urban).ConfigureAwait(false);
+                if (model.Buildings == null)
+                    continue;
+
+                foreach (var b in model.Buildings)
+                {
+                    if (!b.Footprint.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
+                        continue;
+                    var visible = b.Footprint.Intersection(tilePoly);
                     if (visible is Polygon p)
                     {
-                        RenderPolygon(img, p, tileBounds, MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, fillColor);
+                        RenderPolygon(img, p, tileBounds, MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, GetColor(b.LandUse));
                     }
                     else if (visible is MultiPolygon mp)
                     {
                         for (int i = 0; i < mp.NumGeometries; i++)
                         {
                             if (mp.GetGeometryN(i) is Polygon pp)
-                                RenderPolygon(img, pp, tileBounds, MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, fillColor);
+                                RenderPolygon(img, pp, tileBounds, MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, GetColor(b.LandUse));
                         }
                     }
                 }
-            });
+            }
             return img;
+        }
+
+        private static Rgba32 GetColor(LandUseType use)
+        {
+            return use switch
+            {
+                LandUseType.Commercial => new Rgba32(200, 50, 50, 180),
+                LandUseType.Residential => new Rgba32(50, 50, 200, 180),
+                LandUseType.Industrial => new Rgba32(120, 120, 120, 180),
+                LandUseType.Park => new Rgba32(60, 160, 60, 180),
+                _ => new Rgba32(100, 100, 100, 180)
+            };
         }
 
         private static Polygon ToPolygon(GeoBounds b)

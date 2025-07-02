@@ -2017,15 +2017,27 @@ namespace economy_sim
 
         private async void ButtonGenerateCityData_Click(object sender, EventArgs e)
         {
+            buttonGenerateCityData.Text = "Generating...";
             buttonGenerateCityData.Enabled = false;
             await Task.Run(async () =>
             {
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+                Directory.CreateDirectory(dir);
                 foreach (var urban in UrbanAreaManager.UrbanPolygons)
                 {
-                    await RoadNetworkGenerator.GenerateOrLoadModelAsync(urban);
+                    var model = await RoadNetworkGenerator.GenerateOrLoadModelAsync(urban).ConfigureAwait(false);
+                    ParcelGenerator.GenerateParcels(model);
+                    LandUseAssigner.AssignLandUse(model);
+                    BuildingGenerator.GenerateBuildings(model);
+                    string hash = Math.Abs(urban.EnvelopeInternal.GetHashCode()).ToString();
+                    string path = Path.Combine(dir, $"{hash}.json");
+                    var json = System.Text.Json.JsonSerializer.Serialize(model);
+                    await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
                 }
             });
+            buttonGenerateCityData.Text = "Generate City Data";
             buttonGenerateCityData.Enabled = true;
+            MessageBox.Show("City data generation complete.");
         }
 
 
