@@ -101,6 +101,32 @@ namespace StrategyGame
             {
                 var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
                 var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(json);
+                bool updated = false;
+
+                if (model.Parcels == null || model.Parcels.Count == 0)
+                {
+                    ParcelGenerator.GenerateParcels(model);
+                    LandUseAssigner.AssignLandUse(model);
+                    updated = true;
+                }
+
+                if (model.Buildings == null || model.Buildings.Count == 0)
+                {
+                    if (model.Parcels == null || model.Parcels.Count == 0)
+                    {
+                        ParcelGenerator.GenerateParcels(model);
+                        LandUseAssigner.AssignLandUse(model);
+                    }
+                    BuildingGenerator.GenerateBuildings(model);
+                    updated = true;
+                }
+
+                if (updated)
+                {
+                    var jsonOut = System.Text.Json.JsonSerializer.Serialize(model);
+                    await File.WriteAllTextAsync(path, jsonOut).ConfigureAwait(false);
+                }
+
                 modelCache[hash] = model;
                 return model;
             }
@@ -155,6 +181,11 @@ namespace StrategyGame
             }
 
             result.RoadNetwork = lines;
+
+            ParcelGenerator.GenerateParcels(result);
+            LandUseAssigner.AssignLandUse(result);
+            BuildingGenerator.GenerateBuildings(result);
+
             var jsonOut = System.Text.Json.JsonSerializer.Serialize(result);
             await File.WriteAllTextAsync(path, jsonOut).ConfigureAwait(false);
             modelCache[hash] = result;

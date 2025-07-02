@@ -1,7 +1,9 @@
 using NetTopologySuite.Geometries;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 
 namespace StrategyGame
@@ -23,8 +25,21 @@ namespace StrategyGame
                     continue;
 
                 var model = await RoadNetworkGenerator.GenerateOrLoadModelAsync(urban).ConfigureAwait(false);
-                if (model.Buildings == null)
-                    continue;
+                if (model.Buildings == null || model.Buildings.Count == 0)
+                {
+                    if (model.Parcels == null || model.Parcels.Count == 0)
+                    {
+                        ParcelGenerator.GenerateParcels(model);
+                        LandUseAssigner.AssignLandUse(model);
+                    }
+                    BuildingGenerator.GenerateBuildings(model);
+                    string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+                    Directory.CreateDirectory(dir);
+                    string hash = Math.Abs(urban.EnvelopeInternal.GetHashCode()).ToString();
+                    string path = Path.Combine(dir, $"{hash}.json");
+                    var json = System.Text.Json.JsonSerializer.Serialize(model);
+                    await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
+                }
 
                 foreach (var b in model.Buildings)
                 {
