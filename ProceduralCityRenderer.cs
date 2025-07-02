@@ -1,6 +1,8 @@
 using NetTopologySuite.Geometries;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Drawing;
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -24,22 +26,9 @@ namespace StrategyGame
                 if (!urban.Intersects(tilePoly))
                     continue;
 
-                var model = await RoadNetworkGenerator.GenerateOrLoadModelAsync(urban).ConfigureAwait(false);
-                if (model.Buildings == null || model.Buildings.Count == 0)
-                {
-                    if (model.Parcels == null || model.Parcels.Count == 0)
-                    {
-                        ParcelGenerator.GenerateParcels(model);
-                        LandUseAssigner.AssignLandUse(model);
-                    }
-                    BuildingGenerator.GenerateBuildings(model);
-                    string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
-                    Directory.CreateDirectory(dir);
-                    string hash = Math.Abs(urban.EnvelopeInternal.GetHashCode()).ToString();
-                    string path = Path.Combine(dir, $"{hash}.json");
-                    var json = System.Text.Json.JsonSerializer.Serialize(model);
-                    await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
-                }
+                var model = await RoadNetworkGenerator.LoadModelAsync(urban).ConfigureAwait(false);
+                if (model == null)
+                    continue;
 
                 foreach (var b in model.Buildings)
                 {
@@ -103,48 +92,11 @@ namespace StrategyGame
 
         private static void FillPolygon(Image<Rgba32> img, List<(int X, int Y)> points, Rgba32 color)
         {
-            if (points.Count < 3) return;
-            int minY = int.MaxValue, maxY = int.MinValue;
-            foreach (var p in points)
-            {
-                if (p.Y < minY) minY = p.Y;
-                if (p.Y > maxY) maxY = p.Y;
-            }
-            for (int y = minY; y <= maxY; y++)
-            {
-                List<int> nodeX = new();
-                for (int i = 0, j = points.Count - 1; i < points.Count; j = i++)
-                {
-                    var pi = points[i];
-                    var pj = points[j];
-                    if ((pi.Y < y && pj.Y >= y) || (pj.Y < y && pi.Y >= y))
-                    {
-                        int x = (int)(pi.X + (double)(y - pi.Y) / (pj.Y - pi.Y) * (pj.X - pi.X));
-                        nodeX.Add(x);
-                    }
-                }
-                nodeX.Sort();
-                for (int k = 0; k < nodeX.Count - 1; k += 2)
-                {
-                    int start = nodeX[k];
-                    int end = nodeX[k + 1];
-                    for (int x = start; x <= end; x++)
-                    {
-                        if (x < 0 || x >= img.Width || y < 0 || y >= img.Height) continue;
-                        var basePix = img[x, y];
-                        float srcA = color.A / 255f;
-                        float dstA = basePix.A / 255f;
-                        float outA = srcA + dstA * (1 - srcA);
-                        if (outA <= 0)
-                            continue;
-                        byte outAlpha = (byte)(outA * 255);
-                        byte r = (byte)((color.R * srcA + basePix.R * dstA * (1 - srcA)) / outA);
-                        byte g = (byte)((color.G * srcA + basePix.G * dstA * (1 - srcA)) / outA);
-                        byte b = (byte)((color.B * srcA + basePix.B * dstA * (1 - srcA)) / outA);
-                        img[x, y] = new Rgba32(r, g, b, outAlpha);
-                    }
-                }
-            }
+            if (points.Count < 3)
+                return;
+
+            var polygonShape = new SixLabors.ImageSharp.Drawing.Polygon(points.Select(p => new PointF(p.X, p.Y)).ToArray());
+            img.Mutate(ctx => ctx.Fill(color, polygonShape));
         }
     }
 }

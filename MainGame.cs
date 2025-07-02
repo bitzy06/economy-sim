@@ -15,6 +15,7 @@ using System.Text.RegularExpressions; // Added for owner-drawing
 using System.Threading.Tasks;
 using System.Threading;
 using System.Windows.Forms;
+using NetTopologySuite.Geometries;
 
 namespace economy_sim
 {
@@ -484,6 +485,7 @@ namespace economy_sim
 
             // Load urban area polygons for procedural generation
             UrbanAreaManager.LoadUrbanAreas();
+            CheckAndPromptForMissingCityData();
 
             // 3. Load World Setup from JSON
             string jsonFilePath = "world_setup.json";
@@ -2015,26 +2017,46 @@ namespace economy_sim
             policyManagerForm.BringToFront();
         }
 
+        private void CheckAndPromptForMissingCityData()
+        {
+            List<Polygon> missing = new List<Polygon>();
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            Directory.CreateDirectory(dir);
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                string hash = Math.Abs(urban.EnvelopeInternal.GetHashCode()).ToString();
+                string path = Path.Combine(dir, $"{hash}.json");
+                if (!File.Exists(path))
+                    missing.Add(urban);
+            }
+
+            if (missing.Count > 0)
+            {
+                var result = MessageBox.Show($"{missing.Count} urban areas are missing procedural data. Generate now?", "Generate Missing City Data?", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (result == DialogResult.Yes)
+                    Task.Run(() => GenerateCityDataFor(missing));
+            }
+        }
+
+        private async Task GenerateCityDataFor(IEnumerable<Polygon> areas)
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            Directory.CreateDirectory(dir);
+            foreach (var urban in areas)
+            {
+                var model = await RoadNetworkGenerator.GenerateModelAsync(urban).ConfigureAwait(false);
+                string hash = Math.Abs(urban.EnvelopeInternal.GetHashCode()).ToString();
+                string path = Path.Combine(dir, $"{hash}.json");
+                var json = System.Text.Json.JsonSerializer.Serialize(model);
+                await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
+            }
+        }
+
         private async void ButtonGenerateCityData_Click(object sender, EventArgs e)
         {
             buttonGenerateCityData.Text = "Generating...";
             buttonGenerateCityData.Enabled = false;
-            await Task.Run(async () =>
-            {
-                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
-                Directory.CreateDirectory(dir);
-                foreach (var urban in UrbanAreaManager.UrbanPolygons)
-                {
-                    var model = await RoadNetworkGenerator.GenerateOrLoadModelAsync(urban).ConfigureAwait(false);
-                    ParcelGenerator.GenerateParcels(model);
-                    LandUseAssigner.AssignLandUse(model);
-                    BuildingGenerator.GenerateBuildings(model);
-                    string hash = Math.Abs(urban.EnvelopeInternal.GetHashCode()).ToString();
-                    string path = Path.Combine(dir, $"{hash}.json");
-                    var json = System.Text.Json.JsonSerializer.Serialize(model);
-                    await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
-                }
-            });
+            await GenerateCityDataFor(UrbanAreaManager.UrbanPolygons);
             buttonGenerateCityData.Text = "Generate City Data";
             buttonGenerateCityData.Enabled = true;
             MessageBox.Show("City data generation complete.");

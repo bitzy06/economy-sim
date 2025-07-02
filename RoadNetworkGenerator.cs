@@ -87,7 +87,7 @@ namespace StrategyGame
             return clippedNetwork;
         }
 
-        public static async Task<CityDataModel> GenerateOrLoadModelAsync(Polygon urbanArea)
+        public static async Task<CityDataModel?> LoadModelAsync(Polygon urbanArea)
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
@@ -101,35 +101,21 @@ namespace StrategyGame
             {
                 var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
                 var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(json);
-                bool updated = false;
-
-                if (model.Parcels == null || model.Parcels.Count == 0)
-                {
-                    ParcelGenerator.GenerateParcels(model);
-                    LandUseAssigner.AssignLandUse(model);
-                    updated = true;
-                }
-
-                if (model.Buildings == null || model.Buildings.Count == 0)
-                {
-                    if (model.Parcels == null || model.Parcels.Count == 0)
-                    {
-                        ParcelGenerator.GenerateParcels(model);
-                        LandUseAssigner.AssignLandUse(model);
-                    }
-                    BuildingGenerator.GenerateBuildings(model);
-                    updated = true;
-                }
-
-                if (updated)
-                {
-                    var jsonOut = System.Text.Json.JsonSerializer.Serialize(model);
-                    await File.WriteAllTextAsync(path, jsonOut).ConfigureAwait(false);
-                }
-
                 modelCache[hash] = model;
                 return model;
             }
+            return null;
+        }
+
+        public static async Task<CityDataModel> GenerateModelAsync(Polygon urbanArea)
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            Directory.CreateDirectory(dir);
+            string hash = Math.Abs(urbanArea.EnvelopeInternal.GetHashCode()).ToString();
+            string path = Path.Combine(dir, $"{hash}.json");
+
+            if (modelCache.TryGetValue(hash, out var cachedModel))
+                return cachedModel;
 
             var result = new CityDataModel { Id = Guid.NewGuid() };
 
