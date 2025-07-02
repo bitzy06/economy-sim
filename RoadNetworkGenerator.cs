@@ -1,5 +1,6 @@
 using NetTopologySuite.Geometries;
 using System.Collections.Generic;
+using System;
 
 namespace StrategyGame
 {
@@ -18,7 +19,7 @@ namespace StrategyGame
 
             var env = urbanArea.EnvelopeInternal;
             double diagonal = System.Math.Sqrt(env.Width * env.Width + env.Height * env.Height);
-            int divisions = (int)System.Math.Max(5, diagonal * 400.0);
+            int divisions = System.Math.Clamp((int)(diagonal * 40.0), 5, 100);
 
             double stepX = env.Width / divisions;
             double stepY = env.Height / divisions;
