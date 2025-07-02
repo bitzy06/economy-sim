@@ -45,8 +45,8 @@ namespace StrategyGame
             if (vertical)
             {
                 double midX = (env.MinX + env.MaxX) / 2.0;
-                var leftRect = gf.ToGeometry(new Envelope(env.MinX, midX, env.MinY, env.MaxY));
-                var rightRect = gf.ToGeometry(new Envelope(midX, env.MaxX, env.MinY, env.MaxY));
+                var leftRect = gf.ToGeometry(new Nts.Envelope(env.MinX, midX, env.MinY, env.MaxY));
+                var rightRect = gf.ToGeometry(new Nts.Envelope(midX, env.MaxX, env.MinY, env.MaxY));
                 var left = poly.Intersection(leftRect);
                 var right = poly.Intersection(rightRect);
                 if (left is Nts.Polygon lp)
@@ -57,8 +57,8 @@ namespace StrategyGame
             else
             {
                 double midY = (env.MinY + env.MaxY) / 2.0;
-                var botRect = gf.ToGeometry(new Envelope(env.MinX, env.MaxX, env.MinY, midY));
-                var topRect = gf.ToGeometry(new Envelope(env.MinX, env.MaxX, midY, env.MaxY));
+                var botRect = gf.ToGeometry(new Nts.Envelope(env.MinX, env.MaxX, env.MinY, midY));
+                var topRect = gf.ToGeometry(new Nts.Envelope(env.MinX, env.MaxX, midY, env.MaxY));
                 var bot = poly.Intersection(botRect);
                 var top = poly.Intersection(topRect);
                 if (bot is Nts.Polygon bp)
