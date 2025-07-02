@@ -63,7 +63,6 @@
             checkBoxLogPops = new CheckBox();
             checkBoxLogBuildings = new CheckBox();
             checkBoxLogEconomy = new CheckBox();
-            buttonGenerateUrbanLayer = new Button();
             buttonGenerateTileCache = new Button();
             tabPageDiplomacy = new TabPage();
             labelProposedTrades = new Label();
@@ -264,7 +263,6 @@
             tabPageDebug.Controls.Add(checkBoxLogPops);
             tabPageDebug.Controls.Add(checkBoxLogBuildings);
             tabPageDebug.Controls.Add(checkBoxLogEconomy);
-            tabPageDebug.Controls.Add(buttonGenerateUrbanLayer);
             tabPageDebug.Controls.Add(buttonGenerateTileCache);
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
             tabPageDebug.Location = new Point(4, 29);
@@ -425,16 +423,6 @@
             buttonGenerateTileCache.Text = "Build Tile Cache";
             buttonGenerateTileCache.UseVisualStyleBackColor = true;
 
-            //
-            // buttonGenerateUrbanLayer
-            //
-            buttonGenerateUrbanLayer.Location = new Point(14, 662);
-            buttonGenerateUrbanLayer.Margin = new Padding(5, 4, 5, 4);
-            buttonGenerateUrbanLayer.Name = "buttonGenerateUrbanLayer";
-            buttonGenerateUrbanLayer.Size = new Size(160, 36);
-            buttonGenerateUrbanLayer.TabIndex = 14;
-            buttonGenerateUrbanLayer.Text = "Generate Urban Layer";
-            buttonGenerateUrbanLayer.UseVisualStyleBackColor = true;
             // 
             // tabPageDiplomacy
             // 
@@ -725,7 +713,6 @@
         private System.Windows.Forms.CheckBox checkBoxLogPops;
         private System.Windows.Forms.CheckBox checkBoxLogBuildings;
         private System.Windows.Forms.CheckBox checkBoxLogEconomy;
-        private System.Windows.Forms.Button buttonGenerateUrbanLayer;
         private System.Windows.Forms.Button buttonGenerateTileCache;
         private System.Windows.Forms.TabPage tabPageDiplomacy;
         private System.Windows.Forms.Label labelProposedTrades;
