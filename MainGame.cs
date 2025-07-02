@@ -159,7 +159,6 @@ namespace economy_sim
             this.buttonShowFactoryStats.Location = new System.Drawing.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
             this.buttonShowFactoryStats.Click += ButtonShowFactoryStats_Click;
 
-            this.buttonGenerateUrbanLayer.Click += ButtonGenerateUrbanLayer_Click;
 
             this.buttonShowConstruction.Location = new System.Drawing.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
             this.buttonShowConstruction.Click += ButtonShowConstruction_Click;
@@ -429,6 +428,9 @@ namespace economy_sim
 
             // 2. Initialize Factory Blueprints (this also populates Market.GoodDefinitions now)
             FactoryBlueprints.InitializeBlueprints();
+
+            // Load urban area polygons for procedural generation
+            UrbanAreaManager.LoadUrbanAreas();
 
             // 3. Load World Setup from JSON
             string jsonFilePath = "world_setup.json";
@@ -1886,18 +1888,6 @@ namespace economy_sim
             DebugLogger.EnableEconomyLogging(checkBoxLogEconomy.Checked);
         }
 
-        private async void ButtonGenerateUrbanLayer_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                await Task.Run(() => StrategyGame.UrbanAreaRenderer.GenerateUrbanTextureLayer());
-                MessageBox.Show("Urban texture generated", "Generation Complete");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to generate urban layer: {ex.Message}");
-            }
-        }
 
         // Update the Finance tab UI
         private void UpdateFinanceTab()
