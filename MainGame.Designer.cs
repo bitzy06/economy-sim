@@ -64,6 +64,7 @@
             checkBoxLogBuildings = new CheckBox();
             checkBoxLogEconomy = new CheckBox();
             buttonGenerateTileCache = new Button();
+            buttonGenerateCityData = new Button();
             tabPageDiplomacy = new TabPage();
             labelProposedTrades = new Label();
             listBoxProposedTradeAgreements = new ListBox();
@@ -264,6 +265,7 @@
             tabPageDebug.Controls.Add(checkBoxLogBuildings);
             tabPageDebug.Controls.Add(checkBoxLogEconomy);
             tabPageDebug.Controls.Add(buttonGenerateTileCache);
+            tabPageDebug.Controls.Add(buttonGenerateCityData);
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
             tabPageDebug.Location = new Point(4, 29);
             tabPageDebug.Margin = new Padding(5, 4, 5, 4);
@@ -422,6 +424,17 @@
             buttonGenerateTileCache.TabIndex = 13;
             buttonGenerateTileCache.Text = "Build Tile Cache";
             buttonGenerateTileCache.UseVisualStyleBackColor = true;
+            //
+            // buttonGenerateCityData
+            //
+            buttonGenerateCityData.Location = new Point(352, 662);
+            buttonGenerateCityData.Margin = new Padding(5, 4, 5, 4);
+            buttonGenerateCityData.Name = "buttonGenerateCityData";
+            buttonGenerateCityData.Size = new Size(160, 36);
+            buttonGenerateCityData.TabIndex = 15;
+            buttonGenerateCityData.Text = "Generate City Data";
+            buttonGenerateCityData.UseVisualStyleBackColor = true;
+            buttonGenerateCityData.Click += ButtonGenerateCityData_Click;
 
             // 
             // tabPageDiplomacy
@@ -714,6 +727,7 @@
         private System.Windows.Forms.CheckBox checkBoxLogBuildings;
         private System.Windows.Forms.CheckBox checkBoxLogEconomy;
         private System.Windows.Forms.Button buttonGenerateTileCache;
+        private System.Windows.Forms.Button buttonGenerateCityData;
         private System.Windows.Forms.TabPage tabPageDiplomacy;
         private System.Windows.Forms.Label labelProposedTrades;
         private System.Windows.Forms.ListBox listBoxProposedTradeAgreements;
