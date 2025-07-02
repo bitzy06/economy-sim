@@ -60,6 +60,7 @@ namespace economy_sim
         private Point panPictureBoxStartLocation;
         private DateTime _lastRedrawTime = DateTime.MinValue;
         private MultiResolutionMapManager mapManager;
+        private CityTileManager cityTileManager;
         private Point mapViewOrigin = new Point(0, 0); // Origin for the map view
         private int baseCellsWidth;
         private int baseCellsHeight;
@@ -181,6 +182,7 @@ namespace economy_sim
                 var baseSize = mapManager.GetMapSize(1);
                 baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
+                cityTileManager = new CityTileManager(baseCellsWidth, baseCellsHeight);
 
                 var viewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
 
@@ -191,6 +193,7 @@ namespace economy_sim
                         "data", "tile_cache");
 
                     mapManager.PreloadVisibleTiles(mapZoom, viewRect);
+                    cityTileManager.PreloadVisibleTiles(mapZoom, viewRect);
 
                     this.Invoke((MethodInvoker)(() =>
                     {
@@ -239,18 +242,34 @@ namespace economy_sim
             Bitmap bmp = null;
             try
             {
-                bmp = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                Bitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
                 {
                     if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
                         return;
-
                     lastInnerRedraw = DateTime.Now;
-
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(Redraw));
                     else
                         Redraw();
                 });
+                Bitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                {
+                    if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
+                        return;
+                    lastInnerRedraw = DateTime.Now;
+                    if (this.InvokeRequired)
+                        this.BeginInvoke(new Action(Redraw));
+                    else
+                        Redraw();
+                });
+                if (terrain != null)
+                {
+                    bmp = new Bitmap(terrain.Width, terrain.Height);
+                    using var g = Graphics.FromImage(bmp);
+                    g.DrawImage(terrain, 0, 0);
+                    if (city != null)
+                        g.DrawImage(city, 0, 0);
+                }
             }
             catch (ArgumentException ex)
             {
@@ -291,7 +310,7 @@ namespace economy_sim
             {
                 try
                 {
-                    var bmp = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
                     {
                         if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
                         {
@@ -299,6 +318,25 @@ namespace economy_sim
                             this.BeginInvoke(new Action(RedrawAsync));
                         }
                     });
+
+                    var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    {
+                        if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
+                        {
+                            lastInnerRedraw = DateTime.Now;
+                            this.BeginInvoke(new Action(RedrawAsync));
+                        }
+                    });
+
+                    Bitmap bmp = null;
+                    if (terrain != null)
+                    {
+                        bmp = new Bitmap(terrain.Width, terrain.Height);
+                        using var g = Graphics.FromImage(bmp);
+                        g.DrawImage(terrain, 0, 0);
+                        if (city != null)
+                            g.DrawImage(city, 0, 0);
+                    }
 
                     if (bmp != null && bmp.Width > 0 && bmp.Height > 0 && !token.IsCancellationRequested)
                     {
@@ -345,19 +383,34 @@ namespace economy_sim
             }
 
             mapManager.PreloadVisibleTiles(zoom, view);
+            cityTileManager.PreloadVisibleTiles(zoom, view);
 
             mapRenderInProgress = true;
 
             Task.Run(() =>
             {
-                Bitmap map = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
+                Bitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
                     else
                         ApplyZoom();
                 });
-                if (map == null) return;
+                Bitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
+                {
+                    if (this.InvokeRequired)
+                        this.BeginInvoke(new Action(ApplyZoom));
+                    else
+                        ApplyZoom();
+                });
+                if (terrain == null) return;
+                Bitmap map = new Bitmap(terrain.Width, terrain.Height);
+                using (var g = Graphics.FromImage(map))
+                {
+                    g.DrawImage(terrain, 0, 0);
+                    if (city != null)
+                        g.DrawImage(city, 0, 0);
+                }
 
                 void setImage()
                 {
@@ -1960,6 +2013,19 @@ namespace economy_sim
             policyManagerForm.RefreshData();
             policyManagerForm.Show();
             policyManagerForm.BringToFront();
+        }
+
+        private async void ButtonGenerateCityData_Click(object sender, EventArgs e)
+        {
+            buttonGenerateCityData.Enabled = false;
+            await Task.Run(async () =>
+            {
+                foreach (var urban in UrbanAreaManager.UrbanPolygons)
+                {
+                    await RoadNetworkGenerator.GenerateOrLoadModelAsync(urban);
+                }
+            });
+            buttonGenerateCityData.Enabled = true;
         }
 
 
