@@ -75,6 +75,7 @@
 		<PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.0" />
 		<PackageReference Include="NetTopologySuite" Version="2.6.0" />
 		<PackageReference Include="NetTopologySuite.IO.ShapeFile" Version="2.1.0" />
+		<PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.6" />
 		<PackageReference Include="System.Buffers" Version="4.5.1" />
 		<PackageReference Include="System.IO.Pipelines" Version="9.0.4" />
 		<PackageReference Include="System.Memory" Version="4.5.5" />
@@ -85,7 +86,6 @@
 		<PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
                 <PackageReference Include="System.ValueTuple" Version="4.5.0" />
                 <PackageReference Include="SixLabors.ImageSharp" Version="3.1.10" />
-                <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="3.1.0" />
                 <None Include="world_setup.json">
                         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
                 </None>
