@@ -72,6 +72,62 @@ namespace economy_sim
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
 
+        private void LoadGlobalData()
+        {
+            string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
+            string popPath = Path.Combine(dataDir, "population_density.png");
+            if (File.Exists(popPath))
+            {
+                using var bmp = new SD.Bitmap(popPath);
+                var values = new float[bmp.Width, bmp.Height];
+                for (int x = 0; x < bmp.Width; x++)
+                    for (int y = 0; y < bmp.Height; y++)
+                        values[x, y] = bmp.GetPixel(x, y).R / 255f;
+                populationDensity = new PopulationDensityMap(values);
+            }
+            else
+            {
+                populationDensity = new PopulationDensityMap(new float[1, 1]);
+            }
+
+            string waterPath = Path.Combine(dataDir, "water_bodies.png");
+            if (File.Exists(waterPath))
+            {
+                using var bmp = new SD.Bitmap(waterPath);
+                var vals = new bool[bmp.Width, bmp.Height];
+                for (int x = 0; x < bmp.Width; x++)
+                    for (int y = 0; y < bmp.Height; y++)
+                        vals[x, y] = bmp.GetPixel(x, y).B > 128;
+                waterMap = new WaterBodyMap(vals);
+            }
+            else
+            {
+                waterMap = new WaterBodyMap(new bool[1, 1]);
+            }
+
+            string elevPath = Path.Combine(dataDir, "terrain.png");
+            if (File.Exists(elevPath))
+            {
+                using var bmp = new SD.Bitmap(elevPath);
+                var elev = new float[bmp.Width, bmp.Height];
+                for (int x = 0; x < bmp.Width; x++)
+                    for (int y = 0; y < bmp.Height; y++)
+                        elev[x, y] = bmp.GetPixel(x, y).R;
+                terrainData = new TerrainData(elev);
+            }
+            else
+            {
+                terrainData = new TerrainData(new float[1, 1]);
+            }
+
+            cityGenerationManager = new CityGenerationManager(populationDensity, waterMap, terrainData);
+        }
+
+        private PopulationDensityMap populationDensity;
+        private WaterBodyMap waterMap;
+        private TerrainData terrainData;
+        private CityGenerationManager cityGenerationManager;
+
         public MainGame()
         {
             GdalBase.ConfigureAll(); 
@@ -80,6 +136,7 @@ namespace economy_sim
             var sw = Stopwatch.StartNew();
 
             InitializeComponent();
+            LoadGlobalData();
             // In your constructor, after InitializeComponent():
             panelMap.TabStop = true;                        // make panel focusable
             panelMap.MouseEnter += (s, e) => panelMap.Focus();
@@ -2044,12 +2101,10 @@ namespace economy_sim
             Directory.CreateDirectory(dir);
             foreach (var urban in areas)
             {
-                var model = await RoadNetworkGenerator.GenerateModelAsync(urban).ConfigureAwait(false);
-                string hash = Math.Abs(urban.EnvelopeInternal.GetHashCode()).ToString();
-                string path = Path.Combine(dir, $"{hash}.json");
-                var json = System.Text.Json.JsonSerializer.Serialize(model);
-                await File.WriteAllTextAsync(path, json).ConfigureAwait(false);
+                cityGenerationManager.QueueArea(urban);
             }
+            // simple wait until queue empties
+            await Task.Delay(100).ConfigureAwait(false);
         }
 
         private async void ButtonGenerateCityData_Click(object sender, EventArgs e)
