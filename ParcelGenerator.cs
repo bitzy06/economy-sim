@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.Operation.Polygonize;
 using System.Collections.Generic;
 
@@ -9,20 +9,20 @@ namespace StrategyGame
         public static List<Parcel> GenerateParcels(CityDataModel model)
         {
             var parcels = new List<Parcel>();
-            var gf = GeometryFactory.Default;
+            var gf = Nts.GeometryFactory.Default;
 
             var pizer = new Polygonizer();
             foreach (var seg in model.RoadNetwork)
             {
                 var ls = gf.CreateLineString(new[]
                 {
-                    new Coordinate(seg.X1, seg.Y1),
-                    new Coordinate(seg.X2, seg.Y2)
+                    new Nts.Coordinate(seg.X1, seg.Y1),
+                    new Nts.Coordinate(seg.X2, seg.Y2)
                 });
                 pizer.Add(ls);
             }
 
-            foreach (Polygon poly in pizer.GetPolygons())
+            foreach (Nts.Polygon poly in pizer.GetPolygons())
             {
                 Subdivide(poly, parcels, 0);
             }
@@ -31,7 +31,7 @@ namespace StrategyGame
             return parcels;
         }
 
-        private static void Subdivide(Polygon poly, List<Parcel> output, int depth)
+        private static void Subdivide(Nts.Polygon poly, List<Parcel> output, int depth)
         {
             const double MinArea = 0.0001; // arbitrary small area threshold
             if (poly.Area < MinArea || depth > 4)
@@ -41,7 +41,7 @@ namespace StrategyGame
             }
             var env = poly.EnvelopeInternal;
             bool vertical = env.Width > env.Height;
-            var gf = GeometryFactory.Default;
+            var gf = Nts.GeometryFactory.Default;
             if (vertical)
             {
                 double midX = (env.MinX + env.MaxX) / 2.0;
@@ -49,9 +49,9 @@ namespace StrategyGame
                 var rightRect = gf.ToGeometry(new Envelope(midX, env.MaxX, env.MinY, env.MaxY));
                 var left = poly.Intersection(leftRect);
                 var right = poly.Intersection(rightRect);
-                if (left is Polygon lp)
+                if (left is Nts.Polygon lp)
                     Subdivide(lp, output, depth + 1);
-                if (right is Polygon rp)
+                if (right is Nts.Polygon rp)
                     Subdivide(rp, output, depth + 1);
             }
             else
@@ -61,9 +61,9 @@ namespace StrategyGame
                 var topRect = gf.ToGeometry(new Envelope(env.MinX, env.MaxX, midY, env.MaxY));
                 var bot = poly.Intersection(botRect);
                 var top = poly.Intersection(topRect);
-                if (bot is Polygon bp)
+                if (bot is Nts.Polygon bp)
                     Subdivide(bp, output, depth + 1);
-                if (top is Polygon tp)
+                if (top is Nts.Polygon tp)
                     Subdivide(tp, output, depth + 1);
             }
         }

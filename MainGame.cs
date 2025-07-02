@@ -5,8 +5,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Drawing2D;
+using SD = System.Drawing;
+using SDD = System.Drawing.Drawing2D;
 using System.IO; // For File operations
 using System.Linq;
 using System.Text;
@@ -15,7 +15,7 @@ using System.Text.RegularExpressions; // Added for owner-drawing
 using System.Threading.Tasks;
 using System.Threading;
 using System.Windows.Forms;
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
 
 namespace economy_sim
 {
@@ -55,14 +55,14 @@ namespace economy_sim
 
         private int mapZoom = 1;
 
-        private Bitmap baseMap;
+        private SD.Bitmap baseMap;
         private bool isPanning = false;
-        private Point panStart;
-        private Point panPictureBoxStartLocation;
+        private SD.Point panStart;
+        private SD.Point panPictureBoxStartLocation;
         private DateTime _lastRedrawTime = DateTime.MinValue;
         private MultiResolutionMapManager mapManager;
         private CityTileManager cityTileManager;
-        private Point mapViewOrigin = new Point(0, 0); // Origin for the map view
+        private SD.Point mapViewOrigin = new SD.Point(0, 0); // Origin for the map view
         private int baseCellsWidth;
         private int baseCellsHeight;
         private System.Windows.Forms.Timer mapUpdateTimer;
@@ -143,7 +143,7 @@ namespace economy_sim
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
 
-            this.buttonShowPopStats.Location = new System.Drawing.Point(buttonsTargetX, buttonsTargetY);
+            this.buttonShowPopStats.Location = new SD.Point(buttonsTargetX, buttonsTargetY);
             this.buttonShowPopStats.Click += ButtonShowPopStats_Click;
 
             popStatsForm = new PopStatsForm();
@@ -158,11 +158,11 @@ namespace economy_sim
             this.listBoxFactoryStats.DrawItem += new DrawItemEventHandler(this.ListBox_DrawItemShared);
             this.listBoxMarketStats.DrawItem += new DrawItemEventHandler(this.ListBox_DrawItemShared);
 
-            this.buttonShowFactoryStats.Location = new System.Drawing.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
+            this.buttonShowFactoryStats.Location = new SD.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
             this.buttonShowFactoryStats.Click += ButtonShowFactoryStats_Click;
 
 
-            this.buttonShowConstruction.Location = new System.Drawing.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
+            this.buttonShowConstruction.Location = new SD.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
             this.buttonShowConstruction.Click += ButtonShowConstruction_Click;
 
             Console.WriteLine($"[Startup] TOTAL startup time: {totalSw.Elapsed.TotalSeconds:F2} seconds");
@@ -185,7 +185,7 @@ namespace economy_sim
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 cityTileManager = new CityTileManager(baseCellsWidth, baseCellsHeight);
 
-                var viewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                var viewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
 
                 Task.Run(() =>
                 {
@@ -202,7 +202,7 @@ namespace economy_sim
                         {
                             this.Invoke((MethodInvoker)(() =>
                             {
-                                var updatedViewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                                var updatedViewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
                                 pictureBox1.Image = mapManager.AssembleView(mapZoom, updatedViewRect);
                             }));
                         });
@@ -210,8 +210,8 @@ namespace economy_sim
                 });
             }
 
-            pictureBox1.Size = panelMap.ClientSize;
-            pictureBox1.Location = new Point(0, 0);
+            pictureBox1.SD.Size = panelMap.ClientSize;
+            pictureBox1.Location = new SD.Point(0, 0);
         }
 
        
@@ -226,7 +226,7 @@ namespace economy_sim
             if (mapManager == null || panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
                 return;
 
-            Rectangle viewRect = new Rectangle(
+            SD.Rectangle viewRect = new SD.Rectangle(
                 -panelMap.AutoScrollPosition.X,
                 -panelMap.AutoScrollPosition.Y,
                 panelMap.ClientSize.Width,
@@ -240,10 +240,10 @@ namespace economy_sim
 
             DateTime lastInnerRedraw = DateTime.MinValue;
 
-            Bitmap bmp = null;
+            SD.Bitmap bmp = null;
             try
             {
-                Bitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                SD.Bitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
                 {
                     if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
                         return;
@@ -253,7 +253,7 @@ namespace economy_sim
                     else
                         Redraw();
                 });
-                Bitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                SD.Bitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
                 {
                     if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
                         return;
@@ -265,8 +265,8 @@ namespace economy_sim
                 });
                 if (terrain != null)
                 {
-                    bmp = new Bitmap(terrain.Width, terrain.Height);
-                    using var g = Graphics.FromImage(bmp);
+                    bmp = new SD.Bitmap(terrain.Width, terrain.Height);
+                    using var g = SD.Graphics.FromImage(bmp);
                     g.DrawImage(terrain, 0, 0);
                     if (city != null)
                         g.DrawImage(city, 0, 0);
@@ -295,7 +295,7 @@ namespace economy_sim
             redrawCts = new CancellationTokenSource();
             var token = redrawCts.Token;
 
-            Rectangle viewRect = new Rectangle(
+            SD.Rectangle viewRect = new SD.Rectangle(
                 -panelMap.AutoScrollPosition.X,
                 -panelMap.AutoScrollPosition.Y,
                 panelMap.ClientSize.Width,
@@ -329,11 +329,11 @@ namespace economy_sim
                         }
                     });
 
-                    Bitmap bmp = null;
+                    SD.Bitmap bmp = null;
                     if (terrain != null)
                     {
-                        bmp = new Bitmap(terrain.Width, terrain.Height);
-                        using var g = Graphics.FromImage(bmp);
+                        bmp = new SD.Bitmap(terrain.Width, terrain.Height);
+                        using var g = SD.Graphics.FromImage(bmp);
                         g.DrawImage(terrain, 0, 0);
                         if (city != null)
                             g.DrawImage(city, 0, 0);
@@ -366,15 +366,15 @@ namespace economy_sim
                 return;
             }
 
-            Rectangle view;
+            SD.Rectangle view;
             int zoom;
             lock (_zoomLock)
             {
-                Size mapSize = mapManager.GetMapSize(mapZoom);
+                SD.Size mapSize = mapManager.GetMapSize(mapZoom);
                 mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
                 mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
                 zoom = mapZoom;
-                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
             }
 
             if (mapRenderInProgress)
@@ -390,14 +390,14 @@ namespace economy_sim
 
             Task.Run(() =>
             {
-                Bitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
+                SD.Bitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
                     else
                         ApplyZoom();
                 });
-                Bitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
+                SD.Bitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
@@ -405,8 +405,8 @@ namespace economy_sim
                         ApplyZoom();
                 });
                 if (terrain == null) return;
-                Bitmap map = new Bitmap(terrain.Width, terrain.Height);
-                using (var g = Graphics.FromImage(map))
+                SD.Bitmap map = new SD.Bitmap(terrain.Width, terrain.Height);
+                using (var g = SD.Graphics.FromImage(map))
                 {
                     g.DrawImage(terrain, 0, 0);
                     if (city != null)
@@ -437,13 +437,13 @@ namespace economy_sim
         }
 
 
-        private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
+        private SD.Bitmap ScaleBitmapNearest(SD.Bitmap src, int width, int height)
         {
             if (width <= 0 || height <= 0)
             {
                 // Log this event if a logging mechanism exists, e.g.:
                 // DebugLogger.Log("ScaleBitmapNearest called with invalid zero/negative dimensions.");
-                return new Bitmap(1, 1); // Return a minimal valid bitmap
+                return new SD.Bitmap(1, 1); // Return a minimal valid bitmap
             }
 
             // Optional: Add a check for excessively large dimensions as a further safeguard.
@@ -455,10 +455,10 @@ namespace economy_sim
             {
                 // Log this event if a logging mechanism exists, e.g.:
                 // DebugLogger.Log($"ScaleBitmapNearest called with excessively large dimensions: {width}x{height}");
-                return new Bitmap(1, 1); // Return a minimal valid bitmap
+                return new SD.Bitmap(1, 1); // Return a minimal valid bitmap
             }
-            Bitmap dest = new Bitmap(width, height);
-            using (var g = Graphics.FromImage(dest))
+            SD.Bitmap dest = new SD.Bitmap(width, height);
+            using (var g = SD.Graphics.FromImage(dest))
             {
                 g.InterpolationMode = InterpolationMode.NearestNeighbor;
                 g.PixelOffsetMode = PixelOffsetMode.Half;
@@ -1552,7 +1552,7 @@ namespace economy_sim
 
             Font itemFont = e.Font;
             // Default text color (handles selection text color)
-            Color defaultTextColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected ? SystemColors.HighlightText : e.ForeColor;
+            SD.Color defaultTextColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected ? SystemColors.HighlightText : e.ForeColor;
 
             // Regex to find the main part and the change part (e.g., " (+50)" or " (-0.25)")
             // Group 1: Main text part (e.g., "Population: 1,050")
@@ -1572,25 +1572,25 @@ namespace economy_sim
             }
 
             // Use the full item bounds for drawing, TextRenderer will handle clipping if needed.
-            Rectangle itemDrawBounds = e.Bounds;
+            SD.Rectangle itemDrawBounds = e.Bounds;
             TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.NoPadding; // Removed VerticalCenter
 
             // Draw main text part
-            Size mainTextSize = TextRenderer.MeasureText(e.Graphics, mainTextPart, itemFont, itemDrawBounds.Size, flags);
-            Rectangle mainTextRect = new Rectangle(itemDrawBounds.Left, itemDrawBounds.Top, mainTextSize.Width, itemDrawBounds.Height);
-            TextRenderer.DrawText(e.Graphics, mainTextPart, itemFont, mainTextRect, defaultTextColor, flags);
+            SD.Size mainTextSize = TextRenderer.MeasureText(e.SD.Graphics, mainTextPart, itemFont, itemDrawBounds.SD.Size, flags);
+            SD.Rectangle mainTextRect = new SD.Rectangle(itemDrawBounds.Left, itemDrawBounds.Top, mainTextSize.Width, itemDrawBounds.Height);
+            TextRenderer.DrawText(e.SD.Graphics, mainTextPart, itemFont, mainTextRect, defaultTextColor, flags);
 
             if (!string.IsNullOrEmpty(changeTextWithSpaceAndParens))
             {
-                Color changeColor = defaultTextColor;
+                SD.Color changeColor = defaultTextColor;
                 if (contentInsideParens.Contains("+"))
-                    changeColor = Color.Green;
+                    changeColor = SD.Color.Green;
                 else if (contentInsideParens.Contains("-"))
-                    changeColor = Color.Red;
+                    changeColor = SD.Color.Red;
 
-                Size changeTextSize = TextRenderer.MeasureText(e.Graphics, changeTextWithSpaceAndParens, itemFont, itemDrawBounds.Size, flags);
-                Rectangle changeTextRect = new Rectangle(itemDrawBounds.Left + mainTextSize.Width, itemDrawBounds.Top, changeTextSize.Width, itemDrawBounds.Height);
-                TextRenderer.DrawText(e.Graphics, changeTextWithSpaceAndParens, itemFont, changeTextRect, changeColor, flags);
+                SD.Size changeTextSize = TextRenderer.MeasureText(e.SD.Graphics, changeTextWithSpaceAndParens, itemFont, itemDrawBounds.SD.Size, flags);
+                SD.Rectangle changeTextRect = new SD.Rectangle(itemDrawBounds.Left + mainTextSize.Width, itemDrawBounds.Top, changeTextSize.Width, itemDrawBounds.Height);
+                TextRenderer.DrawText(e.SD.Graphics, changeTextWithSpaceAndParens, itemFont, changeTextRect, changeColor, flags);
             }
 
             // Draw focus rectangle if the item has focus
@@ -1965,7 +1965,7 @@ namespace economy_sim
                 // Highlight player's country
                 if (country == playerCountry)
                 {
-                    item.BackColor = Color.LightBlue;
+                    item.BackColor = SD.Color.LightBlue;
                 }
             }
 
@@ -2019,7 +2019,7 @@ namespace economy_sim
 
         private void CheckAndPromptForMissingCityData()
         {
-            List<Polygon> missing = new List<Polygon>();
+            List<Nts.Polygon> missing = new List<Nts.Polygon>();
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
             foreach (var urban in UrbanAreaManager.UrbanPolygons)
@@ -2038,7 +2038,7 @@ namespace economy_sim
             }
         }
 
-        private async Task GenerateCityDataFor(IEnumerable<Polygon> areas)
+        private async Task GenerateCityDataFor(IEnumerable<Nts.Polygon> areas)
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
@@ -2066,7 +2066,7 @@ namespace economy_sim
         private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
             // 1) figure out the anchor in panel coords
-            Point anchor = panelMap.PointToClient(Cursor.Position);
+            SD.Point anchor = panelMap.PointToClient(Cursor.Position);
             if (!panelMap.ClientRectangle.Contains(anchor)) return;
 
             // 2) bump zoom
@@ -2175,7 +2175,7 @@ namespace economy_sim
 
                 lock (_zoomLock)
                 {
-                    Size mapSize = mapManager.GetMapSize(mapZoom);
+                    SD.Size mapSize = mapManager.GetMapSize(mapZoom);
                     mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
                     mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
                 }
@@ -2184,7 +2184,7 @@ namespace economy_sim
             }
         }
 
-        private Point lastLocation; // Track the last location for smooth panning
+        private SD.Point lastLocation; // Track the last location for smooth panning
 
         private void PictureBox1_MouseDown(object sender, MouseEventArgs e)
         {
@@ -2208,7 +2208,7 @@ namespace economy_sim
                     int dy = e.Y - lastLocation.Y;
                     mapViewOrigin.X = Math.Max(0, mapViewOrigin.X - dx);
                     mapViewOrigin.Y = Math.Max(0, mapViewOrigin.Y - dy);
-                    Size mapSize = mapManager.GetMapSize(mapZoom);
+                    SD.Size mapSize = mapManager.GetMapSize(mapZoom);
                     mapViewOrigin.X = Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width);
                     mapViewOrigin.Y = Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height);
                     lastLocation = e.Location;
@@ -2235,7 +2235,7 @@ namespace economy_sim
                 isPanning = false;
                 this.panelMap.Cursor = Cursors.Default; // Reset panelMap cursor
                 this.panelMap.BackColor = SystemColors.Control;
-                this.pictureBox1.BackColor = Color.Transparent; // Reset pictureBox backcolor
+                this.pictureBox1.BackColor = SD.Color.Transparent; // Reset pictureBox backcolor
                 PreloadMapTiles();
             }
         }
@@ -2256,11 +2256,11 @@ namespace economy_sim
         {
             if (mapManager == null)
                 return;
-            Rectangle view;
+            SD.Rectangle view;
             int zoom;
             lock (_zoomLock)
             {
-                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
                 zoom = mapZoom;
             }
             _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);

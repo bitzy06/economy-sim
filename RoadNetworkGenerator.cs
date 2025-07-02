@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
 using System.Collections.Generic;
 using System;
 using System.IO;
@@ -8,10 +8,10 @@ namespace StrategyGame
 {
     public static class RoadNetworkGenerator
     {
-        private static readonly Dictionary<Polygon, List<LineSegment>> networkCache = new();
+        private static readonly Dictionary<Nts.Polygon, List<LineSegment>> networkCache = new();
         private static readonly Dictionary<string, CityDataModel> modelCache = new();
 
-        public static List<LineSegment> GetOrGenerateFor(Polygon urbanArea, int cellSize)
+        public static List<LineSegment> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
         {
             // Low zoom levels use a simple fill instead of detailed roads
             if (cellSize < 40)
@@ -40,14 +40,14 @@ namespace StrategyGame
             }
 
             var clippedNetwork = new List<LineSegment>();
-            var factory = GeometryFactory.Default;
+            var factory = Nts.GeometryFactory.Default;
 
             foreach (var line in gridLines)
             {
                 var lineString = factory.CreateLineString(new[]
                 {
-                    new Coordinate(line.X1, line.Y1),
-                    new Coordinate(line.X2, line.Y2)
+                    new Nts.Coordinate(line.X1, line.Y1),
+                    new Nts.Coordinate(line.X2, line.Y2)
                 });
 
                 if (!urbanArea.Intersects(lineString))
@@ -55,7 +55,7 @@ namespace StrategyGame
 
                 var intersection = urbanArea.Intersection(lineString);
 
-                if (intersection is LineString ls)
+                if (intersection is Nts.LineString ls)
                 {
                     var coords = ls.Coordinates;
                     for (int c = 0; c < coords.Length - 1; c++)
@@ -69,7 +69,7 @@ namespace StrategyGame
                 {
                     foreach (var geom in mls.Geometries)
                     {
-                        if (geom is LineString subLs)
+                        if (geom is Nts.LineString subLs)
                         {
                             var coords = subLs.Coordinates;
                             for (int c = 0; c < coords.Length - 1; c++)
@@ -87,7 +87,7 @@ namespace StrategyGame
             return clippedNetwork;
         }
 
-        public static async Task<CityDataModel?> LoadModelAsync(Polygon urbanArea)
+        public static async Task<CityDataModel?> LoadModelAsync(Nts.Polygon urbanArea)
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
@@ -107,7 +107,7 @@ namespace StrategyGame
             return null;
         }
 
-        public static async Task<CityDataModel> GenerateModelAsync(Polygon urbanArea)
+        public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea)
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
@@ -121,27 +121,27 @@ namespace StrategyGame
 
             var env = urbanArea.EnvelopeInternal;
             var rnd = new Random();
-            var factory = GeometryFactory.Default;
+            var factory = Nts.GeometryFactory.Default;
             var lines = new List<LineSegment>();
 
             double step = Math.Min(env.Width, env.Height) / 12.0;
-            var center = new Coordinate((env.MinX + env.MaxX) / 2.0, (env.MinY + env.MaxY) / 2.0);
-            var initial = new (Coordinate start, double angle, int depth)[]
+            var center = new Nts.Coordinate((env.MinX + env.MaxX) / 2.0, (env.MinY + env.MaxY) / 2.0);
+            var initial = new (Nts.Coordinate start, double angle, int depth)[]
             {
                 (center, 0.0, 0)
             };
 
-            var queue = new Queue<(Coordinate start, double angle, int depth)>(initial);
+            var queue = new Queue<(Nts.Coordinate start, double angle, int depth)>(initial);
             int maxDepth = 4;
 
             bool IsValid(LineSegment s)
             {
-                var ls = factory.CreateLineString(new[] { new Coordinate(s.X1, s.Y1), new Coordinate(s.X2, s.Y2) });
+                var ls = factory.CreateLineString(new[] { new Nts.Coordinate(s.X1, s.Y1), new Nts.Coordinate(s.X2, s.Y2) });
                 if (!urbanArea.Contains(ls.EndPoint))
                     return false;
                 foreach (var existing in lines)
                 {
-                    var existingLs = factory.CreateLineString(new[] { new Coordinate(existing.X1, existing.Y1), new Coordinate(existing.X2, existing.Y2) });
+                    var existingLs = factory.CreateLineString(new[] { new Nts.Coordinate(existing.X1, existing.Y1), new Nts.Coordinate(existing.X2, existing.Y2) });
                     if (ls.Distance(existingLs) < step * 0.5)
                         return false;
                 }
@@ -152,7 +152,7 @@ namespace StrategyGame
             {
                 var (start, angle, depth) = queue.Dequeue();
                 double len = step * (1.0 + rnd.NextDouble() * 0.5);
-                var end = new Coordinate(start.X + Math.Cos(angle) * len, start.Y + Math.Sin(angle) * len);
+                var end = new Nts.Coordinate(start.X + Math.Cos(angle) * len, start.Y + Math.Sin(angle) * len);
                 var seg = new LineSegment(start.X, start.Y, end.X, end.Y);
                 if (IsValid(seg))
                 {

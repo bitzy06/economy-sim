@@ -1,7 +1,9 @@
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Drawing;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Drawing.Processing;
 using System.Linq;
 using System;
 using System.Collections.Generic;
@@ -35,15 +37,15 @@ namespace StrategyGame
                     if (!b.Footprint.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
                         continue;
                     var visible = b.Footprint.Intersection(tilePoly);
-                    if (visible is Polygon p)
+                    if (visible is Nts.Polygon p)
                     {
                         RenderPolygon(img, p, tileBounds, MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, GetColor(b.LandUse));
                     }
-                    else if (visible is MultiPolygon mp)
+                    else if (visible is Nts.MultiPolygon mp)
                     {
                         for (int i = 0; i < mp.NumGeometries; i++)
                         {
-                            if (mp.GetGeometryN(i) is Polygon pp)
+                            if (mp.GetGeometryN(i) is Nts.Polygon pp)
                                 RenderPolygon(img, pp, tileBounds, MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, GetColor(b.LandUse));
                         }
                     }
@@ -64,20 +66,20 @@ namespace StrategyGame
             };
         }
 
-        private static Polygon ToPolygon(GeoBounds b)
+        private static Nts.Polygon ToPolygon(GeoBounds b)
         {
-            var gf = GeometryFactory.Default;
+            var gf = Nts.GeometryFactory.Default;
             return gf.CreatePolygon(new[]
             {
-                new Coordinate(b.MinLon,b.MinLat),
-                new Coordinate(b.MaxLon,b.MinLat),
-                new Coordinate(b.MaxLon,b.MaxLat),
-                new Coordinate(b.MinLon,b.MaxLat),
-                new Coordinate(b.MinLon,b.MinLat)
+                new Nts.Coordinate(b.MinLon,b.MinLat),
+                new Nts.Coordinate(b.MaxLon,b.MinLat),
+                new Nts.Coordinate(b.MaxLon,b.MaxLat),
+                new Nts.Coordinate(b.MinLon,b.MaxLat),
+                new Nts.Coordinate(b.MinLon,b.MinLat)
             });
         }
 
-        private static void RenderPolygon(Image<Rgba32> img, Polygon poly, GeoBounds bounds, int tileWidth, int tileHeight, Rgba32 color)
+        private static void RenderPolygon(Image<Rgba32> img, Nts.Polygon poly, GeoBounds bounds, int tileWidth, int tileHeight, Rgba32 color)
         {
             var coords = poly.ExteriorRing.Coordinates;
             var pts = new List<(int X, int Y)>(coords.Length);
@@ -95,7 +97,7 @@ namespace StrategyGame
             if (points.Count < 3)
                 return;
 
-            var polygonShape = new SixLabors.ImageSharp.Drawing.Polygon(points.Select(p => new PointF(p.X, p.Y)).ToArray());
+            var polygonShape = new SixLabors.ImageSharp.Drawing.Polygon(points.Select(p => new SixLabors.ImageSharp.PointF(p.X, p.Y)).ToArray());
             img.Mutate(ctx => ctx.Fill(color, polygonShape));
         }
     }

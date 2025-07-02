@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
 
 namespace StrategyGame
 {
@@ -6,7 +6,7 @@ namespace StrategyGame
 
     public class Parcel
     {
-        public Polygon Shape { get; set; }
+        public Nts.Polygon Shape { get; set; }
         public LandUseType LandUse { get; set; }
     }
 }
