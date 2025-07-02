@@ -275,32 +275,54 @@ namespace StrategyGame
                 if (!urban.Intersects(tilePoly))
                     continue;
 
-                var network = RoadNetworkGenerator.GetOrGenerateFor(urban);
-                foreach (var road in network)
+                var network = RoadNetworkGenerator.GetOrGenerateFor(urban, cellSize);
+                if (network.Count == 0)
                 {
-                    double x1 = road.X1, y1 = road.Y1, x2 = road.X2, y2 = road.Y2;
-                    if (!GeometryUtil.ClipLine(bounds, ref x1, ref y1, ref x2, ref y2))
-                        continue;
-                    int px1 = (int)((x1 - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
-                    int py1 = (int)((bounds.MaxLat - y1) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
-                    int px2 = (int)((x2 - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
-                    int py2 = (int)((bounds.MaxLat - y2) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
-                    DrawLine(img, px1, py1, px2, py2, roadColor);
-                }
-
-                var visible = urban.Intersection(tilePoly);
-                if (visible != null && !visible.IsEmpty)
-                {
-                    if (visible is NetTopologySuite.Geometries.Polygon p)
+                    var visibleFill = urban.Intersection(tilePoly);
+                    if (visibleFill != null && !visibleFill.IsEmpty)
                     {
-                        RenderPolygon(img, p, bounds, tileWidth, tileHeight, fillColor);
-                    }
-                    else if (visible is NetTopologySuite.Geometries.MultiPolygon mp)
-                    {
-                        for (int i = 0; i < mp.NumGeometries; i++)
+                        if (visibleFill is NetTopologySuite.Geometries.Polygon p)
                         {
-                            if (mp.GetGeometryN(i) is NetTopologySuite.Geometries.Polygon pp)
-                                RenderPolygon(img, pp, bounds, tileWidth, tileHeight, fillColor);
+                            RenderPolygon(img, p, bounds, tileWidth, tileHeight, fillColor);
+                        }
+                        else if (visibleFill is NetTopologySuite.Geometries.MultiPolygon mpFill)
+                        {
+                            for (int i = 0; i < mpFill.NumGeometries; i++)
+                            {
+                                if (mpFill.GetGeometryN(i) is NetTopologySuite.Geometries.Polygon pp)
+                                    RenderPolygon(img, pp, bounds, tileWidth, tileHeight, fillColor);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var road in network)
+                    {
+                        double x1 = road.X1, y1 = road.Y1, x2 = road.X2, y2 = road.Y2;
+                        if (!GeometryUtil.ClipLine(bounds, ref x1, ref y1, ref x2, ref y2))
+                            continue;
+                        int px1 = (int)((x1 - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
+                        int py1 = (int)((bounds.MaxLat - y1) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
+                        int px2 = (int)((x2 - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
+                        int py2 = (int)((bounds.MaxLat - y2) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
+                        DrawLine(img, px1, py1, px2, py2, roadColor);
+                    }
+
+                    var visible = urban.Intersection(tilePoly);
+                    if (visible != null && !visible.IsEmpty)
+                    {
+                        if (visible is NetTopologySuite.Geometries.Polygon p)
+                        {
+                            RenderPolygon(img, p, bounds, tileWidth, tileHeight, fillColor);
+                        }
+                        else if (visible is NetTopologySuite.Geometries.MultiPolygon mp)
+                        {
+                            for (int i = 0; i < mp.NumGeometries; i++)
+                            {
+                                if (mp.GetGeometryN(i) is NetTopologySuite.Geometries.Polygon pp)
+                                    RenderPolygon(img, pp, bounds, tileWidth, tileHeight, fillColor);
+                            }
                         }
                     }
                 }
