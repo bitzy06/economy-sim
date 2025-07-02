@@ -292,7 +292,51 @@ namespace StrategyGame
 
             DrawBordersLarge(img, mask);
 
-            OverlayUrban(img, offsetX, offsetY, fullW, fullH);
+
+            int tileWidth = Math.Min(tileSizePx, fullW - offsetX);
+            int tileHeight = Math.Min(tileSizePx, fullH - offsetY);
+
+            var bounds = new CityManager.GeoBounds
+            {
+                MinLon = (double)offsetX / fullW * 360.0 - 180.0,
+                MaxLon = (double)(offsetX + tileWidth) / fullW * 360.0 - 180.0,
+                MaxLat = 90.0 - (double)offsetY / fullH * 180.0,
+                MinLat = 90.0 - (double)(offsetY + tileHeight) / fullH * 180.0
+            };
+
+            var cities = CityManager.GetCitiesInBounds(bounds);
+            var roadColor = new Rgba32(60, 60, 60, 255);
+            var buildingColor = new Rgba32(100, 100, 100, 255);
+            foreach (var city in cities)
+            {
+                foreach (var road in city.GetRoads(cellSize))
+                {
+                    int x0 = (int)(((road.X1 + 180.0) / 360.0) * fullW) - offsetX;
+                    int y0 = (int)((90.0 - road.Y1) / 180.0 * fullH) - offsetY;
+                    int x1 = (int)(((road.X2 + 180.0) / 360.0) * fullW) - offsetX;
+                    int y1 = (int)((90.0 - road.Y2) / 180.0 * fullH) - offsetY;
+                    DrawLine(img, x0, y0, x1, y1, roadColor);
+                }
+
+                foreach (var poly in city.GetBuildingFootprints(cellSize))
+                {
+                    int minX = int.MaxValue;
+                    int minY = int.MaxValue;
+                    int maxX = int.MinValue;
+                    int maxY = int.MinValue;
+                    foreach (var v in poly.Vertices)
+                    {
+                        int px = (int)(((v.X + 180.0) / 360.0) * fullW) - offsetX;
+                        int py = (int)((90.0 - v.Y) / 180.0 * fullH) - offsetY;
+                        if (px < minX) minX = px;
+                        if (px > maxX) maxX = px;
+                        if (py < minY) minY = py;
+                        if (py > maxY) maxY = py;
+                    }
+
+                    FillRect(img, minX, minY, maxX - minX + 1, maxY - minY + 1, buildingColor);
+                }
+            }
 
             return img;
         }
@@ -465,6 +509,20 @@ namespace StrategyGame
                 e2 = 2 * err;
                 if (e2 >= dy) { err += dy; x0 += sx; }
                 if (e2 <= dx) { err += dx; y0 += sy; }
+            }
+        }
+
+        private static void FillRect(Image<Rgba32> img, int x, int y, int width, int height, Rgba32 color)
+        {
+            for (int yy = y; yy < y + height; yy++)
+            {
+                if (yy < 0 || yy >= img.Height) continue;
+                Span<Rgba32> row = img.DangerousGetPixelRowMemory(yy).Span;
+                for (int xx = x; xx < x + width; xx++)
+                {
+                    if (xx < 0 || xx >= img.Width) continue;
+                    row[xx] = color;
+                }
             }
         }
 

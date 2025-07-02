@@ -583,6 +583,9 @@ namespace economy_sim
             UpdateCityAndFactoryStats();
             UpdateMarketStats();
 
+            // Load procedural city locations for dynamic map rendering
+            CityManager.LoadCities();
+
             var initialCity = GetSelectedCity();
             if (initialCity != null)
             {
