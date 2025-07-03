@@ -71,6 +71,8 @@ namespace economy_sim
         private bool mapRenderQueued = false;
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
+        private int lastCityModelCount = 0;
+        private DateTime lastCityModelUpdate = DateTime.Now;
 
         private void LoadGlobalData()
         {
@@ -1261,11 +1263,8 @@ namespace economy_sim
                 UpdateGovernmentTab();
             }
 
-            // Update urban area status if city generation is in progress
-            if (cityGenerationManager.IsProcessing())
-            {
-                UpdateUrbanAreaStatus();
-            }
+            // Update urban area status each tick
+            UpdateUrbanAreaStatus();
 
             // Process AI trade proposals (temporary simple logic)
             if (diplomacyManager != null && playerCountry != null && random.Next(100) < 20) // 20% chance each turn
@@ -2506,7 +2505,16 @@ namespace economy_sim
             int missingData = GetUrbanAreasMissingData();
             bool isGenerating = cityGenerationManager.IsProcessing();
             int queueCount = cityGenerationManager.GetQueueCount();
-            
+
+            double elapsed = (DateTime.Now - lastCityModelUpdate).TotalSeconds;
+            double rate = 0;
+            if (elapsed > 0)
+            {
+                rate = (areasWithData - lastCityModelCount) / elapsed;
+            }
+            lastCityModelUpdate = DateTime.Now;
+            lastCityModelCount = areasWithData;
+
             var (inMemoryCount, diskCount, totalUnique) = RoadNetworkGenerator.GetCacheStatistics();
             
             string statusMessage = $"Urban Areas: {totalUrbanAreas} total, {areasWithData} with data, {missingData} missing";
@@ -2515,6 +2523,9 @@ namespace economy_sim
                 statusMessage += $" (Generating... {queueCount} in queue)";
             }
             
+            labelCityModelStatus.Text = $"City Models: {areasWithData}/{totalUrbanAreas}";
+            labelCityModelRate.Text = $"Generation Rate: {rate:F2}/s";
+
             // If you have a status label or other UI element, update it here
             // For example: labelUrbanAreaStatus.Text = statusMessage;
             
