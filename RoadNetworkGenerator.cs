@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using NetTopologySuite.IO;
 using NetTopologySuite.IO.Converters;
+using NetTopologySuite.Index.Strtree;
 
 namespace StrategyGame
 {
@@ -132,6 +133,11 @@ namespace StrategyGame
             var gf = Nts.GeometryFactory.Default;
             var random = new Random();
             var roadNetwork = new List<Nts.LineString>(highways);
+            var index = new STRtree<Nts.LineString>();
+            foreach (var hw in highways)
+            {
+                index.Insert(hw.EnvelopeInternal, hw);
+            }
             var queue = new Queue<(Nts.Coordinate origin, double angle)>();
 
             // Seed the L-system from points on the highways
@@ -169,7 +175,8 @@ namespace StrategyGame
                 Nts.Coordinate? closestIntersection = null;
                 double minDistance = double.MaxValue;
 
-                foreach (var existingRoad in roadNetwork)
+                var candidates = index.Query(proposedSegment.EnvelopeInternal);
+                foreach (var existingRoad in candidates)
                 {
                     if (proposedSegment.Intersects(existingRoad))
                     {
@@ -195,6 +202,7 @@ namespace StrategyGame
                 }
 
                 roadNetwork.Add(proposedSegment);
+                index.Insert(proposedSegment.EnvelopeInternal, proposedSegment);
 
                 // If the road didn't hit anything, it's a candidate for branching
                 if (closestIntersection == null)
