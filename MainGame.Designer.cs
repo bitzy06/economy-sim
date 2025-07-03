@@ -63,6 +63,8 @@
             checkBoxLogPops = new CheckBox();
             checkBoxLogBuildings = new CheckBox();
             checkBoxLogEconomy = new CheckBox();
+            labelCityModelStatus = new Label();
+            labelCityModelRate = new Label();
             buttonGenerateTileCache = new Button();
             buttonGenerateCityData = new Button();
             tabPageDiplomacy = new TabPage();
@@ -264,6 +266,8 @@
             tabPageDebug.Controls.Add(checkBoxLogPops);
             tabPageDebug.Controls.Add(checkBoxLogBuildings);
             tabPageDebug.Controls.Add(checkBoxLogEconomy);
+            tabPageDebug.Controls.Add(labelCityModelStatus);
+            tabPageDebug.Controls.Add(labelCityModelRate);
             tabPageDebug.Controls.Add(buttonGenerateTileCache);
             tabPageDebug.Controls.Add(buttonGenerateCityData);
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
@@ -414,7 +418,27 @@
             checkBoxLogEconomy.Text = "Log Economy Stats";
             checkBoxLogEconomy.UseVisualStyleBackColor = true;
             checkBoxLogEconomy.CheckedChanged += CheckBoxLogEconomy_CheckedChanged;
-            // 
+            //
+            // labelCityModelStatus
+            //
+            labelCityModelStatus.AutoSize = true;
+            labelCityModelStatus.Location = new Point(14, 523);
+            labelCityModelStatus.Margin = new Padding(5, 0, 5, 0);
+            labelCityModelStatus.Name = "labelCityModelStatus";
+            labelCityModelStatus.Size = new Size(196, 20);
+            labelCityModelStatus.TabIndex = 16;
+            labelCityModelStatus.Text = "City Models: 0/0";
+            //
+            // labelCityModelRate
+            //
+            labelCityModelRate.AutoSize = true;
+            labelCityModelRate.Location = new Point(14, 553);
+            labelCityModelRate.Margin = new Padding(5, 0, 5, 0);
+            labelCityModelRate.Name = "labelCityModelRate";
+            labelCityModelRate.Size = new Size(212, 20);
+            labelCityModelRate.TabIndex = 17;
+            labelCityModelRate.Text = "Generation Rate: 0/s";
+            //
             // buttonGenerateTileCache
             //
             buttonGenerateTileCache.Location = new Point(182, 662);
@@ -726,6 +750,8 @@
         private System.Windows.Forms.CheckBox checkBoxLogPops;
         private System.Windows.Forms.CheckBox checkBoxLogBuildings;
         private System.Windows.Forms.CheckBox checkBoxLogEconomy;
+        private System.Windows.Forms.Label labelCityModelStatus;
+        private System.Windows.Forms.Label labelCityModelRate;
         private System.Windows.Forms.Button buttonGenerateTileCache;
         private System.Windows.Forms.Button buttonGenerateCityData;
         private System.Windows.Forms.TabPage tabPageDiplomacy;
