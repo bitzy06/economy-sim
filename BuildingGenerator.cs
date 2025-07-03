@@ -27,7 +27,7 @@ namespace StrategyGame
                         foot = gf.ToGeometry(temp.EnvelopeInternal);
                         break;
                     case LandUseType.Park:
-                        continue;
+                        return;
                 }
 
                 if (foot is Nts.Polygon p && !foot.IsEmpty)

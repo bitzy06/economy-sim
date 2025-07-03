@@ -32,7 +32,7 @@ namespace StrategyGame
 
             if (lineStrings.Length == 0)
             {
-                return parcels;
+                return new List<Parcel>();
             }
 
             var nodedLines = (Nts.MultiLineString)lineStrings.First().Union(lineStrings.Skip(1).First());

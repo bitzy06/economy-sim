@@ -1,5 +1,4 @@
 using ComputeSharp;
-using ComputeSharp; // for attributes
 
 namespace StrategyGame
 {
