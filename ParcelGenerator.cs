@@ -5,6 +5,8 @@ using NetTopologySuite.Geometries.Utilities; // Add this namespace for splitting
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace StrategyGame
 {
@@ -12,10 +14,10 @@ namespace StrategyGame
     {
         public static List<Parcel> GenerateParcels(CityDataModel model)
         {
-            var parcels = new List<Parcel>();
+            var parcelsBag = new System.Collections.Concurrent.ConcurrentBag<Parcel>();
             if (model.RoadNetwork == null || !model.RoadNetwork.Any())
             {
-                return parcels;
+                return new List<Parcel>();
             }
 
             var gf = Nts.GeometryFactory.Default;
@@ -45,20 +47,17 @@ namespace StrategyGame
             var rawPolys = polygonizer.GetPolygons();
             Debug.WriteLine($"[ParcelGenerator] Polygonizer produced {rawPolys.Count} raw polygons");
 
-            foreach (var geom in rawPolys)
+            Parallel.ForEach(rawPolys.OfType<Nts.Polygon>().Where(p => p.IsValid && p.Area > 1e-9), poly =>
             {
-                if (geom is Nts.Polygon poly && poly.IsValid && poly.Area > 1e-9)
-                {
-                    if (poly.Area > 0.0001)
-                    {
-                        RecursiveOBBSplitting(poly, parcels, 0);
-                    }
-                    else
-                    {
-                        parcels.Add(new Parcel { Shape = poly });
-                    }
-                }
-            }
+                var local = new List<Parcel>();
+                if (poly.Area > 0.0001)
+                    RecursiveOBBSplitting(poly, local, 0);
+                else
+                    local.Add(new Parcel { Shape = poly });
+                foreach (var p in local) parcelsBag.Add(p);
+            });
+
+            var parcels = parcelsBag.ToList();
 
             Debug.WriteLine($"[ParcelGenerator] Final parcel count: {parcels.Count}");
             return parcels;

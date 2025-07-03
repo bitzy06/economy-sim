@@ -2,6 +2,7 @@ using Nts = NetTopologySuite.Geometries;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace StrategyGame
 {
@@ -37,7 +38,7 @@ namespace StrategyGame
                 .Select(seg => gf.CreateLineString(new[] { new Nts.Coordinate(seg.X1, seg.Y1), new Nts.Coordinate(seg.X2, seg.Y2) }))
                 .ToList();
 
-            foreach (var parcel in model.Parcels)
+            Parallel.ForEach(model.Parcels, parcel =>
             {
                 var weights = new Dictionary<LandUseType, double>();
                 var parcelCenter = parcel.Shape.Centroid;
@@ -73,7 +74,7 @@ namespace StrategyGame
 
                 // --- Select Land Use ---
                 parcel.LandUse = GetRandomLandUse(weights);
-            }
+            });
         }
 
         private static LandUseType GetRandomLandUse(Dictionary<LandUseType, double> weights)
