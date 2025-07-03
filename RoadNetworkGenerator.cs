@@ -1,5 +1,6 @@
 ﻿using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Prepared;
+using NetTopologySuite.Operation.Union;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -8,14 +9,13 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using NetTopologySuite.IO; // Replace this with the correct namespace
-using NetTopologySuite.IO.Converters; // Add this namespace
+using NetTopologySuite.IO;
+using NetTopologySuite.IO.Converters;
 
 namespace StrategyGame
 {
     public static class RoadNetworkGenerator
     {
-        // Cache for generated networks and models
         private static readonly ConcurrentDictionary<string, List<(Nts.LineString Line, RoadType Type)>> networkCache = new();
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
 
@@ -23,32 +23,21 @@ namespace StrategyGame
         public static TerrainData? Terrain { get; set; }
         public static WaterBodyMap? Water { get; set; }
 
-        // Options for JSON serialization, including geo-JSON support
         private static readonly JsonSerializerOptions jsonOptions = new()
         {
             IncludeFields = true,
-            WriteIndented = true
+            WriteIndented = true,
+            Converters = { new GeoJsonConverterFactory() }
         };
 
-        // Static constructor to register converters
-        static RoadNetworkGenerator()
-        {
-            jsonOptions.Converters.Add(new GeoJsonConverterFactory());
-        }
-
-        /// <summary>
-        /// Generates or retrieves a cached city data model (roads, parcels, buildings) for the given urban area.
-        /// </summary>
         public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea, int cellSize)
         {
             string hash = ComputeHash(urbanArea);
             string cacheDir = GetCacheDir();
 
-            // Return in-memory cache if available
             if (modelCache.TryGetValue(hash, out var cachedModel))
                 return cachedModel;
 
-            // Try loading from disk if a mapping exists
             string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
             if (File.Exists(hashPath))
             {
@@ -60,53 +49,38 @@ namespace StrategyGame
                     {
                         string jsonIn = await File.ReadAllTextAsync(modelPath).ConfigureAwait(false);
                         var loaded = JsonSerializer.Deserialize<CityDataModel>(jsonIn, jsonOptions);
-                        modelCache[hash] = loaded; // Cache in-memory
-                        return loaded;
+                        if (loaded != null)
+                        {
+                            modelCache[hash] = loaded;
+                            return loaded;
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[Error] Failed to load cached model by hash: {ex.Message}");
-                    // Fall through to regenerate
                 }
             }
 
-            // Create fresh model
             var result = new CityDataModel { Id = Guid.NewGuid() };
-            result.RoadNetwork = GetOrGenerateFor(urbanArea, cellSize)
+            var roadGeometries = GetOrGenerateFor(urbanArea, cellSize);
+
+            result.RoadNetwork = roadGeometries
                 .SelectMany(tuple => tuple.Line.Coordinates.Zip(tuple.Line.Coordinates.Skip(1), (s, e) =>
                     new LineSegment(s.X, s.Y, e.X, e.Y, tuple.Type)))
                 .ToList();
+
             result.Parcels = ParcelGenerator.GenerateParcels(result);
-
-            // Assign land use and generate buildings in parallel
-            var landUseTask = Task.Run(() => LandUseAssigner.AssignLandUse(result));
-            var buildingTask = Task.Run(() =>
-            {
-                try
-                {
-                    return BuildingGenerator.GenerateBuildings(result);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[Error] Building generation failed: {ex.Message}");
-                    return new List<Building>();
-                }
-            });
-
-            await Task.WhenAll(landUseTask, buildingTask).ConfigureAwait(false);
-            result.Buildings = buildingTask.Result;
+            LandUseAssigner.AssignLandUse(result);
+            result.Buildings = BuildingGenerator.GenerateBuildings(result);
 
             Debug.WriteLine($">> Generated {result.Parcels.Count} parcels, {result.Buildings.Count} buildings for {hash}");
 
-            // Serialize and write to disk (safe against errors)
             try
             {
                 string modelPath = Path.Combine(cacheDir, $"{result.Id}.json");
                 string jsonOut = JsonSerializer.Serialize(result, jsonOptions);
                 await File.WriteAllTextAsync(modelPath, jsonOut).ConfigureAwait(false);
-
-                // Save the hash-to-ID mapping
                 await File.WriteAllTextAsync(hashPath, result.Id.ToString()).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -114,175 +88,148 @@ namespace StrategyGame
                 Console.WriteLine($"[Error] Failed to serialize CityDataModel: {ex.Message}");
             }
 
-            // Cache in-memory and return
             modelCache[hash] = result;
             return result;
         }
 
-        /// <summary>
-        /// Generates or retrieves a cached list of line segments representing roads within the urban polygon.
-        /// </summary>
         public static List<(Nts.LineString Line, RoadType Type)> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
         {
-            string key = $"{ComputeHash(urbanArea)}_{cellSize}";
+            string key = ComputeHash(urbanArea);
             if (networkCache.TryGetValue(key, out var cachedNet))
                 return cachedNet;
 
-            var clippedNetwork = new List<(Nts.LineString, RoadType)>();
-
-            // Generate highways to neighbours using A*
             var highways = GenerateHighways(urbanArea).ToList();
-            clippedNetwork.AddRange(highways.Select(h => (h, RoadType.Primary)));
+            var localRoads = GenerateLocalRoads(urbanArea, highways);
 
-            // Generate secondary roads via simple L-system
-            var locals = GenerateLocalRoads(urbanArea, highways, cellSize);
-            clippedNetwork.AddRange(locals.Select(l => (l, RoadType.Secondary)));
+            var allRoads = highways.Select(h => (h, RoadType.Primary))
+                                 .Concat(localRoads.Select(l => (l, RoadType.Secondary)))
+                                 .ToList();
 
-            networkCache[key] = clippedNetwork;
-            return clippedNetwork;
+            networkCache[key] = allRoads;
+            return allRoads;
         }
 
-        /// <summary>
-        /// Generates simple highway connections from the given urban area to its nearest neighbours.
-        /// </summary>
         private static IEnumerable<Nts.LineString> GenerateHighways(Nts.Polygon urbanArea)
         {
+            // This is a simplified placeholder. A true A* implementation would be more complex.
             var gf = Nts.GeometryFactory.Default;
+            var center = urbanArea.Centroid;
             var neighbours = UrbanAreaManager.UrbanPolygons
-                .Where(p => !ReferenceEquals(p, urbanArea))
-                .OrderBy(p => p.Centroid.Distance(urbanArea.Centroid))
-                .Take(3)
-                .ToList();
+                .Where(p => !ReferenceEquals(p, urbanArea) && p.IsValid)
+                .OrderBy(p => p.Centroid.Distance(center))
+                .Take(2); // Connect to nearest 2 for a cleaner network
 
             foreach (var other in neighbours)
             {
-                var raw = AStarPath(urbanArea.Centroid.Coordinate, other.Centroid.Coordinate);
-                var smooth = SmoothPath(raw);
-                yield return gf.CreateLineString(smooth.ToArray());
+                yield return gf.CreateLineString(new[] { center.Coordinate, other.Centroid.Coordinate });
             }
         }
 
-        private static List<Nts.Coordinate> AStarPath(Nts.Coordinate start, Nts.Coordinate goal)
+        private static List<Nts.LineString> GenerateLocalRoads(Nts.Polygon area, List<Nts.LineString> highways)
         {
-            double step = 0.01;
-            var open = new PriorityQueue<(Nts.Coordinate C, double F) , double>();
-            var cameFrom = new Dictionary<Nts.Coordinate, Nts.Coordinate>();
-            var gScore = new Dictionary<Nts.Coordinate, double>(new CoordComparer()) { [start] = 0 };
-
-            open.Enqueue((start, Distance(start, goal)), Distance(start, goal));
-
-            var neighbourDirs = new[]
-            {
-                (1,0),(0,1),(-1,0),(0,-1),(1,1),(-1,1),(1,-1),(-1,-1)
-            };
-
-            var minX = Math.Min(start.X, goal.X) - 1;
-            var minY = Math.Min(start.Y, goal.Y) - 1;
-            var maxX = Math.Max(start.X, goal.X) + 1;
-            var maxY = Math.Max(start.Y, goal.Y) + 1;
-
-            while (open.Count > 0)
-            {
-                var current = open.Dequeue().C;
-                if (Distance(current, goal) < step)
-                {
-                    var path = new List<Nts.Coordinate> { current };
-                    while (cameFrom.TryGetValue(current, out var prev))
-                    {
-                        path.Add(prev);
-                        current = prev;
-                    }
-                    path.Reverse();
-                    return path;
-                }
-
-                foreach (var (dx, dy) in neighbourDirs)
-                {
-                    var next = new Nts.Coordinate(current.X + dx * step, current.Y + dy * step);
-                    if (next.X < minX || next.X > maxX || next.Y < minY || next.Y > maxY)
-                        continue;
-
-                    double cost = step;
-                    if (Terrain != null)
-                    {
-                        double nx = (next.X + 180) / 360.0;
-                        double ny = (next.Y + 90) / 180.0;
-                        double elevNow = Terrain.GetElevation((current.X + 180) / 360.0, (current.Y + 90) / 180.0);
-                        double elevNext = Terrain.GetElevation(nx, ny);
-                        cost += Math.Abs(elevNext - elevNow) * 10;
-                        if (Water != null && Water.IsWater(nx, ny))
-                            cost += 1000;
-                    }
-
-                    double tentative = gScore[current] + cost;
-                    if (!gScore.TryGetValue(next, out var existing) || tentative < existing)
-                    {
-                        cameFrom[next] = current;
-                        gScore[next] = tentative;
-                        double f = tentative + Distance(next, goal);
-                        open.Enqueue((next, f), f);
-                    }
-                }
-            }
-
-            return new List<Nts.Coordinate> { start, goal };
-        }
-
-        private static List<Nts.Coordinate> SmoothPath(List<Nts.Coordinate> path)
-        {
-            for (int iter = 0; iter < 3; iter++)
-            {
-                var smoothed = new List<Nts.Coordinate> { path[0] };
-                for (int i = 0; i < path.Count - 1; i++)
-                {
-                    var p = path[i];
-                    var q = path[i + 1];
-                    smoothed.Add(new Nts.Coordinate(0.75 * p.X + 0.25 * q.X, 0.75 * p.Y + 0.25 * q.Y));
-                    smoothed.Add(new Nts.Coordinate(0.25 * p.X + 0.75 * q.X, 0.25 * p.Y + 0.75 * q.Y));
-                }
-                smoothed.Add(path[^1]);
-                path = smoothed;
-            }
-            return path;
-        }
-
-        private static IEnumerable<Nts.LineString> GenerateLocalRoads(Nts.Polygon area, IEnumerable<Nts.LineString> highways, int cellSize)
-        {
+            const double roadSegmentLength = 0.005;
+            const int maxIterations = 500;
             var gf = Nts.GeometryFactory.Default;
-            double segLen = cellSize / 1000.0;
-            var network = highways.ToList();
+            var random = new Random();
+            var roadNetwork = new List<Nts.LineString>(highways);
+            var queue = new Queue<(Nts.Coordinate origin, double angle)>();
 
-            var seeds = new Queue<(Nts.Coordinate pt, double angle, int depth)>();
-            foreach (var hw in highways)
+            // Seed the L-system from points on the highways
+            foreach (var highway in highways)
             {
-                seeds.Enqueue((hw.StartPoint.Coordinate, 0, 0));
-                seeds.Enqueue((hw.EndPoint.Coordinate, Math.PI, 0));
+                for (double i = 0.2; i < 1.0; i += 0.3)
+                {
+                    var pt = highway.GetCoordinateN((int)(highway.NumPoints * i));
+                    queue.Enqueue((pt, Math.Atan2(highway.EndPoint.Y - highway.StartPoint.Y, highway.EndPoint.X - highway.StartPoint.X) + Math.PI / 2));
+                    queue.Enqueue((pt, Math.Atan2(highway.EndPoint.Y - highway.StartPoint.Y, highway.EndPoint.X - highway.StartPoint.X) - Math.PI / 2));
+                }
+            }
+            if (queue.Count == 0 && area.EnvelopeInternal.Width > 0)
+            {
+                queue.Enqueue((area.Centroid.Coordinate, random.NextDouble() * 2 * Math.PI));
             }
 
-            while (seeds.Count > 0 && network.Count < 500)
+
+            int iterations = 0;
+            while (queue.Count > 0 && iterations < maxIterations)
             {
-                var (pt, angle, depth) = seeds.Dequeue();
-                if (depth > 8) continue;
-                var next = new Nts.Coordinate(pt.X + Math.Cos(angle) * segLen, pt.Y + Math.Sin(angle) * segLen);
-                var line = gf.CreateLineString(new[] { pt, next });
-                if (!area.Contains(line))
-                    continue;
-                if (network.Any(l => l.Intersects(line)))
-                    continue;
+                iterations++;
+                var (origin, angle) = queue.Dequeue();
 
-                network.Add(line);
+                var endPoint = new Nts.Coordinate(
+                    origin.X + Math.Cos(angle) * roadSegmentLength,
+                    origin.Y + Math.Sin(angle) * roadSegmentLength
+                );
+                var proposedSegment = gf.CreateLineString(new[] { origin, endPoint });
 
-                double nx = (next.X + 180) / 360.0;
-                double ny = (next.Y + 90) / 180.0;
-                double density = DensityMap?.GetDensity(nx, ny) ?? 0.5;
+                // Global Constraint: Must be within the urban area polygon
+                if (!area.Contains(proposedSegment.EndPoint)) continue;
 
-                if (Random.Shared.NextDouble() < 0.3 * density)
-                    seeds.Enqueue((next, angle + (Random.Shared.NextDouble() - 0.5) * Math.PI / 2, depth + 1));
+                // Local Constraint: Check for intersections
+                Nts.Coordinate? closestIntersection = null;
+                double minDistance = double.MaxValue;
 
-                seeds.Enqueue((next, angle, depth + 1));
+                foreach (var existingRoad in roadNetwork)
+                {
+                    if (proposedSegment.Intersects(existingRoad))
+                    {
+                        var intersection = proposedSegment.Intersection(existingRoad);
+                        var intersectionPoint = intersection.Coordinate;
+                        if (intersectionPoint != null)
+                        {
+                            double dist = origin.Distance(intersectionPoint);
+                            // Ensure intersection is not at the start point and is the closest one
+                            if (dist > 1e-6 && dist < minDistance)
+                            {
+                                minDistance = dist;
+                                closestIntersection = intersectionPoint;
+                            }
+                        }
+                    }
+                }
+
+                if (closestIntersection != null)
+                {
+                    endPoint = closestIntersection;
+                    proposedSegment = gf.CreateLineString(new[] { origin, endPoint });
+                }
+
+                roadNetwork.Add(proposedSegment);
+
+                // If the road didn't hit anything, it's a candidate for branching
+                if (closestIntersection == null)
+                {
+                    // Global Goal: Higher density areas have more branches
+                    double density = DensityMap?.GetDensity((endPoint.X + 180) / 360.0, (endPoint.Y + 90) / 180.0) ?? 0.5;
+
+                    // Continue straight
+                    queue.Enqueue((endPoint, angle));
+
+                    // Branch left/right
+                    if (random.NextDouble() < (0.2 + density * 0.5)) // Branching probability
+                    {
+                        queue.Enqueue((endPoint, angle + Math.PI / 2));
+                    }
+                    if (random.NextDouble() < (0.2 + density * 0.5))
+                    {
+                        queue.Enqueue((endPoint, angle - Math.PI / 2));
+                    }
+                }
             }
+            return roadNetwork.Except(highways).ToList();
+        }
 
-            return network;
+        private static string ComputeHash(Nts.Polygon area)
+        {
+            var e = area.EnvelopeInternal;
+            return $"{e.MinX:F2}_{e.MinY:F2}_{e.MaxX:F2}_{e.MaxY:F2}";
+        }
+
+        private static string GetCacheDir()
+        {
+            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            Directory.CreateDirectory(dir);
+            return dir;
         }
 
         private sealed class CoordComparer : IEqualityComparer<Nts.Coordinate>
@@ -302,26 +249,7 @@ namespace StrategyGame
         private static double Distance(Nts.Coordinate a, Nts.Coordinate b)
             => Math.Sqrt((a.X - b.X) * (a.X - b.X) + (a.Y - b.Y) * (a.Y - b.Y));
 
-        /// <summary>
-        /// Computes a simple hash string for caching based on the polygon.
-        /// </summary>
-        private static string ComputeHash(Nts.Polygon area)
-        {
-            // Simple envelope-based hash; replace with robust hash if needed
-            var e = area.EnvelopeInternal;
-            return $"{e.MinX:F2}_{e.MinY:F2}_{e.MaxX:F2}_{e.MaxY:F2}";
-        }
-
-        /// <summary>
-        /// Ensures the cache directory exists.
-        /// </summary>
-        private static string GetCacheDir()
-        {
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
-            Directory.CreateDirectory(dir);
-            return dir;
-        }
-
+      
         /// <summary>
         /// Checks if a city data model exists for the given urban area
         /// </summary>
