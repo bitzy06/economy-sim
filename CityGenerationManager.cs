@@ -61,7 +61,7 @@ namespace StrategyGame
         {
             while (true)
             {
-                Nts.Polygon area;
+                List<Nts.Polygon> batch;
                 lock (queue)
                 {
                     if (queue.Count == 0)
@@ -69,12 +69,14 @@ namespace StrategyGame
                         processing = false;
                         return;
                     }
-                    area = queue.Dequeue();
+                    batch = new List<Nts.Polygon>(queue);
+                    queue.Clear();
                 }
 
-                await RoadNetworkGenerator.GenerateModelAsync(area, 10)
-                    .ConfigureAwait(false);
-                await Task.Delay(10).ConfigureAwait(false);
+                await Parallel.ForEachAsync(batch, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, async (area, token) =>
+                {
+                    await RoadNetworkGenerator.GenerateModelAsync(area, 10).ConfigureAwait(false);
+                }).ConfigureAwait(false);
             }
         }
     }

@@ -1,6 +1,7 @@
 ﻿using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Prepared;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -15,8 +16,8 @@ namespace StrategyGame
     public static class RoadNetworkGenerator
     {
         // Cache for generated networks and models
-        private static readonly Dictionary<Nts.Polygon, List<Nts.LineString>> networkCache = new();
-        private static readonly Dictionary<string, CityDataModel> modelCache = new();
+        private static readonly ConcurrentDictionary<string, List<(Nts.LineString Line, RoadType Type)>> networkCache = new();
+        private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
 
         // Options for JSON serialization, including geo-JSON support
         private static readonly JsonSerializerOptions jsonOptions = new()
@@ -69,14 +70,8 @@ namespace StrategyGame
             // Create fresh model
             var result = new CityDataModel { Id = Guid.NewGuid() };
             result.RoadNetwork = GetOrGenerateFor(urbanArea, cellSize)
-                .SelectMany(lineString => lineString.Coordinates
-                    .Zip(lineString.Coordinates.Skip(1), (start, end) => new LineSegment
-                    {
-                        X1 = start.X,
-                        Y1 = start.Y,
-                        X2 = end.X,
-                        Y2 = end.Y
-                    }))
+                .SelectMany(tuple => tuple.Line.Coordinates.Zip(tuple.Line.Coordinates.Skip(1), (s, e) =>
+                    new LineSegment(s.X, s.Y, e.X, e.Y, tuple.Type)))
                 .ToList();
             result.Parcels = ParcelGenerator.GenerateParcels(result);
 
@@ -123,24 +118,26 @@ namespace StrategyGame
         /// <summary>
         /// Generates or retrieves a cached list of line segments representing roads within the urban polygon.
         /// </summary>
-        public static List<Nts.LineString> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
+        public static List<(Nts.LineString Line, RoadType Type)> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
         {
-            if (networkCache.TryGetValue(urbanArea, out var cachedNet))
+            string key = $"{ComputeHash(urbanArea)}_{cellSize}";
+            if (networkCache.TryGetValue(key, out var cachedNet))
                 return cachedNet;
 
             var env = urbanArea.EnvelopeInternal;
             double width = env.Width;
             double height = env.Height;
-            double diagonal = Math.Sqrt(width * width + height * height);
-            int divisions = Math.Clamp((int)(diagonal * 40.0), 5, 100);
-            double stepX = width / divisions;
-            double stepY = height / divisions;
+            double step = cellSize / 1000.0; // constant road spacing
+            int divisionsX = Math.Max(1, (int)Math.Round(width / step));
+            int divisionsY = Math.Max(1, (int)Math.Round(height / step));
+            double stepX = width / divisionsX;
+            double stepY = height / divisionsY;
 
             var prepared = PreparedGeometryFactory.Prepare(urbanArea);
-            var clippedNetwork = new List<Nts.LineString>();
+            var clippedNetwork = new List<(Nts.LineString, RoadType)>();
 
             // Create horizontal and vertical grid lines, then clip
-            for (int i = 0; i <= divisions; i++)
+            for (int i = 0; i <= divisionsY; i++)
             {
                 // Horizontal line at Y
                 double y = env.MinY + stepY * i;
@@ -155,10 +152,11 @@ namespace StrategyGame
                     switch (intersected)
                     {
                         case Nts.LineString ls:
-                            clippedNetwork.Add(ls);
+                            clippedNetwork.Add((ls, RoadType.Secondary));
                             break;
                         case Nts.MultiLineString mls:
-                            clippedNetwork.AddRange(mls.Geometries.Cast<Nts.LineString>());
+                            foreach (var l in mls.Geometries.Cast<Nts.LineString>())
+                                clippedNetwork.Add((l, RoadType.Secondary));
                             break;
                     }
                 }
@@ -176,17 +174,43 @@ namespace StrategyGame
                     switch (intersected)
                     {
                         case Nts.LineString ls:
-                            clippedNetwork.Add(ls);
+                            clippedNetwork.Add((ls, RoadType.Secondary));
                             break;
                         case Nts.MultiLineString mls:
-                            clippedNetwork.AddRange(mls.Geometries.Cast<Nts.LineString>());
+                            foreach (var l in mls.Geometries.Cast<Nts.LineString>())
+                                clippedNetwork.Add((l, RoadType.Secondary));
                             break;
                     }
                 }
             }
 
-            networkCache[urbanArea] = clippedNetwork;
+            // Add highway connections
+            foreach (var hw in GenerateHighways(urbanArea))
+                clippedNetwork.Add((hw, RoadType.Primary));
+
+            networkCache[key] = clippedNetwork;
             return clippedNetwork;
+        }
+
+        /// <summary>
+        /// Generates simple highway connections from the given urban area to its nearest neighbours.
+        /// </summary>
+        private static IEnumerable<Nts.LineString> GenerateHighways(Nts.Polygon urbanArea)
+        {
+            var center = urbanArea.Centroid.Coordinate;
+            var gf = Nts.GeometryFactory.Default;
+            var neighbours = UrbanAreaManager.UrbanPolygons
+                .Where(p => !ReferenceEquals(p, urbanArea))
+                .OrderBy(p => p.Centroid.Distance(urbanArea.Centroid))
+                .Take(3);
+            foreach (var other in neighbours)
+            {
+                yield return gf.CreateLineString(new[]
+                {
+                    center,
+                    other.Centroid.Coordinate
+                });
+            }
         }
 
         /// <summary>

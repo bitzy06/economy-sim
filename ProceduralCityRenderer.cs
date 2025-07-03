@@ -28,43 +28,37 @@ namespace StrategyGame
 
                 foreach (var urban in UrbanAreaManager.UrbanPolygons)
                 {
-                    Console.WriteLine($"[Debug] Processing urban polygon envelope: {urban.EnvelopeInternal}");
-
                     if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
                         continue;
 
-                    // Load or generate model as needed
                     var model = await RoadNetworkGenerator.GenerateModelAsync(urban, cellSize).ConfigureAwait(false);
                     if (model == null)
-                    {
-                        Console.WriteLine("[Debug] CityDataModel missing, skipping.");
                         continue;
-                    }
 
-                    // Draw road network
-                    Console.WriteLine($"[Debug] Rendering {model.RoadNetwork.Count} road segments.");
                     DrawRoads(img, model.RoadNetwork, tileBounds);
 
-                    // Draw buildings
-                    foreach (var b in model.Buildings)
+                    var drawList = new List<(Nts.Polygon Poly, LandUseType Use)>();
+                    Parallel.ForEach(model.Buildings, b =>
                     {
                         if (!b.Footprint.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
-                            continue;
-
+                            return;
                         var visible = b.Footprint.Intersection(tilePoly);
                         if (visible is Nts.Polygon p)
                         {
-                            RenderPolygon(img, p, tileBounds, GetBuildingColor(b.LandUse));
+                            lock (drawList) drawList.Add((p, b.LandUse));
                         }
                         else if (visible is Nts.MultiPolygon mp)
                         {
                             for (int i = 0; i < mp.NumGeometries; i++)
                             {
                                 if (mp.GetGeometryN(i) is Nts.Polygon pp)
-                                    RenderPolygon(img, pp, tileBounds, GetBuildingColor(b.LandUse));
+                                    lock (drawList) drawList.Add((pp, b.LandUse));
                             }
                         }
-                    }
+                    });
+
+                    foreach (var item in drawList)
+                        RenderPolygon(img, item.Poly, tileBounds, GetBuildingColor(item.Use));
                 }
 
                 return img;
@@ -85,9 +79,10 @@ namespace StrategyGame
         {
             img.Mutate(ctx =>
             {
-                var pen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1);
                 foreach (var seg in roads)
                 {
+                    float width = seg.Type == RoadType.Primary ? 2f : 1f;
+                    var pen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), width);
                     var p1 = ToPointF(seg.X1, seg.Y1, bounds);
                     var p2 = ToPointF(seg.X2, seg.Y2, bounds);
                     ctx.DrawLine(pen, p1, p2);
