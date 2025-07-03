@@ -1,38 +1,98 @@
 using Nts = NetTopologySuite.Geometries;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace StrategyGame
 {
     public static class LandUseAssigner
     {
+        private static readonly Random Rng = new Random();
+
         public static void AssignLandUse(CityDataModel model)
         {
-            if (model.Parcels == null)
+            if (model.Parcels == null || !model.Parcels.Any() || model.RoadNetwork == null || !model.RoadNetwork.Any())
                 return;
+
             var gf = Nts.GeometryFactory.Default;
+            var cityEnvelope = new Nts.Envelope();
+            foreach (var seg in model.RoadNetwork)
+            {
+                cityEnvelope.ExpandToInclude(seg.X1, seg.Y1);
+                cityEnvelope.ExpandToInclude(seg.X2, seg.Y2);
+            }
+
+            if (cityEnvelope.IsNull) return;
+
+            var centerPoint = cityEnvelope.Centre;
+            var maxDist = centerPoint.Distance(new Nts.Coordinate(cityEnvelope.MinX, cityEnvelope.MinY));
+            if (maxDist < 1e-6) maxDist = 1.0; // Avoid division by zero for very small areas
+
+            var primaryRoads = model.RoadNetwork
+                .Where(r => r.Type == RoadType.Primary)
+                .Select(seg => gf.CreateLineString(new[] { new Nts.Coordinate(seg.X1, seg.Y1), new Nts.Coordinate(seg.X2, seg.Y2) }))
+                .ToList();
+
+            var allRoads = model.RoadNetwork
+                .Select(seg => gf.CreateLineString(new[] { new Nts.Coordinate(seg.X1, seg.Y1), new Nts.Coordinate(seg.X2, seg.Y2) }))
+                .ToList();
+
             foreach (var parcel in model.Parcels)
             {
-                double best = double.MaxValue;
-                foreach (var seg in model.RoadNetwork)
-                {
-                    var ls = gf.CreateLineString(new[]
-                    {
-                        new Nts.Coordinate(seg.X1, seg.Y1),
-                        new Nts.Coordinate(seg.X2, seg.Y2)
-                    });
-                    double d = ls.Distance(parcel.Shape);
-                    if (d < best) best = d;
-                }
+                var weights = new Dictionary<LandUseType, double>();
+                var parcelCenter = parcel.Shape.Centroid;
 
-                if (best < 0.001)
-                    parcel.LandUse = LandUseType.Commercial;
-                else if (best < 0.005)
-                    parcel.LandUse = LandUseType.Residential;
-                else if (parcel.Shape.Area > 0.005)
-                    parcel.LandUse = LandUseType.Industrial;
-                else
-                    parcel.LandUse = LandUseType.Park;
+                double distToCenter = parcelCenter.Distance(new Nts.Point(centerPoint));
+                double distToPrimary = primaryRoads.Any() ? primaryRoads.Min(r => r.Distance(parcel.Shape)) : double.MaxValue;
+                double distToAnyRoad = allRoads.Any() ? allRoads.Min(r => r.Distance(parcel.Shape)) : double.MaxValue;
+
+                // --- Calculate Weights ---
+
+                // Commercial: High value near primary roads and the city center.
+                double commercialWeight = 0;
+                if (distToPrimary < 0.005) commercialWeight += 50;
+                commercialWeight += Math.Max(0, 30 * (1 - distToCenter / (maxDist * 0.4)));
+
+                // Residential: Prefers being away from the absolute center but still well-connected.
+                double residentialWeight = 20; // Base desire
+                if (distToCenter > maxDist * 0.1 && distToCenter < maxDist * 0.7) residentialWeight += 30;
+                if (distToAnyRoad < 0.002) residentialWeight += 20;
+
+                // Industrial: Prefers the outskirts and good highway access.
+                double industrialWeight = 0;
+                if (distToPrimary < 0.01) industrialWeight += 20;
+                industrialWeight += Math.Max(0, 40 * (distToCenter / (maxDist * 0.6) - 1.0));
+
+                // Park: Fills in areas that aren't ideal for other uses.
+                double parkWeight = 5 + (1 - residentialWeight / 70) * 15;
+
+                weights[LandUseType.Commercial] = Math.Max(0.1, commercialWeight);
+                weights[LandUseType.Residential] = Math.Max(0.1, residentialWeight);
+                weights[LandUseType.Industrial] = Math.Max(0.1, industrialWeight);
+                weights[LandUseType.Park] = Math.Max(0.1, parkWeight);
+
+                // --- Select Land Use ---
+                parcel.LandUse = GetRandomLandUse(weights);
             }
+        }
+
+        private static LandUseType GetRandomLandUse(Dictionary<LandUseType, double> weights)
+        {
+            double totalWeight = weights.Values.Sum();
+            if (totalWeight <= 0) return LandUseType.Park; // Fallback
+
+            double randomValue = Rng.NextDouble() * totalWeight;
+
+            foreach (var (landUse, weight) in weights)
+            {
+                if (randomValue < weight)
+                {
+                    return landUse;
+                }
+                randomValue -= weight;
+            }
+
+            return LandUseType.Park; // Fallback
         }
     }
 }
