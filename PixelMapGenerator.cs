@@ -184,6 +184,11 @@ namespace StrategyGame
             ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
             ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
 
+            if (GpuCityHelpers.TryGenerateTile(tileWidth, tileHeight, cellSize, r, g, b, landMask, out var gpuImage))
+            {
+                return gpuImage;
+            }
+
             var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(tileWidth, tileHeight);
             int seed = Environment.TickCount;
             var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
