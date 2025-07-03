@@ -11,7 +11,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using NetTopologySuite.IO;
 using NetTopologySuite.IO.Converters;
-using NetTopologySuite.Index.Strtree;
+using NetTopologySuite.Index.Quadtree;
 
 namespace StrategyGame
 {
@@ -198,7 +198,7 @@ namespace StrategyGame
                 }
 
                 roadNetwork.Add(proposedSegment);
-                index = BuildIndex(roadNetwork);
+                index.Insert(proposedSegment.EnvelopeInternal, proposedSegment);
 
                 // If the road didn't hit anything, it's a candidate for branching
                 if (closestIntersection == null)
@@ -223,9 +223,9 @@ namespace StrategyGame
             return roadNetwork.Except(highways).ToList();
         }
 
-        private static STRtree<Nts.LineString> BuildIndex(IEnumerable<Nts.LineString> roads)
+        private static Quadtree<Nts.LineString> BuildIndex(IEnumerable<Nts.LineString> roads)
         {
-            var tree = new STRtree<Nts.LineString>();
+            var tree = new Quadtree<Nts.LineString>();
             foreach (var road in roads)
             {
                 tree.Insert(road.EnvelopeInternal, road);
