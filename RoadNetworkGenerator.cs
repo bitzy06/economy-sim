@@ -1,4 +1,5 @@
-using Nts = NetTopologySuite.Geometries;
+﻿using Nts = NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries.Prepared;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -6,86 +7,180 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using NetTopologySuite.IO; // Replace this with the correct namespace
+using NetTopologySuite.IO.Converters; // Add this namespace
 
 namespace StrategyGame
 {
     public static class RoadNetworkGenerator
     {
-        private static readonly Dictionary<Nts.Polygon, List<LineSegment>> networkCache = new();
+        // Cache for generated networks and models
+        private static readonly Dictionary<Nts.Polygon, List<Nts.LineString>> networkCache = new();
         private static readonly Dictionary<string, CityDataModel> modelCache = new();
+
+        // Options for JSON serialization, including geo-JSON support
         private static readonly JsonSerializerOptions jsonOptions = new()
         {
             IncludeFields = true,
             WriteIndented = true
         };
 
-        public static List<LineSegment> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
+        // Static constructor to register converters
+        static RoadNetworkGenerator()
         {
-            if (cellSize < 40)
-                return new List<LineSegment>();
+            jsonOptions.Converters.Add(new GeoJsonConverterFactory());
+        }
 
-            if (networkCache.TryGetValue(urbanArea, out var cached))
-                return cached;
+        /// <summary>
+        /// Generates or retrieves a cached city data model (roads, parcels, buildings) for the given urban area.
+        /// </summary>
+        public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea, int cellSize)
+        {
+            string hash = ComputeHash(urbanArea);
+            string cacheDir = GetCacheDir();
 
-            var env = urbanArea.EnvelopeInternal;
-            double diagonal = Math.Sqrt(env.Width * env.Width + env.Height * env.Height);
-            int divisions = Math.Clamp((int)(diagonal * 40.0), 5, 100);
+            // Return in-memory cache if available
+            if (modelCache.TryGetValue(hash, out var cachedModel))
+                return cachedModel;
 
-            double stepX = env.Width / divisions;
-            double stepY = env.Height / divisions;
-
-            var gridLines = new List<LineSegment>();
-            for (int i = 0; i <= divisions; i++)
+            // Try loading from disk if a mapping exists
+            string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
+            if (File.Exists(hashPath))
             {
-                double x = env.MinX + i * stepX;
-                gridLines.Add(new LineSegment(x, env.MinY, x, env.MaxY));
-            }
-            for (int j = 0; j <= divisions; j++)
-            {
-                double y = env.MinY + j * stepY;
-                gridLines.Add(new LineSegment(env.MinX, y, env.MaxX, y));
-            }
-
-            var clippedNetwork = new List<LineSegment>();
-            var factory = Nts.GeometryFactory.Default;
-
-            foreach (var line in gridLines)
-            {
-                var lineString = factory.CreateLineString(new[]
+                try
                 {
-                    new Nts.Coordinate(line.X1, line.Y1),
-                    new Nts.Coordinate(line.X2, line.Y2)
-                });
-
-                if (!urbanArea.Intersects(lineString))
-                    continue;
-
-                var intersection = urbanArea.Intersection(lineString);
-
-                if (intersection is Nts.LineString ls)
-                {
-                    var coords = ls.Coordinates;
-                    for (int c = 0; c < coords.Length - 1; c++)
+                    string id = await File.ReadAllTextAsync(hashPath).ConfigureAwait(false);
+                    string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                    if (File.Exists(modelPath))
                     {
-                        clippedNetwork.Add(new LineSegment(
-                            coords[c].X, coords[c].Y,
-                            coords[c + 1].X, coords[c + 1].Y));
+                        string jsonIn = await File.ReadAllTextAsync(modelPath).ConfigureAwait(false);
+                        var loaded = JsonSerializer.Deserialize<CityDataModel>(jsonIn, jsonOptions);
+                        modelCache[hash] = loaded; // Cache in-memory
+                        return loaded;
                     }
                 }
-                else if (intersection is Nts.MultiLineString mls)
+                catch (Exception ex)
                 {
-                    foreach (var geom in mls.Geometries)
+                    Console.WriteLine($"[Error] Failed to load cached model by hash: {ex.Message}");
+                    // Fall through to regenerate
+                }
+            }
+
+            // Create fresh model
+            var result = new CityDataModel { Id = Guid.NewGuid() };
+            result.RoadNetwork = GetOrGenerateFor(urbanArea, cellSize)
+                .SelectMany(lineString => lineString.Coordinates
+                    .Zip(lineString.Coordinates.Skip(1), (start, end) => new LineSegment
                     {
-                        if (geom is Nts.LineString subLs)
-                        {
-                            var coords = subLs.Coordinates;
-                            for (int c = 0; c < coords.Length - 1; c++)
-                            {
-                                clippedNetwork.Add(new LineSegment(
-                                    coords[c].X, coords[c].Y,
-                                    coords[c + 1].X, coords[c + 1].Y));
-                            }
-                        }
+                        X1 = start.X,
+                        Y1 = start.Y,
+                        X2 = end.X,
+                        Y2 = end.Y
+                    }))
+                .ToList();
+            result.Parcels = ParcelGenerator.GenerateParcels(result);
+
+            // Assign land use and generate buildings in parallel
+            var landUseTask = Task.Run(() => LandUseAssigner.AssignLandUse(result));
+            var buildingTask = Task.Run(() =>
+            {
+                try
+                {
+                    return BuildingGenerator.GenerateBuildings(result);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Error] Building generation failed: {ex.Message}");
+                    return new List<Building>();
+                }
+            });
+
+            await Task.WhenAll(landUseTask, buildingTask).ConfigureAwait(false);
+            result.Buildings = buildingTask.Result;
+
+            Debug.WriteLine($">> Generated {result.Parcels.Count} parcels, {result.Buildings.Count} buildings for {hash}");
+
+            // Serialize and write to disk (safe against errors)
+            try
+            {
+                string modelPath = Path.Combine(cacheDir, $"{result.Id}.json");
+                string jsonOut = JsonSerializer.Serialize(result, jsonOptions);
+                await File.WriteAllTextAsync(modelPath, jsonOut).ConfigureAwait(false);
+
+                // Save the hash-to-ID mapping
+                await File.WriteAllTextAsync(hashPath, result.Id.ToString()).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Error] Failed to serialize CityDataModel: {ex.Message}");
+            }
+
+            // Cache in-memory and return
+            modelCache[hash] = result;
+            return result;
+        }
+
+        /// <summary>
+        /// Generates or retrieves a cached list of line segments representing roads within the urban polygon.
+        /// </summary>
+        public static List<Nts.LineString> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
+        {
+            if (networkCache.TryGetValue(urbanArea, out var cachedNet))
+                return cachedNet;
+
+            var env = urbanArea.EnvelopeInternal;
+            double width = env.Width;
+            double height = env.Height;
+            double diagonal = Math.Sqrt(width * width + height * height);
+            int divisions = Math.Clamp((int)(diagonal * 40.0), 5, 100);
+            double stepX = width / divisions;
+            double stepY = height / divisions;
+
+            var prepared = PreparedGeometryFactory.Prepare(urbanArea);
+            var clippedNetwork = new List<Nts.LineString>();
+
+            // Create horizontal and vertical grid lines, then clip
+            for (int i = 0; i <= divisions; i++)
+            {
+                // Horizontal line at Y
+                double y = env.MinY + stepY * i;
+                var horiz = new Nts.LineString(new[]
+                {
+                    new Nts.Coordinate(env.MinX, y),
+                    new Nts.Coordinate(env.MaxX, y)
+                });
+                if (prepared.Intersects(horiz))
+                {
+                    var intersected = urbanArea.Intersection(horiz);
+                    switch (intersected)
+                    {
+                        case Nts.LineString ls:
+                            clippedNetwork.Add(ls);
+                            break;
+                        case Nts.MultiLineString mls:
+                            clippedNetwork.AddRange(mls.Geometries.Cast<Nts.LineString>());
+                            break;
+                    }
+                }
+
+                // Vertical line at X
+                double x = env.MinX + stepX * i;
+                var vert = new Nts.LineString(new[]
+                {
+                    new Nts.Coordinate(x, env.MinY),
+                    new Nts.Coordinate(x, env.MaxY)
+                });
+                if (prepared.Intersects(vert))
+                {
+                    var intersected = urbanArea.Intersection(vert);
+                    switch (intersected)
+                    {
+                        case Nts.LineString ls:
+                            clippedNetwork.Add(ls);
+                            break;
+                        case Nts.MultiLineString mls:
+                            clippedNetwork.AddRange(mls.Geometries.Cast<Nts.LineString>());
+                            break;
                     }
                 }
             }
@@ -94,122 +189,128 @@ namespace StrategyGame
             return clippedNetwork;
         }
 
-        public static async Task<CityDataModel?> LoadModelAsync(Nts.Polygon urbanArea)
+        /// <summary>
+        /// Computes a simple hash string for caching based on the polygon.
+        /// </summary>
+        private static string ComputeHash(Nts.Polygon area)
         {
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            // Simple envelope-based hash; replace with robust hash if needed
+            var e = area.EnvelopeInternal;
+            return $"{e.MinX:F2}_{e.MinY:F2}_{e.MaxX:F2}_{e.MaxY:F2}";
+        }
+
+        /// <summary>
+        /// Ensures the cache directory exists.
+        /// </summary>
+        private static string GetCacheDir()
+        {
+            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
-            string hash = Math.Abs(urbanArea.EnvelopeInternal.GetHashCode()).ToString();
-            string path = Path.Combine(dir, $"{hash}.json");
+            return dir;
+        }
 
-            if (modelCache.TryGetValue(hash, out var cachedModel))
-                return cachedModel;
-
-            if (File.Exists(path))
+        /// <summary>
+        /// Checks if a city data model exists for the given urban area
+        /// </summary>
+        public static bool HasCityDataModel(Nts.Polygon urbanArea)
+        {
+            string hash = ComputeHash(urbanArea);
+            string cacheDir = GetCacheDir();
+            
+            // Check in-memory cache first
+            if (modelCache.ContainsKey(hash))
+                return true;
+                
+            // Check disk cache
+            string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
+            if (File.Exists(hashPath))
             {
-                var json = await File.ReadAllTextAsync(path).ConfigureAwait(false);
-                var model = JsonSerializer.Deserialize<CityDataModel>(json, jsonOptions);
-                if (model != null)
+                try
                 {
-                    modelCache[hash] = model;
-                    Debug.WriteLine($"Loaded model {hash}: {model.RoadNetwork.Count} segments, {model.Parcels.Count} parcels");
-                    return model;
+                    string id = File.ReadAllText(hashPath);
+                    string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                    return File.Exists(modelPath);
+                }
+                catch
+                {
+                    return false;
                 }
             }
+            
+            return false;
+        }
+
+        /// <summary>
+        /// Gets the ID of the city data model for a given urban area, if it exists
+        /// </summary>
+        public static Guid? GetCityDataModelId(Nts.Polygon urbanArea)
+        {
+            string hash = ComputeHash(urbanArea);
+            string cacheDir = GetCacheDir();
+            
+            // Check in-memory cache first
+            if (modelCache.TryGetValue(hash, out var cachedModel))
+                return cachedModel.Id;
+                
+            // Check disk cache
+            string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
+            if (File.Exists(hashPath))
+            {
+                try
+                {
+                    string id = File.ReadAllText(hashPath);
+                    if (Guid.TryParse(id, out Guid guid))
+                    {
+                        string modelPath = Path.Combine(cacheDir, $"{guid}.json");
+                        if (File.Exists(modelPath))
+                            return guid;
+                    }
+                }
+                catch
+                {
+                    // Fall through
+                }
+            }
+            
             return null;
         }
 
-        public static async Task<CityDataModel> GenerateModelAsync(
-            Nts.Polygon urbanArea,
-            PopulationDensityMap popDensity,
-            WaterBodyMap waterMap,
-            TerrainData terrain)
+        /// <summary>
+        /// Gets statistics about cached city data models
+        /// </summary>
+        public static (int InMemoryCount, int DiskCount, int TotalUnique) GetCacheStatistics()
         {
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
-            Directory.CreateDirectory(dir);
-            string hash = Math.Abs(urbanArea.EnvelopeInternal.GetHashCode()).ToString();
-            string path = Path.Combine(dir, $"{hash}.json");
-
-            if (modelCache.TryGetValue(hash, out var cachedModel))
-                return cachedModel;
-
-            var result = new CityDataModel { Id = Guid.NewGuid() };
-
-            // --- START: Copied and adapted from GetOrGenerateFor ---
-            var env = urbanArea.EnvelopeInternal;
-            double diagonal = Math.Sqrt(env.Width * env.Width + env.Height * env.Height);
-            int divisions = Math.Clamp((int)(diagonal * 40.0), 10, 150); // Increased density
-
-            double stepX = env.Width / divisions;
-            double stepY = env.Height / divisions;
-
-            var gridLines = new List<LineSegment>();
-            for (int i = 0; i <= divisions; i++)
+            int inMemoryCount = modelCache.Count;
+            
+            string cacheDir = GetCacheDir();
+            int diskCount = 0;
+            int totalUnique = 0;
+            
+            if (Directory.Exists(cacheDir))
             {
-                double x = env.MinX + i * stepX;
-                gridLines.Add(new LineSegment(x, env.MinY, x, env.MaxY));
-            }
-            for (int j = 0; j <= divisions; j++)
-            {
-                double y = env.MinY + j * stepY;
-                gridLines.Add(new LineSegment(env.MinX, y, env.MaxX, y));
-            }
-
-            var clippedNetwork = new List<LineSegment>();
-            var factory = Nts.GeometryFactory.Default;
-
-            foreach (var line in gridLines)
-            {
-                var lineString = factory.CreateLineString(new[]
+                var hashFiles = Directory.GetFiles(cacheDir, "*.txt");
+                var jsonFiles = Directory.GetFiles(cacheDir, "*.json");
+                
+                diskCount = jsonFiles.Length;
+                
+                // Count unique models (hash files that have corresponding JSON files)
+                foreach (string hashFile in hashFiles)
                 {
-                    new Nts.Coordinate(line.X1, line.Y1),
-                    new Nts.Coordinate(line.X2, line.Y2)
-                });
-
-                if (!urbanArea.Intersects(lineString))
-                    continue;
-
-                var intersection = urbanArea.Intersection(lineString);
-
-                if (intersection is Nts.LineString ls)
-                {
-                    var coords = ls.Coordinates;
-                    for (int c = 0; c < coords.Length - 1; c++)
+                    try
                     {
-                        clippedNetwork.Add(new LineSegment(
-                            coords[c].X, coords[c].Y,
-                            coords[c + 1].X, coords[c + 1].Y));
+                        string id = File.ReadAllText(hashFile);
+                        string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                        if (File.Exists(modelPath))
+                            totalUnique++;
                     }
-                }
-                else if (intersection is Nts.MultiLineString mls)
-                {
-                    foreach (var geom in mls.Geometries)
+                    catch
                     {
-                        if (geom is Nts.LineString subLs)
-                        {
-                            var coords = subLs.Coordinates;
-                            for (int c = 0; c < coords.Length - 1; c++)
-                            {
-                                clippedNetwork.Add(new LineSegment(
-                                    coords[c].X, coords[c].Y,
-                                    coords[c + 1].X, coords[c + 1].Y));
-                            }
-                        }
+                        // Skip invalid files
                     }
                 }
             }
-            result.RoadNetwork = clippedNetwork;
-            // --- END: Copied logic ---
-
-            // This part will now work correctly
-            ParcelGenerator.GenerateParcels(result);
-            LandUseAssigner.AssignLandUse(result);
-            BuildingGenerator.GenerateBuildings(result);
-
-            var jsonOut = JsonSerializer.Serialize(result, jsonOptions);
-            await File.WriteAllTextAsync(path, jsonOut).ConfigureAwait(false);
-            modelCache[hash] = result;
-            return result;
+            
+            return (inMemoryCount, diskCount, totalUnique);
         }
-
     }
 }

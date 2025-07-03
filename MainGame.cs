@@ -754,7 +754,7 @@ namespace economy_sim
                     int assignedSlots = farm.JobSlots.Values.Sum();
                     if (assignedSlots < totalSlots && farm.JobSlots.Any())
                     {
-                        farm.JobSlots[farm.JobSlots.First().Key] += (totalSlots - assignedSlots);
+                        farm.JobSlots[farmBlueprint.DefaultJobSlotDistribution.First().Key] += (totalSlots - assignedSlots);
                     }
                     else if (assignedSlots < totalSlots)
                     {
@@ -1259,6 +1259,12 @@ namespace economy_sim
             if (tabControlMain.SelectedTab == tabPageGovernment)
             {
                 UpdateGovernmentTab();
+            }
+
+            // Update urban area status if city generation is in progress
+            if (cityGenerationManager.IsProcessing())
+            {
+                UpdateUrbanAreaStatus();
             }
 
             // Process AI trade proposals (temporary simple logic)
@@ -2081,10 +2087,33 @@ namespace economy_sim
             Directory.CreateDirectory(dir);
             foreach (var urban in UrbanAreaManager.UrbanPolygons)
             {
-                string hash = Math.Abs(urban.EnvelopeInternal.GetHashCode()).ToString();
-                string path = Path.Combine(dir, $"{hash}.json");
-                if (!File.Exists(path))
+                // Use the same hash computation as RoadNetworkGenerator for consistency
+                string hash = ComputeUrbanAreaHash(urban);
+                string hashPath = Path.Combine(dir, $"{hash}.txt");
+                
+                // Check if hash-to-ID mapping exists
+                if (!File.Exists(hashPath))
+                {
                     missing.Add(urban);
+                }
+                else
+                {
+                    // Also verify the actual model file exists
+                    try
+                    {
+                        string id = File.ReadAllText(hashPath);
+                        string modelPath = Path.Combine(dir, $"{id}.json");
+                        if (!File.Exists(modelPath))
+                        {
+                            missing.Add(urban);
+                        }
+                    }
+                    catch
+                    {
+                        // If we can't read the hash file, consider it missing
+                        missing.Add(urban);
+                    }
+                }
             }
 
             if (missing.Count > 0)
@@ -2095,28 +2124,159 @@ namespace economy_sim
             }
         }
 
+        /// <summary>
+        /// Computes the same hash for urban areas as RoadNetworkGenerator to ensure consistency
+        /// </summary>
+        private string ComputeUrbanAreaHash(Nts.Polygon area)
+        {
+            // Use the same hash computation as RoadNetworkGenerator.ComputeHash()
+            var e = area.EnvelopeInternal;
+            return $"{e.MinX:F2}_{e.MinY:F2}_{e.MaxX:F2}_{e.MaxY:F2}";
+        }
+
         private async Task GenerateCityDataFor(IEnumerable<Nts.Polygon> areas)
         {
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
+            
+            int totalAreas = areas.Count();
+            int processed = 0;
+            
             foreach (var urban in areas)
             {
+                // Queue the area for generation, which will create a model with a new GUID
                 cityGenerationManager.QueueArea(urban);
+                processed++;
+                
+                // Update progress (you could show this in UI if needed)
+                Console.WriteLine($"Queued urban area {processed}/{totalAreas} for city data generation");
             }
-            // simple wait until queue empties
-            await Task.Delay(100).ConfigureAwait(false);
+            
+            // Wait a bit longer to ensure queue processing completes
+            await Task.Delay(1000).ConfigureAwait(false);
+            
+            // Wait for the queue to empty
+            while (cityGenerationManager.IsProcessing())
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Gets count of urban areas that have complete procedural city data
+        /// </summary>
+        public int GetUrbanAreasWithData()
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            if (!Directory.Exists(dir)) return 0;
+            
+            int count = 0;
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                string hash = ComputeUrbanAreaHash(urban);
+                string hashPath = Path.Combine(dir, $"{hash}.txt");
+                
+                if (File.Exists(hashPath))
+                {
+                    try
+                    {
+                        string id = File.ReadAllText(hashPath);
+                        string modelPath = Path.Combine(dir, $"{id}.json");
+                        if (File.Exists(modelPath))
+                        {
+                            count++;
+                        }
+                    }
+                    catch
+                    {
+                        // Skip if we can't read the files
+                    }
+                }
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// Gets count of urban areas missing procedural city data
+        /// </summary>
+        public int GetUrbanAreasMissingData()
+        {
+            return UrbanAreaManager.UrbanPolygons.Count - GetUrbanAreasWithData();
         }
 
         private async void ButtonGenerateCityData_Click(object sender, EventArgs e)
         {
-            buttonGenerateCityData.Text = "Generating...";
+            // Show current status first
+            int totalUrbanAreas = UrbanAreaManager.UrbanPolygons.Count;
+            int areasWithData = GetUrbanAreasWithData();
+            int missingData = GetUrbanAreasMissingData();
+            
+            if (missingData == 0)
+            {
+                MessageBox.Show($"All {totalUrbanAreas} urban areas already have procedural city data.", "Generation Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            
+            var result = MessageBox.Show($"Found {totalUrbanAreas} total urban areas.\n{areasWithData} have data, {missingData} are missing data.\n\nGenerate missing city data now?", "Generate City Data", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            
+            if (result != DialogResult.Yes)
+                return;
+                
+            buttonGenerateCityData.Text = $"Generating... (0/{missingData})";
             buttonGenerateCityData.Enabled = false;
-            await GenerateCityDataFor(UrbanAreaManager.UrbanPolygons);
-            buttonGenerateCityData.Text = "Generate City Data";
-            buttonGenerateCityData.Enabled = true;
-            MessageBox.Show("City data generation complete.");
+            
+            try
+            {
+                // Get only the missing areas
+                List<Nts.Polygon> missingAreas = new List<Nts.Polygon>();
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+                Directory.CreateDirectory(dir);
+                
+                foreach (var urban in UrbanAreaManager.UrbanPolygons)
+                {
+                    string hash = ComputeUrbanAreaHash(urban);
+                    string hashPath = Path.Combine(dir, $"{hash}.txt");
+                    
+                    if (!File.Exists(hashPath))
+                    {
+                        missingAreas.Add(urban);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            string id = File.ReadAllText(hashPath);
+                            string modelPath = Path.Combine(dir, $"{id}.json");
+                            if (!File.Exists(modelPath))
+                            {
+                                missingAreas.Add(urban);
+                            }
+                        }
+                        catch
+                        {
+                            missingAreas.Add(urban);
+                        }
+                    }
+                }
+                
+                await GenerateCityDataFor(missingAreas);
+                
+                // Final status check
+                int finalAreasWithData = GetUrbanAreasWithData();
+                int finalMissingData = GetUrbanAreasMissingData();
+                
+                MessageBox.Show($"City data generation complete!\n\nTotal urban areas: {totalUrbanAreas}\nWith data: {finalAreasWithData}\nStill missing: {finalMissingData}", "Generation Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error during city data generation: {ex.Message}", "Generation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                buttonGenerateCityData.Text = "Generate City Data";
+                buttonGenerateCityData.Enabled = true;
+            }
         }
-
 
         private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
@@ -2334,7 +2494,211 @@ namespace economy_sim
 
             return levels[index];
         }
+
+        /// <summary>
+        /// Updates the urban area status display (if you have UI elements for this)
+        /// Call this method to refresh status information about city data generation
+        /// </summary>
+        public void UpdateUrbanAreaStatus()
+        {
+            int totalUrbanAreas = UrbanAreaManager.UrbanPolygons.Count;
+            int areasWithData = GetUrbanAreasWithData();
+            int missingData = GetUrbanAreasMissingData();
+            bool isGenerating = cityGenerationManager.IsProcessing();
+            int queueCount = cityGenerationManager.GetQueueCount();
+            
+            var (inMemoryCount, diskCount, totalUnique) = RoadNetworkGenerator.GetCacheStatistics();
+            
+            string statusMessage = $"Urban Areas: {totalUrbanAreas} total, {areasWithData} with data, {missingData} missing";
+            if (isGenerating)
+            {
+                statusMessage += $" (Generating... {queueCount} in queue)";
+            }
+            
+            // If you have a status label or other UI element, update it here
+            // For example: labelUrbanAreaStatus.Text = statusMessage;
+            
+            // Log to console for debugging
+            Console.WriteLine($"[Urban Area Status] {statusMessage}");
+            Console.WriteLine($"[Cache Stats] In-Memory: {inMemoryCount}, Disk: {diskCount}, Unique: {totalUnique}");
+        }
+
+        /// <summary>
+        /// Validates that all urban areas have consistent city model IDs
+        /// </summary>
+        public void ValidateUrbanAreaData()
+        {
+            int validCount = 0;
+            int invalidCount = 0;
+            List<string> issues = new List<string>();
+            
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                string hash = ComputeUrbanAreaHash(urban);
+                string hashPath = Path.Combine(dir, $"{hash}.txt");
+                
+                if (!File.Exists(hashPath))
+                {
+                    invalidCount++;
+                    issues.Add($"Missing hash file for urban area with hash {hash}");
+                    continue;
+                }
+                
+                try
+                {
+                    string id = File.ReadAllText(hashPath).Trim();
+                    if (!Guid.TryParse(id, out Guid guid))
+                    {
+                        invalidCount++;
+                        issues.Add($"Invalid GUID '{id}' in hash file {hash}.txt");
+                        continue;
+                    }
+                    
+                    string modelPath = Path.Combine(dir, $"{guid}.json");
+                    if (!File.Exists(modelPath))
+                    {
+                        invalidCount++;
+                        issues.Add($"Missing model file {guid}.json for hash {hash}");
+                        continue;
+                    }
+                    
+                    // Try to verify the model can be loaded
+                    string jsonContent = File.ReadAllText(modelPath);
+                    var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(jsonContent);
+                    if (model == null || model.Id != guid)
+                    {
+                        invalidCount++;
+                        issues.Add($"Model file {guid}.json has invalid or mismatched ID");
+                        continue;
+                    }
+                    
+                    validCount++;
+                }
+                catch (Exception ex)
+                {
+                    invalidCount++;
+                    issues.Add($"Error validating data for hash {hash}: {ex.Message}");
+                }
+            }
+            
+            Console.WriteLine($"[Validation] Valid: {validCount}, Invalid: {invalidCount}");
+            if (issues.Count > 0)
+            {
+                Console.WriteLine("[Validation Issues:]");
+                foreach (string issue in issues.Take(10)) // Show first 10 issues
+                {
+                    Console.WriteLine($"  - {issue}");
+                }
+                if (issues.Count > 10)
+                {
+                    Console.WriteLine($"  ... and {issues.Count - 10} more issues");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets detailed information about a specific urban area and its city model
+        /// </summary>
+        public string GetUrbanAreaDetails(Nts.Polygon urbanArea)
+        {
+            string hash = ComputeUrbanAreaHash(urbanArea);
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            
+            var details = new System.Text.StringBuilder();
+            details.AppendLine($"Urban Area Hash: {hash}");
+            details.AppendLine($"Envelope: {urbanArea.EnvelopeInternal}");
+            
+            // Check for city model data
+            Guid? modelId = RoadNetworkGenerator.GetCityDataModelId(urbanArea);
+            if (modelId.HasValue)
+            {
+                details.AppendLine($"City Model ID: {modelId.Value}");
+                
+                string modelPath = Path.Combine(dir, $"{modelId.Value}.json");
+                if (File.Exists(modelPath))
+                {
+                    try
+                    {
+                        var fileInfo = new FileInfo(modelPath);
+                        details.AppendLine($"Model File Size: {fileInfo.Length:N0} bytes");
+                        details.AppendLine($"Model File Created: {fileInfo.CreationTime}");
+                        details.AppendLine($"Model File Modified: {fileInfo.LastWriteTime}");
+                        
+                        // Try to load and get basic stats
+                        string jsonContent = File.ReadAllText(modelPath);
+                        var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(jsonContent);
+                        if (model != null)
+                        {
+                            details.AppendLine($"Road Segments: {model.RoadNetwork.Count}");
+                            details.AppendLine($"Parcels: {model.Parcels.Count}");
+                            details.AppendLine($"Buildings: {model.Buildings.Count}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        details.AppendLine($"Error reading model: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    details.AppendLine("Model file missing!");
+                }
+            }
+            else
+            {
+                details.AppendLine("No city model ID found");
+            }
+            
+            return details.ToString();
+        }
+
+        /// <summary>
+        /// Regenerates city data for a specific urban area (useful for debugging)
+        /// </summary>
+        public async Task RegenerateUrbanAreaData(Nts.Polygon urbanArea)
+        {
+            string hash = ComputeUrbanAreaHash(urbanArea);
+            Console.WriteLine($"Regenerating city data for urban area with hash: {hash}");
+            
+            // Remove existing data first
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            string hashPath = Path.Combine(dir, $"{hash}.txt");
+            
+            if (File.Exists(hashPath))
+            {
+                try
+                {
+                    string oldId = File.ReadAllText(hashPath);
+                    string oldModelPath = Path.Combine(dir, $"{oldId}.json");
+                    
+                    // Delete old files
+                    File.Delete(hashPath);
+                    if (File.Exists(oldModelPath))
+                        File.Delete(oldModelPath);
+                        
+                    Console.WriteLine($"Removed old city data files for hash {hash}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error removing old files: {ex.Message}");
+                }
+            }
+            
+            // Generate new data
+            cityGenerationManager.QueueArea(urbanArea);
+            
+            // Wait for generation to complete
+            while (cityGenerationManager.IsProcessing())
+            {
+                await Task.Delay(100);
+            }
+            
+            Console.WriteLine($"Regeneration complete for urban area with hash: {hash}");
+        }
     }
 }
+
 
 
