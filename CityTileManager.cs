@@ -138,7 +138,7 @@ namespace StrategyGame
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
-                    using var img = await Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
+                    using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var bmp = ImageSharpToBitmap(img);
                     lock (_cacheLock)
                         _tileCache[key] = bmp;

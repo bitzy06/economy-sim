@@ -1,7 +1,6 @@
 using Nts = NetTopologySuite.Geometries;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.Drawing;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using System.Linq;
@@ -9,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
+using SixLabors.ImageSharp.Drawing;
 
 namespace StrategyGame
 {
@@ -16,45 +16,93 @@ namespace StrategyGame
     {
         public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
         {
-            var img = new Image<Rgba32>(Configuration.Default,
-                MultiResolutionMapManager.TileSizePx,
-                MultiResolutionMapManager.TileSizePx,
-                new Rgba32(0, 0, 0, 0));
-            var tilePoly = ToPolygon(tileBounds);
-            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            try
             {
-                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
-                    continue;
-                if (!urban.Intersects(tilePoly))
-                    continue;
+                Console.WriteLine($"[Debug] RenderCityTileAsync: Bounds={{MinLon={tileBounds.MinLon},MaxLon={tileBounds.MaxLon},MinLat={tileBounds.MinLat},MaxLat={tileBounds.MaxLat}}}, cellSize={cellSize}");
 
-                var model = await RoadNetworkGenerator.LoadModelAsync(urban).ConfigureAwait(false);
-                if (model == null)
-                    continue;
+                var img = new Image<Rgba32>(Configuration.Default,
+                    MultiResolutionMapManager.TileSizePx,
+                    MultiResolutionMapManager.TileSizePx,
+                    new Rgba32(0, 0, 0, 0));
+                var tilePoly = ToPolygon(tileBounds);
 
-                foreach (var b in model.Buildings)
+                foreach (var urban in UrbanAreaManager.UrbanPolygons)
                 {
-                    if (!b.Footprint.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
+                    Console.WriteLine($"[Debug] Processing urban polygon envelope: {urban.EnvelopeInternal}");
+
+                    if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
                         continue;
-                    var visible = b.Footprint.Intersection(tilePoly);
-                    if (visible is Nts.Polygon p)
+
+                    // Load or generate model as needed
+                    var model = await RoadNetworkGenerator.GenerateModelAsync(urban, cellSize).ConfigureAwait(false);
+                    if (model == null)
                     {
-                        RenderPolygon(img, p, tileBounds, MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, GetColor(b.LandUse));
+                        Console.WriteLine("[Debug] CityDataModel missing, skipping.");
+                        continue;
                     }
-                    else if (visible is Nts.MultiPolygon mp)
+
+                    // Draw road network
+                    Console.WriteLine($"[Debug] Rendering {model.RoadNetwork.Count} road segments.");
+                    DrawRoads(img, model.RoadNetwork, tileBounds);
+
+                    // Draw buildings
+                    foreach (var b in model.Buildings)
                     {
-                        for (int i = 0; i < mp.NumGeometries; i++)
+                        if (!b.Footprint.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal))
+                            continue;
+
+                        var visible = b.Footprint.Intersection(tilePoly);
+                        if (visible is Nts.Polygon p)
                         {
-                            if (mp.GetGeometryN(i) is Nts.Polygon pp)
-                                RenderPolygon(img, pp, tileBounds, MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, GetColor(b.LandUse));
+                            RenderPolygon(img, p, tileBounds, GetBuildingColor(b.LandUse));
+                        }
+                        else if (visible is Nts.MultiPolygon mp)
+                        {
+                            for (int i = 0; i < mp.NumGeometries; i++)
+                            {
+                                if (mp.GetGeometryN(i) is Nts.Polygon pp)
+                                    RenderPolygon(img, pp, tileBounds, GetBuildingColor(b.LandUse));
+                            }
                         }
                     }
                 }
+
+                return img;
             }
-            return img;
+            catch (ArgumentException ex)
+            {
+                Console.WriteLine($"[Error] RenderCityTileAsync ArgumentException: {ex.Message}");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Error] RenderCityTileAsync Exception: {ex.Message}");
+                throw;
+            }
         }
 
-        private static Rgba32 GetColor(LandUseType use)
+        private static void DrawRoads(Image<Rgba32> img, IEnumerable<LineSegment> roads, GeoBounds bounds)
+        {
+            img.Mutate(ctx =>
+            {
+                var pen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1);
+                foreach (var seg in roads)
+                {
+                    var p1 = ToPointF(seg.X1, seg.Y1, bounds);
+                    var p2 = ToPointF(seg.X2, seg.Y2, bounds);
+                    ctx.DrawLine(pen, p1, p2);
+                }
+            });
+        }
+
+        private static SixLabors.ImageSharp.PointF ToPointF(double lon, double lat, GeoBounds b)
+        {
+            float x = (float)((lon - b.MinLon) / (b.MaxLon - b.MinLon) * MultiResolutionMapManager.TileSizePx);
+            float y = (float)((b.MaxLat - lat) / (b.MaxLat - b.MinLat) * MultiResolutionMapManager.TileSizePx);
+            return new SixLabors.ImageSharp.PointF(x, y);
+        }
+
+        private static Rgba32 GetBuildingColor(LandUseType use)
         {
             return use switch
             {
@@ -68,37 +116,24 @@ namespace StrategyGame
 
         private static Nts.Polygon ToPolygon(GeoBounds b)
         {
+            if (b.MinLon >= b.MaxLon || b.MinLat >= b.MaxLat)
+                throw new ArgumentException("Invalid GeoBounds: Min must be less than Max.");
+
             var gf = Nts.GeometryFactory.Default;
             return gf.CreatePolygon(new[]
             {
-                new Nts.Coordinate(b.MinLon,b.MinLat),
-                new Nts.Coordinate(b.MaxLon,b.MinLat),
-                new Nts.Coordinate(b.MaxLon,b.MaxLat),
-                new Nts.Coordinate(b.MinLon,b.MaxLat),
-                new Nts.Coordinate(b.MinLon,b.MinLat)
+                new Nts.Coordinate(b.MinLon, b.MinLat),
+                new Nts.Coordinate(b.MaxLon, b.MinLat),
+                new Nts.Coordinate(b.MaxLon, b.MaxLat),
+                new Nts.Coordinate(b.MinLon, b.MaxLat),
+                new Nts.Coordinate(b.MinLon, b.MinLat)
             });
         }
 
-        private static void RenderPolygon(Image<Rgba32> img, Nts.Polygon poly, GeoBounds bounds, int tileWidth, int tileHeight, Rgba32 color)
+        private static void RenderPolygon(Image<Rgba32> img, Nts.Polygon poly, GeoBounds bounds, Rgba32 color)
         {
-            var coords = poly.ExteriorRing.Coordinates;
-            var pts = new List<(int X, int Y)>(coords.Length);
-            foreach (var c in coords)
-            {
-                int px = (int)((c.X - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
-                int py = (int)((bounds.MaxLat - c.Y) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
-                pts.Add((px, py));
-            }
-            FillPolygon(img, pts, color);
-        }
-
-        private static void FillPolygon(Image<Rgba32> img, List<(int X, int Y)> points, Rgba32 color)
-        {
-            if (points.Count < 3)
-                return;
-
-            var polygonShape = new SixLabors.ImageSharp.Drawing.Polygon(points.Select(p => new SixLabors.ImageSharp.PointF(p.X, p.Y)).ToArray());
-            img.Mutate(ctx => ctx.Fill(color, polygonShape));
+            var coords = poly.ExteriorRing.Coordinates.Select(c => ToPointF(c.X, c.Y, bounds)).ToArray();
+            img.Mutate(ctx => ctx.Fill(color, new Polygon(coords)));
         }
     }
 }

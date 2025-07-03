@@ -210,7 +210,14 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         public void AdjustMoneySupply(decimal amount)
         {
             // Positive amount = print money, negative = remove from circulation
-            MoneySupply = Math.Max(0, MoneySupply + amount);
+            if (MoneySupply == decimal.MaxValue || amount > 0 && MoneySupply + amount > decimal.MaxValue)
+            {
+                MoneySupply = decimal.MaxValue;
+            }
+            else
+            {
+                MoneySupply = Math.Max(0, MoneySupply + amount);
+            }
             
             // Impact on inflation
             if (amount > 0)
@@ -249,16 +256,24 @@ namespace StrategyGame // Changed from EconomySim to StrategyGame
         // Simulate the impact of current monetary policy and economic conditions
         public void SimulateMonetaryEffects()
         {
-            // Money supply changes each tick based on current inflation
-            MoneySupply *= (1.0m + InflationRate);
+            // Check if multiplication would cause overflow
+            decimal multiplier = 1.0m + InflationRate;
+            decimal maxSafeMoneySupply = decimal.MaxValue / multiplier;
+            
+            if (MoneySupply > maxSafeMoneySupply)
+            {
+                // Cap the money supply to prevent overflow
+                MoneySupply = maxSafeMoneySupply;
+            }
+            
+            // Now safely apply the inflation
+            MoneySupply *= multiplier;
 
-            // Inflation effects on credit rating when it gets high
+            // Rest of the method remains the same
             if (InflationRate > 0.1m) // High inflation scenario
             {
                 CreditRating = Math.Max(0.1f, CreditRating - 0.005f); // High inflation hurts credit rating
             }
-
-            // Interest rate effects no longer account for bonds since the bond system was removed
 
             // Reserve effects
             if (NationalReserves < MoneySupply * 0.1m) // Low reserves scenario
