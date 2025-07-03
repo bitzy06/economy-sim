@@ -5,6 +5,8 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using ComputeSharp;
+using System.Runtime.InteropServices;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -184,47 +186,31 @@ namespace StrategyGame
             ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
             ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
 
-            var dest = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(tileWidth, tileHeight);
-            int seed = Environment.TickCount;
-            var rngLocal = new ThreadLocal<Random>(() => new Random(Interlocked.Increment(ref seed)));
-            var waterColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(135, 206, 250, 255); // LightSkyBlue
-
-            Parallel.For(0, cellsY, y =>
+            int[] maskFlat = new int[tileWidth * tileHeight];
+            for (int yy = 0; yy < tileHeight; yy++)
             {
-                for (int x = 0; x < cellsX; x++)
+                for (int xx = 0; xx < tileWidth; xx++)
                 {
-                    int idx = y * cellsX + x;
-                    var baseColor = new Rgba32(r[idx], g[idx], b[idx], 255);
-                    var palette = BuildPalette(baseColor);
-
-                    for (int py = 0; py < cellSize; py++)
-                    {
-                        int destY = y * cellSize + py;
-                        if (destY >= tileHeight) continue;
-
-                        var row = dest.DangerousGetPixelRowMemory(destY).Span;
-
-                        for (int px = 0; px < cellSize; px++)
-                        {
-                            int destX = x * cellSize + px;
-                            if (destX >= tileWidth) continue;
-
-                            var isLand = landMask[destY, destX] != 0;
-                            if (!isLand)
-                            {
-                                row[destX] = waterColor;
-                            }
-                            else
-                            {
-                                var c = palette[rngLocal.Value.Next(palette.Length)];
-                                row[destX] = new SixLabors.ImageSharp.PixelFormats.Rgba32(c.R, c.G, c.B, c.A);
-                            }
-                        }
-                    }
+                    maskFlat[yy * tileWidth + xx] = landMask[yy, xx];
                 }
-            });
+            }
 
-            return dest;
+            var device = GraphicsDevice.GetDefault();
+            using ReadOnlyBuffer<byte> rBuf = device.AllocateReadOnlyBuffer(r);
+            using ReadOnlyBuffer<byte> gBuf = device.AllocateReadOnlyBuffer(g);
+            using ReadOnlyBuffer<byte> bBuf = device.AllocateReadOnlyBuffer(b);
+            using ReadOnlyBuffer<int> maskBuf = device.AllocateReadOnlyBuffer(maskFlat);
+            using ReadWriteTexture2D<Rgba32> tex = device.AllocateReadWriteTexture2D<Rgba32>(tileWidth, tileHeight);
+
+            device.For(tileWidth, tileHeight, new TerrainTileShader(rBuf, gBuf, bBuf, maskBuf, tex, cellSize, cellsX, tileWidth, tileHeight));
+
+            using ReadBackTexture2D<Rgba32> readback = device.AllocateReadBackTexture2D<Rgba32>(tileWidth, tileHeight);
+            readback.CopyFrom(tex);
+
+            var pixels = new Rgba32[tileWidth * tileHeight];
+            readback.Span.CopyTo(pixels);
+
+            return SixLabors.ImageSharp.Image.LoadPixelData<Rgba32>(MemoryMarshal.AsBytes(pixels.AsSpan()), tileWidth, tileHeight);
         }
 
 
