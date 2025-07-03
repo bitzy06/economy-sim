@@ -162,31 +162,28 @@ namespace StrategyGame
                     origin.X + Math.Cos(angle) * roadSegmentLength,
                     origin.Y + Math.Sin(angle) * roadSegmentLength
                 );
-                var proposedSegment = gf.CreateLineString(new[] { origin, endPoint });
-
+                // Envelope for quadtree lookup
+                var proposedEnv = new Nts.Envelope(origin, endPoint);
                 // Global Constraint: Must be within the urban area polygon
-                if (!area.Contains(proposedSegment.EndPoint)) continue;
+                if (!area.Contains(gf.CreatePoint(endPoint))) continue;
 
                 // Local Constraint: Check for intersections
                 Nts.Coordinate? closestIntersection = null;
                 double minDistance = double.MaxValue;
 
-                var candidates = index.Query(proposedSegment.EnvelopeInternal);
+                var candidates = index.Query(proposedEnv);
                 foreach (var existingRoad in candidates)
                 {
-                    if (proposedSegment.Intersects(existingRoad))
+                    var p1 = existingRoad.GetCoordinateN(0);
+                    var p2 = existingRoad.GetCoordinateN(existingRoad.NumPoints - 1);
+                    if (GeometryUtil.TryGetIntersection(origin, endPoint, p1, p2, out var intersectionPoint))
                     {
-                        var intersection = proposedSegment.Intersection(existingRoad);
-                        var intersectionPoint = intersection.Coordinate;
-                        if (intersectionPoint != null)
+                        double dist = origin.Distance(intersectionPoint);
+                        // Ensure intersection is not at the start point and is the closest one
+                        if (dist > 1e-6 && dist < minDistance)
                         {
-                            double dist = origin.Distance(intersectionPoint);
-                            // Ensure intersection is not at the start point and is the closest one
-                            if (dist > 1e-6 && dist < minDistance)
-                            {
-                                minDistance = dist;
-                                closestIntersection = intersectionPoint;
-                            }
+                            minDistance = dist;
+                            closestIntersection = intersectionPoint;
                         }
                     }
                 }
@@ -194,9 +191,9 @@ namespace StrategyGame
                 if (closestIntersection != null)
                 {
                     endPoint = closestIntersection;
-                    proposedSegment = gf.CreateLineString(new[] { origin, endPoint });
                 }
 
+                var proposedSegment = gf.CreateLineString(new[] { origin, endPoint });
                 roadNetwork.Add(proposedSegment);
                 index.Insert(proposedSegment.EnvelopeInternal, proposedSegment);
 
