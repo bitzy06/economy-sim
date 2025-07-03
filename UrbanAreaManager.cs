@@ -1,4 +1,4 @@
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
 using System;
 using System.Collections.Generic;
@@ -10,7 +10,7 @@ namespace StrategyGame
 {
     public static class UrbanAreaManager
     {
-        public static List<Polygon> UrbanPolygons { get; private set; } = new();
+        public static List<Nts.Polygon> UrbanPolygons { get; private set; } = new();
 
         private static readonly string RepoRoot =
             Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
@@ -28,19 +28,19 @@ namespace StrategyGame
             if (!File.Exists(shp))
                 return;
 
-            var reader = new ShapefileDataReader(shp, GeometryFactory.Default);
+            var reader = new ShapefileDataReader(shp, Nts.GeometryFactory.Default);
             while (reader.Read())
             {
                 var geom = reader.Geometry;
-                if (geom is MultiPolygon mp)
+                if (geom is Nts.MultiPolygon mp)
                 {
                     for (int i = 0; i < mp.NumGeometries; i++)
                     {
-                        if (mp.GetGeometryN(i) is Polygon p)
+                        if (mp.GetGeometryN(i) is Nts.Polygon p)
                             UrbanPolygons.Add(p);
                     }
                 }
-                else if (geom is Polygon p)
+                else if (geom is Nts.Polygon p)
                 {
                     UrbanPolygons.Add(p);
                 }

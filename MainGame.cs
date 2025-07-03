@@ -5,8 +5,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Drawing2D;
+using SD = System.Drawing;
+using SDD = System.Drawing.Drawing2D;
 using System.IO; // For File operations
 using System.Linq;
 using System.Text;
@@ -15,6 +15,7 @@ using System.Text.RegularExpressions; // Added for owner-drawing
 using System.Threading.Tasks;
 using System.Threading;
 using System.Windows.Forms;
+using Nts = NetTopologySuite.Geometries;
 
 namespace economy_sim
 {
@@ -54,13 +55,14 @@ namespace economy_sim
 
         private int mapZoom = 1;
 
-        private Bitmap baseMap;
+        private SD.Bitmap baseMap;
         private bool isPanning = false;
-        private Point panStart;
-        private Point panPictureBoxStartLocation;
+        private SD.Point panStart;
+        private SD.Point panPictureBoxStartLocation;
         private DateTime _lastRedrawTime = DateTime.MinValue;
         private MultiResolutionMapManager mapManager;
-        private Point mapViewOrigin = new Point(0, 0); // Origin for the map view
+        private CityTileManager cityTileManager;
+        private SD.Point mapViewOrigin = new SD.Point(0, 0); // Origin for the map view
         private int baseCellsWidth;
         private int baseCellsHeight;
         private System.Windows.Forms.Timer mapUpdateTimer;
@@ -70,6 +72,62 @@ namespace economy_sim
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
 
+        private void LoadGlobalData()
+        {
+            string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
+            string popPath = Path.Combine(dataDir, "population_density.png");
+            if (File.Exists(popPath))
+            {
+                using var bmp = new SD.Bitmap(popPath);
+                var values = new float[bmp.Width, bmp.Height];
+                for (int x = 0; x < bmp.Width; x++)
+                    for (int y = 0; y < bmp.Height; y++)
+                        values[x, y] = bmp.GetPixel(x, y).R / 255f;
+                populationDensity = new PopulationDensityMap(values);
+            }
+            else
+            {
+                populationDensity = new PopulationDensityMap(new float[1, 1]);
+            }
+
+            string waterPath = Path.Combine(dataDir, "water_bodies.png");
+            if (File.Exists(waterPath))
+            {
+                using var bmp = new SD.Bitmap(waterPath);
+                var vals = new bool[bmp.Width, bmp.Height];
+                for (int x = 0; x < bmp.Width; x++)
+                    for (int y = 0; y < bmp.Height; y++)
+                        vals[x, y] = bmp.GetPixel(x, y).B > 128;
+                waterMap = new WaterBodyMap(vals);
+            }
+            else
+            {
+                waterMap = new WaterBodyMap(new bool[1, 1]);
+            }
+
+            string elevPath = Path.Combine(dataDir, "terrain.png");
+            if (File.Exists(elevPath))
+            {
+                using var bmp = new SD.Bitmap(elevPath);
+                var elev = new float[bmp.Width, bmp.Height];
+                for (int x = 0; x < bmp.Width; x++)
+                    for (int y = 0; y < bmp.Height; y++)
+                        elev[x, y] = bmp.GetPixel(x, y).R;
+                terrainData = new TerrainData(elev);
+            }
+            else
+            {
+                terrainData = new TerrainData(new float[1, 1]);
+            }
+
+            cityGenerationManager = new CityGenerationManager(populationDensity, waterMap, terrainData);
+        }
+
+        private PopulationDensityMap populationDensity;
+        private WaterBodyMap waterMap;
+        private TerrainData terrainData;
+        private CityGenerationManager cityGenerationManager;
+
         public MainGame()
         {
             GdalBase.ConfigureAll(); 
@@ -78,6 +136,7 @@ namespace economy_sim
             var sw = Stopwatch.StartNew();
 
             InitializeComponent();
+            LoadGlobalData();
             // In your constructor, after InitializeComponent():
             panelMap.TabStop = true;                        // make panel focusable
             panelMap.MouseEnter += (s, e) => panelMap.Focus();
@@ -141,7 +200,7 @@ namespace economy_sim
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
 
-            this.buttonShowPopStats.Location = new System.Drawing.Point(buttonsTargetX, buttonsTargetY);
+            this.buttonShowPopStats.Location = new SD.Point(buttonsTargetX, buttonsTargetY);
             this.buttonShowPopStats.Click += ButtonShowPopStats_Click;
 
             popStatsForm = new PopStatsForm();
@@ -156,11 +215,11 @@ namespace economy_sim
             this.listBoxFactoryStats.DrawItem += new DrawItemEventHandler(this.ListBox_DrawItemShared);
             this.listBoxMarketStats.DrawItem += new DrawItemEventHandler(this.ListBox_DrawItemShared);
 
-            this.buttonShowFactoryStats.Location = new System.Drawing.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
+            this.buttonShowFactoryStats.Location = new SD.Point(this.buttonShowPopStats.Right + 10, buttonsTargetY);
             this.buttonShowFactoryStats.Click += ButtonShowFactoryStats_Click;
 
 
-            this.buttonShowConstruction.Location = new System.Drawing.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
+            this.buttonShowConstruction.Location = new SD.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
             this.buttonShowConstruction.Click += ButtonShowConstruction_Click;
 
             Console.WriteLine($"[Startup] TOTAL startup time: {totalSw.Elapsed.TotalSeconds:F2} seconds");
@@ -181,8 +240,9 @@ namespace economy_sim
                 var baseSize = mapManager.GetMapSize(1);
                 baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
+                cityTileManager = new CityTileManager(baseCellsWidth, baseCellsHeight);
 
-                var viewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                var viewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
 
                 Task.Run(() =>
                 {
@@ -191,6 +251,7 @@ namespace economy_sim
                         "data", "tile_cache");
 
                     mapManager.PreloadVisibleTiles(mapZoom, viewRect);
+                    cityTileManager.PreloadVisibleTiles(mapZoom, viewRect);
 
                     this.Invoke((MethodInvoker)(() =>
                     {
@@ -198,7 +259,7 @@ namespace economy_sim
                         {
                             this.Invoke((MethodInvoker)(() =>
                             {
-                                var updatedViewRect = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                                var updatedViewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
                                 pictureBox1.Image = mapManager.AssembleView(mapZoom, updatedViewRect);
                             }));
                         });
@@ -207,7 +268,7 @@ namespace economy_sim
             }
 
             pictureBox1.Size = panelMap.ClientSize;
-            pictureBox1.Location = new Point(0, 0);
+            pictureBox1.Location = new SD.Point(0, 0);
         }
 
        
@@ -222,7 +283,7 @@ namespace economy_sim
             if (mapManager == null || panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
                 return;
 
-            Rectangle viewRect = new Rectangle(
+            SD.Rectangle viewRect = new SD.Rectangle(
                 -panelMap.AutoScrollPosition.X,
                 -panelMap.AutoScrollPosition.Y,
                 panelMap.ClientSize.Width,
@@ -236,21 +297,37 @@ namespace economy_sim
 
             DateTime lastInnerRedraw = DateTime.MinValue;
 
-            Bitmap bmp = null;
+            SD.Bitmap bmp = null;
             try
             {
-                bmp = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                SD.Bitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
                 {
                     if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
                         return;
-
                     lastInnerRedraw = DateTime.Now;
-
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(Redraw));
                     else
                         Redraw();
                 });
+                SD.Bitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                {
+                    if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
+                        return;
+                    lastInnerRedraw = DateTime.Now;
+                    if (this.InvokeRequired)
+                        this.BeginInvoke(new Action(Redraw));
+                    else
+                        Redraw();
+                });
+                if (terrain != null)
+                {
+                    bmp = new SD.Bitmap(terrain.Width, terrain.Height);
+                    using var g = SD.Graphics.FromImage(bmp);
+                    g.DrawImage(terrain, 0, 0);
+                    if (city != null)
+                        g.DrawImage(city, 0, 0);
+                }
             }
             catch (ArgumentException ex)
             {
@@ -275,7 +352,7 @@ namespace economy_sim
             redrawCts = new CancellationTokenSource();
             var token = redrawCts.Token;
 
-            Rectangle viewRect = new Rectangle(
+            SD.Rectangle viewRect = new SD.Rectangle(
                 -panelMap.AutoScrollPosition.X,
                 -panelMap.AutoScrollPosition.Y,
                 panelMap.ClientSize.Width,
@@ -291,7 +368,7 @@ namespace economy_sim
             {
                 try
                 {
-                    var bmp = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
                     {
                         if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
                         {
@@ -299,6 +376,25 @@ namespace economy_sim
                             this.BeginInvoke(new Action(RedrawAsync));
                         }
                     });
+
+                    var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    {
+                        if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
+                        {
+                            lastInnerRedraw = DateTime.Now;
+                            this.BeginInvoke(new Action(RedrawAsync));
+                        }
+                    });
+
+                    SD.Bitmap bmp = null;
+                    if (terrain != null)
+                    {
+                        bmp = new SD.Bitmap(terrain.Width, terrain.Height);
+                        using var g = SD.Graphics.FromImage(bmp);
+                        g.DrawImage(terrain, 0, 0);
+                        if (city != null)
+                            g.DrawImage(city, 0, 0);
+                    }
 
                     if (bmp != null && bmp.Width > 0 && bmp.Height > 0 && !token.IsCancellationRequested)
                     {
@@ -327,15 +423,15 @@ namespace economy_sim
                 return;
             }
 
-            Rectangle view;
+            SD.Rectangle view;
             int zoom;
             lock (_zoomLock)
             {
-                Size mapSize = mapManager.GetMapSize(mapZoom);
+                SD.Size mapSize = mapManager.GetMapSize(mapZoom);
                 mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
                 mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
                 zoom = mapZoom;
-                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
             }
 
             if (mapRenderInProgress)
@@ -345,19 +441,34 @@ namespace economy_sim
             }
 
             mapManager.PreloadVisibleTiles(zoom, view);
+            cityTileManager.PreloadVisibleTiles(zoom, view);
 
             mapRenderInProgress = true;
 
             Task.Run(() =>
             {
-                Bitmap map = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
+                SD.Bitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
                     else
                         ApplyZoom();
                 });
-                if (map == null) return;
+                SD.Bitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
+                {
+                    if (this.InvokeRequired)
+                        this.BeginInvoke(new Action(ApplyZoom));
+                    else
+                        ApplyZoom();
+                });
+                if (terrain == null) return;
+                SD.Bitmap map = new SD.Bitmap(terrain.Width, terrain.Height);
+                using (var g = SD.Graphics.FromImage(map))
+                {
+                    g.DrawImage(terrain, 0, 0);
+                    if (city != null)
+                        g.DrawImage(city, 0, 0);
+                }
 
                 void setImage()
                 {
@@ -383,13 +494,13 @@ namespace economy_sim
         }
 
 
-        private Bitmap ScaleBitmapNearest(Bitmap src, int width, int height)
+        private SD.Bitmap ScaleBitmapNearest(SD.Bitmap src, int width, int height)
         {
             if (width <= 0 || height <= 0)
             {
                 // Log this event if a logging mechanism exists, e.g.:
                 // DebugLogger.Log("ScaleBitmapNearest called with invalid zero/negative dimensions.");
-                return new Bitmap(1, 1); // Return a minimal valid bitmap
+                return new SD.Bitmap(1, 1); // Return a minimal valid bitmap
             }
 
             // Optional: Add a check for excessively large dimensions as a further safeguard.
@@ -401,13 +512,13 @@ namespace economy_sim
             {
                 // Log this event if a logging mechanism exists, e.g.:
                 // DebugLogger.Log($"ScaleBitmapNearest called with excessively large dimensions: {width}x{height}");
-                return new Bitmap(1, 1); // Return a minimal valid bitmap
+                return new SD.Bitmap(1, 1); // Return a minimal valid bitmap
             }
-            Bitmap dest = new Bitmap(width, height);
-            using (var g = Graphics.FromImage(dest))
+            SD.Bitmap dest = new SD.Bitmap(width, height);
+            using (var g = SD.Graphics.FromImage(dest))
             {
-                g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.InterpolationMode = SDD.InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = SDD.PixelOffsetMode.Half;
                 g.DrawImage(src, 0, 0, width, height);
             }
             return dest;
@@ -431,6 +542,7 @@ namespace economy_sim
 
             // Load urban area polygons for procedural generation
             UrbanAreaManager.LoadUrbanAreas();
+            CheckAndPromptForMissingCityData();
 
             // 3. Load World Setup from JSON
             string jsonFilePath = "world_setup.json";
@@ -642,7 +754,7 @@ namespace economy_sim
                     int assignedSlots = farm.JobSlots.Values.Sum();
                     if (assignedSlots < totalSlots && farm.JobSlots.Any())
                     {
-                        farm.JobSlots[farm.JobSlots.First().Key] += (totalSlots - assignedSlots);
+                        farm.JobSlots[farmBlueprint.DefaultJobSlotDistribution.First().Key] += (totalSlots - assignedSlots);
                     }
                     else if (assignedSlots < totalSlots)
                     {
@@ -1149,6 +1261,12 @@ namespace economy_sim
                 UpdateGovernmentTab();
             }
 
+            // Update urban area status if city generation is in progress
+            if (cityGenerationManager.IsProcessing())
+            {
+                UpdateUrbanAreaStatus();
+            }
+
             // Process AI trade proposals (temporary simple logic)
             if (diplomacyManager != null && playerCountry != null && random.Next(100) < 20) // 20% chance each turn
             {
@@ -1497,7 +1615,7 @@ namespace economy_sim
 
             Font itemFont = e.Font;
             // Default text color (handles selection text color)
-            Color defaultTextColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected ? SystemColors.HighlightText : e.ForeColor;
+            SD.Color defaultTextColor = (e.State & DrawItemState.Selected) == DrawItemState.Selected ? SystemColors.HighlightText : e.ForeColor;
 
             // Regex to find the main part and the change part (e.g., " (+50)" or " (-0.25)")
             // Group 1: Main text part (e.g., "Population: 1,050")
@@ -1517,24 +1635,24 @@ namespace economy_sim
             }
 
             // Use the full item bounds for drawing, TextRenderer will handle clipping if needed.
-            Rectangle itemDrawBounds = e.Bounds;
+            SD.Rectangle itemDrawBounds = e.Bounds;
             TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.NoPadding; // Removed VerticalCenter
 
             // Draw main text part
-            Size mainTextSize = TextRenderer.MeasureText(e.Graphics, mainTextPart, itemFont, itemDrawBounds.Size, flags);
-            Rectangle mainTextRect = new Rectangle(itemDrawBounds.Left, itemDrawBounds.Top, mainTextSize.Width, itemDrawBounds.Height);
+            SD.Size mainTextSize = TextRenderer.MeasureText(e.Graphics, mainTextPart, itemFont, itemDrawBounds.Size, flags);
+            SD.Rectangle mainTextRect = new SD.Rectangle(itemDrawBounds.Left, itemDrawBounds.Top, mainTextSize.Width, itemDrawBounds.Height);
             TextRenderer.DrawText(e.Graphics, mainTextPart, itemFont, mainTextRect, defaultTextColor, flags);
 
             if (!string.IsNullOrEmpty(changeTextWithSpaceAndParens))
             {
-                Color changeColor = defaultTextColor;
+                SD.Color changeColor = defaultTextColor;
                 if (contentInsideParens.Contains("+"))
-                    changeColor = Color.Green;
+                    changeColor = SD.Color.Green;
                 else if (contentInsideParens.Contains("-"))
-                    changeColor = Color.Red;
+                    changeColor = SD.Color.Red;
 
-                Size changeTextSize = TextRenderer.MeasureText(e.Graphics, changeTextWithSpaceAndParens, itemFont, itemDrawBounds.Size, flags);
-                Rectangle changeTextRect = new Rectangle(itemDrawBounds.Left + mainTextSize.Width, itemDrawBounds.Top, changeTextSize.Width, itemDrawBounds.Height);
+                SD.Size changeTextSize = TextRenderer.MeasureText(e.Graphics, changeTextWithSpaceAndParens, itemFont, itemDrawBounds.Size, flags);
+                SD.Rectangle changeTextRect = new SD.Rectangle(itemDrawBounds.Left + mainTextSize.Width, itemDrawBounds.Top, changeTextSize.Width, itemDrawBounds.Height);
                 TextRenderer.DrawText(e.Graphics, changeTextWithSpaceAndParens, itemFont, changeTextRect, changeColor, flags);
             }
 
@@ -1910,7 +2028,7 @@ namespace economy_sim
                 // Highlight player's country
                 if (country == playerCountry)
                 {
-                    item.BackColor = Color.LightBlue;
+                    item.BackColor = SD.Color.LightBlue;
                 }
             }
 
@@ -1962,11 +2080,208 @@ namespace economy_sim
             policyManagerForm.BringToFront();
         }
 
+        private void CheckAndPromptForMissingCityData()
+        {
+            List<Nts.Polygon> missing = new List<Nts.Polygon>();
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            Directory.CreateDirectory(dir);
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                // Use the same hash computation as RoadNetworkGenerator for consistency
+                string hash = ComputeUrbanAreaHash(urban);
+                string hashPath = Path.Combine(dir, $"{hash}.txt");
+                
+                // Check if hash-to-ID mapping exists
+                if (!File.Exists(hashPath))
+                {
+                    missing.Add(urban);
+                }
+                else
+                {
+                    // Also verify the actual model file exists
+                    try
+                    {
+                        string id = File.ReadAllText(hashPath);
+                        string modelPath = Path.Combine(dir, $"{id}.json");
+                        if (!File.Exists(modelPath))
+                        {
+                            missing.Add(urban);
+                        }
+                    }
+                    catch
+                    {
+                        // If we can't read the hash file, consider it missing
+                        missing.Add(urban);
+                    }
+                }
+            }
+
+            if (missing.Count > 0)
+            {
+                var result = MessageBox.Show($"{missing.Count} urban areas are missing procedural data. Generate now?", "Generate Missing City Data?", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (result == DialogResult.Yes)
+                    Task.Run(() => GenerateCityDataFor(missing));
+            }
+        }
+
+        /// <summary>
+        /// Computes the same hash for urban areas as RoadNetworkGenerator to ensure consistency
+        /// </summary>
+        private string ComputeUrbanAreaHash(Nts.Polygon area)
+        {
+            // Use the same hash computation as RoadNetworkGenerator.ComputeHash()
+            var e = area.EnvelopeInternal;
+            return $"{e.MinX:F2}_{e.MinY:F2}_{e.MaxX:F2}_{e.MaxY:F2}";
+        }
+
+        private async Task GenerateCityDataFor(IEnumerable<Nts.Polygon> areas)
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            Directory.CreateDirectory(dir);
+            
+            int totalAreas = areas.Count();
+            int processed = 0;
+            
+            foreach (var urban in areas)
+            {
+                // Queue the area for generation, which will create a model with a new GUID
+                cityGenerationManager.QueueArea(urban);
+                processed++;
+                
+                // Update progress (you could show this in UI if needed)
+                Console.WriteLine($"Queued urban area {processed}/{totalAreas} for city data generation");
+            }
+            
+            // Wait a bit longer to ensure queue processing completes
+            await Task.Delay(1000).ConfigureAwait(false);
+            
+            // Wait for the queue to empty
+            while (cityGenerationManager.IsProcessing())
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+        }
+
+        /// <summary>
+        /// Gets count of urban areas that have complete procedural city data
+        /// </summary>
+        public int GetUrbanAreasWithData()
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            if (!Directory.Exists(dir)) return 0;
+            
+            int count = 0;
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                string hash = ComputeUrbanAreaHash(urban);
+                string hashPath = Path.Combine(dir, $"{hash}.txt");
+                
+                if (File.Exists(hashPath))
+                {
+                    try
+                    {
+                        string id = File.ReadAllText(hashPath);
+                        string modelPath = Path.Combine(dir, $"{id}.json");
+                        if (File.Exists(modelPath))
+                        {
+                            count++;
+                        }
+                    }
+                    catch
+                    {
+                        // Skip if we can't read the files
+                    }
+                }
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// Gets count of urban areas missing procedural city data
+        /// </summary>
+        public int GetUrbanAreasMissingData()
+        {
+            return UrbanAreaManager.UrbanPolygons.Count - GetUrbanAreasWithData();
+        }
+
+        private async void ButtonGenerateCityData_Click(object sender, EventArgs e)
+        {
+            // Show current status first
+            int totalUrbanAreas = UrbanAreaManager.UrbanPolygons.Count;
+            int areasWithData = GetUrbanAreasWithData();
+            int missingData = GetUrbanAreasMissingData();
+            
+            if (missingData == 0)
+            {
+                MessageBox.Show($"All {totalUrbanAreas} urban areas already have procedural city data.", "Generation Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            
+            var result = MessageBox.Show($"Found {totalUrbanAreas} total urban areas.\n{areasWithData} have data, {missingData} are missing data.\n\nGenerate missing city data now?", "Generate City Data", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            
+            if (result != DialogResult.Yes)
+                return;
+                
+            buttonGenerateCityData.Text = $"Generating... (0/{missingData})";
+            buttonGenerateCityData.Enabled = false;
+            
+            try
+            {
+                // Get only the missing areas
+                List<Nts.Polygon> missingAreas = new List<Nts.Polygon>();
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+                Directory.CreateDirectory(dir);
+                
+                foreach (var urban in UrbanAreaManager.UrbanPolygons)
+                {
+                    string hash = ComputeUrbanAreaHash(urban);
+                    string hashPath = Path.Combine(dir, $"{hash}.txt");
+                    
+                    if (!File.Exists(hashPath))
+                    {
+                        missingAreas.Add(urban);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            string id = File.ReadAllText(hashPath);
+                            string modelPath = Path.Combine(dir, $"{id}.json");
+                            if (!File.Exists(modelPath))
+                            {
+                                missingAreas.Add(urban);
+                            }
+                        }
+                        catch
+                        {
+                            missingAreas.Add(urban);
+                        }
+                    }
+                }
+                
+                await GenerateCityDataFor(missingAreas);
+                
+                // Final status check
+                int finalAreasWithData = GetUrbanAreasWithData();
+                int finalMissingData = GetUrbanAreasMissingData();
+                
+                MessageBox.Show($"City data generation complete!\n\nTotal urban areas: {totalUrbanAreas}\nWith data: {finalAreasWithData}\nStill missing: {finalMissingData}", "Generation Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error during city data generation: {ex.Message}", "Generation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                buttonGenerateCityData.Text = "Generate City Data";
+                buttonGenerateCityData.Enabled = true;
+            }
+        }
 
         private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
             // 1) figure out the anchor in panel coords
-            Point anchor = panelMap.PointToClient(Cursor.Position);
+            SD.Point anchor = panelMap.PointToClient(Cursor.Position);
             if (!panelMap.ClientRectangle.Contains(anchor)) return;
 
             // 2) bump zoom
@@ -2075,7 +2390,7 @@ namespace economy_sim
 
                 lock (_zoomLock)
                 {
-                    Size mapSize = mapManager.GetMapSize(mapZoom);
+                    SD.Size mapSize = mapManager.GetMapSize(mapZoom);
                     mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
                     mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
                 }
@@ -2084,7 +2399,7 @@ namespace economy_sim
             }
         }
 
-        private Point lastLocation; // Track the last location for smooth panning
+        private SD.Point lastLocation; // Track the last location for smooth panning
 
         private void PictureBox1_MouseDown(object sender, MouseEventArgs e)
         {
@@ -2108,7 +2423,7 @@ namespace economy_sim
                     int dy = e.Y - lastLocation.Y;
                     mapViewOrigin.X = Math.Max(0, mapViewOrigin.X - dx);
                     mapViewOrigin.Y = Math.Max(0, mapViewOrigin.Y - dy);
-                    Size mapSize = mapManager.GetMapSize(mapZoom);
+                    SD.Size mapSize = mapManager.GetMapSize(mapZoom);
                     mapViewOrigin.X = Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width);
                     mapViewOrigin.Y = Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height);
                     lastLocation = e.Location;
@@ -2135,7 +2450,7 @@ namespace economy_sim
                 isPanning = false;
                 this.panelMap.Cursor = Cursors.Default; // Reset panelMap cursor
                 this.panelMap.BackColor = SystemColors.Control;
-                this.pictureBox1.BackColor = Color.Transparent; // Reset pictureBox backcolor
+                this.pictureBox1.BackColor = SD.Color.Transparent; // Reset pictureBox backcolor
                 PreloadMapTiles();
             }
         }
@@ -2156,11 +2471,11 @@ namespace economy_sim
         {
             if (mapManager == null)
                 return;
-            Rectangle view;
+            SD.Rectangle view;
             int zoom;
             lock (_zoomLock)
             {
-                view = new Rectangle(mapViewOrigin, panelMap.ClientSize);
+                view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
                 zoom = mapZoom;
             }
             _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
@@ -2179,7 +2494,211 @@ namespace economy_sim
 
             return levels[index];
         }
+
+        /// <summary>
+        /// Updates the urban area status display (if you have UI elements for this)
+        /// Call this method to refresh status information about city data generation
+        /// </summary>
+        public void UpdateUrbanAreaStatus()
+        {
+            int totalUrbanAreas = UrbanAreaManager.UrbanPolygons.Count;
+            int areasWithData = GetUrbanAreasWithData();
+            int missingData = GetUrbanAreasMissingData();
+            bool isGenerating = cityGenerationManager.IsProcessing();
+            int queueCount = cityGenerationManager.GetQueueCount();
+            
+            var (inMemoryCount, diskCount, totalUnique) = RoadNetworkGenerator.GetCacheStatistics();
+            
+            string statusMessage = $"Urban Areas: {totalUrbanAreas} total, {areasWithData} with data, {missingData} missing";
+            if (isGenerating)
+            {
+                statusMessage += $" (Generating... {queueCount} in queue)";
+            }
+            
+            // If you have a status label or other UI element, update it here
+            // For example: labelUrbanAreaStatus.Text = statusMessage;
+            
+            // Log to console for debugging
+            Console.WriteLine($"[Urban Area Status] {statusMessage}");
+            Console.WriteLine($"[Cache Stats] In-Memory: {inMemoryCount}, Disk: {diskCount}, Unique: {totalUnique}");
+        }
+
+        /// <summary>
+        /// Validates that all urban areas have consistent city model IDs
+        /// </summary>
+        public void ValidateUrbanAreaData()
+        {
+            int validCount = 0;
+            int invalidCount = 0;
+            List<string> issues = new List<string>();
+            
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                string hash = ComputeUrbanAreaHash(urban);
+                string hashPath = Path.Combine(dir, $"{hash}.txt");
+                
+                if (!File.Exists(hashPath))
+                {
+                    invalidCount++;
+                    issues.Add($"Missing hash file for urban area with hash {hash}");
+                    continue;
+                }
+                
+                try
+                {
+                    string id = File.ReadAllText(hashPath).Trim();
+                    if (!Guid.TryParse(id, out Guid guid))
+                    {
+                        invalidCount++;
+                        issues.Add($"Invalid GUID '{id}' in hash file {hash}.txt");
+                        continue;
+                    }
+                    
+                    string modelPath = Path.Combine(dir, $"{guid}.json");
+                    if (!File.Exists(modelPath))
+                    {
+                        invalidCount++;
+                        issues.Add($"Missing model file {guid}.json for hash {hash}");
+                        continue;
+                    }
+                    
+                    // Try to verify the model can be loaded
+                    string jsonContent = File.ReadAllText(modelPath);
+                    var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(jsonContent);
+                    if (model == null || model.Id != guid)
+                    {
+                        invalidCount++;
+                        issues.Add($"Model file {guid}.json has invalid or mismatched ID");
+                        continue;
+                    }
+                    
+                    validCount++;
+                }
+                catch (Exception ex)
+                {
+                    invalidCount++;
+                    issues.Add($"Error validating data for hash {hash}: {ex.Message}");
+                }
+            }
+            
+            Console.WriteLine($"[Validation] Valid: {validCount}, Invalid: {invalidCount}");
+            if (issues.Count > 0)
+            {
+                Console.WriteLine("[Validation Issues:]");
+                foreach (string issue in issues.Take(10)) // Show first 10 issues
+                {
+                    Console.WriteLine($"  - {issue}");
+                }
+                if (issues.Count > 10)
+                {
+                    Console.WriteLine($"  ... and {issues.Count - 10} more issues");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets detailed information about a specific urban area and its city model
+        /// </summary>
+        public string GetUrbanAreaDetails(Nts.Polygon urbanArea)
+        {
+            string hash = ComputeUrbanAreaHash(urbanArea);
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            
+            var details = new System.Text.StringBuilder();
+            details.AppendLine($"Urban Area Hash: {hash}");
+            details.AppendLine($"Envelope: {urbanArea.EnvelopeInternal}");
+            
+            // Check for city model data
+            Guid? modelId = RoadNetworkGenerator.GetCityDataModelId(urbanArea);
+            if (modelId.HasValue)
+            {
+                details.AppendLine($"City Model ID: {modelId.Value}");
+                
+                string modelPath = Path.Combine(dir, $"{modelId.Value}.json");
+                if (File.Exists(modelPath))
+                {
+                    try
+                    {
+                        var fileInfo = new FileInfo(modelPath);
+                        details.AppendLine($"Model File Size: {fileInfo.Length:N0} bytes");
+                        details.AppendLine($"Model File Created: {fileInfo.CreationTime}");
+                        details.AppendLine($"Model File Modified: {fileInfo.LastWriteTime}");
+                        
+                        // Try to load and get basic stats
+                        string jsonContent = File.ReadAllText(modelPath);
+                        var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(jsonContent);
+                        if (model != null)
+                        {
+                            details.AppendLine($"Road Segments: {model.RoadNetwork.Count}");
+                            details.AppendLine($"Parcels: {model.Parcels.Count}");
+                            details.AppendLine($"Buildings: {model.Buildings.Count}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        details.AppendLine($"Error reading model: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    details.AppendLine("Model file missing!");
+                }
+            }
+            else
+            {
+                details.AppendLine("No city model ID found");
+            }
+            
+            return details.ToString();
+        }
+
+        /// <summary>
+        /// Regenerates city data for a specific urban area (useful for debugging)
+        /// </summary>
+        public async Task RegenerateUrbanAreaData(Nts.Polygon urbanArea)
+        {
+            string hash = ComputeUrbanAreaHash(urbanArea);
+            Console.WriteLine($"Regenerating city data for urban area with hash: {hash}");
+            
+            // Remove existing data first
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
+            string hashPath = Path.Combine(dir, $"{hash}.txt");
+            
+            if (File.Exists(hashPath))
+            {
+                try
+                {
+                    string oldId = File.ReadAllText(hashPath);
+                    string oldModelPath = Path.Combine(dir, $"{oldId}.json");
+                    
+                    // Delete old files
+                    File.Delete(hashPath);
+                    if (File.Exists(oldModelPath))
+                        File.Delete(oldModelPath);
+                        
+                    Console.WriteLine($"Removed old city data files for hash {hash}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error removing old files: {ex.Message}");
+                }
+            }
+            
+            // Generate new data
+            cityGenerationManager.QueueArea(urbanArea);
+            
+            // Wait for generation to complete
+            while (cityGenerationManager.IsProcessing())
+            {
+                await Task.Delay(100);
+            }
+            
+            Console.WriteLine($"Regeneration complete for urban area with hash: {hash}");
+        }
     }
 }
+
 
 
