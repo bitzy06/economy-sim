@@ -133,11 +133,7 @@ namespace StrategyGame
             var gf = Nts.GeometryFactory.Default;
             var random = new Random();
             var roadNetwork = new List<Nts.LineString>(highways);
-            var index = new STRtree<Nts.LineString>();
-            foreach (var hw in highways)
-            {
-                index.Insert(hw.EnvelopeInternal, hw);
-            }
+            var index = BuildIndex(roadNetwork);
             var queue = new Queue<(Nts.Coordinate origin, double angle)>();
 
             // Seed the L-system from points on the highways
@@ -202,7 +198,7 @@ namespace StrategyGame
                 }
 
                 roadNetwork.Add(proposedSegment);
-                index.Insert(proposedSegment.EnvelopeInternal, proposedSegment);
+                index = BuildIndex(roadNetwork);
 
                 // If the road didn't hit anything, it's a candidate for branching
                 if (closestIntersection == null)
@@ -225,6 +221,16 @@ namespace StrategyGame
                 }
             }
             return roadNetwork.Except(highways).ToList();
+        }
+
+        private static STRtree<Nts.LineString> BuildIndex(IEnumerable<Nts.LineString> roads)
+        {
+            var tree = new STRtree<Nts.LineString>();
+            foreach (var road in roads)
+            {
+                tree.Insert(road.EnvelopeInternal, road);
+            }
+            return tree;
         }
 
         private static string ComputeHash(Nts.Polygon area)
