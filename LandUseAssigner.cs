@@ -24,10 +24,11 @@ namespace StrategyGame
             }
             var centerPoint = gf.CreatePoint(new Nts.Coordinate((minX + maxX) / 2.0, (minY + maxY) / 2.0));
 
+            var assigned = new List<Parcel>();
             foreach (var parcel in model.Parcels)
             {
-                double distToRoad = double.MaxValue;
-                double distToPrimary = double.MaxValue;
+                double nearPrimary = double.MaxValue;
+                double nearSecondary = double.MaxValue;
                 foreach (var seg in model.RoadNetwork)
                 {
                     var ls = gf.CreateLineString(new[]
@@ -36,20 +37,33 @@ namespace StrategyGame
                         new Nts.Coordinate(seg.X2, seg.Y2)
                     });
                     double d = ls.Distance(parcel.Shape);
-                    if (d < distToRoad) distToRoad = d;
-                    if (seg.Type == RoadType.Primary && d < distToPrimary) distToPrimary = d;
+                    if (seg.Type == RoadType.Primary && d < nearPrimary) nearPrimary = d;
+                    if (seg.Type == RoadType.Secondary && d < nearSecondary) nearSecondary = d;
                 }
 
                 double distToCenter = parcel.Shape.Centroid.Distance(centerPoint);
 
-                if (distToPrimary < 0.002)
+                double commercialScore = 1.0 / (nearPrimary + 0.0001) + 1.0 / (distToCenter + 0.0001);
+                double residentialScore = 1.0 / (nearSecondary + 0.0001) + Math.Exp(-distToCenter * 30);
+                double industrialScore = (distToCenter * 2) / (nearPrimary + 0.0001);
+                double parkScore = 0.2;
+
+                bool nearIndustrial = assigned.Any(p => p.LandUse == LandUseType.Industrial && p.Shape.Distance(parcel.Shape) < 0.003);
+                if (nearIndustrial)
+                    residentialScore *= 0.3;
+
+                double total = commercialScore + residentialScore + industrialScore + parkScore;
+                double r = Random.Shared.NextDouble() * total;
+                if ((r -= commercialScore) <= 0)
                     parcel.LandUse = LandUseType.Commercial;
-                else if (distToCenter < 0.02 && distToRoad < 0.004)
+                else if ((r -= residentialScore) <= 0)
                     parcel.LandUse = LandUseType.Residential;
-                else if (distToCenter > 0.03 && distToRoad < 0.01)
+                else if ((r -= industrialScore) <= 0)
                     parcel.LandUse = LandUseType.Industrial;
                 else
                     parcel.LandUse = LandUseType.Park;
+
+                assigned.Add(parcel);
             }
         }
     }

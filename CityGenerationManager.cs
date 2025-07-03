@@ -20,6 +20,9 @@ namespace StrategyGame
             this.density = density;
             this.water = water;
             this.terrain = terrain;
+            RoadNetworkGenerator.DensityMap = density;
+            RoadNetworkGenerator.Water = water;
+            RoadNetworkGenerator.Terrain = terrain;
         }
 
         public void QueueArea(Nts.Polygon area)
