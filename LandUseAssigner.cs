@@ -2,12 +2,15 @@ using Nts = NetTopologySuite.Geometries;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace StrategyGame
 {
     public static class LandUseAssigner
     {
-        private static readonly Random Rng = new Random();
+        private static readonly ThreadLocal<Random> Rng =
+            new ThreadLocal<Random>(() => new Random());
 
         public static void AssignLandUse(CityDataModel model)
         {
@@ -37,7 +40,7 @@ namespace StrategyGame
                 .Select(seg => gf.CreateLineString(new[] { new Nts.Coordinate(seg.X1, seg.Y1), new Nts.Coordinate(seg.X2, seg.Y2) }))
                 .ToList();
 
-            foreach (var parcel in model.Parcels)
+            Parallel.ForEach(model.Parcels, parcel =>
             {
                 var weights = new Dictionary<LandUseType, double>();
                 var parcelCenter = parcel.Shape.Centroid;
@@ -73,7 +76,7 @@ namespace StrategyGame
 
                 // --- Select Land Use ---
                 parcel.LandUse = GetRandomLandUse(weights);
-            }
+            });
         }
 
         private static LandUseType GetRandomLandUse(Dictionary<LandUseType, double> weights)
@@ -81,7 +84,7 @@ namespace StrategyGame
             double totalWeight = weights.Values.Sum();
             if (totalWeight <= 0) return LandUseType.Park; // Fallback
 
-            double randomValue = Rng.NextDouble() * totalWeight;
+            double randomValue = Rng.Value.NextDouble() * totalWeight;
 
             foreach (var (landUse, weight) in weights)
             {
