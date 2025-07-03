@@ -14,18 +14,20 @@ namespace StrategyGame
                 Nts.Geometry foot = parcel.Shape;
                 switch (parcel.LandUse)
                 {
-                    case LandUseType.Residential:
-                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.1);
-                        break;
                     case LandUseType.Commercial:
-                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.02);
+                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.05);
+                        break;
+                    case LandUseType.Residential:
+                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.15);
                         break;
                     case LandUseType.Industrial:
-                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.05);
+                        var temp = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.1);
+                        foot = gf.ToGeometry(temp.EnvelopeInternal);
                         break;
                     case LandUseType.Park:
                         continue;
                 }
+
                 if (foot is Nts.Polygon p && !foot.IsEmpty)
                     buildings.Add(new Building { Footprint = p, LandUse = parcel.LandUse });
             }
