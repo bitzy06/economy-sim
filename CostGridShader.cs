@@ -2,6 +2,7 @@ using ComputeSharp;
 
 namespace StrategyGame
 {
+    [AutoConstructor]
     [ThreadGroupSize(8, 8, 1)]
     internal readonly partial struct CostGridShader : IComputeShader
     {
