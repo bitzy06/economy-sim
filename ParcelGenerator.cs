@@ -33,11 +33,7 @@ namespace StrategyGame
                 return parcels;
             }
 
-            var nodedLines = (Nts.MultiLineString)lineStrings.First().Union(lineStrings.Skip(1).First());
-            for (int i = 2; i < lineStrings.Length; i++)
-            {
-                nodedLines = (Nts.MultiLineString)nodedLines.Union(lineStrings[i]);
-            }
+            var nodedLines = UnaryUnionOp.Union(lineStrings);
 
             var polygonizer = new Polygonizer();
             polygonizer.Add(nodedLines);
