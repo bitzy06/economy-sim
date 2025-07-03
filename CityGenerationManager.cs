@@ -35,6 +35,28 @@ namespace StrategyGame
             }
         }
 
+        /// <summary>
+        /// Returns true if the manager is currently processing queued areas
+        /// </summary>
+        public bool IsProcessing()
+        {
+            lock (queue)
+            {
+                return processing || queue.Count > 0;
+            }
+        }
+
+        /// <summary>
+        /// Gets the current queue count
+        /// </summary>
+        public int GetQueueCount()
+        {
+            lock (queue)
+            {
+                return queue.Count;
+            }
+        }
+
         private async Task ProcessQueue()
         {
             while (true)
@@ -50,7 +72,7 @@ namespace StrategyGame
                     area = queue.Dequeue();
                 }
 
-                await RoadNetworkGenerator.GenerateModelAsync(area, density, water, terrain)
+                await RoadNetworkGenerator.GenerateModelAsync(area, 10)
                     .ConfigureAwait(false);
                 await Task.Delay(10).ConfigureAwait(false);
             }
