@@ -1,5 +1,8 @@
 using Nts = NetTopologySuite.Geometries;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace StrategyGame
 {
@@ -7,9 +10,9 @@ namespace StrategyGame
     {
         public static List<Building> GenerateBuildings(CityDataModel model)
         {
-            var buildings = new List<Building>();
+            var bag = new ConcurrentBag<Building>();
             var gf = Nts.GeometryFactory.Default;
-            foreach (var parcel in model.Parcels)
+            Parallel.ForEach(model.Parcels, parcel =>
             {
                 Nts.Geometry foot = parcel.Shape;
                 switch (parcel.LandUse)
@@ -29,10 +32,10 @@ namespace StrategyGame
                 }
 
                 if (foot is Nts.Polygon p && !foot.IsEmpty)
-                    buildings.Add(new Building { Footprint = p, LandUse = parcel.LandUse });
-            }
-            model.Buildings = buildings;
-            return buildings;
+                    bag.Add(new Building { Footprint = p, LandUse = parcel.LandUse });
+            });
+            model.Buildings = bag.ToList();
+            return model.Buildings;
         }
     }
 }

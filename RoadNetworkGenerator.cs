@@ -1,6 +1,8 @@
 ﻿using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Prepared;
 using NetTopologySuite.Operation.Union;
+using ComputeSharp;
+using NetTopologySuite.Index.Strtree;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -23,12 +25,35 @@ namespace StrategyGame
         public static TerrainData? Terrain { get; set; }
         public static WaterBodyMap? Water { get; set; }
 
+        private static float[,]? costGrid;
+
         private static readonly JsonSerializerOptions jsonOptions = new()
         {
             IncludeFields = true,
             WriteIndented = true,
             Converters = { new GeoJsonConverterFactory() }
         };
+
+        private static void EnsureCostGrid()
+        {
+            if (costGrid != null || Terrain == null || Water == null)
+                return;
+
+            int width = Terrain.Width;
+            int height = Terrain.Height;
+            costGrid = new float[width, height];
+
+            var waterFloat = new float[width, height];
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    waterFloat[x, y] = Water.Values[x, y] ? 1f : 0f;
+
+            using var elevTex = GraphicsDevice.GetDefault().AllocateReadOnlyTexture2D(Terrain.Elevation);
+            using var waterTex = GraphicsDevice.GetDefault().AllocateReadOnlyTexture2D(waterFloat);
+            using var costTex = GraphicsDevice.GetDefault().AllocateReadWriteTexture2D<float>(width, height);
+            GraphicsDevice.GetDefault().For(width, height, new CostGridShader(elevTex, waterTex, costTex));
+            costTex.CopyTo(costGrid);
+        }
 
         public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea, int cellSize)
         {
@@ -111,18 +136,89 @@ namespace StrategyGame
 
         private static IEnumerable<Nts.LineString> GenerateHighways(Nts.Polygon urbanArea)
         {
-            // This is a simplified placeholder. A true A* implementation would be more complex.
+            EnsureCostGrid();
+            if (costGrid == null || Terrain == null)
+                yield break;
+
             var gf = Nts.GeometryFactory.Default;
             var center = urbanArea.Centroid;
             var neighbours = UrbanAreaManager.UrbanPolygons
                 .Where(p => !ReferenceEquals(p, urbanArea) && p.IsValid)
                 .OrderBy(p => p.Centroid.Distance(center))
-                .Take(2); // Connect to nearest 2 for a cleaner network
+                .Take(2);
 
             foreach (var other in neighbours)
             {
-                yield return gf.CreateLineString(new[] { center.Coordinate, other.Centroid.Coordinate });
+                var path = AStarPath(center.Coordinate, other.Centroid.Coordinate);
+                if (path.Count >= 2)
+                    yield return gf.CreateLineString(path.ToArray());
             }
+        }
+
+        private static List<Nts.Coordinate> AStarPath(Nts.Coordinate start, Nts.Coordinate goal)
+        {
+            int width = costGrid!.GetLength(0);
+            int height = costGrid.GetLength(1);
+
+            int StartX() => (int)Math.Clamp((start.X + 180) / 360.0 * (width - 1), 0, width - 1);
+            int StartY() => (int)Math.Clamp((start.Y + 90) / 180.0 * (height - 1), 0, height - 1);
+            int GoalX() => (int)Math.Clamp((goal.X + 180) / 360.0 * (width - 1), 0, width - 1);
+            int GoalY() => (int)Math.Clamp((goal.Y + 90) / 180.0 * (height - 1), 0, height - 1);
+
+            var sx = StartX();
+            var sy = StartY();
+            var gx = GoalX();
+            var gy = GoalY();
+
+            var open = new PriorityQueue<(int x, int y), float>();
+            var came = new Dictionary<(int, int), (int, int)>();
+            var gScore = new Dictionary<(int, int), float>();
+
+            open.Enqueue((sx, sy), 0);
+            gScore[(sx, sy)] = 0;
+
+            int[] dx = { -1, 0, 1, -1, 1, -1, 0, 1 };
+            int[] dy = { -1, -1, -1, 0, 0, 1, 1, 1 };
+
+            while (open.Count > 0)
+            {
+                var current = open.Dequeue();
+                if (current.x == gx && current.y == gy)
+                    break;
+
+                float currentG = gScore[current];
+
+                for (int i = 0; i < 8; i++)
+                {
+                    int nx = current.x + dx[i];
+                    int ny = current.y + dy[i];
+                    if (nx < 0 || nx >= width || ny < 0 || ny >= height)
+                        continue;
+                    float tentative = currentG + costGrid[nx, ny];
+                    var key = (nx, ny);
+                    if (!gScore.TryGetValue(key, out float g) || tentative < g)
+                    {
+                        came[key] = current;
+                        gScore[key] = tentative;
+                        float h = Math.Abs(nx - gx) + Math.Abs(ny - gy);
+                        open.Enqueue(key, tentative + h);
+                    }
+                }
+            }
+
+            var path = new List<Nts.Coordinate>();
+            var node = (gx, gy);
+            path.Add(goal);
+            while (node != (sx, sy) && came.TryGetValue(node, out var prev))
+            {
+                double lon = (double)node.Item1 / (width - 1) * 360.0 - 180.0;
+                double lat = (double)node.Item2 / (height - 1) * 180.0 - 90.0;
+                path.Add(new Nts.Coordinate(lon, lat));
+                node = prev;
+            }
+            path.Add(start);
+            path.Reverse();
+            return path;
         }
 
         private static List<Nts.LineString> GenerateLocalRoads(Nts.Polygon area, List<Nts.LineString> highways)
@@ -132,6 +228,9 @@ namespace StrategyGame
             var gf = Nts.GeometryFactory.Default;
             var random = new Random();
             var roadNetwork = new List<Nts.LineString>(highways);
+            var index = new NetTopologySuite.Index.Strtree.STRtree<Nts.LineString>();
+            foreach (var h in highways)
+                index.Insert(h.EnvelopeInternal, h);
             var queue = new Queue<(Nts.Coordinate origin, double angle)>();
 
             // Seed the L-system from points on the highways
@@ -169,7 +268,8 @@ namespace StrategyGame
                 Nts.Coordinate? closestIntersection = null;
                 double minDistance = double.MaxValue;
 
-                foreach (var existingRoad in roadNetwork)
+                var candidates = index.Query(proposedSegment.EnvelopeInternal);
+                foreach (var existingRoad in candidates)
                 {
                     if (proposedSegment.Intersects(existingRoad))
                     {
@@ -178,7 +278,6 @@ namespace StrategyGame
                         if (intersectionPoint != null)
                         {
                             double dist = origin.Distance(intersectionPoint);
-                            // Ensure intersection is not at the start point and is the closest one
                             if (dist > 1e-6 && dist < minDistance)
                             {
                                 minDistance = dist;
@@ -195,6 +294,7 @@ namespace StrategyGame
                 }
 
                 roadNetwork.Add(proposedSegment);
+                index.Insert(proposedSegment.EnvelopeInternal, proposedSegment);
 
                 // If the road didn't hit anything, it's a candidate for branching
                 if (closestIntersection == null)

@@ -2,9 +2,11 @@ using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.Operation.Polygonize;
 using NetTopologySuite.Operation.Union;
 using NetTopologySuite.Geometries.Utilities; // Add this namespace for splitting polygons
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace StrategyGame
 {
@@ -12,10 +14,10 @@ namespace StrategyGame
     {
         public static List<Parcel> GenerateParcels(CityDataModel model)
         {
-            var parcels = new List<Parcel>();
+            var parcelsBag = new ConcurrentBag<Parcel>();
             if (model.RoadNetwork == null || !model.RoadNetwork.Any())
             {
-                return parcels;
+                return parcelsBag.ToList();
             }
 
             var gf = Nts.GeometryFactory.Default;
@@ -45,26 +47,26 @@ namespace StrategyGame
             var rawPolys = polygonizer.GetPolygons();
             Debug.WriteLine($"[ParcelGenerator] Polygonizer produced {rawPolys.Count} raw polygons");
 
-            foreach (var geom in rawPolys)
+            Parallel.ForEach(rawPolys.Cast<Nts.Geometry>(), geom =>
             {
                 if (geom is Nts.Polygon poly && poly.IsValid && poly.Area > 1e-9)
                 {
                     if (poly.Area > 0.0001)
                     {
-                        RecursiveOBBSplitting(poly, parcels, 0);
+                        RecursiveOBBSplitting(poly, parcelsBag, 0);
                     }
                     else
                     {
-                        parcels.Add(new Parcel { Shape = poly });
+                        parcelsBag.Add(new Parcel { Shape = poly });
                     }
                 }
-            }
+            });
 
-            Debug.WriteLine($"[ParcelGenerator] Final parcel count: {parcels.Count}");
-            return parcels;
+            Debug.WriteLine($"[ParcelGenerator] Final parcel count: {parcelsBag.Count}");
+            return parcelsBag.ToList();
         }
 
-        private static void RecursiveOBBSplitting(Nts.Polygon poly, List<Parcel> output, int depth)
+        private static void RecursiveOBBSplitting(Nts.Polygon poly, ICollection<Parcel> output, int depth)
         {
             const double MinArea = 0.00005;
             const int MaxDepth = 4;
