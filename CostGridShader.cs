@@ -1,13 +1,21 @@
 using ComputeSharp;
+using System;
 
 namespace StrategyGame
 {
-    [AutoConstructor]
+    [ThreadGroupSize(16, 16, 1)]
     public readonly partial struct CostGridShader : IComputeShader
     {
         public readonly ReadOnlyTexture2D<float> elevation;
         public readonly ReadOnlyTexture2D<float> water;
         public readonly ReadWriteTexture2D<float> cost;
+
+        public CostGridShader(ReadOnlyTexture2D<float> elevation, ReadOnlyTexture2D<float> water, ReadWriteTexture2D<float> cost)
+        {
+            this.elevation = elevation;
+            this.water = water;
+            this.cost = cost;
+        }
 
         public void Execute()
         {
