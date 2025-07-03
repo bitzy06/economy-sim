@@ -66,7 +66,7 @@ namespace StrategyGame
             return parcelsBag.ToList();
         }
 
-        private static void RecursiveOBBSplitting(Nts.Polygon poly, ICollection<Parcel> output, int depth)
+        private static void RecursiveOBBSplitting(Nts.Polygon poly, ConcurrentBag<Parcel> output, int depth)
         {
             const double MinArea = 0.00005;
             const int MaxDepth = 4;
