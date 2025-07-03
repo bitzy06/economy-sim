@@ -2,6 +2,7 @@ using Nts = NetTopologySuite.Geometries;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using NetTopologySuite.Index.Strtree;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -31,14 +32,25 @@ namespace StrategyGame
             var maxDist = centerPoint.Distance(new Nts.Coordinate(cityEnvelope.MinX, cityEnvelope.MinY));
             if (maxDist < 1e-6) maxDist = 1.0; // Avoid division by zero for very small areas
 
-            var primaryRoads = model.RoadNetwork
-                .Where(r => r.Type == RoadType.Primary)
-                .Select(seg => gf.CreateLineString(new[] { new Nts.Coordinate(seg.X1, seg.Y1), new Nts.Coordinate(seg.X2, seg.Y2) }))
+            var allRoads = model.RoadNetwork
+                .Select(seg =>
+                {
+                    var ls = gf.CreateLineString(new[]
+                    {
+                        new Nts.Coordinate(seg.X1, seg.Y1),
+                        new Nts.Coordinate(seg.X2, seg.Y2)
+                    });
+                    ls.UserData = seg.Type;
+                    return ls;
+                })
                 .ToList();
 
-            var allRoads = model.RoadNetwork
-                .Select(seg => gf.CreateLineString(new[] { new Nts.Coordinate(seg.X1, seg.Y1), new Nts.Coordinate(seg.X2, seg.Y2) }))
-                .ToList();
+            var roadIndex = new STRtree<Nts.LineString>();
+            foreach (var road in allRoads)
+            {
+                roadIndex.Insert(road.EnvelopeInternal, road);
+            }
+            roadIndex.Build();
 
             Parallel.ForEach(model.Parcels, parcel =>
             {
@@ -46,8 +58,22 @@ namespace StrategyGame
                 var parcelCenter = parcel.Shape.Centroid;
 
                 double distToCenter = parcelCenter.Distance(new Nts.Point(centerPoint));
-                double distToPrimary = primaryRoads.Any() ? primaryRoads.Min(r => r.Distance(parcel.Shape)) : double.MaxValue;
-                double distToAnyRoad = allRoads.Any() ? allRoads.Min(r => r.Distance(parcel.Shape)) : double.MaxValue;
+
+                var searchEnv = new Nts.Envelope(parcel.Shape.EnvelopeInternal);
+                searchEnv.ExpandBy(0.01);
+                var candidates = roadIndex.Query(searchEnv);
+
+                double distToPrimary = double.MaxValue;
+                double distToAnyRoad = double.MaxValue;
+                foreach (var candidate in candidates)
+                {
+                    double d = candidate.Distance(parcel.Shape);
+                    distToAnyRoad = Math.Min(distToAnyRoad, d);
+                    if (candidate.UserData is RoadType type && type == RoadType.Primary)
+                    {
+                        distToPrimary = Math.Min(distToPrimary, d);
+                    }
+                }
 
                 // --- Calculate Weights ---
 
