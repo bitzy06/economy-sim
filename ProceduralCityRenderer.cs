@@ -123,7 +123,7 @@ namespace StrategyGame
                     using var snapshot = surface.Snapshot();
                     using var data = snapshot.Encode(SKEncodedImageFormat.Png, 100);
                     img.Dispose();
-                    img = Image.Load<Rgba32>(data.AsStream());
+                    img = SixLabors.ImageSharp.Image.Load<Rgba32>(data.AsStream());
                 }
 
                 return img;
@@ -166,7 +166,7 @@ namespace StrategyGame
                     foreach (var seg in roads)
                     {
                         float width = seg.Type == RoadType.Primary ? 2f : 1f;
-                        var pen = Pens.Solid(new Rgba32(180, 180, 180, 200), width);
+                        var pen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), width);
                         var p1 = ToPointF(seg.X1, seg.Y1, bounds);
                         var p2 = ToPointF(seg.X2, seg.Y2, bounds);
                         ctx.DrawLine(pen, p1, p2);
