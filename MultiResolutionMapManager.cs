@@ -365,21 +365,17 @@ namespace StrategyGame
                         }
                         else
                         {
-                            SystemDrawing.Bitmap tile = null;
                             lock (_cacheLock)
                             {
-                                _tileCache.TryGetValue(key, out tile);
-                                if (tile != null && tile.Width > 0 && tile.Height > 0)
-                                    tile = (SystemDrawing.Bitmap)tile.Clone();
-                                else
-                                    tile = null;
+                                if (_tileCache.TryGetValue(key, out var tile) && tile.Width > 0 && tile.Height > 0)
+                                {
+                                    texture = SkiaBitmapUtil.ToSKBitmap(tile);
+                                    _tileTextures[key] = texture;
+                                }
                             }
 
-                            if (tile != null)
+                            if (texture != null)
                             {
-                                texture = SkiaBitmapUtil.ToSKBitmap(tile);
-                                tile.Dispose();
-                                lock (_textureLock) _tileTextures[key] = texture;
                                 canvas.DrawBitmap(texture, rect);
                             }
                             else
