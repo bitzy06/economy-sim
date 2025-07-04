@@ -8,6 +8,7 @@ using SDI = System.Drawing.Imaging;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
 
 namespace StrategyGame
 {
@@ -227,13 +228,28 @@ namespace StrategyGame
             int endX = (viewRect.Right + tileSize - 1) / tileSize;
             int startY = Math.Max(0, viewRect.Y / tileSize);
             int endY = (viewRect.Bottom + tileSize - 1) / tileSize;
-            for (int x = startX; x < endX; x++)
+
+            var coords = Enumerable
+                .Range(startX, endX - startX)
+                .SelectMany(x => Enumerable.Range(startY, endY - startY)
+                    .Select(y => (x, y)))
+                .ToList();
+
+            using var throttle = new SemaphoreSlim(Environment.ProcessorCount);
+
+            Parallel.ForEach(coords, coord =>
             {
-                for (int y = startY; y < endY; y++)
+                throttle.Wait();
+                try
                 {
-                    _ = GetTileAsync(zoom, x, y, CancellationToken.None);
+                    GetTileAsync(zoom, coord.x, coord.y, CancellationToken.None)
+                        .GetAwaiter().GetResult();
                 }
-            }
+                finally
+                {
+                    throttle.Release();
+                }
+            });
         }
     }
 }
