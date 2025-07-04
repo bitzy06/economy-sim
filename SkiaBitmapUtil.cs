@@ -7,18 +7,43 @@ namespace StrategyGame
 {
     internal static class SkiaBitmapUtil
     {
-        public static SKBitmap ToSKBitmap(Bitmap bmp)
+        public static unsafe SKBitmap ToSKBitmap(Bitmap bmp)
         {
             if (bmp == null || bmp.Width <= 0 || bmp.Height <= 0)
-                return new SKBitmap(1, 1); // avoid GDI+ errors on invalid input
+                return new SKBitmap(1, 1);
 
-            using var ms = new MemoryStream();
-            // Saving as BMP is broadly supported even when libgdiplus is used on
-            // non‑Windows platforms, preventing 'Generic error in GDI+' issues
-            // that sometimes occur with the PNG encoder.
-            bmp.Save(ms, ImageFormat.Bmp);
-            ms.Position = 0;
-            return SKBitmap.Decode(ms);
+            Bitmap src = bmp;
+            Bitmap? converted = null;
+            PixelFormat fmt = bmp.PixelFormat;
+            if (fmt != PixelFormat.Format32bppArgb && fmt != PixelFormat.Format32bppPArgb)
+            {
+                converted = new Bitmap(bmp.Width, bmp.Height, PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(converted))
+                    g.DrawImage(bmp, 0, 0, bmp.Width, bmp.Height);
+                src = converted;
+                fmt = PixelFormat.Format32bppArgb;
+            }
+
+            var rect = new Rectangle(0, 0, src.Width, src.Height);
+            var data = src.LockBits(rect, ImageLockMode.ReadOnly, fmt);
+            try
+            {
+                var info = new SKImageInfo(src.Width, src.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
+                var sk = new SKBitmap(info);
+                byte* dst = (byte*)sk.GetPixels().ToPointer();
+                for (int y = 0; y < info.Height; y++)
+                {
+                    byte* srcRow = (byte*)data.Scan0 + y * data.Stride;
+                    byte* dstRow = dst + y * sk.Info.RowBytes;
+                    Buffer.MemoryCopy(srcRow, dstRow, sk.Info.RowBytes, info.BytesPerPixel * info.Width);
+                }
+                return sk;
+            }
+            finally
+            {
+                src.UnlockBits(data);
+                converted?.Dispose();
+            }
         }
 
         public static Bitmap ToGdiBitmap(SKBitmap skBmp)
