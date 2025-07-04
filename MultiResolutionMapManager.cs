@@ -56,13 +56,14 @@ namespace StrategyGame
         private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileTextures = new();
 
         public static readonly bool GpuAvailable;
+        internal static readonly GRContext? SharedContext;
 
         static MultiResolutionMapManager()
         {
             try
             {
-                using var ctx = GRContext.CreateGl();
-                GpuAvailable = ctx != null;
+                SharedContext = GRContext.CreateGl();
+                GpuAvailable = SharedContext != null;
             }
             catch
             {
@@ -334,7 +335,7 @@ namespace StrategyGame
                 int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
 
                 var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-                using var context = GpuAvailable ? GRContext.CreateGl() : null;
+                var context = GpuAvailable ? SharedContext : null;
                 using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
                 var canvas = surface.Canvas;
                 canvas.Clear(SKColors.DarkGray);

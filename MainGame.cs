@@ -516,7 +516,7 @@ namespace economy_sim
         {
             if (terrain == null) return null;
             var info = new SKImageInfo(terrain.Width, terrain.Height);
-            using var context = MultiResolutionMapManager.GpuAvailable ? GRContext.CreateGl() : null;
+            var context = MultiResolutionMapManager.GpuAvailable ? MultiResolutionMapManager.SharedContext : null;
             using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);

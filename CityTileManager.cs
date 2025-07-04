@@ -28,8 +28,7 @@ namespace StrategyGame
         {
             try
             {
-                using var ctx = GRContext.CreateGl();
-                GpuAvailable = ctx != null;
+                GpuAvailable = MultiResolutionMapManager.SharedContext != null;
             }
             catch
             {
@@ -208,7 +207,7 @@ namespace StrategyGame
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-            using var context = GpuAvailable ? GRContext.CreateGl() : null;
+            var context = GpuAvailable ? MultiResolutionMapManager.SharedContext : null;
             using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
