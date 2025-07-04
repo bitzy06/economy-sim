@@ -16,6 +16,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Windows.Forms;
 using Nts = NetTopologySuite.Geometries;
+using SkiaSharp;
 
 namespace economy_sim
 {
@@ -257,14 +258,16 @@ namespace economy_sim
 
                     this.Invoke((MethodInvoker)(() =>
                     {
-                        pictureBox1.Image = mapManager.AssembleView(mapZoom, viewRect, () =>
+                        using var sk = mapManager.AssembleView(mapZoom, viewRect, () =>
                         {
                             this.Invoke((MethodInvoker)(() =>
                             {
                                 var updatedViewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
-                                pictureBox1.Image = mapManager.AssembleView(mapZoom, updatedViewRect);
+                                using var sk2 = mapManager.AssembleView(mapZoom, updatedViewRect);
+                                pictureBox1.Image = SkiaBitmapUtil.ToGdiBitmap(sk2);
                             }));
                         });
+                        pictureBox1.Image = SkiaBitmapUtil.ToGdiBitmap(sk);
                     }));
                 });
             }
@@ -299,10 +302,10 @@ namespace economy_sim
 
             DateTime lastInnerRedraw = DateTime.MinValue;
 
-            SD.Bitmap bmp = null;
+            SKBitmap finalSk = null;
             try
             {
-                SD.Bitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                using SKBitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
                 {
                     if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
                         return;
@@ -312,7 +315,7 @@ namespace economy_sim
                     else
                         Redraw();
                 });
-                SD.Bitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                using SKBitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
                 {
                     if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
                         return;
@@ -322,14 +325,7 @@ namespace economy_sim
                     else
                         Redraw();
                 });
-                if (terrain != null)
-                {
-                    bmp = new SD.Bitmap(terrain.Width, terrain.Height);
-                    using var g = SD.Graphics.FromImage(bmp);
-                    g.DrawImage(terrain, 0, 0);
-                    if (city != null)
-                        g.DrawImage(city, 0, 0);
-                }
+                finalSk = CombineMaps(terrain, city);
             }
             catch (ArgumentException ex)
             {
@@ -337,10 +333,11 @@ namespace economy_sim
                 return;
             }
 
-            if (bmp == null)
+            if (finalSk == null)
                 return;
 
             pictureBox1.Image?.Dispose();
+            using var bmp = SkiaBitmapUtil.ToGdiBitmap(finalSk);
             pictureBox1.Image = bmp;
         }
         private CancellationTokenSource redrawCts;
@@ -370,7 +367,7 @@ namespace economy_sim
             {
                 try
                 {
-                    var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    using var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
                     {
                         if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
                         {
@@ -379,7 +376,7 @@ namespace economy_sim
                         }
                     });
 
-                    var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    using var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
                     {
                         if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
                         {
@@ -388,21 +385,14 @@ namespace economy_sim
                         }
                     });
 
-                    SD.Bitmap bmp = null;
-                    if (terrain != null)
-                    {
-                        bmp = new SD.Bitmap(terrain.Width, terrain.Height);
-                        using var g = SD.Graphics.FromImage(bmp);
-                        g.DrawImage(terrain, 0, 0);
-                        if (city != null)
-                            g.DrawImage(city, 0, 0);
-                    }
+                    using var finalSk = CombineMaps(terrain, city);
 
-                    if (bmp != null && bmp.Width > 0 && bmp.Height > 0 && !token.IsCancellationRequested)
+                    if (finalSk != null && !token.IsCancellationRequested)
                     {
                         this.Invoke(() =>
                         {
                             pictureBox1.Image?.Dispose();
+                            using var bmp = SkiaBitmapUtil.ToGdiBitmap(finalSk);
                             pictureBox1.Image = bmp;
                         });
                     }
@@ -449,14 +439,14 @@ namespace economy_sim
 
             Task.Run(() =>
             {
-                SD.Bitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
+                using SKBitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
                     else
                         ApplyZoom();
                 });
-                SD.Bitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
+                using SKBitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
@@ -464,18 +454,14 @@ namespace economy_sim
                         ApplyZoom();
                 });
                 if (terrain == null) return;
-                SD.Bitmap map = new SD.Bitmap(terrain.Width, terrain.Height);
-                using (var g = SD.Graphics.FromImage(map))
-                {
-                    g.DrawImage(terrain, 0, 0);
-                    if (city != null)
-                        g.DrawImage(city, 0, 0);
-                }
+                using SKBitmap mapSk = CombineMaps(terrain, city);
+                if (mapSk == null) return;
+                using var map = SkiaBitmapUtil.ToGdiBitmap(mapSk);
 
                 void setImage()
                 {
                     pictureBox1.Image?.Dispose();
-                    pictureBox1.Image = map;
+                    pictureBox1.Image = (SD.Bitmap)map.Clone();
                     mapRenderInProgress = false;
                     if (mapRenderQueued)
                     {
@@ -524,6 +510,22 @@ namespace economy_sim
                 g.DrawImage(src, 0, 0, width, height);
             }
             return dest;
+        }
+
+        private SKBitmap CombineMaps(SKBitmap terrain, SKBitmap city)
+        {
+            if (terrain == null) return null;
+            var info = new SKImageInfo(terrain.Width, terrain.Height);
+            using var context = MultiResolutionMapManager.GpuAvailable ? GRContext.CreateGl() : null;
+            using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.Transparent);
+            canvas.DrawBitmap(terrain, 0, 0);
+            if (city != null)
+                canvas.DrawBitmap(city, 0, 0);
+            var result = new SKBitmap(info);
+            surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
+            return result;
         }
         private void InitializeGameData()
         {
