@@ -367,11 +367,18 @@ namespace StrategyGame
                         {
                             SystemDrawing.Bitmap tile = null;
                             lock (_cacheLock)
+                            {
                                 _tileCache.TryGetValue(key, out tile);
+                                if (tile != null && tile.Width > 0 && tile.Height > 0)
+                                    tile = (SystemDrawing.Bitmap)tile.Clone();
+                                else
+                                    tile = null;
+                            }
 
-                            if (tile != null && tile.Width > 0 && tile.Height > 0)
+                            if (tile != null)
                             {
                                 texture = SkiaBitmapUtil.ToSKBitmap(tile);
+                                tile.Dispose();
                                 lock (_textureLock) _tileTextures[key] = texture;
                                 canvas.DrawBitmap(texture, rect);
                             }
