@@ -9,8 +9,14 @@ namespace StrategyGame
     {
         public static SKBitmap ToSKBitmap(Bitmap bmp)
         {
+            if (bmp == null || bmp.Width <= 0 || bmp.Height <= 0)
+                return new SKBitmap(1, 1); // avoid GDI+ errors on invalid input
+
             using var ms = new MemoryStream();
-            bmp.Save(ms, ImageFormat.Png);
+            // Saving as BMP is broadly supported even when libgdiplus is used on
+            // non‑Windows platforms, preventing 'Generic error in GDI+' issues
+            // that sometimes occur with the PNG encoder.
+            bmp.Save(ms, ImageFormat.Bmp);
             ms.Position = 0;
             return SKBitmap.Decode(ms);
         }
