@@ -3,6 +3,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using SkiaSharp;
 using System.Linq;
 using System;
 using System.Collections.Generic;
@@ -14,6 +15,21 @@ namespace StrategyGame
 {
     public static class ProceduralCityRenderer
     {
+        private static readonly bool GpuAvailable;
+
+        static ProceduralCityRenderer()
+        {
+            try
+            {
+                using var context = GRContext.CreateGl();
+                GpuAvailable = context != null;
+            }
+            catch
+            {
+                GpuAvailable = false;
+            }
+        }
+
         public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
         {
             try
@@ -24,6 +40,26 @@ namespace StrategyGame
                     MultiResolutionMapManager.TileSizePx,
                     MultiResolutionMapManager.TileSizePx,
                     new Rgba32(0, 0, 0, 0));
+
+                SKSurface? surface = null;
+                SKCanvas? canvas = null;
+                if (GpuAvailable)
+                {
+                    var info = new SKImageInfo(MultiResolutionMapManager.TileSizePx,
+                        MultiResolutionMapManager.TileSizePx);
+                    try
+                    {
+                        var context = GRContext.CreateGl();
+                        surface = SKSurface.Create(context, false, info);
+                        canvas = surface.Canvas;
+                        canvas.Clear(SKColors.Transparent);
+                    }
+                    catch
+                    {
+                        surface = null;
+                        canvas = null;
+                    }
+                }
                 var tilePoly = ToPolygon(tileBounds);
 
                 foreach (var urban in UrbanAreaManager.UrbanPolygons)
@@ -35,7 +71,7 @@ namespace StrategyGame
                     if (model == null)
                         continue;
 
-                    DrawRoads(img, model.RoadNetwork, tileBounds);
+                    DrawRoads(img, canvas, model.RoadNetwork, tileBounds);
 
                     var drawList = new List<(Nts.Polygon Poly, LandUseType Use)>();
                     Parallel.ForEach(model.Buildings, b =>
@@ -56,7 +92,6 @@ namespace StrategyGame
                             }
                         }
                     });
-
 
                     if (canvas != null)
                     {
@@ -89,7 +124,6 @@ namespace StrategyGame
                     using var data = snapshot.Encode(SKEncodedImageFormat.Png, 100);
                     img.Dispose();
                     img = SixLabors.ImageSharp.Image.Load<Rgba32>(data.AsStream());
-
                 }
 
                 return img;
@@ -106,19 +140,24 @@ namespace StrategyGame
             }
         }
 
-        private static void DrawRoads(Image<Rgba32> img, IEnumerable<LineSegment> roads, GeoBounds bounds)
+        private static void DrawRoads(Image<Rgba32> img, SKCanvas? canvas, IEnumerable<LineSegment> roads, GeoBounds bounds)
         {
-            img.Mutate(ctx =>
+            if (canvas != null)
             {
                 foreach (var seg in roads)
                 {
                     float width = seg.Type == RoadType.Primary ? 2f : 1f;
-                    var pen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), width);
-                    var p1 = ToPointF(seg.X1, seg.Y1, bounds);
-                    var p2 = ToPointF(seg.X2, seg.Y2, bounds);
-                    ctx.DrawLine(pen, p1, p2);
+                    using var paint = new SKPaint
+                    {
+                        Color = new SKColor(180, 180, 180, 200),
+                        StrokeWidth = width,
+                        Style = SKPaintStyle.Stroke,
+                        IsAntialias = true
+                    };
+                    var p1 = ToSKPoint(seg.X1, seg.Y1, bounds);
+                    var p2 = ToSKPoint(seg.X2, seg.Y2, bounds);
+                    canvas.DrawLine(p1, p2, paint);
                 }
-
             }
             else
             {
@@ -141,6 +180,27 @@ namespace StrategyGame
             float x = (float)((lon - b.MinLon) / (b.MaxLon - b.MinLon) * MultiResolutionMapManager.TileSizePx);
             float y = (float)((b.MaxLat - lat) / (b.MaxLat - b.MinLat) * MultiResolutionMapManager.TileSizePx);
             return new SixLabors.ImageSharp.PointF(x, y);
+        }
+
+        private static SKPoint ToSKPoint(double lon, double lat, GeoBounds b)
+        {
+            float x = (float)((lon - b.MinLon) / (b.MaxLon - b.MinLon) * MultiResolutionMapManager.TileSizePx);
+            float y = (float)((b.MaxLat - lat) / (b.MaxLat - b.MinLat) * MultiResolutionMapManager.TileSizePx);
+            return new SKPoint(x, y);
+        }
+
+        private static SKColor ToSkColor(Rgba32 c) => new SKColor(c.R, c.G, c.B, c.A);
+
+        private static void AppendPolygon(SKPath path, Nts.Polygon poly, GeoBounds bounds)
+        {
+            var coords = poly.ExteriorRing.Coordinates;
+            if (coords.Length == 0) return;
+            path.MoveTo(ToSKPoint(coords[0].X, coords[0].Y, bounds));
+            for (int i = 1; i < coords.Length; i++)
+            {
+                path.LineTo(ToSKPoint(coords[i].X, coords[i].Y, bounds));
+            }
+            path.Close();
         }
 
         private static Rgba32 GetBuildingColor(LandUseType use)
@@ -171,10 +231,25 @@ namespace StrategyGame
             });
         }
 
-        private static void RenderPolygon(Image<Rgba32> img, Nts.Polygon poly, GeoBounds bounds, Rgba32 color)
+        private static void RenderPolygon(Image<Rgba32> img, SKCanvas? canvas, Nts.Polygon poly, GeoBounds bounds, Rgba32 color)
         {
-            var coords = poly.ExteriorRing.Coordinates.Select(c => ToPointF(c.X, c.Y, bounds)).ToArray();
-            img.Mutate(ctx => ctx.Fill(color, new Polygon(coords)));
+            if (canvas != null)
+            {
+                using var path = new SKPath();
+                AppendPolygon(path, poly, bounds);
+                using var paint = new SKPaint
+                {
+                    Color = ToSkColor(color),
+                    Style = SKPaintStyle.Fill,
+                    IsAntialias = true
+                };
+                canvas.DrawPath(path, paint);
+            }
+            else
+            {
+                var coords = poly.ExteriorRing.Coordinates.Select(c => ToPointF(c.X, c.Y, bounds)).ToArray();
+                img.Mutate(ctx => ctx.Fill(color, new Polygon(coords)));
+            }
         }
     }
 }
