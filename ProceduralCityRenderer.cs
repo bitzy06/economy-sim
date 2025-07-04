@@ -57,8 +57,39 @@ namespace StrategyGame
                         }
                     });
 
-                    foreach (var item in drawList)
-                        RenderPolygon(img, item.Poly, tileBounds, GetBuildingColor(item.Use));
+
+                    if (canvas != null)
+                    {
+                        foreach (var grp in drawList.GroupBy(d => d.Use))
+                        {
+                            using var path = new SKPath();
+                            foreach (var item in grp)
+                            {
+                                AppendPolygon(path, item.Poly, tileBounds);
+                            }
+                            using var paint = new SKPaint
+                            {
+                                Color = ToSkColor(GetBuildingColor(grp.Key)),
+                                Style = SKPaintStyle.Fill,
+                                IsAntialias = true
+                            };
+                            canvas.DrawPath(path, paint);
+                        }
+                    }
+                    else
+                    {
+                        foreach (var item in drawList)
+                            RenderPolygon(img, null, item.Poly, tileBounds, GetBuildingColor(item.Use));
+                    }
+                }
+
+                if (surface != null)
+                {
+                    using var snapshot = surface.Snapshot();
+                    using var data = snapshot.Encode(SKEncodedImageFormat.Png, 100);
+                    img.Dispose();
+                    img = SixLabors.ImageSharp.Image.Load<Rgba32>(data.AsStream());
+
                 }
 
                 return img;
@@ -87,7 +118,22 @@ namespace StrategyGame
                     var p2 = ToPointF(seg.X2, seg.Y2, bounds);
                     ctx.DrawLine(pen, p1, p2);
                 }
-            });
+
+            }
+            else
+            {
+                img.Mutate(ctx =>
+                {
+                    foreach (var seg in roads)
+                    {
+                        float width = seg.Type == RoadType.Primary ? 2f : 1f;
+                        var pen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), width);
+                        var p1 = ToPointF(seg.X1, seg.Y1, bounds);
+                        var p2 = ToPointF(seg.X2, seg.Y2, bounds);
+                        ctx.DrawLine(pen, p1, p2);
+                    }
+                });
+            }
         }
 
         private static SixLabors.ImageSharp.PointF ToPointF(double lon, double lat, GeoBounds b)
