@@ -210,7 +210,7 @@ namespace economy_sim
             timerSim.Tick += ExecuteSimulationTick; // legacy timer unused
             //timerSim.Start();
             var simCts = new CancellationTokenSource();
-            _ = RunGameSimulationLoop(simCts.Token);
+            _ = Task.Run(() => RunGameSimulationLoop(simCts.Token));
 
             // 3. Initialize and start the UI update timer
             uiUpdateTimer = new System.Windows.Forms.Timer();
