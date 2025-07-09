@@ -78,6 +78,12 @@ namespace economy_sim
         private int lastCityModelCount = 0;
         private DateTime lastCityModelUpdate = DateTime.Now;
 
+        // 4. Thread-safe state management
+        private readonly object _gameStateLock = new object();
+
+        // 3. UI Update Timer
+        private System.Windows.Forms.Timer uiUpdateTimer;
+
         private void LoadGlobalData()
         {
             string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
@@ -201,10 +207,16 @@ namespace economy_sim
             Console.WriteLine($"[Startup] UpdateOrderLists took {sw.Elapsed.TotalSeconds:F2} seconds");
             pictureBox1.Dock = DockStyle.Fill;
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
-            timerSim.Tick += TimerSim_Tick; // legacy timer unused
+            timerSim.Tick += ExecuteSimulationTick; // legacy timer unused
             //timerSim.Start();
             var simCts = new CancellationTokenSource();
             _ = RunGameSimulationLoop(simCts.Token);
+
+            // 3. Initialize and start the UI update timer
+            uiUpdateTimer = new System.Windows.Forms.Timer();
+            uiUpdateTimer.Interval = 250; // Update UI 4 times per second
+            uiUpdateTimer.Tick += UiUpdateTimer_Tick;
+            uiUpdateTimer.Start();
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
@@ -983,47 +995,16 @@ namespace economy_sim
             }
         }
 
-        private void TimerSim_Tick(object sender, EventArgs e)
+        private void ExecuteSimulationTick(object sender, EventArgs e)
         {
             var swSim = Stopwatch.StartNew();
             simTurn++;
-            this.Invoke((Action)(() => labelSimTime.Text = $"Turn: {simTurn}"));
-
             StrategyGame.City cityCurrentlySelectedForUI = null;
-            this.Invoke((Action)(() => { cityCurrentlySelectedForUI = GetSelectedCity(); }));
 
-            // 1. Capture Previous Stats for the Selected City (if any, and not the first tick)
-            if (cityCurrentlySelectedForUI != null && !firstTick)
+            lock (_gameStateLock)
             {
-                prevCityMetrics["Population"] = cityCurrentlySelectedForUI.Population;
-                prevCityMetrics["Budget"] = cityCurrentlySelectedForUI.Budget;
-                prevCityMetrics["Happiness"] = cityCurrentlySelectedForUI.Happiness;
 
-                prevFactoryWorkers.Clear();
-                foreach (var factory in cityCurrentlySelectedForUI.Factories)
-                {
-                    // Ensure factory name is unique enough if multiple cities can have same factory names
-                    // For now, assuming factory names are unique within a city or globally for prevFactoryWorkers keying
-                    prevFactoryWorkers[factory.Name] = factory.WorkersEmployed;
-                }
 
-                prevMarketPrices.Clear();
-                prevMarketSupply.Clear();
-                prevMarketDemand.Clear();
-                if (cityCurrentlySelectedForUI.LocalPrices != null) // Ensure dictionary exists
-                {
-                    foreach (var goodName in cityCurrentlySelectedForUI.LocalPrices.Keys)
-                    {
-                        prevMarketPrices[goodName] = cityCurrentlySelectedForUI.LocalPrices.ContainsKey(goodName) ? cityCurrentlySelectedForUI.LocalPrices[goodName] : 0;
-                        prevMarketSupply[goodName] = cityCurrentlySelectedForUI.LocalSupply.ContainsKey(goodName) ? cityCurrentlySelectedForUI.LocalSupply[goodName] : 0;
-                        prevMarketDemand[goodName] = cityCurrentlySelectedForUI.LocalDemand.ContainsKey(goodName) ? cityCurrentlySelectedForUI.LocalDemand[goodName] : 0;
-                    }
-                }
-                State selectedState = null;
-                this.Invoke((Action)(() => { selectedState = GetSelectedState(); }));
-                if (selectedState != null) { prevStateBudget = selectedState.Budget; }
-                if (playerCountry != null) { prevCountryBudget = playerCountry.Budget; }
-            }
 
             // 2. --- Corporation AI Update Phase ---
             if (Market.AllCorporations != null && allCitiesInWorld != null && FactoryBlueprints.AllBlueprints.Any())
@@ -1235,36 +1216,13 @@ namespace economy_sim
                 }
             }
 
-            // 4. Refresh UI elements
-            // The GetSelectedCity() here will get the same city as cityCurrentlySelectedForUI,
-            // but its data has now been updated by the simulation loop.
-            this.Invoke((Action)(() =>
-            {
-                UpdateOrderLists();
-                UpdateCityAndFactoryStats();
-                UpdateMarketStats();
-                UpdateStateStats();
-                UpdateCountryStats();
-
-                if (cityCurrentlySelectedForUI != null)
-                {
-                    if (popStatsForm != null && popStatsForm.Visible)
-                    {
-                        popStatsForm.UpdateStats(cityCurrentlySelectedForUI);
-                    }
-                    if (factoryStatsForm != null && factoryStatsForm.Visible)
-                    {
-                        factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI);
-                    }
-                }
-            }));
+            // 4. Refresh UI elements handled by UI timer
             firstTick = false;
 
             // Process end-of-turn for diplomacy
             if (diplomacyManager != null)
             {
                 diplomacyManager.ProcessTurnEnd();
-                this.Invoke((Action)(UpdateDiplomacyTab));
             }
 
             // Process financial systems and monetary effects
@@ -1274,21 +1232,9 @@ namespace economy_sim
                 DebugLogger.LogFinancialData(country.FinancialSystem, country.Name);
             }
 
-            // Refresh finance tab if it's visible so data stays current
-            this.Invoke((Action)(() =>
-            {
-                if (tabControlMain.SelectedTab == tabPageFinance)
-                {
-                    UpdateFinanceTab();
-                }
-                if (tabControlMain.SelectedTab == tabPageGovernment)
-                {
-                    UpdateGovernmentTab();
-                }
-            }));
+            // Refresh finance and government tabs handled by UI timer
 
-            // Update urban area status each tick
-            this.Invoke((Action)(UpdateUrbanAreaStatus));
+            // Update urban area status each tick handled by UI timer
 
             // Process AI trade proposals (temporary simple logic)
             if (diplomacyManager != null && playerCountry != null && random.Next(100) < 20) // 20% chance each turn
@@ -1318,6 +1264,7 @@ namespace economy_sim
                     }
                 }
             }
+            }
             PerformanceTracker.Record("GameSimulation", swSim.Elapsed);
         }
 
@@ -1325,8 +1272,74 @@ namespace economy_sim
         {
             while (!token.IsCancellationRequested)
             {
-                TimerSim_Tick(this, EventArgs.Empty);
+                try
+                {
+                    ExecuteSimulationTick(this, EventArgs.Empty);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[SIMULATION CRASH] {DateTime.Now}: {ex.Message}\n{ex.StackTrace}");
+                    Debug.WriteLine($"[SIMULATION CRASH] {DateTime.Now}: {ex.Message}\n{ex.StackTrace}");
+                }
+
                 await Task.Delay(1000, token);
+            }
+        }
+
+        // 3. The new UI update timer's event handler
+        private void UiUpdateTimer_Tick(object sender, EventArgs e)
+        {
+            lock (_gameStateLock)
+            {
+                labelSimTime.Text = $"Turn: {simTurn}";
+                UpdateOrderLists();
+                UpdateCityAndFactoryStats();
+                UpdateMarketStats();
+                UpdateStateStats();
+                UpdateCountryStats();
+                UpdateDiplomacyTab();
+                UpdateFinanceTab();
+                UpdateGovernmentTab();
+                UpdateUrbanAreaStatus();
+
+                var cityCurrentlySelectedForUI = GetSelectedCity();
+                if (cityCurrentlySelectedForUI != null)
+                {
+                    if (popStatsForm != null && popStatsForm.Visible)
+                    {
+                        popStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                    }
+                    if (factoryStatsForm != null && factoryStatsForm.Visible)
+                    {
+                        factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                    }
+
+                    prevCityMetrics["Population"] = cityCurrentlySelectedForUI.Population;
+                    prevCityMetrics["Budget"] = cityCurrentlySelectedForUI.Budget;
+                    prevCityMetrics["Happiness"] = cityCurrentlySelectedForUI.Happiness;
+
+                    prevFactoryWorkers.Clear();
+                    foreach (var factory in cityCurrentlySelectedForUI.Factories)
+                    {
+                        prevFactoryWorkers[factory.Name] = factory.WorkersEmployed;
+                    }
+
+                    prevMarketPrices.Clear();
+                    prevMarketSupply.Clear();
+                    prevMarketDemand.Clear();
+                    if (cityCurrentlySelectedForUI.LocalPrices != null)
+                    {
+                        foreach (var goodName in cityCurrentlySelectedForUI.LocalPrices.Keys)
+                        {
+                            prevMarketPrices[goodName] = cityCurrentlySelectedForUI.LocalPrices[goodName];
+                            prevMarketSupply[goodName] = cityCurrentlySelectedForUI.LocalSupply.ContainsKey(goodName) ? cityCurrentlySelectedForUI.LocalSupply[goodName] : 0;
+                            prevMarketDemand[goodName] = cityCurrentlySelectedForUI.LocalDemand.ContainsKey(goodName) ? cityCurrentlySelectedForUI.LocalDemand[goodName] : 0;
+                        }
+                    }
+                    var selectedState = GetSelectedState();
+                    if (selectedState != null) { prevStateBudget = selectedState.Budget; }
+                    if (playerCountry != null) { prevCountryBudget = playerCountry.Budget; }
+                }
             }
         }
 
@@ -1614,7 +1627,7 @@ namespace economy_sim
             // However, forcing a refresh ensures diffs are calculated against the latest "previous" state if tab is switched.
 
             // No matter which tab, if a city is selected, all stats should be current.
-            // The TimerSim_Tick handles continuous updates. This handles tab switching.
+            // The ExecuteSimulationTick runs in the background; this handles tab switching.
             // If firstTick is true, it means no simulation tick has completed fully to populate prev values for diffs.
             // So, we call the update methods to display initial state. If firstTick is false, they will calc diffs.
 
