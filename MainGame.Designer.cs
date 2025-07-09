@@ -67,6 +67,7 @@
             labelCityModelRate = new Label();
             buttonGenerateTileCache = new Button();
             buttonGenerateCityData = new Button();
+            buttonShowPerformance = new Button();
             tabPageDiplomacy = new TabPage();
             labelProposedTrades = new Label();
             listBoxProposedTradeAgreements = new ListBox();
@@ -270,6 +271,7 @@
             tabPageDebug.Controls.Add(labelCityModelRate);
             tabPageDebug.Controls.Add(buttonGenerateTileCache);
             tabPageDebug.Controls.Add(buttonGenerateCityData);
+            tabPageDebug.Controls.Add(buttonShowPerformance);
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
             tabPageDebug.Location = new Point(4, 29);
             tabPageDebug.Margin = new Padding(5, 4, 5, 4);
@@ -459,6 +461,18 @@
             buttonGenerateCityData.Text = "Generate City Data";
             buttonGenerateCityData.UseVisualStyleBackColor = true;
             buttonGenerateCityData.Click += ButtonGenerateCityData_Click;
+
+            //
+            // buttonShowPerformance
+            //
+            buttonShowPerformance.Location = new Point(522, 662);
+            buttonShowPerformance.Margin = new Padding(5, 4, 5, 4);
+            buttonShowPerformance.Name = "buttonShowPerformance";
+            buttonShowPerformance.Size = new Size(160, 36);
+            buttonShowPerformance.TabIndex = 18;
+            buttonShowPerformance.Text = "Performance Stats";
+            buttonShowPerformance.UseVisualStyleBackColor = true;
+            buttonShowPerformance.Click += ButtonShowPerformance_Click;
 
             // 
             // tabPageDiplomacy
@@ -754,6 +768,7 @@
         private System.Windows.Forms.Label labelCityModelRate;
         private System.Windows.Forms.Button buttonGenerateTileCache;
         private System.Windows.Forms.Button buttonGenerateCityData;
+        private System.Windows.Forms.Button buttonShowPerformance;
         private System.Windows.Forms.TabPage tabPageDiplomacy;
         private System.Windows.Forms.Label labelProposedTrades;
         private System.Windows.Forms.ListBox listBoxProposedTradeAgreements;
