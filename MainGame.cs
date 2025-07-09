@@ -56,6 +56,8 @@ namespace economy_sim
 
         private bool isDetailedDebugMode = false; // Flag to track the current debug mode
 
+        private CancellationTokenSource simCts; // manages the background simulation loop
+
         private int mapZoom = 1;
 
         private SD.Bitmap baseMap;
@@ -201,8 +203,10 @@ namespace economy_sim
             Console.WriteLine($"[Startup] UpdateOrderLists took {sw.Elapsed.TotalSeconds:F2} seconds");
             pictureBox1.Dock = DockStyle.Fill;
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
-            timerSim.Tick += TimerSim_Tick;
-            timerSim.Start();
+            timerSim.Tick += TimerSim_Tick; // legacy timer unused
+            //timerSim.Start();
+            simCts = new CancellationTokenSource();
+            _ = RunGameSimulationLoop(simCts.Token);
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
@@ -1319,9 +1323,15 @@ namespace economy_sim
             PerformanceTracker.Record("GameSimulation", swSim.Elapsed);
         }
 
-        // Legacy asynchronous loop previously drove TimerSim_Tick when running
-        // the UI on a dedicated thread. With the built-in WinForms timer
-        // resumed, this method is currently unused.
+        // Run the simulation loop on a background thread so the UI remains responsive
+        private async Task RunGameSimulationLoop(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                TimerSim_Tick(this, EventArgs.Empty);
+                await Task.Delay(1000, token);
+            }
+        }
 
         private string FormatValueWithChange(double currentValue, double previousValue, string formatSpecifier, bool calculateDiff, double tolerance = 0.001)
         {
@@ -2011,6 +2021,7 @@ namespace economy_sim
             {
                 DebugLogger.LogDetailedCityData(selectedCity); // Log detailed data for the selected city
             }
+            simCts?.Cancel();
             DebugLogger.FinalizeLog(allCountries); // Pass the list of countries to the logger
             base.OnFormClosing(e);
         }
