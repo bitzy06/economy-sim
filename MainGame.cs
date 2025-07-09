@@ -184,6 +184,7 @@ namespace economy_sim
             pictureBox1.MouseDown += PictureBox1_MouseDown;
             pictureBox1.MouseMove += PictureBox1_MouseMove;
             pictureBox1.MouseUp += PictureBox1_MouseUp;
+            pictureBox1.MouseClick += PictureBox1_MouseClick;
             pictureBox1.Paint += PictureBox1_Paint;
 
             sw.Restart();
@@ -2483,6 +2484,68 @@ namespace economy_sim
                 Cursor = Cursors.Default;
                 PreloadMapTiles();
             }
+        }
+
+        private void PictureBox1_MouseClick(object sender, MouseEventArgs e)
+        {
+            if (allCitiesInWorld == null || allCitiesInWorld.Count == 0)
+                return;
+
+            int worldX, worldY;
+            lock (_zoomLock)
+            {
+                worldX = mapViewOrigin.X + e.X;
+                worldY = mapViewOrigin.Y + e.Y;
+            }
+
+            StrategyGame.City closestCity = null;
+            double closestDist = double.MaxValue;
+            foreach (var city in allCitiesInWorld)
+            {
+                double dx = city.X - worldX;
+                double dy = city.Y - worldY;
+                double dist = Math.Sqrt(dx * dx + dy * dy);
+                if (dist < closestDist)
+                {
+                    closestDist = dist;
+                    closestCity = city;
+                }
+            }
+
+            if (closestCity == null || closestDist > 15)
+                return;
+
+            StrategyGame.State parentState = null;
+            StrategyGame.Country parentCountry = null;
+            foreach (var country in allCountries ?? new List<StrategyGame.Country>())
+            {
+                foreach (var state in country.States)
+                {
+                    if (state.Cities.Contains(closestCity))
+                    {
+                        parentCountry = country;
+                        parentState = state;
+                        break;
+                    }
+                }
+                if (parentState != null) break;
+            }
+
+            if (parentCountry == null || parentState == null)
+                return;
+
+            if (comboBoxCountry.SelectedItem == null || comboBoxCountry.SelectedItem.ToString() != parentCountry.Name)
+                comboBoxCountry.SelectedItem = parentCountry.Name;
+
+            if (comboBoxStates.SelectedItem == null || comboBoxStates.SelectedItem.ToString() != parentState.Name)
+                comboBoxStates.SelectedItem = parentState.Name;
+
+            if (comboBoxCities.SelectedItem == null || comboBoxCities.SelectedItem.ToString() != closestCity.Name)
+                comboBoxCities.SelectedItem = closestCity.Name;
+
+            UpdateCountryStats();
+            UpdateStateStats();
+            UpdateCityAndFactoryStats();
         }
 
         private void PictureBox1_Paint(object sender, PaintEventArgs e)
