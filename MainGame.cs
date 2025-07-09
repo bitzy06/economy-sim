@@ -33,6 +33,7 @@ namespace economy_sim
         private FactoryStatsForm factoryStatsForm;
         private ConstructionForm constructionForm;
         private PerformanceStatsForm performanceStatsForm;
+        private CancellationTokenSource simCts;
         private List<State> states;
         private PlayerRoleManager playerRoleManager;
         private Random random = new Random(); // Add a Random instance for AI and other uses
@@ -203,8 +204,8 @@ namespace economy_sim
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
             timerSim.Tick += TimerSim_Tick; // legacy timer unused
             //timerSim.Start();
-            var simCts = new CancellationTokenSource();
-            _ = RunGameSimulationLoop(simCts.Token);
+            simCts = new CancellationTokenSource();
+            _ = Task.Run(() => RunGameSimulationLoop(simCts.Token));
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
@@ -1325,8 +1326,23 @@ namespace economy_sim
         {
             while (!token.IsCancellationRequested)
             {
-                TimerSim_Tick(this, EventArgs.Empty);
-                await Task.Delay(1000, token);
+                try
+                {
+                    TimerSim_Tick(this, EventArgs.Empty);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Simulation tick error: {ex.Message}");
+                }
+
+                try
+                {
+                    await Task.Delay(1000, token);
+                }
+                catch (TaskCanceledException)
+                {
+                    break;
+                }
             }
         }
 
@@ -2013,6 +2029,7 @@ namespace economy_sim
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            simCts?.Cancel();
             var selectedCity = GetSelectedCity(); // Retrieve the selected city
             if (selectedCity != null)
             {
