@@ -2485,7 +2485,10 @@ namespace economy_sim
         {
             if (_currentMapView != null)
             {
-                SkiaSharp.Views.Desktop.Extensions.DrawToBitmap(_currentMapView, e.Graphics, new SKRectI(0, 0, _currentMapView.Width, _currentMapView.Height));
+                using (var bitmap = _currentMapView.ToBitmap())
+                {
+                    e.Graphics.DrawImage(bitmap, new SD.Rectangle(0, 0, _currentMapView.Width, _currentMapView.Height));
+                }
             }
         }
 
