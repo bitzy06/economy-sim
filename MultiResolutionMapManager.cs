@@ -365,20 +365,40 @@ namespace StrategyGame
                         }
                         else
                         {
-                            SD.Bitmap clone = null;
+                            // Try to safely create texture from cached bitmap
+                            SKBitmap newTexture = null;
                             lock (_cacheLock)
                             {
-                                if (_tileCache.TryGetValue(key, out var tile) && tile.Width > 0 && tile.Height > 0)
-                                    clone = (SD.Bitmap)tile.Clone();
+                                if (_tileCache.TryGetValue(key, out var tile))
+                                {
+                                    try
+                                    {
+                                        // Check dimensions inside the lock to avoid concurrent access
+                                        if (tile.Width > 0 && tile.Height > 0)
+                                        {
+                                            // Create texture directly from the cached bitmap while holding the lock
+                                            // This reduces the window for concurrent access issues
+                                            newTexture = SkiaBitmapUtil.ToSKBitmap(tile);
+                                        }
+                                    }
+                                    catch (InvalidOperationException)
+                                    {
+                                        // Bitmap was disposed or being used elsewhere, skip this tile
+                                        newTexture = null;
+                                    }
+                                    catch (ArgumentException)
+                                    {
+                                        // Bitmap properties became invalid
+                                        newTexture = null;
+                                    }
+                                }
                             }
 
-                            if (clone != null)
+                            if (newTexture != null)
                             {
-                                texture = SkiaBitmapUtil.ToSKBitmap(clone);
-                                clone.Dispose();
                                 lock (_textureLock)
-                                    _tileTextures[key] = texture;
-                                canvas.DrawBitmap(texture, rect);
+                                    _tileTextures[key] = newTexture;
+                                canvas.DrawBitmap(newTexture, rect);
                             }
                             else
                             {
@@ -527,6 +547,7 @@ namespace StrategyGame
                     row[ix] = color;
             }
         }
+
         private static void DrawLine(Image<Rgba32> img, int x0, int y0, int x1, int y1, SixLabors.ImageSharp.Color color, int thickness = 1)
         {
             int dx = Math.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
@@ -575,11 +596,6 @@ namespace StrategyGame
                 }
             }
         }
-
-
-
-
-
 
         private int GetCellSize(float zoom)
         {
@@ -640,13 +656,10 @@ namespace StrategyGame
         /// <summary>
         /// Dispose all cached bitmaps without affecting tile caches.
         /// </summary>
-       
-
 
         /// <summary>
         /// Dispose all cached tiles and clear the tile cache.
         /// </summary>
-       
 
         private void EnforceTileLimit()
         {
@@ -675,44 +688,45 @@ namespace StrategyGame
             await _preloadSemaphore.WaitAsync(token).ConfigureAwait(false);
             try
             {
-            var size = GetMapSize(zoom);
-            int firstTileX = Math.Max(0, view.X / TileSizePx - radius);
-            int lastTileX = Math.Min((size.Width - 1) / TileSizePx, (view.Right - 1) / TileSizePx + radius);
-            int firstTileY = Math.Max(0, view.Y / TileSizePx - radius);
-            int lastTileY = Math.Min((size.Height - 1) / TileSizePx, (view.Bottom - 1) / TileSizePx + radius);
+                var size = GetMapSize(zoom);
+                int firstTileX = Math.Max(0, view.X / TileSizePx - radius);
+                int lastTileX = Math.Min((size.Width - 1) / TileSizePx, (view.Right - 1) / TileSizePx + radius);
+                int firstTileY = Math.Max(0, view.Y / TileSizePx - radius);
+                int lastTileY = Math.Min((size.Height - 1) / TileSizePx, (view.Bottom - 1) / TileSizePx + radius);
 
-            const int maxParallel = 4;
-            using var throttler = new SemaphoreSlim(maxParallel);
-            var tasks = new List<Task>();
+                const int maxParallel = 4;
+                using var throttler = new SemaphoreSlim(maxParallel);
+                var tasks = new List<Task>();
 
-            for (int tx = firstTileX; tx <= lastTileX; tx++)
-            {
-                for (int ty = firstTileY; ty <= lastTileY; ty++)
+                for (int tx = firstTileX; tx <= lastTileX; tx++)
                 {
-                    await throttler.WaitAsync(token).ConfigureAwait(false);
-                    var ttx = tx;
-                    var tty = ty;
-                    tasks.Add(Task.Run(async () =>
+                    for (int ty = firstTileY; ty <= lastTileY; ty++)
                     {
-                        try
+                        await throttler.WaitAsync(token).ConfigureAwait(false);
+                        var ttx = tx;
+                        var tty = ty;
+                        tasks.Add(Task.Run(async () =>
                         {
-                            await GetTileAsync(zoom, ttx, tty, token).ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            throttler.Release();
-                        }
-                    }, token));
+                            try
+                            {
+                                await GetTileAsync(zoom, ttx, tty, token).ConfigureAwait(false);
+                            }
+                            finally
+                            {
+                                throttler.Release();
+                            }
+                        }, token));
+                    }
                 }
-            }
 
-            await Task.WhenAll(tasks).ConfigureAwait(false);
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+            finally
+            {
+                _preloadSemaphore.Release();
+            }
         }
-        finally
-        {
-            _preloadSemaphore.Release();
-        }
-        }
+
         // DONT CHANGE
         private static Image<Rgba32> ConvertBitmapToImageSharpFast(Bitmap bmp)
         {
@@ -764,7 +778,6 @@ namespace StrategyGame
             bmp.UnlockBits(bmpData);
             return image;
         }
-
 
         private void SaveTileToDisk(int cellSize, int tileX, int tileY, System.Drawing.Bitmap bmp)
         {
