@@ -203,11 +203,11 @@ namespace economy_sim
             Console.WriteLine($"[Startup] UpdateOrderLists took {sw.Elapsed.TotalSeconds:F2} seconds");
             pictureBox1.Dock = DockStyle.Fill;
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
-            timerSim.Tick += TimerSim_Tick; // legacy timer unused
-            //timerSim.Start();
-            simCts = new CancellationTokenSource();
-            // start the simulation loop on a background thread
-            _ = Task.Run(() => RunGameSimulationLoop(simCts.Token));
+            timerSim.Tick += TimerSim_Tick;
+            timerSim.Start(); // fire TimerSim_Tick every second
+            //simCts = new CancellationTokenSource();
+            //// start the simulation loop on a background thread
+            //_ = Task.Run(() => RunGameSimulationLoop(simCts.Token));
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
