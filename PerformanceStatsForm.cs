@@ -6,12 +6,12 @@ namespace economy_sim
 {
     public partial class PerformanceStatsForm : Form
     {
-        private readonly Timer refreshTimer;
+        private readonly System.Windows.Forms.Timer refreshTimer;
 
         public PerformanceStatsForm()
         {
             InitializeComponent();
-            refreshTimer = new Timer { Interval = 1000 };
+            refreshTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             refreshTimer.Tick += (s, e) => UpdateStats();
             refreshTimer.Start();
         }

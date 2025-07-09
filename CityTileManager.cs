@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using SkiaSharp;
+using economy_sim;
 
 namespace StrategyGame
 {
@@ -66,14 +67,18 @@ namespace StrategyGame
 
         private static SD.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
         {
+            var sw = Stopwatch.StartNew();
             using var ms = new MemoryStream();
             img.SaveAsPng(ms);
             ms.Position = 0;
-            return new SD.Bitmap(ms);
+            var bmp = new SD.Bitmap(ms);
+            PerformanceTracker.Record("ImageSharpToBitmap", sw.Elapsed);
+            return bmp;
         }
 
         private void UploadTileTexture((int cellSize, int x, int y) key, SD.Bitmap bmp)
         {
+            var sw = Stopwatch.StartNew();
             var sk = SkiaBitmapUtil.ToSKBitmap(bmp);
             lock (_textureLock)
             {
@@ -81,10 +86,12 @@ namespace StrategyGame
                     old.Dispose();
                 _tileTextures[key] = sk;
             }
+            PerformanceTracker.Record("UploadTileTexture", sw.Elapsed);
         }
 
         private void TouchKey((int cellSize, int x, int y) key)
         {
+            var sw = Stopwatch.StartNew();
             lock (_cacheLock)
             {
                 if (_lruNodes.TryGetValue(key, out var node))
@@ -93,10 +100,12 @@ namespace StrategyGame
                     _lruOrder.AddFirst(node);
                 }
             }
+            PerformanceTracker.Record("LRU-TouchKey", sw.Elapsed);
         }
 
         private void AddToCache((int cellSize, int x, int y) key, SD.Bitmap bmp)
         {
+            var sw = Stopwatch.StartNew();
             lock (_cacheLock)
             {
                 _tileCache[key] = bmp;
@@ -127,10 +136,12 @@ namespace StrategyGame
                     }
                 }
             }
+            PerformanceTracker.Record("AddToCache", sw.Elapsed);
         }
 
         private int GetCellSize(float zoom)
         {
+            var sw = Stopwatch.StartNew();
             float[] anchors = new float[MultiResolutionMapManager.PixelsPerCellLevels.Length];
             for (int i = 0; i < anchors.Length; i++)
                 anchors[i] = MultiResolutionMapManager.PixelsPerCellLevels[i];
@@ -150,11 +161,14 @@ namespace StrategyGame
             if (size < 1f)
                 size = 1f;
 
-            return (int)Math.Round(size);
+            var result = (int)Math.Round(size);
+            PerformanceTracker.Record("GetCellSize", sw.Elapsed);
+            return result;
         }
 
         private GeoBounds ComputeTileBounds(int cellSize, int tileX, int tileY)
         {
+            var sw = Stopwatch.StartNew();
             int fullW = _baseWidth * cellSize;
             int fullH = _baseHeight * cellSize;
             int offsetX = tileX * MultiResolutionMapManager.TileSizePx;
@@ -162,13 +176,15 @@ namespace StrategyGame
             int tileWidth = Math.Min(MultiResolutionMapManager.TileSizePx, fullW - offsetX);
             int tileHeight = Math.Min(MultiResolutionMapManager.TileSizePx, fullH - offsetY);
 
-            return new GeoBounds
+            var bounds = new GeoBounds
             {
                 MinLon = -180 + (double)offsetX / fullW * 360.0,
                 MaxLon = -180 + (double)(offsetX + tileWidth) / fullW * 360.0,
                 MaxLat = 90 - (double)offsetY / fullH * 180.0,
                 MinLat = 90 - (double)(offsetY + tileHeight) / fullH * 180.0
             };
+            PerformanceTracker.Record("ComputeTileBounds", sw.Elapsed);
+            return bounds;
         }
 
         private string GetTilePath(int cellSize, int tileX, int tileY)
@@ -179,33 +195,44 @@ namespace StrategyGame
 
         public Task<SD.Bitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
         {
+            var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
+            Task<SD.Bitmap> result;
             lock (_cacheLock)
             {
                 if (_inFlight.TryGetValue(key, out var existing))
-                    return existing;
-                var task = LoadTileInternalAsync(cellSize, tileX, tileY, token);
-                _inFlight[key] = task;
-                task.ContinueWith(_ =>
                 {
-                    lock (_cacheLock)
+                    result = existing;
+                }
+                else
+                {
+                    var task = LoadTileInternalAsync(cellSize, tileX, tileY, token);
+                    _inFlight[key] = task;
+                    task.ContinueWith(_ =>
                     {
-                        _inFlight.Remove(key);
-                    }
-                }, TaskScheduler.Default);
-                return task;
+                        lock (_cacheLock)
+                        {
+                            _inFlight.Remove(key);
+                        }
+                    }, TaskScheduler.Default);
+                    result = task;
+                }
             }
+            PerformanceTracker.Record("GetTileAsync", sw.Elapsed);
+            return result;
         }
 
         private async Task<SD.Bitmap> LoadTileInternalAsync(int cellSize, int tileX, int tileY, CancellationToken token)
         {
+            var sw = Stopwatch.StartNew();
             var key = (cellSize, tileX, tileY);
             lock (_cacheLock)
             {
                 if (_tileCache.TryGetValue(key, out var cached))
                 {
                     TouchKey(key);
+                    PerformanceTracker.Record("LoadTileInternal-CacheHit", sw.Elapsed);
                     return cached;
                 }
             }
@@ -213,6 +240,7 @@ namespace StrategyGame
             string path = GetTilePath(cellSize, tileX, tileY);
             if (File.Exists(path))
             {
+                var swFileLoad = Stopwatch.StartNew();
                 var fileLock = GetFileLock(path);
                 await fileLock.WaitAsync(token).ConfigureAwait(false);
                 try
@@ -221,6 +249,8 @@ namespace StrategyGame
                     using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var bmp = ImageSharpToBitmap(img);
                     AddToCache(key, bmp);
+                    PerformanceTracker.Record("LoadTileInternal-FromDisk", swFileLoad.Elapsed);
+                    PerformanceTracker.Record("LoadTileInternal-Total", sw.Elapsed);
                     return bmp;
                 }
                 finally
@@ -229,11 +259,17 @@ namespace StrategyGame
                 }
             }
 
+            var swGeneration = Stopwatch.StartNew();
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
             var swGen = Stopwatch.StartNew();
             using var generated = await ProceduralCityRenderer.RenderCityTileAsync(bounds, cellSize).ConfigureAwait(false);
             PerformanceTracker.Record("TileGeneration", swGen.Elapsed);
+            
+            var swBitmap = Stopwatch.StartNew();
             var bitmap = ImageSharpToBitmap(generated);
+            PerformanceTracker.Record("TileGeneration-ToBitmap", swBitmap.Elapsed);
+            
+            var swSave = Stopwatch.StartNew();
             string dir = Path.Combine(TileCacheDir, cellSize.ToString());
             Directory.CreateDirectory(dir);
             var lockFile = GetFileLock(path);
@@ -248,9 +284,12 @@ namespace StrategyGame
             {
                 lockFile.Release();
             }
+            PerformanceTracker.Record("TileGeneration-SaveToDisk", swSave.Elapsed);
 
             AddToCache(key, bitmap);
             UploadTileTexture(key, bitmap);
+            PerformanceTracker.Record("LoadTileInternal-Generation", swGeneration.Elapsed);
+            PerformanceTracker.Record("LoadTileInternal-Total", sw.Elapsed);
             return bitmap;
         }
 
@@ -259,17 +298,24 @@ namespace StrategyGame
             var swRender = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
+            
+            var swSurface = Stopwatch.StartNew();
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
             var context = GpuAvailable ? MultiResolutionMapManager.SharedContext : null;
             using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
+            PerformanceTracker.Record("AssembleView-CreateSurface", swSurface.Elapsed);
 
             int tileStartX = Math.Max(0, viewArea.X / tileSize);
             int tileStartY = Math.Max(0, viewArea.Y / tileSize);
             int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
             int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
 
+            var swDrawing = Stopwatch.StartNew();
+            int tilesDrawn = 0;
+            int tilesMissing = 0;
+            
             for (int ty = tileStartY; ty < tileEndY; ty++)
             {
                 for (int tx = tileStartX; tx < tileEndX; tx++)
@@ -289,6 +335,7 @@ namespace StrategyGame
                     {
                         TouchKey(key);
                         canvas.DrawBitmap(tex, rect);
+                        tilesDrawn++;
                     }
                     else
                     {
@@ -306,7 +353,9 @@ namespace StrategyGame
                                     {
                                         // Create texture directly from the cached bitmap while holding the lock
                                         // This reduces the window for concurrent access issues
+                                        var swTexConvert = Stopwatch.StartNew();
                                         newTexture = SkiaBitmapUtil.ToSKBitmap(tile);
+                                        PerformanceTracker.Record("CachedBitmapToSkia", swTexConvert.Elapsed);
                                     }
                                 }
                                 catch (InvalidOperationException)
@@ -328,31 +377,41 @@ namespace StrategyGame
                                 _tileTextures[key] = newTexture;
                             TouchKey(key);
                             canvas.DrawBitmap(newTexture, rect);
+                            tilesDrawn++;
                         }
                         else
                         {
+                            tilesMissing++;
                             var ttx = tx;
                             var tty = ty;
                             var tileKey = key;
                             _ = Task.Run(async () =>
                             {
+                                var swAsync = Stopwatch.StartNew();
                                 var t = await GetTileAsync(zoom, ttx, tty, CancellationToken.None).ConfigureAwait(false);
                                 if (t != null) UploadTileTexture(tileKey, t);
+                                PerformanceTracker.Record("AssembleView-AsyncTileLoad", swAsync.Elapsed);
                                 triggerRefresh?.Invoke();
                             });
                         }
                     }
                 }
             }
+            PerformanceTracker.Record("AssembleView-DrawingTiles", swDrawing.Elapsed);
+            PerformanceTracker.Record("AssembleView-TilesDrawn", TimeSpan.FromMilliseconds(tilesDrawn));
+            PerformanceTracker.Record("AssembleView-TilesMissing", TimeSpan.FromMilliseconds(tilesMissing));
 
+            var swReadPixels = Stopwatch.StartNew();
             var result = new SKBitmap(info);
             surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
+            PerformanceTracker.Record("AssembleView-ReadPixels", swReadPixels.Elapsed);
             PerformanceTracker.Record("TileRendering", swRender.Elapsed);
             return result;
         }
 
         public void PreloadVisibleTiles(float zoom, SD.Rectangle viewRect)
         {
+            var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
             int startX = Math.Max(0, viewRect.X / tileSize);
@@ -366,21 +425,30 @@ namespace StrategyGame
                     .Select(y => (x, y)))
                 .ToList();
 
+            int tileCount = coords.Count;
             using var throttle = new SemaphoreSlim(Environment.ProcessorCount);
+            int loaded = 0;
 
+            var swParallel = Stopwatch.StartNew();
             Parallel.ForEach(coords, coord =>
             {
                 throttle.Wait();
                 try
                 {
+                    var swTile = Stopwatch.StartNew();
                     GetTileAsync(zoom, coord.x, coord.y, CancellationToken.None)
                         .GetAwaiter().GetResult();
+                    PerformanceTracker.Record("PreloadTile-Single", swTile.Elapsed);
+                    Interlocked.Increment(ref loaded);
                 }
                 finally
                 {
                     throttle.Release();
                 }
             });
+            PerformanceTracker.Record("PreloadTiles-Parallel", swParallel.Elapsed);
+            PerformanceTracker.Record("PreloadTiles-Count", TimeSpan.FromMilliseconds(loaded));
+            PerformanceTracker.Record("PreloadTiles-Total", sw.Elapsed);
         }
     }
 }
