@@ -17,6 +17,7 @@ using System.Threading;
 using System.Windows.Forms;
 using Nts = NetTopologySuite.Geometries;
 using SkiaSharp;
+using SkiaSharp.Views.Desktop;
 
 namespace economy_sim
 {
@@ -71,6 +72,7 @@ namespace economy_sim
         private bool pendingMapUpdate = false;
         private bool mapRenderInProgress = false;
         private bool mapRenderQueued = false;
+        private SKBitmap _currentMapView;
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
         private int lastCityModelCount = 0;
@@ -180,6 +182,7 @@ namespace economy_sim
             pictureBox1.MouseDown += PictureBox1_MouseDown;
             pictureBox1.MouseMove += PictureBox1_MouseMove;
             pictureBox1.MouseUp += PictureBox1_MouseUp;
+            pictureBox1.Paint += PictureBox1_Paint;
 
             sw.Restart();
             InitializeCorporations();
@@ -198,8 +201,10 @@ namespace economy_sim
             Console.WriteLine($"[Startup] UpdateOrderLists took {sw.Elapsed.TotalSeconds:F2} seconds");
             pictureBox1.Dock = DockStyle.Fill;
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
-            timerSim.Tick += TimerSim_Tick;
-            timerSim.Start();
+            timerSim.Tick += TimerSim_Tick; // legacy timer unused
+            //timerSim.Start();
+            var simCts = new CancellationTokenSource();
+            _ = RunGameSimulationLoop(simCts.Token);
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
@@ -269,10 +274,14 @@ namespace economy_sim
                             {
                                 var updatedViewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
                                 using var sk2 = mapManager.AssembleView(mapZoom, updatedViewRect);
-                                pictureBox1.Image = SkiaBitmapUtil.ToGdiBitmap(sk2);
+                                _currentMapView?.Dispose();
+                                _currentMapView = sk2.Copy();
+                                pictureBox1.Invalidate();
                             }));
                         });
-                        pictureBox1.Image = SkiaBitmapUtil.ToGdiBitmap(sk);
+                        _currentMapView?.Dispose();
+                        _currentMapView = sk.Copy();
+                        pictureBox1.Invalidate();
                     }));
                 });
             }
@@ -341,9 +350,9 @@ namespace economy_sim
             if (finalSk == null)
                 return;
 
-            pictureBox1.Image?.Dispose();
-            using var bmp = SkiaBitmapUtil.ToGdiBitmap(finalSk);
-            pictureBox1.Image = bmp;
+            _currentMapView?.Dispose();
+            _currentMapView = finalSk.Copy();
+            pictureBox1.Invalidate();
         }
         private CancellationTokenSource redrawCts;
 
@@ -396,9 +405,9 @@ namespace economy_sim
                     {
                         this.Invoke(() =>
                         {
-                            pictureBox1.Image?.Dispose();
-                            using var bmp = SkiaBitmapUtil.ToGdiBitmap(finalSk);
-                            pictureBox1.Image = bmp;
+                            _currentMapView?.Dispose();
+                            _currentMapView = finalSk.Copy();
+                            pictureBox1.Invalidate();
                         });
                     }
                 }
@@ -461,12 +470,12 @@ namespace economy_sim
                 if (terrain == null) return;
                 using SKBitmap mapSk = CombineMaps(terrain, city);
                 if (mapSk == null) return;
-                using var map = SkiaBitmapUtil.ToGdiBitmap(mapSk);
 
                 void setImage()
                 {
-                    pictureBox1.Image?.Dispose();
-                    pictureBox1.Image = (SD.Bitmap)map.Clone();
+                    _currentMapView?.Dispose();
+                    _currentMapView = mapSk.Copy();
+                    pictureBox1.Invalidate();
                     mapRenderInProgress = false;
                     if (mapRenderQueued)
                     {
@@ -978,10 +987,10 @@ namespace economy_sim
         {
             var swSim = Stopwatch.StartNew();
             simTurn++;
-            labelSimTime.Text = $"Turn: {simTurn}";
+            this.Invoke((Action)(() => labelSimTime.Text = $"Turn: {simTurn}"));
 
-            // Get the currently selected city for UI before any updates this tick
-            var cityCurrentlySelectedForUI = GetSelectedCity();
+            StrategyGame.City cityCurrentlySelectedForUI = null;
+            this.Invoke((Action)(() => { cityCurrentlySelectedForUI = GetSelectedCity(); }));
 
             // 1. Capture Previous Stats for the Selected City (if any, and not the first tick)
             if (cityCurrentlySelectedForUI != null && !firstTick)
@@ -1010,7 +1019,8 @@ namespace economy_sim
                         prevMarketDemand[goodName] = cityCurrentlySelectedForUI.LocalDemand.ContainsKey(goodName) ? cityCurrentlySelectedForUI.LocalDemand[goodName] : 0;
                     }
                 }
-                var selectedState = GetSelectedState(); // If state/country budgets also have indicators
+                State selectedState = null;
+                this.Invoke((Action)(() => { selectedState = GetSelectedState(); }));
                 if (selectedState != null) { prevStateBudget = selectedState.Budget; }
                 if (playerCountry != null) { prevCountryBudget = playerCountry.Budget; }
             }
@@ -1228,30 +1238,33 @@ namespace economy_sim
             // 4. Refresh UI elements
             // The GetSelectedCity() here will get the same city as cityCurrentlySelectedForUI,
             // but its data has now been updated by the simulation loop.
-            UpdateOrderLists();
-            UpdateCityAndFactoryStats();
-            UpdateMarketStats();
-            UpdateStateStats();
-            UpdateCountryStats();
-
-            if (cityCurrentlySelectedForUI != null) // Use the city selected at start of tick for populating forms
+            this.Invoke((Action)(() =>
             {
-                if (popStatsForm != null && popStatsForm.Visible)
+                UpdateOrderLists();
+                UpdateCityAndFactoryStats();
+                UpdateMarketStats();
+                UpdateStateStats();
+                UpdateCountryStats();
+
+                if (cityCurrentlySelectedForUI != null)
                 {
-                    popStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
+                    if (popStatsForm != null && popStatsForm.Visible)
+                    {
+                        popStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                    }
+                    if (factoryStatsForm != null && factoryStatsForm.Visible)
+                    {
+                        factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                    }
                 }
-                if (factoryStatsForm != null && factoryStatsForm.Visible)
-                {
-                    factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
-                }
-            }
+            }));
             firstTick = false;
 
             // Process end-of-turn for diplomacy
             if (diplomacyManager != null)
             {
                 diplomacyManager.ProcessTurnEnd();
-                UpdateDiplomacyTab(); // Update the diplomacy UI after processing
+                this.Invoke((Action)(UpdateDiplomacyTab));
             }
 
             // Process financial systems and monetary effects
@@ -1262,17 +1275,20 @@ namespace economy_sim
             }
 
             // Refresh finance tab if it's visible so data stays current
-            if (tabControlMain.SelectedTab == tabPageFinance)
+            this.Invoke((Action)(() =>
             {
-                UpdateFinanceTab();
-            }
-            if (tabControlMain.SelectedTab == tabPageGovernment)
-            {
-                UpdateGovernmentTab();
-            }
+                if (tabControlMain.SelectedTab == tabPageFinance)
+                {
+                    UpdateFinanceTab();
+                }
+                if (tabControlMain.SelectedTab == tabPageGovernment)
+                {
+                    UpdateGovernmentTab();
+                }
+            }));
 
             // Update urban area status each tick
-            UpdateUrbanAreaStatus();
+            this.Invoke((Action)(UpdateUrbanAreaStatus));
 
             // Process AI trade proposals (temporary simple logic)
             if (diplomacyManager != null && playerCountry != null && random.Next(100) < 20) // 20% chance each turn
@@ -1303,6 +1319,15 @@ namespace economy_sim
                 }
             }
             PerformanceTracker.Record("GameSimulation", swSim.Elapsed);
+        }
+
+        private async Task RunGameSimulationLoop(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                TimerSim_Tick(this, EventArgs.Empty);
+                await Task.Delay(1000, token);
+            }
         }
 
         private string FormatValueWithChange(double currentValue, double previousValue, string formatSpecifier, bool calculateDiff, double tolerance = 0.001)
@@ -2453,6 +2478,17 @@ namespace economy_sim
                 isPanning = false;
                 Cursor = Cursors.Default;
                 PreloadMapTiles();
+            }
+        }
+
+        private void PictureBox1_Paint(object sender, PaintEventArgs e)
+        {
+            if (_currentMapView != null)
+            {
+                using (var bitmap = _currentMapView.ToBitmap())
+                {
+                    e.Graphics.DrawImage(bitmap, new SD.Rectangle(0, 0, _currentMapView.Width, _currentMapView.Height));
+                }
             }
         }
 
