@@ -31,6 +31,7 @@ namespace economy_sim
         private PopStatsForm popStatsForm;
         private FactoryStatsForm factoryStatsForm;
         private ConstructionForm constructionForm;
+        private PerformanceStatsForm performanceStatsForm;
         private List<State> states;
         private PlayerRoleManager playerRoleManager;
         private Random random = new Random(); // Add a Random instance for AI and other uses
@@ -209,6 +210,7 @@ namespace economy_sim
             popStatsForm = new PopStatsForm();
             factoryStatsForm = new FactoryStatsForm();
             constructionForm = new ConstructionForm();
+            performanceStatsForm = new PerformanceStatsForm();
             tabControlMain.SelectedIndexChanged += TabControlMain_SelectedIndexChanged;
 
             this.listBoxCityStats.DrawMode = DrawMode.OwnerDrawFixed;
@@ -224,6 +226,9 @@ namespace economy_sim
 
             this.buttonShowConstruction.Location = new SD.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
             this.buttonShowConstruction.Click += ButtonShowConstruction_Click;
+
+            this.buttonShowPerformance.Location = new SD.Point(this.buttonShowConstruction.Right + 10, buttonsTargetY);
+            this.buttonShowPerformance.Click += ButtonShowPerformance_Click;
 
             Console.WriteLine($"[Startup] TOTAL startup time: {totalSw.Elapsed.TotalSeconds:F2} seconds");
             this.Shown += (s, e) =>
@@ -971,6 +976,7 @@ namespace economy_sim
 
         private void TimerSim_Tick(object sender, EventArgs e)
         {
+            var swSim = Stopwatch.StartNew();
             simTurn++;
             labelSimTime.Text = $"Turn: {simTurn}";
 
@@ -1296,6 +1302,7 @@ namespace economy_sim
                     }
                 }
             }
+            PerformanceTracker.Record("GameSimulation", swSim.Elapsed);
         }
 
         private string FormatValueWithChange(double currentValue, double previousValue, string formatSpecifier, bool calculateDiff, double tolerance = 0.001)
@@ -1449,6 +1456,12 @@ namespace economy_sim
                 constructionForm.Show();
                 constructionForm.BringToFront();
             }
+        }
+
+        private void ButtonShowPerformance_Click(object sender, EventArgs e)
+        {
+            performanceStatsForm.Show();
+            performanceStatsForm.BringToFront();
         }
 
         private void UpdateOrderLists()
