@@ -999,8 +999,6 @@ namespace economy_sim
         {
             var swSim = Stopwatch.StartNew();
             simTurn++;
-            StrategyGame.City cityCurrentlySelectedForUI = null;
-
             lock (_gameStateLock)
             {
 
@@ -1032,10 +1030,6 @@ namespace economy_sim
                     }
                     StrategyGame.Economy.UpdateCityEconomy(city); // Populates ImportNeeds and ExportableSurplus
                     city.ProgressConstruction();
-                    if (constructionForm.Visible && constructionForm.CurrentCity == city)
-                    {
-                        constructionForm.UpdateProjects();
-                    }
                     Market.UpdateCityPrices(city);
                 }
             }
@@ -1312,6 +1306,10 @@ namespace economy_sim
                     if (factoryStatsForm != null && factoryStatsForm.Visible)
                     {
                         factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                    }
+                    if (constructionForm != null && constructionForm.Visible && constructionForm.CurrentCity == cityCurrentlySelectedForUI)
+                    {
+                        constructionForm.UpdateProjects();
                     }
 
                     prevCityMetrics["Population"] = cityCurrentlySelectedForUI.Population;
