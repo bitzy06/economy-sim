@@ -16,6 +16,8 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Windows.Forms;
 using Nts = NetTopologySuite.Geometries;
+using SkiaSharp;
+using SkiaSharp.Views.Desktop;
 
 namespace economy_sim
 {
@@ -30,6 +32,7 @@ namespace economy_sim
         private PopStatsForm popStatsForm;
         private FactoryStatsForm factoryStatsForm;
         private ConstructionForm constructionForm;
+        private PerformanceStatsForm performanceStatsForm;
         private List<State> states;
         private PlayerRoleManager playerRoleManager;
         private Random random = new Random(); // Add a Random instance for AI and other uses
@@ -69,6 +72,7 @@ namespace economy_sim
         private bool pendingMapUpdate = false;
         private bool mapRenderInProgress = false;
         private bool mapRenderQueued = false;
+        private SKBitmap _currentMapView;
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
         private int lastCityModelCount = 0;
@@ -178,6 +182,7 @@ namespace economy_sim
             pictureBox1.MouseDown += PictureBox1_MouseDown;
             pictureBox1.MouseMove += PictureBox1_MouseMove;
             pictureBox1.MouseUp += PictureBox1_MouseUp;
+            pictureBox1.Paint += PictureBox1_Paint;
 
             sw.Restart();
             InitializeCorporations();
@@ -196,8 +201,10 @@ namespace economy_sim
             Console.WriteLine($"[Startup] UpdateOrderLists took {sw.Elapsed.TotalSeconds:F2} seconds");
             pictureBox1.Dock = DockStyle.Fill;
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
-            timerSim.Tick += TimerSim_Tick;
-            timerSim.Start();
+            timerSim.Tick += TimerSim_Tick; // legacy timer unused
+            //timerSim.Start();
+            var simCts = new CancellationTokenSource();
+            _ = RunGameSimulationLoop(simCts.Token);
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
@@ -208,6 +215,7 @@ namespace economy_sim
             popStatsForm = new PopStatsForm();
             factoryStatsForm = new FactoryStatsForm();
             constructionForm = new ConstructionForm();
+            performanceStatsForm = new PerformanceStatsForm();
             tabControlMain.SelectedIndexChanged += TabControlMain_SelectedIndexChanged;
 
             this.listBoxCityStats.DrawMode = DrawMode.OwnerDrawFixed;
@@ -223,6 +231,9 @@ namespace economy_sim
 
             this.buttonShowConstruction.Location = new SD.Point(this.buttonShowFactoryStats.Right + 10, buttonsTargetY);
             this.buttonShowConstruction.Click += ButtonShowConstruction_Click;
+
+            this.buttonShowPerformance.Location = new SD.Point(this.buttonShowConstruction.Right + 10, buttonsTargetY);
+            this.buttonShowPerformance.Click += ButtonShowPerformance_Click;
 
             Console.WriteLine($"[Startup] TOTAL startup time: {totalSw.Elapsed.TotalSeconds:F2} seconds");
             this.Shown += (s, e) =>
@@ -257,14 +268,20 @@ namespace economy_sim
 
                     this.Invoke((MethodInvoker)(() =>
                     {
-                        pictureBox1.Image = mapManager.AssembleView(mapZoom, viewRect, () =>
+                        using var sk = mapManager.AssembleView(mapZoom, viewRect, () =>
                         {
                             this.Invoke((MethodInvoker)(() =>
                             {
                                 var updatedViewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
-                                pictureBox1.Image = mapManager.AssembleView(mapZoom, updatedViewRect);
+                                using var sk2 = mapManager.AssembleView(mapZoom, updatedViewRect);
+                                _currentMapView?.Dispose();
+                                _currentMapView = sk2.Copy();
+                                pictureBox1.Invalidate();
                             }));
                         });
+                        _currentMapView?.Dispose();
+                        _currentMapView = sk.Copy();
+                        pictureBox1.Invalidate();
                     }));
                 });
             }
@@ -299,10 +316,10 @@ namespace economy_sim
 
             DateTime lastInnerRedraw = DateTime.MinValue;
 
-            SD.Bitmap bmp = null;
+            SKBitmap finalSk = null;
             try
             {
-                SD.Bitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                using SKBitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
                 {
                     if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
                         return;
@@ -312,7 +329,7 @@ namespace economy_sim
                     else
                         Redraw();
                 });
-                SD.Bitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
+                using SKBitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
                 {
                     if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
                         return;
@@ -322,14 +339,7 @@ namespace economy_sim
                     else
                         Redraw();
                 });
-                if (terrain != null)
-                {
-                    bmp = new SD.Bitmap(terrain.Width, terrain.Height);
-                    using var g = SD.Graphics.FromImage(bmp);
-                    g.DrawImage(terrain, 0, 0);
-                    if (city != null)
-                        g.DrawImage(city, 0, 0);
-                }
+                finalSk = CombineMaps(terrain, city);
             }
             catch (ArgumentException ex)
             {
@@ -337,11 +347,12 @@ namespace economy_sim
                 return;
             }
 
-            if (bmp == null)
+            if (finalSk == null)
                 return;
 
-            pictureBox1.Image?.Dispose();
-            pictureBox1.Image = bmp;
+            _currentMapView?.Dispose();
+            _currentMapView = finalSk.Copy();
+            pictureBox1.Invalidate();
         }
         private CancellationTokenSource redrawCts;
 
@@ -370,7 +381,7 @@ namespace economy_sim
             {
                 try
                 {
-                    var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    using var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
                     {
                         if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
                         {
@@ -379,7 +390,7 @@ namespace economy_sim
                         }
                     });
 
-                    var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
+                    using var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
                     {
                         if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
                         {
@@ -388,22 +399,15 @@ namespace economy_sim
                         }
                     });
 
-                    SD.Bitmap bmp = null;
-                    if (terrain != null)
-                    {
-                        bmp = new SD.Bitmap(terrain.Width, terrain.Height);
-                        using var g = SD.Graphics.FromImage(bmp);
-                        g.DrawImage(terrain, 0, 0);
-                        if (city != null)
-                            g.DrawImage(city, 0, 0);
-                    }
+                    using var finalSk = CombineMaps(terrain, city);
 
-                    if (bmp != null && bmp.Width > 0 && bmp.Height > 0 && !token.IsCancellationRequested)
+                    if (finalSk != null && !token.IsCancellationRequested)
                     {
                         this.Invoke(() =>
                         {
-                            pictureBox1.Image?.Dispose();
-                            pictureBox1.Image = bmp;
+                            _currentMapView?.Dispose();
+                            _currentMapView = finalSk.Copy();
+                            pictureBox1.Invalidate();
                         });
                     }
                 }
@@ -449,14 +453,14 @@ namespace economy_sim
 
             Task.Run(() =>
             {
-                SD.Bitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
+                using SKBitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
                     else
                         ApplyZoom();
                 });
-                SD.Bitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
+                using SKBitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
                 {
                     if (this.InvokeRequired)
                         this.BeginInvoke(new Action(ApplyZoom));
@@ -464,18 +468,14 @@ namespace economy_sim
                         ApplyZoom();
                 });
                 if (terrain == null) return;
-                SD.Bitmap map = new SD.Bitmap(terrain.Width, terrain.Height);
-                using (var g = SD.Graphics.FromImage(map))
-                {
-                    g.DrawImage(terrain, 0, 0);
-                    if (city != null)
-                        g.DrawImage(city, 0, 0);
-                }
+                using SKBitmap mapSk = CombineMaps(terrain, city);
+                if (mapSk == null) return;
 
                 void setImage()
                 {
-                    pictureBox1.Image?.Dispose();
-                    pictureBox1.Image = map;
+                    _currentMapView?.Dispose();
+                    _currentMapView = mapSk.Copy();
+                    pictureBox1.Invalidate();
                     mapRenderInProgress = false;
                     if (mapRenderQueued)
                     {
@@ -524,6 +524,22 @@ namespace economy_sim
                 g.DrawImage(src, 0, 0, width, height);
             }
             return dest;
+        }
+
+        private SKBitmap CombineMaps(SKBitmap terrain, SKBitmap city)
+        {
+            if (terrain == null) return null;
+            var info = new SKImageInfo(terrain.Width, terrain.Height);
+            var context = MultiResolutionMapManager.GpuAvailable ? MultiResolutionMapManager.SharedContext : null;
+            using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.Transparent);
+            canvas.DrawBitmap(terrain, 0, 0);
+            if (city != null)
+                canvas.DrawBitmap(city, 0, 0);
+            var result = new SKBitmap(info);
+            surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
+            return result;
         }
         private void InitializeGameData()
         {
@@ -969,11 +985,12 @@ namespace economy_sim
 
         private void TimerSim_Tick(object sender, EventArgs e)
         {
+            var swSim = Stopwatch.StartNew();
             simTurn++;
-            labelSimTime.Text = $"Turn: {simTurn}";
+            this.Invoke((Action)(() => labelSimTime.Text = $"Turn: {simTurn}"));
 
-            // Get the currently selected city for UI before any updates this tick
-            var cityCurrentlySelectedForUI = GetSelectedCity();
+            StrategyGame.City cityCurrentlySelectedForUI = null;
+            this.Invoke((Action)(() => { cityCurrentlySelectedForUI = GetSelectedCity(); }));
 
             // 1. Capture Previous Stats for the Selected City (if any, and not the first tick)
             if (cityCurrentlySelectedForUI != null && !firstTick)
@@ -1002,7 +1019,8 @@ namespace economy_sim
                         prevMarketDemand[goodName] = cityCurrentlySelectedForUI.LocalDemand.ContainsKey(goodName) ? cityCurrentlySelectedForUI.LocalDemand[goodName] : 0;
                     }
                 }
-                var selectedState = GetSelectedState(); // If state/country budgets also have indicators
+                State selectedState = null;
+                this.Invoke((Action)(() => { selectedState = GetSelectedState(); }));
                 if (selectedState != null) { prevStateBudget = selectedState.Budget; }
                 if (playerCountry != null) { prevCountryBudget = playerCountry.Budget; }
             }
@@ -1220,30 +1238,33 @@ namespace economy_sim
             // 4. Refresh UI elements
             // The GetSelectedCity() here will get the same city as cityCurrentlySelectedForUI,
             // but its data has now been updated by the simulation loop.
-            UpdateOrderLists();
-            UpdateCityAndFactoryStats();
-            UpdateMarketStats();
-            UpdateStateStats();
-            UpdateCountryStats();
-
-            if (cityCurrentlySelectedForUI != null) // Use the city selected at start of tick for populating forms
+            this.Invoke((Action)(() =>
             {
-                if (popStatsForm != null && popStatsForm.Visible)
+                UpdateOrderLists();
+                UpdateCityAndFactoryStats();
+                UpdateMarketStats();
+                UpdateStateStats();
+                UpdateCountryStats();
+
+                if (cityCurrentlySelectedForUI != null)
                 {
-                    popStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
+                    if (popStatsForm != null && popStatsForm.Visible)
+                    {
+                        popStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                    }
+                    if (factoryStatsForm != null && factoryStatsForm.Visible)
+                    {
+                        factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                    }
                 }
-                if (factoryStatsForm != null && factoryStatsForm.Visible)
-                {
-                    factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI); // Pass the (now updated) selected city
-                }
-            }
+            }));
             firstTick = false;
 
             // Process end-of-turn for diplomacy
             if (diplomacyManager != null)
             {
                 diplomacyManager.ProcessTurnEnd();
-                UpdateDiplomacyTab(); // Update the diplomacy UI after processing
+                this.Invoke((Action)(UpdateDiplomacyTab));
             }
 
             // Process financial systems and monetary effects
@@ -1254,17 +1275,20 @@ namespace economy_sim
             }
 
             // Refresh finance tab if it's visible so data stays current
-            if (tabControlMain.SelectedTab == tabPageFinance)
+            this.Invoke((Action)(() =>
             {
-                UpdateFinanceTab();
-            }
-            if (tabControlMain.SelectedTab == tabPageGovernment)
-            {
-                UpdateGovernmentTab();
-            }
+                if (tabControlMain.SelectedTab == tabPageFinance)
+                {
+                    UpdateFinanceTab();
+                }
+                if (tabControlMain.SelectedTab == tabPageGovernment)
+                {
+                    UpdateGovernmentTab();
+                }
+            }));
 
             // Update urban area status each tick
-            UpdateUrbanAreaStatus();
+            this.Invoke((Action)(UpdateUrbanAreaStatus));
 
             // Process AI trade proposals (temporary simple logic)
             if (diplomacyManager != null && playerCountry != null && random.Next(100) < 20) // 20% chance each turn
@@ -1293,6 +1317,16 @@ namespace economy_sim
                         diplomacyManager.ProposeTradeAgreement(newTrade);
                     }
                 }
+            }
+            PerformanceTracker.Record("GameSimulation", swSim.Elapsed);
+        }
+
+        private async Task RunGameSimulationLoop(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                TimerSim_Tick(this, EventArgs.Empty);
+                await Task.Delay(1000, token);
             }
         }
 
@@ -1447,6 +1481,12 @@ namespace economy_sim
                 constructionForm.Show();
                 constructionForm.BringToFront();
             }
+        }
+
+        private void ButtonShowPerformance_Click(object sender, EventArgs e)
+        {
+            performanceStatsForm.Show();
+            performanceStatsForm.BringToFront();
         }
 
         private void UpdateOrderLists()
@@ -2438,6 +2478,17 @@ namespace economy_sim
                 isPanning = false;
                 Cursor = Cursors.Default;
                 PreloadMapTiles();
+            }
+        }
+
+        private void PictureBox1_Paint(object sender, PaintEventArgs e)
+        {
+            if (_currentMapView != null)
+            {
+                using (var bitmap = _currentMapView.ToBitmap())
+                {
+                    e.Graphics.DrawImage(bitmap, new SD.Rectangle(0, 0, _currentMapView.Width, _currentMapView.Height));
+                }
             }
         }
 
