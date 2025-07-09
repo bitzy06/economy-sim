@@ -206,7 +206,8 @@ namespace economy_sim
             timerSim.Tick += TimerSim_Tick; // legacy timer unused
             //timerSim.Start();
             simCts = new CancellationTokenSource();
-            _ = RunGameSimulationLoop(simCts.Token);
+            // start the simulation loop on a background thread
+            _ = Task.Run(() => RunGameSimulationLoop(simCts.Token));
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
