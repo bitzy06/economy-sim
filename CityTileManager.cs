@@ -22,6 +22,9 @@ namespace StrategyGame
         private readonly object _cacheLock = new();
         private readonly object _textureLock = new();
         private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileTextures = new();
+        private readonly LinkedList<(int cellSize, int x, int y)> _lruOrder = new();
+        private readonly Dictionary<(int cellSize, int x, int y), LinkedListNode<(int cellSize, int x, int y)>> _lruNodes = new();
+        private const int MaxCacheSize = 256;
         public static readonly bool GpuAvailable;
 
         static CityTileManager()
@@ -77,6 +80,52 @@ namespace StrategyGame
                 if (_tileTextures.TryGetValue(key, out var old))
                     old.Dispose();
                 _tileTextures[key] = sk;
+            }
+        }
+
+        private void TouchKey((int cellSize, int x, int y) key)
+        {
+            lock (_cacheLock)
+            {
+                if (_lruNodes.TryGetValue(key, out var node))
+                {
+                    _lruOrder.Remove(node);
+                    _lruOrder.AddFirst(node);
+                }
+            }
+        }
+
+        private void AddToCache((int cellSize, int x, int y) key, SD.Bitmap bmp)
+        {
+            lock (_cacheLock)
+            {
+                _tileCache[key] = bmp;
+                if (_lruNodes.TryGetValue(key, out var existing))
+                {
+                    _lruOrder.Remove(existing);
+                }
+                var node = _lruOrder.AddFirst(key);
+                _lruNodes[key] = node;
+
+                while (_tileCache.Count > MaxCacheSize)
+                {
+                    var last = _lruOrder.Last;
+                    if (last == null) break;
+                    _lruOrder.RemoveLast();
+                    var remKey = last.Value;
+                    if (_tileCache.TryGetValue(remKey, out var oldBmp))
+                        oldBmp.Dispose();
+                    _tileCache.Remove(remKey);
+                    _lruNodes.Remove(remKey);
+                    lock (_textureLock)
+                    {
+                        if (_tileTextures.TryGetValue(remKey, out var tex))
+                        {
+                            tex.Dispose();
+                            _tileTextures.Remove(remKey);
+                        }
+                    }
+                }
             }
         }
 
@@ -155,7 +204,10 @@ namespace StrategyGame
             lock (_cacheLock)
             {
                 if (_tileCache.TryGetValue(key, out var cached))
+                {
+                    TouchKey(key);
                     return cached;
+                }
             }
 
             string path = GetTilePath(cellSize, tileX, tileY);
@@ -168,8 +220,7 @@ namespace StrategyGame
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
                     using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var bmp = ImageSharpToBitmap(img);
-                    lock (_cacheLock)
-                        _tileCache[key] = bmp;
+                    AddToCache(key, bmp);
                     return bmp;
                 }
                 finally
@@ -196,8 +247,7 @@ namespace StrategyGame
                 lockFile.Release();
             }
 
-            lock (_cacheLock)
-                _tileCache[key] = bitmap;
+            AddToCache(key, bitmap);
             UploadTileTexture(key, bitmap);
             return bitmap;
         }
@@ -234,6 +284,7 @@ namespace StrategyGame
 
                     if (tex != null)
                     {
+                        TouchKey(key);
                         canvas.DrawBitmap(tex, rect);
                     }
                     else
@@ -244,6 +295,7 @@ namespace StrategyGame
                         {
                             if (_tileCache.TryGetValue(key, out var tile))
                             {
+                                TouchKey(key);
                                 try
                                 {
                                     // Check dimensions inside the lock to avoid concurrent access
@@ -271,6 +323,7 @@ namespace StrategyGame
                         {
                             lock (_textureLock)
                                 _tileTextures[key] = newTexture;
+                            TouchKey(key);
                             canvas.DrawBitmap(newTexture, rect);
                         }
                         else
