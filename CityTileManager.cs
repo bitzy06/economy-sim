@@ -238,17 +238,19 @@ namespace StrategyGame
                     }
                     else
                     {
+                        SD.Bitmap clone = null;
                         lock (_cacheLock)
                         {
                             if (_tileCache.TryGetValue(key, out var tile) && tile.Width > 0 && tile.Height > 0)
-                            {
-                                tex = SkiaBitmapUtil.ToSKBitmap(tile);
-                                _tileTextures[key] = tex;
-                            }
+                                clone = (SD.Bitmap)tile.Clone();
                         }
 
-                        if (tex != null)
+                        if (clone != null)
                         {
+                            tex = SkiaBitmapUtil.ToSKBitmap(clone);
+                            clone.Dispose();
+                            lock (_textureLock)
+                                _tileTextures[key] = tex;
                             canvas.DrawBitmap(tex, rect);
                         }
                         else
