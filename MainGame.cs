@@ -201,8 +201,8 @@ namespace economy_sim
             Console.WriteLine($"[Startup] UpdateOrderLists took {sw.Elapsed.TotalSeconds:F2} seconds");
             pictureBox1.Dock = DockStyle.Fill;
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
-            timerSim.Tick += TimerSim_Tick; // legacy timer unused
-            //timerSim.Start();
+            timerSim.Tick += TimerSim_Tick;
+            timerSim.Start();
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
@@ -1319,14 +1319,9 @@ namespace economy_sim
             PerformanceTracker.Record("GameSimulation", swSim.Elapsed);
         }
 
-        public async Task RunGameSimulationLoop(CancellationToken token)
-        {
-            while (!token.IsCancellationRequested)
-            {
-                TimerSim_Tick(this, EventArgs.Empty);
-                await Task.Delay(1000, token);
-            }
-        }
+        // Legacy asynchronous loop previously drove TimerSim_Tick when running
+        // the UI on a dedicated thread. With the built-in WinForms timer
+        // resumed, this method is currently unused.
 
         private string FormatValueWithChange(double currentValue, double previousValue, string formatSpecifier, bool calculateDiff, double tolerance = 0.001)
         {
