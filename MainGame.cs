@@ -202,9 +202,7 @@ namespace economy_sim
             pictureBox1.Dock = DockStyle.Fill;
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
             timerSim.Tick += TimerSim_Tick; // legacy timer unused
-            timerSim.Start();
-            //var simCts = new CancellationTokenSource();
-            //_ = RunGameSimulationLoop(simCts.Token);
+            //timerSim.Start();
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
@@ -1321,7 +1319,7 @@ namespace economy_sim
             PerformanceTracker.Record("GameSimulation", swSim.Elapsed);
         }
 
-        private async Task RunGameSimulationLoop(CancellationToken token)
+        public async Task RunGameSimulationLoop(CancellationToken token)
         {
             while (!token.IsCancellationRequested)
             {
