@@ -230,7 +230,9 @@ namespace StrategyGame
             }
 
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
+            var swGen = Stopwatch.StartNew();
             using var generated = await ProceduralCityRenderer.RenderCityTileAsync(bounds, cellSize).ConfigureAwait(false);
+            PerformanceTracker.Record("TileGeneration", swGen.Elapsed);
             var bitmap = ImageSharpToBitmap(generated);
             string dir = Path.Combine(TileCacheDir, cellSize.ToString());
             Directory.CreateDirectory(dir);
@@ -254,6 +256,7 @@ namespace StrategyGame
 
         public SKBitmap AssembleView(float zoom, SD.Rectangle viewArea, Action triggerRefresh = null)
         {
+            var swRender = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
@@ -344,6 +347,7 @@ namespace StrategyGame
 
             var result = new SKBitmap(info);
             surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
+            PerformanceTracker.Record("TileRendering", swRender.Elapsed);
             return result;
         }
 
