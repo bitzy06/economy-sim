@@ -238,20 +238,40 @@ namespace StrategyGame
                     }
                     else
                     {
-                        SD.Bitmap clone = null;
+                        // Try to safely create texture from cached bitmap
+                        SKBitmap newTexture = null;
                         lock (_cacheLock)
                         {
-                            if (_tileCache.TryGetValue(key, out var tile) && tile.Width > 0 && tile.Height > 0)
-                                clone = (SD.Bitmap)tile.Clone();
+                            if (_tileCache.TryGetValue(key, out var tile))
+                            {
+                                try
+                                {
+                                    // Check dimensions inside the lock to avoid concurrent access
+                                    if (tile.Width > 0 && tile.Height > 0)
+                                    {
+                                        // Create texture directly from the cached bitmap while holding the lock
+                                        // This reduces the window for concurrent access issues
+                                        newTexture = SkiaBitmapUtil.ToSKBitmap(tile);
+                                    }
+                                }
+                                catch (InvalidOperationException)
+                                {
+                                    // Bitmap was disposed or being used elsewhere, skip this tile
+                                    newTexture = null;
+                                }
+                                catch (ArgumentException)
+                                {
+                                    // Bitmap properties became invalid
+                                    newTexture = null;
+                                }
+                            }
                         }
 
-                        if (clone != null)
+                        if (newTexture != null)
                         {
-                            tex = SkiaBitmapUtil.ToSKBitmap(clone);
-                            clone.Dispose();
                             lock (_textureLock)
-                                _tileTextures[key] = tex;
-                            canvas.DrawBitmap(tex, rect);
+                                _tileTextures[key] = newTexture;
+                            canvas.DrawBitmap(newTexture, rect);
                         }
                         else
                         {
