@@ -487,7 +487,7 @@ namespace economy_sim
 
                 if (pictureBox1.InvokeRequired)
                 {
-                    pictureBox1.Invoke((Action)setImage);
+                    pictureBox1.BeginInvoke((Action)setImage);
                 }
                 else
                 {
@@ -988,7 +988,14 @@ namespace economy_sim
         {
             var swSim = Stopwatch.StartNew();
             simTurn++;
-            this.Invoke((Action)(() => labelSimTime.Text = $"Turn: {simTurn}"));
+            if (labelSimTime.InvokeRequired)
+            {
+                labelSimTime.BeginInvoke((Action)(() => labelSimTime.Text = $"Turn: {simTurn}"));
+            }
+            else
+            {
+                labelSimTime.Text = $"Turn: {simTurn}";
+            }
 
             StrategyGame.City cityCurrentlySelectedForUI = null;
             this.Invoke((Action)(() => { cityCurrentlySelectedForUI = GetSelectedCity(); }));
@@ -1239,8 +1246,10 @@ namespace economy_sim
             // 4. Refresh UI elements
             // The GetSelectedCity() here will get the same city as cityCurrentlySelectedForUI,
             // but its data has now been updated by the simulation loop.
-            this.Invoke((Action)(() =>
+            if (this.IsHandleCreated)
             {
+                this.BeginInvoke((Action)(() =>
+                {
                 UpdateOrderLists();
                 UpdateCityAndFactoryStats();
                 UpdateMarketStats();
@@ -1258,14 +1267,18 @@ namespace economy_sim
                         factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI);
                     }
                 }
-            }));
+                }));
+            }
             firstTick = false;
 
             // Process end-of-turn for diplomacy
             if (diplomacyManager != null)
             {
                 diplomacyManager.ProcessTurnEnd();
-                this.Invoke((Action)(UpdateDiplomacyTab));
+                if (this.IsHandleCreated)
+                {
+                    this.BeginInvoke((Action)(UpdateDiplomacyTab));
+                }
             }
 
             // Process financial systems and monetary effects
@@ -1276,20 +1289,26 @@ namespace economy_sim
             }
 
             // Refresh finance tab if it's visible so data stays current
-            this.Invoke((Action)(() =>
+            if (this.IsHandleCreated)
             {
-                if (tabControlMain.SelectedTab == tabPageFinance)
+                this.BeginInvoke((Action)(() =>
                 {
-                    UpdateFinanceTab();
-                }
-                if (tabControlMain.SelectedTab == tabPageGovernment)
-                {
-                    UpdateGovernmentTab();
-                }
-            }));
+                    if (tabControlMain.SelectedTab == tabPageFinance)
+                    {
+                        UpdateFinanceTab();
+                    }
+                    if (tabControlMain.SelectedTab == tabPageGovernment)
+                    {
+                        UpdateGovernmentTab();
+                    }
+                }));
+            }
 
             // Update urban area status each tick
-            this.Invoke((Action)(UpdateUrbanAreaStatus));
+            if (this.IsHandleCreated)
+            {
+                this.BeginInvoke((Action)(UpdateUrbanAreaStatus));
+            }
 
             // Process AI trade proposals (temporary simple logic)
             if (diplomacyManager != null && playerCountry != null && random.Next(100) < 20) // 20% chance each turn
