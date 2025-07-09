@@ -10,6 +10,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp.Drawing;
+using System.Diagnostics;
+using economy_sim;
 
 namespace StrategyGame
 {
@@ -32,10 +34,12 @@ namespace StrategyGame
 
         public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
         {
+            var swTotal = Stopwatch.StartNew();
             try
             {
                 Console.WriteLine($"[Debug] RenderCityTileAsync: Bounds={{MinLon={tileBounds.MinLon},MaxLon={tileBounds.MaxLon},MinLat={tileBounds.MinLat},MaxLat={tileBounds.MaxLat}}}, cellSize={cellSize}");
 
+                var swInit = Stopwatch.StartNew();
                 var img = new Image<Rgba32>(Configuration.Default,
                     MultiResolutionMapManager.TileSizePx,
                     MultiResolutionMapManager.TileSizePx,
@@ -61,18 +65,43 @@ namespace StrategyGame
                     }
                 }
                 var tilePoly = ToPolygon(tileBounds);
+                PerformanceTracker.Record("CityRenderer-Initialization", swInit.Elapsed);
 
+                int urbanAreasProcessed = 0;
+                int urbanAreasSkipped = 0;
+                int totalRoads = 0;
+                int totalBuildings = 0;
+
+                var swUrbanProcessing = Stopwatch.StartNew();
                 foreach (var urban in UrbanAreaManager.UrbanPolygons)
                 {
+                    var swSpatialCheck = Stopwatch.StartNew();
                     if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
+                    {
+                        urbanAreasSkipped++;
+                        PerformanceTracker.Record("CityRenderer-SpatialCheck-Skipped", swSpatialCheck.Elapsed);
                         continue;
+                    }
+                    PerformanceTracker.Record("CityRenderer-SpatialCheck-Passed", swSpatialCheck.Elapsed);
 
+                    var swModel = Stopwatch.StartNew();
                     var model = await RoadNetworkGenerator.GenerateModelAsync(urban, cellSize).ConfigureAwait(false);
                     if (model == null)
+                    {
+                        PerformanceTracker.Record("CityRenderer-ModelGeneration-Failed", swModel.Elapsed);
                         continue;
+                    }
+                    PerformanceTracker.Record("CityRenderer-ModelGeneration", swModel.Elapsed);
+                    urbanAreasProcessed++;
 
+                    var swRoads = Stopwatch.StartNew();
+                    int roadCount = model.RoadNetwork.Count();
+                    totalRoads += roadCount;
                     DrawRoads(img, canvas, model.RoadNetwork, tileBounds);
+                    PerformanceTracker.Record("CityRenderer-RoadDrawing", swRoads.Elapsed);
+                    PerformanceTracker.Record("CityRenderer-RoadCount", TimeSpan.FromMilliseconds(roadCount));
 
+                    var swBuildings = Stopwatch.StartNew();
                     var drawList = new List<(Nts.Polygon Poly, LandUseType Use)>();
                     Parallel.ForEach(model.Buildings, b =>
                     {
@@ -92,7 +121,10 @@ namespace StrategyGame
                             }
                         }
                     });
+                    totalBuildings += drawList.Count;
+                    PerformanceTracker.Record("CityRenderer-BuildingFiltering", swBuildings.Elapsed);
 
+                    var swRendering = Stopwatch.StartNew();
                     if (canvas != null)
                     {
                         foreach (var grp in drawList.GroupBy(d => d.Use))
@@ -116,8 +148,15 @@ namespace StrategyGame
                         foreach (var item in drawList)
                             RenderPolygon(img, null, item.Poly, tileBounds, GetBuildingColor(item.Use));
                     }
+                    PerformanceTracker.Record("CityRenderer-BuildingRendering", swRendering.Elapsed);
                 }
+                PerformanceTracker.Record("CityRenderer-UrbanProcessing", swUrbanProcessing.Elapsed);
+                PerformanceTracker.Record("CityRenderer-UrbanAreasProcessed", TimeSpan.FromMilliseconds(urbanAreasProcessed));
+                PerformanceTracker.Record("CityRenderer-UrbanAreasSkipped", TimeSpan.FromMilliseconds(urbanAreasSkipped));
+                PerformanceTracker.Record("CityRenderer-TotalRoads", TimeSpan.FromMilliseconds(totalRoads));
+                PerformanceTracker.Record("CityRenderer-TotalBuildings", TimeSpan.FromMilliseconds(totalBuildings));
 
+                var swFinalize = Stopwatch.StartNew();
                 if (surface != null)
                 {
                     using var snapshot = surface.Snapshot();
@@ -125,23 +164,28 @@ namespace StrategyGame
                     img.Dispose();
                     img = SixLabors.ImageSharp.Image.Load<Rgba32>(data.AsStream());
                 }
+                PerformanceTracker.Record("CityRenderer-Finalization", swFinalize.Elapsed);
+                PerformanceTracker.Record("CityRenderer-Total", swTotal.Elapsed);
 
                 return img;
             }
             catch (ArgumentException ex)
             {
                 Console.WriteLine($"[Error] RenderCityTileAsync ArgumentException: {ex.Message}");
+                PerformanceTracker.Record("CityRenderer-ArgumentException", swTotal.Elapsed);
                 throw;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Error] RenderCityTileAsync Exception: {ex.Message}");
+                PerformanceTracker.Record("CityRenderer-Exception", swTotal.Elapsed);
                 throw;
             }
         }
 
         private static void DrawRoads(Image<Rgba32> img, SKCanvas? canvas, IEnumerable<LineSegment> roads, GeoBounds bounds)
         {
+            var sw = Stopwatch.StartNew();
             if (canvas != null)
             {
                 foreach (var seg in roads)
@@ -158,6 +202,7 @@ namespace StrategyGame
                     var p2 = ToSKPoint(seg.X2, seg.Y2, bounds);
                     canvas.DrawLine(p1, p2, paint);
                 }
+                PerformanceTracker.Record("DrawRoads-Skia", sw.Elapsed);
             }
             else
             {
@@ -172,6 +217,7 @@ namespace StrategyGame
                         ctx.DrawLine(pen, p1, p2);
                     }
                 });
+                PerformanceTracker.Record("DrawRoads-ImageSharp", sw.Elapsed);
             }
         }
 
@@ -217,11 +263,12 @@ namespace StrategyGame
 
         private static Nts.Polygon ToPolygon(GeoBounds b)
         {
+            var sw = Stopwatch.StartNew();
             if (b.MinLon >= b.MaxLon || b.MinLat >= b.MaxLat)
                 throw new ArgumentException("Invalid GeoBounds: Min must be less than Max.");
 
             var gf = Nts.GeometryFactory.Default;
-            return gf.CreatePolygon(new[]
+            var result = gf.CreatePolygon(new[]
             {
                 new Nts.Coordinate(b.MinLon, b.MinLat),
                 new Nts.Coordinate(b.MaxLon, b.MinLat),
@@ -229,10 +276,13 @@ namespace StrategyGame
                 new Nts.Coordinate(b.MinLon, b.MaxLat),
                 new Nts.Coordinate(b.MinLon, b.MinLat)
             });
+            PerformanceTracker.Record("ToPolygon", sw.Elapsed);
+            return result;
         }
 
         private static void RenderPolygon(Image<Rgba32> img, SKCanvas? canvas, Nts.Polygon poly, GeoBounds bounds, Rgba32 color)
         {
+            var sw = Stopwatch.StartNew();
             if (canvas != null)
             {
                 using var path = new SKPath();
@@ -244,11 +294,13 @@ namespace StrategyGame
                     IsAntialias = true
                 };
                 canvas.DrawPath(path, paint);
+                PerformanceTracker.Record("RenderPolygon-Skia", sw.Elapsed);
             }
             else
             {
                 var coords = poly.ExteriorRing.Coordinates.Select(c => ToPointF(c.X, c.Y, bounds)).ToArray();
                 img.Mutate(ctx => ctx.Fill(color, new Polygon(coords)));
+                PerformanceTracker.Record("RenderPolygon-ImageSharp", sw.Elapsed);
             }
         }
     }
