@@ -385,19 +385,22 @@ namespace StrategyGame
                                     if (!_tilesBeingLoaded.Contains(key))
                                     {
                                         _tilesBeingLoaded.Add(key);
+                                        var ttx = tx;
+                                        var tty = ty;
+                                        var tileKey = key;
                                         _ = Task.Run(async () =>
                                         {
                                             try
                                             {
-                                                var t = await GetTileAsync(zoom, tx, ty, CancellationToken.None);
+                                                var t = await GetTileAsync(zoom, ttx, tty, CancellationToken.None);
                                                 if (t != null)
-                                                    UploadTileTexture(key, t);
+                                                    UploadTileTexture(tileKey, t);
                                                 triggerRefresh?.Invoke();
                                             }
                                             finally
                                             {
                                                 lock (_tileLoadLock)
-                                                    _tilesBeingLoaded.Remove(key);
+                                                    _tilesBeingLoaded.Remove(tileKey);
                                             }
                                         });
                                     }
@@ -416,6 +419,9 @@ namespace StrategyGame
         private static void OverlayFeatures(SystemDrawing.Bitmap bmp, ZoomLevel level)
         {
             using SystemDrawing.Graphics g = SystemDrawing.Graphics.FromImage(bmp);
+            g.SmoothingMode = SystemDrawing.Drawing2D.SmoothingMode.None;
+            g.PixelOffsetMode = SystemDrawing.Drawing2D.PixelOffsetMode.None;
+            g.CompositingQuality = SystemDrawing.Drawing2D.CompositingQuality.HighSpeed;
             Random rng = new Random(42);
             switch (level)
             {
@@ -443,7 +449,7 @@ namespace StrategyGame
                     break;
                 case ZoomLevel.City:
                     // Add buildings and cars without drawing a full grid of road lines
-                    for (int i = 0; i < 50; i++)
+                    for (int i = 0; i < 20; i++)
                     {
                         int w = rng.Next(4, 8);
                         int h = rng.Next(4, 8);
@@ -451,7 +457,7 @@ namespace StrategyGame
                         int y = rng.Next(bmp.Height - h);
                         g.FillRectangle(SystemDrawing.Brushes.DarkSlateBlue, x, y, w, h);
                     }
-                    for (int i = 0; i < 20; i++)
+                    for (int i = 0; i < 10; i++)
                     {
                         int x = rng.Next(bmp.Width - 3);
                         int y = rng.Next(bmp.Height - 2);

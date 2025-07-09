@@ -253,10 +253,13 @@ namespace StrategyGame
                         }
                         else
                         {
+                            var ttx = tx;
+                            var tty = ty;
+                            var tileKey = key;
                             _ = Task.Run(async () =>
                             {
-                                var t = await GetTileAsync(zoom, tx, ty, CancellationToken.None).ConfigureAwait(false);
-                                if (t != null) UploadTileTexture(key, t);
+                                var t = await GetTileAsync(zoom, ttx, tty, CancellationToken.None).ConfigureAwait(false);
+                                if (t != null) UploadTileTexture(tileKey, t);
                                 triggerRefresh?.Invoke();
                             });
                         }
