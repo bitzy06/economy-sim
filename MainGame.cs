@@ -2227,9 +2227,14 @@ namespace economy_sim
 
             if (missing.Count > 0)
             {
-                var result = MessageBox.Show($"{missing.Count} urban areas are missing procedural data. Generate now?", "Generate Missing City Data?", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                if (result == DialogResult.Yes)
-                    Task.Run(() => GenerateCityDataFor(missing));
+                StrategyGame.CountryBorderManager.EnsureLoaded();
+                using var form = new CityGenerationSettingsForm(StrategyGame.CountryBorderManager.CountryNames);
+                if (form.ShowDialog() == DialogResult.OK)
+                {
+                    var filtered = StrategyGame.CountryBorderManager.FilterUrbanAreasByCountries(missing, form.SelectedCountries).ToList();
+                    if (filtered.Count > 0)
+                        Task.Run(() => GenerateCityDataFor(filtered));
+                }
             }
         }
 
