@@ -70,8 +70,9 @@ namespace StrategyGame
                 .ToList();
 
             result.Parcels = ParcelGenerator.GenerateParcels(result);
-            LandUseAssigner.AssignLandUse(result);
+            LandUseSimulator.Run(result);
             result.Buildings = BuildingGenerator.GenerateBuildings(result);
+            BuildingRefiner.RefineBuildings(result);
 
             Debug.WriteLine($">> Generated {result.Parcels.Count} parcels, {result.Buildings.Count} buildings for {hash}");
 
