@@ -2,59 +2,42 @@ using System;
 
 namespace StrategyGame
 {
-    public class PopulationDensityMap
+    /// <summary>
+    /// Container for global data used when procedurally generating cities.
+    /// </summary>
+    public class CityGenerationData
     {
-        public float[,] Values { get; }
-        public int Width => Values.GetLength(0);
-        public int Height => Values.GetLength(1);
+        public float[,] PopulationDensity { get; }
+        public bool[,] WaterBodies { get; }
+        public float[,] Elevation { get; }
 
-        public PopulationDensityMap(float[,] values)
+        public CityGenerationData(float[,] populationDensity, bool[,] waterBodies, float[,] elevation)
         {
-            Values = values ?? throw new ArgumentNullException(nameof(values));
+            PopulationDensity = populationDensity ?? throw new ArgumentNullException(nameof(populationDensity));
+            WaterBodies = waterBodies ?? throw new ArgumentNullException(nameof(waterBodies));
+            Elevation = elevation ?? throw new ArgumentNullException(nameof(elevation));
         }
 
-        public float GetDensity(double xNorm, double yNorm)
-        {
-            int ix = (int)Math.Clamp(xNorm * (Width - 1), 0, Width - 1);
-            int iy = (int)Math.Clamp(yNorm * (Height - 1), 0, Height - 1);
-            return Values[ix, iy];
-        }
-    }
+        private static int ClampIndex(double value, int size) => (int)Math.Clamp(value * (size - 1), 0, size - 1);
 
-    public class WaterBodyMap
-    {
-        public bool[,] Values { get; }
-        public int Width => Values.GetLength(0);
-        public int Height => Values.GetLength(1);
-
-        public WaterBodyMap(bool[,] values)
+        public float GetPopulationDensity(double xNorm, double yNorm)
         {
-            Values = values ?? throw new ArgumentNullException(nameof(values));
+            int ix = ClampIndex(xNorm, PopulationDensity.GetLength(0));
+            int iy = ClampIndex(yNorm, PopulationDensity.GetLength(1));
+            return PopulationDensity[ix, iy];
         }
 
         public bool IsWater(double xNorm, double yNorm)
         {
-            int ix = (int)Math.Clamp(xNorm * (Width - 1), 0, Width - 1);
-            int iy = (int)Math.Clamp(yNorm * (Height - 1), 0, Height - 1);
-            return Values[ix, iy];
-        }
-    }
-
-    public class TerrainData
-    {
-        public float[,] Elevation { get; }
-        public int Width => Elevation.GetLength(0);
-        public int Height => Elevation.GetLength(1);
-
-        public TerrainData(float[,] elevation)
-        {
-            Elevation = elevation ?? throw new ArgumentNullException(nameof(elevation));
+            int ix = ClampIndex(xNorm, WaterBodies.GetLength(0));
+            int iy = ClampIndex(yNorm, WaterBodies.GetLength(1));
+            return WaterBodies[ix, iy];
         }
 
         public float GetElevation(double xNorm, double yNorm)
         {
-            int ix = (int)Math.Clamp(xNorm * (Width - 1), 0, Width - 1);
-            int iy = (int)Math.Clamp(yNorm * (Height - 1), 0, Height - 1);
+            int ix = ClampIndex(xNorm, Elevation.GetLength(0));
+            int iy = ClampIndex(yNorm, Elevation.GetLength(1));
             return Elevation[ix, iy];
         }
     }

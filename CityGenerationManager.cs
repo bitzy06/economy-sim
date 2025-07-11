@@ -8,21 +8,13 @@ namespace StrategyGame
     public class CityGenerationManager
     {
         private readonly Queue<Nts.Polygon> queue = new();
-        private readonly PopulationDensityMap density;
-        private readonly WaterBodyMap water;
-        private readonly TerrainData terrain;
+        private readonly CityGenerationData data;
         private bool processing;
 
-        public CityGenerationManager(PopulationDensityMap density,
-            WaterBodyMap water,
-            TerrainData terrain)
+        public CityGenerationManager(CityGenerationData data)
         {
-            this.density = density;
-            this.water = water;
-            this.terrain = terrain;
-            RoadNetworkGenerator.DensityMap = density;
-            RoadNetworkGenerator.Water = water;
-            RoadNetworkGenerator.Terrain = terrain;
+            this.data = data;
+            RoadNetworkGenerator.Data = data;
         }
 
         public void QueueArea(Nts.Polygon area)
