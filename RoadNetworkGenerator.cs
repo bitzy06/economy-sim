@@ -20,9 +20,7 @@ namespace StrategyGame
         private static readonly ConcurrentDictionary<string, List<(Nts.LineString Line, RoadType Type)>> networkCache = new();
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
 
-        public static PopulationDensityMap? DensityMap { get; set; }
-        public static TerrainData? Terrain { get; set; }
-        public static WaterBodyMap? Water { get; set; }
+        public static CityGenerationData? Data { get; set; }
 
         private static readonly JsonSerializerOptions jsonOptions = new()
         {
@@ -201,7 +199,7 @@ namespace StrategyGame
                 if (closestIntersection == null)
                 {
                     // Global Goal: Higher density areas have more branches
-                    double density = DensityMap?.GetDensity((endPoint.X + 180) / 360.0, (endPoint.Y + 90) / 180.0) ?? 0.5;
+                    double density = Data?.GetPopulationDensity((endPoint.X + 180) / 360.0, (endPoint.Y + 90) / 180.0) ?? 0.5;
 
                     // Continue straight
                     queue.Enqueue((endPoint, angle));
