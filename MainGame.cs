@@ -83,57 +83,57 @@ namespace economy_sim
         private void LoadGlobalData()
         {
             string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
+
+            float[,] popVals;
             string popPath = Path.Combine(dataDir, "population_density.png");
             if (File.Exists(popPath))
             {
                 using var bmp = new SD.Bitmap(popPath);
-                var values = new float[bmp.Width, bmp.Height];
+                popVals = new float[bmp.Width, bmp.Height];
                 for (int x = 0; x < bmp.Width; x++)
                     for (int y = 0; y < bmp.Height; y++)
-                        values[x, y] = bmp.GetPixel(x, y).R / 255f;
-                populationDensity = new PopulationDensityMap(values);
+                        popVals[x, y] = bmp.GetPixel(x, y).R / 255f;
             }
             else
             {
-                populationDensity = new PopulationDensityMap(new float[1, 1]);
+                popVals = new float[1, 1];
             }
 
+            bool[,] waterVals;
             string waterPath = Path.Combine(dataDir, "water_bodies.png");
             if (File.Exists(waterPath))
             {
                 using var bmp = new SD.Bitmap(waterPath);
-                var vals = new bool[bmp.Width, bmp.Height];
+                waterVals = new bool[bmp.Width, bmp.Height];
                 for (int x = 0; x < bmp.Width; x++)
                     for (int y = 0; y < bmp.Height; y++)
-                        vals[x, y] = bmp.GetPixel(x, y).B > 128;
-                waterMap = new WaterBodyMap(vals);
+                        waterVals[x, y] = bmp.GetPixel(x, y).B > 128;
             }
             else
             {
-                waterMap = new WaterBodyMap(new bool[1, 1]);
+                waterVals = new bool[1, 1];
             }
 
+            float[,] elevVals;
             string elevPath = Path.Combine(dataDir, "terrain.png");
             if (File.Exists(elevPath))
             {
                 using var bmp = new SD.Bitmap(elevPath);
-                var elev = new float[bmp.Width, bmp.Height];
+                elevVals = new float[bmp.Width, bmp.Height];
                 for (int x = 0; x < bmp.Width; x++)
                     for (int y = 0; y < bmp.Height; y++)
-                        elev[x, y] = bmp.GetPixel(x, y).R;
-                terrainData = new TerrainData(elev);
+                        elevVals[x, y] = bmp.GetPixel(x, y).R;
             }
             else
             {
-                terrainData = new TerrainData(new float[1, 1]);
+                elevVals = new float[1, 1];
             }
 
-            cityGenerationManager = new CityGenerationManager(populationDensity, waterMap, terrainData);
+            cityData = new CityGenerationData(popVals, waterVals, elevVals);
+            cityGenerationManager = new CityGenerationManager(cityData);
         }
 
-        private PopulationDensityMap populationDensity;
-        private WaterBodyMap waterMap;
-        private TerrainData terrainData;
+        private CityGenerationData cityData;
         private CityGenerationManager cityGenerationManager;
 
         public MainGame()
