@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
 
@@ -9,6 +10,7 @@ namespace StrategyGame
     public static class CountryBorderManager
     {
         private static readonly Dictionary<string, Geometry> countryPolygons = new();
+        private static readonly List<string> countryNames = new();
 
         private static readonly string RepoRoot =
             Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
@@ -24,41 +26,63 @@ namespace StrategyGame
             get
             {
                 EnsureLoaded();
-                return countryPolygons.Keys;
+                return countryNames;
             }
         }
 
         public static void EnsureLoaded()
         {
-            if (countryPolygons.Count > 0)
+            if (countryNames.Count > 0 || countryPolygons.Count > 0)
                 return;
 
             string shp = GetDataFile("ne_10m_admin_0_countries.shp");
-            if (!File.Exists(shp))
-                return;
-
-            var reader = new ShapefileDataReader(shp, GeometryFactory.Default);
-            int nameIndex = -1;
-            var fields = reader.DbaseHeader.Fields;
-            for (int i = 0; i < fields.Length; i++)
+            if (File.Exists(shp))
             {
-                var fname = fields[i].Name;
-                if (string.Equals(fname, "ADMIN", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(fname, "NAME", StringComparison.OrdinalIgnoreCase))
+                var reader = new ShapefileDataReader(shp, GeometryFactory.Default);
+                int nameIndex = -1;
+                var fields = reader.DbaseHeader.Fields;
+                for (int i = 0; i < fields.Length; i++)
                 {
-                    nameIndex = i;
-                    break;
+                    var fname = fields[i].Name;
+                    if (string.Equals(fname, "ADMIN", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(fname, "NAME", StringComparison.OrdinalIgnoreCase))
+                    {
+                        nameIndex = i;
+                        break;
+                    }
                 }
-            }
-            if (nameIndex == -1)
-                nameIndex = 0;
+                if (nameIndex == -1)
+                    nameIndex = 0;
 
-            while (reader.Read())
+                while (reader.Read())
+                {
+                    string name = reader.GetString(nameIndex);
+                    Geometry geom = reader.Geometry;
+                    if (geom != null && !countryPolygons.ContainsKey(name))
+                    {
+                        countryPolygons[name] = geom;
+                        countryNames.Add(name);
+                    }
+                }
+                return;
+            }
+
+            // Fallback: if shapefile missing, try world_setup.json for names
+            string setupPath = Path.Combine(RepoRoot, "world_setup.json");
+            if (File.Exists(setupPath))
             {
-                string name = reader.GetString(nameIndex);
-                Geometry geom = reader.Geometry;
-                if (geom != null && !countryPolygons.ContainsKey(name))
-                    countryPolygons[name] = geom;
+                try
+                {
+                    using var doc = JsonDocument.Parse(File.ReadAllText(setupPath));
+                    foreach (var c in doc.RootElement.GetProperty("Countries").EnumerateArray())
+                    {
+                        if (c.TryGetProperty("Name", out var n))
+                        {
+                            countryNames.Add(n.GetString());
+                        }
+                    }
+                }
+                catch { }
             }
         }
 
@@ -66,6 +90,12 @@ namespace StrategyGame
         {
             EnsureLoaded();
             var set = new HashSet<string>(countries);
+            if (countryPolygons.Count == 0)
+            {
+                foreach (var a in areas)
+                    yield return a;
+                yield break;
+            }
             foreach (var area in areas)
             {
                 var centroid = area.Centroid;
