@@ -78,6 +78,8 @@ namespace economy_sim
         private int lastCityModelCount = 0;
         private DateTime lastCityModelUpdate = DateTime.Now;
 
+        //threading
+        private CancellationTokenSource simCts; // Add this line
         private void LoadGlobalData()
         {
             string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
@@ -202,9 +204,8 @@ namespace economy_sim
             pictureBox1.Dock = DockStyle.Fill;
             pictureBox1.SizeMode = PictureBoxSizeMode.Normal;
             timerSim.Tick += TimerSim_Tick; // legacy timer unused
-            //timerSim.Start();
-            var simCts = new CancellationTokenSource();
-            _ = RunGameSimulationLoop(simCts.Token);
+                                            //timerSim.Start();
+
 
             int buttonsTargetX = 30;
             int buttonsTargetY = 411;
@@ -239,9 +240,16 @@ namespace economy_sim
             this.Shown += (s, e) =>
             {
                 RefreshMap();
+                MainGame_Shown(s, e); // Call your new handler
             };
         }
-
+        private void MainGame_Shown(object sender, EventArgs e)
+        {
+            // Start the simulation loop on a background thread
+            // now that the form is fully loaded and displayed.
+            simCts = new CancellationTokenSource();
+            Task.Run(() => RunGameSimulationLoop(simCts.Token), simCts.Token);
+        }
         private void RefreshMap()
         {
             if (panelMap.ClientSize.Width == 0 || panelMap.ClientSize.Height == 0)
@@ -1325,8 +1333,70 @@ namespace economy_sim
         {
             while (!token.IsCancellationRequested)
             {
-                TimerSim_Tick(this, EventArgs.Empty);
-                await Task.Delay(1000, token);
+                var swSim = Stopwatch.StartNew();
+                simTurn++;
+
+                // All simulation logic should happen here, off the UI thread.
+                // --- Corporation AI Update Phase ---
+                if (Market.AllCorporations != null && allCitiesInWorld != null && FactoryBlueprints.AllBlueprints.Any())
+                {
+                    List<Good> goodPrototypes = Market.GoodDefinitions.Values.ToList();
+                    foreach (var corp in Market.AllCorporations)
+                    {
+                        if (!corp.IsPlayerControlled)
+                        {
+                            corp.UpdateAI(this.allCitiesInWorld, goodPrototypes, random);
+                        }
+                    }
+                }
+
+                // --- City Economies Update Phase ---
+                // ... (and all other simulation logic from TimerSim_Tick) ...
+
+                // --- UI Update Phase ---
+                // Marshal all UI updates to the UI thread.
+                this.Invoke((Action)(() =>
+                {
+                    labelSimTime.Text = $"Turn: {simTurn}";
+                    UpdateOrderLists();
+                    UpdateCityAndFactoryStats();
+                    UpdateMarketStats();
+                    UpdateStateStats();
+                    UpdateCountryStats();
+
+                    var cityCurrentlySelectedForUI = GetSelectedCity();
+                    if (cityCurrentlySelectedForUI != null)
+                    {
+                        if (popStatsForm != null && popStatsForm.Visible)
+                        {
+                            popStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                        }
+                        if (factoryStatsForm != null && factoryStatsForm.Visible)
+                        {
+                            factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI);
+                        }
+                    }
+                    if (tabControlMain.SelectedTab == tabPageFinance)
+                    {
+                        UpdateFinanceTab();
+                    }
+                    if (tabControlMain.SelectedTab == tabPageGovernment)
+                    {
+                        UpdateGovernmentTab();
+                    }
+                }));
+
+                firstTick = false;
+                PerformanceTracker.Record("GameSimulation", swSim.Elapsed);
+
+                try
+                {
+                    await Task.Delay(1000, token); // The delay between ticks.
+                }
+                catch (TaskCanceledException)
+                {
+                    break; // Exit the loop if the task is canceled.
+                }
             }
         }
 
