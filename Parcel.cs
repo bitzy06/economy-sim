@@ -8,5 +8,6 @@ namespace StrategyGame
     {
         public Nts.Polygon Shape { get; set; }
         public LandUseType LandUse { get; set; }
+        public double LandValue { get; set; }
     }
 }
