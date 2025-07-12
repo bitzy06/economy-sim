@@ -56,6 +56,11 @@ namespace StrategyGame
     {
         public static List<Parcel> GenerateParcels(CityDataModel model)
         {
+            if (model.RawBlocks != null && model.RawBlocks.Count > 0)
+            {
+                return GenerateParcelsFromBlocks(model.RawBlocks);
+            }
+
             var parcels = new List<Parcel>();
             if (model.RoadNetwork == null || !model.RoadNetwork.Any())
                 return parcels;
@@ -78,15 +83,26 @@ namespace StrategyGame
             var rawPolys = polygonizer.GetPolygons();
             Debug.WriteLine($"[ParcelGenerator] Polygonizer produced {rawPolys.Count} raw polygons");
 
-            foreach (var geom in rawPolys)
-            {
-                if (geom is Nts.Polygon poly && poly.IsValid && poly.Area > 1e-9)
-                {
-                    SubdividePolygon(poly, parcels);
-                }
-            }
+            var blocks = rawPolys.OfType<Nts.Polygon>()
+                .Where(p => p.IsValid && p.Area > 1e-9)
+                .ToList();
+
+            model.RawBlocks = blocks;
+
+            parcels = GenerateParcelsFromBlocks(blocks);
 
             Debug.WriteLine($"[ParcelGenerator] Final parcel count: {parcels.Count}");
+            return parcels;
+        }
+
+        public static List<Parcel> GenerateParcelsFromBlocks(List<Nts.Polygon> blocks)
+        {
+            var parcels = new List<Parcel>();
+            foreach (var block in blocks)
+            {
+                if (block.IsValid && !block.IsEmpty && block.Area > 1e-9)
+                    SubdividePolygon(block, parcels);
+            }
             return parcels;
         }
 
