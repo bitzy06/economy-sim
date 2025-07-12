@@ -69,7 +69,8 @@ namespace StrategyGame
                     new LineSegment(s.X, s.Y, e.X, e.Y, tuple.Type)))
                 .ToList();
 
-            result.Parcels = ParcelGenerator.GenerateParcels(result);
+            result.RawBlocks = PolygonizeRoadNetwork(result.RoadNetwork);
+            result.Parcels = ParcelGenerator.GenerateParcelsFromBlocks(result.RawBlocks);
             LandUseSimulator.Run(result);
             result.Buildings = BuildingGenerator.GenerateBuildings(result);
             BuildingRefiner.RefineBuildings(result);
@@ -229,6 +230,28 @@ namespace StrategyGame
             return tree;
         }
 
+        private static List<Nts.Polygon> PolygonizeRoadNetwork(List<LineSegment> roads)
+        {
+            var gf = Nts.GeometryFactory.Default;
+            var lineStrings = roads.Select(seg =>
+                gf.CreateLineString(new[]
+                {
+                    new Nts.Coordinate(seg.X1, seg.Y1),
+                    new Nts.Coordinate(seg.X2, seg.Y2)
+                })).ToArray();
+
+            if (lineStrings.Length == 0)
+                return new List<Nts.Polygon>();
+
+            var nodedLines = UnaryUnionOp.Union(lineStrings);
+            var polygonizer = new Polygonizer();
+            polygonizer.Add(nodedLines);
+            var rawPolys = polygonizer.GetPolygons();
+            return rawPolys.OfType<Nts.Polygon>()
+                .Where(p => p.IsValid && p.Area > 1e-9)
+                .ToList();
+        }
+
         private static string ComputeHash(Nts.Polygon area)
         {
             var e = area.EnvelopeInternal;
@@ -362,6 +385,25 @@ namespace StrategyGame
             }
             
             return (inMemoryCount, diskCount, totalUnique);
+        }
+
+        public static CityDataModel? LoadCityDataModel(Guid id)
+        {
+            string cacheDir = GetCacheDir();
+            string modelPath = Path.Combine(cacheDir, $"{id}.json");
+            if (!File.Exists(modelPath))
+                return null;
+
+            try
+            {
+                string json = File.ReadAllText(modelPath);
+                return JsonSerializer.Deserialize<CityDataModel>(json, jsonOptions);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Error] Failed to load CityDataModel {id}: {ex.Message}");
+                return null;
+            }
         }
     }
 }

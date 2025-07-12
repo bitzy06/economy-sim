@@ -32,7 +32,7 @@ namespace StrategyGame
             }
         }
 
-        public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
+        public static Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
         {
             var swTotal = Stopwatch.StartNew();
             try
@@ -86,7 +86,14 @@ namespace StrategyGame
                     PerformanceTracker.Record("CityRenderer-SpatialCheck-Passed", swSpatialCheck.Elapsed);
 
                     var swModel = Stopwatch.StartNew();
-                    var model = await RoadNetworkGenerator.GenerateModelAsync(urban, cellSize).ConfigureAwait(false);
+                    var modelId = RoadNetworkGenerator.GetCityDataModelId(urban);
+                    if (!modelId.HasValue)
+                    {
+                        PerformanceTracker.Record("CityRenderer-ModelGeneration-Failed", swModel.Elapsed);
+                        continue;
+                    }
+
+                    var model = RoadNetworkGenerator.LoadCityDataModel(modelId.Value);
                     if (model == null)
                     {
                         PerformanceTracker.Record("CityRenderer-ModelGeneration-Failed", swModel.Elapsed);
@@ -168,7 +175,7 @@ namespace StrategyGame
                 PerformanceTracker.Record("CityRenderer-Finalization", swFinalize.Elapsed);
                 PerformanceTracker.Record("CityRenderer-Total", swTotal.Elapsed);
 
-                return img;
+                return Task.FromResult(img);
             }
             catch (ArgumentException ex)
             {
