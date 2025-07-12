@@ -1,6 +1,7 @@
 ﻿using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Prepared;
 using NetTopologySuite.Operation.Union;
+using NetTopologySuite.Operation.Polygonize;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
