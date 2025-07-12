@@ -1336,25 +1336,44 @@ namespace economy_sim
                 var swSim = Stopwatch.StartNew();
                 simTurn++;
 
-                // All simulation logic should happen here, off the UI thread.
-                // --- Corporation AI Update Phase ---
-                if (Market.AllCorporations != null && allCitiesInWorld != null && FactoryBlueprints.AllBlueprints.Any())
+                int citiesPerTick = 20;
+                int startIndex = ((simTurn - 1) * citiesPerTick) % (allCitiesInWorld?.Count ?? 1);
+                var citiesToUpdate = allCitiesInWorld?.Skip(startIndex).Take(citiesPerTick).ToList() ?? new List<StrategyGame.City>();
+                if (citiesToUpdate.Count == 0 && allCitiesInWorld != null)
+                    citiesToUpdate = allCitiesInWorld.Take(citiesPerTick).ToList();
+
+                await Task.Run(() =>
                 {
-                    List<Good> goodPrototypes = Market.GoodDefinitions.Values.ToList();
-                    foreach (var corp in Market.AllCorporations)
+                    if (Market.AllCorporations != null && allCitiesInWorld != null && FactoryBlueprints.AllBlueprints.Any())
                     {
-                        if (!corp.IsPlayerControlled)
+                        List<Good> goodPrototypes = Market.GoodDefinitions.Values.ToList();
+                        foreach (var corp in Market.AllCorporations)
                         {
-                            corp.UpdateAI(this.allCitiesInWorld, goodPrototypes, random);
+                            if (!corp.IsPlayerControlled)
+                                corp.UpdateAI(allCitiesInWorld, goodPrototypes, random);
                         }
                     }
-                }
 
-                // --- City Economies Update Phase ---
-                // ... (and all other simulation logic from TimerSim_Tick) ...
+                    foreach (var city in citiesToUpdate)
+                    {
+                        Market.ResetCitySupplyDemand(city);
+                        foreach (var factory in city.Factories)
+                            factory.Produce(city.Stockpile, city);
+                        StrategyGame.Economy.UpdateCityEconomy(city);
+                        city.ProgressConstruction();
+                        Market.UpdateCityPrices(city);
+                    }
 
-                // --- UI Update Phase ---
-                // Marshal all UI updates to the UI thread.
+                    if (allCitiesInWorld != null && allCitiesInWorld.Count > 1)
+                        Market.ResolveInterCityTrade(allCitiesInWorld, 0.1);
+
+                    tradeRouteManager?.UpdateAllRoutes();
+                    enhancedTradeManager?.ProcessTurnEnd();
+
+                    if (globalMarket != null && allCountries != null && allCitiesInWorld != null)
+                        globalMarket.UpdateGlobalMarket(allCitiesInWorld, allCountries, tradeRouteManager, enhancedTradeManager);
+                }, token);
+
                 this.Invoke((Action)(() =>
                 {
                     labelSimTime.Text = $"Turn: {simTurn}";
@@ -1368,22 +1387,14 @@ namespace economy_sim
                     if (cityCurrentlySelectedForUI != null)
                     {
                         if (popStatsForm != null && popStatsForm.Visible)
-                        {
                             popStatsForm.UpdateStats(cityCurrentlySelectedForUI);
-                        }
                         if (factoryStatsForm != null && factoryStatsForm.Visible)
-                        {
                             factoryStatsForm.UpdateStats(cityCurrentlySelectedForUI);
-                        }
                     }
                     if (tabControlMain.SelectedTab == tabPageFinance)
-                    {
                         UpdateFinanceTab();
-                    }
                     if (tabControlMain.SelectedTab == tabPageGovernment)
-                    {
                         UpdateGovernmentTab();
-                    }
                 }));
 
                 firstTick = false;
@@ -1391,11 +1402,11 @@ namespace economy_sim
 
                 try
                 {
-                    await Task.Delay(1000, token); // The delay between ticks.
+                    await Task.Delay(100, token);
                 }
                 catch (TaskCanceledException)
                 {
-                    break; // Exit the loop if the task is canceled.
+                    break;
                 }
             }
         }

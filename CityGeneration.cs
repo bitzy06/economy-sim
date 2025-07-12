@@ -82,10 +82,7 @@ namespace StrategyGame
             {
                 if (geom is Nts.Polygon poly && poly.IsValid && poly.Area > 1e-9)
                 {
-                    if (poly.Area > 0.0001)
-                        RecursiveOBBSplitting(poly, parcels, 0);
-                    else
-                        parcels.Add(new Parcel { Shape = poly });
+                    SubdividePolygon(poly, parcels);
                 }
             }
 
@@ -93,55 +90,47 @@ namespace StrategyGame
             return parcels;
         }
 
-        private static void RecursiveOBBSplitting(Nts.Polygon poly, List<Parcel> output, int depth)
+        private static void SubdividePolygon(Nts.Polygon poly, List<Parcel> output)
         {
-            const double MinArea = 0.00005;
-            const int MaxDepth = 4;
-
-            if (poly.Area < MinArea || depth > MaxDepth)
+            const double DesiredParcelArea = 0.0001;
+            if (poly.Area < DesiredParcelArea * 1.5)
             {
-                if (poly.IsValid && poly.Area > 1e-9)
-                    output.Add(new Parcel { Shape = poly });
+                output.Add(new Parcel { Shape = poly });
                 return;
             }
 
-            var env = poly.EnvelopeInternal;
-            bool splitVertical = env.Width > env.Height;
+            var envelope = poly.EnvelopeInternal;
+            int xSplits = (int)Math.Max(1, Math.Round(envelope.Width / Math.Sqrt(DesiredParcelArea)));
+            int ySplits = (int)Math.Max(1, Math.Round(envelope.Height / Math.Sqrt(DesiredParcelArea)));
+
+            double dx = envelope.Width / xSplits;
+            double dy = envelope.Height / ySplits;
+
             var gf = Nts.GeometryFactory.Default;
-
-            try
+            for (int i = 0; i < xSplits; i++)
             {
-                Nts.Geometry splitLine;
-                if (splitVertical)
+                for (int j = 0; j < ySplits; j++)
                 {
-                    double midX = env.MinX + env.Width / 2;
-                    splitLine = gf.CreateLineString(new[] { new Nts.Coordinate(midX, env.MinY), new Nts.Coordinate(midX, env.MaxY) });
-                }
-                else
-                {
-                    double midY = env.MinY + env.Height / 2;
-                    splitLine = gf.CreateLineString(new[] { new Nts.Coordinate(env.MinX, midY), new Nts.Coordinate(env.MaxX, midY) });
-                }
+                    var subEnvelope = new Nts.Envelope(
+                        envelope.MinX + i * dx,
+                        envelope.MinX + (i + 1) * dx,
+                        envelope.MinY + j * dy,
+                        envelope.MinY + (j + 1) * dy);
 
-                var splitPolygons = poly.Difference(splitLine);
-                if (splitPolygons is Nts.MultiPolygon multiPoly)
-                {
-                    foreach (var geom in multiPoly.Geometries)
+                    try
                     {
-                        if (geom is Nts.Polygon splitPoly && splitPoly.IsValid)
-                            RecursiveOBBSplitting(splitPoly, output, depth + 1);
+                        var envPoly = gf.ToGeometry(subEnvelope);
+                        var parcelGeom = poly.Intersection(envPoly);
+                        if (parcelGeom is Nts.Polygon p && !p.IsEmpty)
+                        {
+                            output.Add(new Parcel { Shape = p });
+                        }
+                    }
+                    catch
+                    {
+                        // Intersection can fail, just skip this sub-parcel
                     }
                 }
-                else
-                {
-                    if (poly.IsValid && poly.Area > 1e-9)
-                        output.Add(new Parcel { Shape = poly });
-                }
-            }
-            catch
-            {
-                if (poly.IsValid && poly.Area > 1e-9)
-                    output.Add(new Parcel { Shape = poly });
             }
         }
     }
