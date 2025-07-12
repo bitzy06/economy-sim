@@ -967,9 +967,9 @@ new List<CountryTemplate>
                     {
                         Name = stateName,
                         TaxRate = Math.Round(RandomBetween(rnd, 0.04, Math.Max(countryData.TaxRate - 0.01, 0.04)), 2),
-                        StateExpenses = rnd.Next(50000, numStatesPerCountry > 0 ? countryData.NationalExpenses / (numStatesPerCountry + 2) : 50001),
+                        StateExpenses = rnd.Next(50000, numStatesPerCountry > 0 ? (int)(countryData.NationalExpenses / (numStatesPerCountry + 2)) : 50001),
                         InitialPopulation = 0,
-                        InitialBudget = rnd.Next(500000, numStatesPerCountry > 0 ? countryData.InitialBudget / (numStatesPerCountry + 2) : 500001),
+                        InitialBudget = rnd.Next(500000, numStatesPerCountry > 0 ? (int)(countryData.InitialBudget / (numStatesPerCountry + 2)) : 500001),
                         Cities = new List<CityData>()
                     };
 
@@ -1005,9 +1005,9 @@ new List<CountryTemplate>
                         {
                             Name = cityName,
                             InitialPopulation = cityPop,
-                            InitialBudget = rnd.Next(50000, numCitiesToGenerate > 0 ? stateData.InitialBudget / (numCitiesToGenerate + 1) : 50001),
+                            InitialBudget = rnd.Next(50000, numCitiesToGenerate > 0 ? (int)(stateData.InitialBudget / (numCitiesToGenerate + 1)) : 50001),
                             TaxRate = Math.Round(RandomBetween(rnd, 0.02, Math.Max(stateData.TaxRate - 0.01, 0.02)), 2),
-                            CityExpenses = rnd.Next(10000, Math.Max(stateData.StateExpenses / (numCitiesToGenerate + 1), 10000) + 1),
+                            CityExpenses = rnd.Next(10000, (int)Math.Max(stateData.StateExpenses / (numCitiesToGenerate + 1), 10000) + 1),
                             InitialFactories = new List<InitialFactoryData>()
                         };
 
