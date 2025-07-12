@@ -1,5 +1,6 @@
 using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.IO;
+using NetTopologySuite.Index.Strtree;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -11,6 +12,7 @@ namespace StrategyGame
     public static class UrbanAreaManager
     {
         public static List<Nts.Polygon> UrbanPolygons { get; private set; } = new();
+        private static STRtree<Nts.Polygon>? spatialIndex;
 
         private static readonly string RepoRoot =
             Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
@@ -45,6 +47,12 @@ namespace StrategyGame
                     UrbanPolygons.Add(p);
                 }
             }
+
+            spatialIndex = new STRtree<Nts.Polygon>();
+            foreach (var poly in UrbanPolygons)
+            {
+                spatialIndex.Insert(poly.EnvelopeInternal, poly);
+            }
         }
 
         public static void PrecomputeAllRoadNetworks()
@@ -59,6 +67,15 @@ namespace StrategyGame
 
             sw.Stop();
             Debug.WriteLine($"Finished pre-computing all road networks in {sw.Elapsed.TotalSeconds:F2} seconds.");
+        }
+
+        public static List<Nts.Polygon> Query(GeoBounds bounds)
+        {
+            if (spatialIndex == null)
+                return UrbanPolygons;
+
+            var env = new Nts.Envelope(bounds.MinLon, bounds.MaxLon, bounds.MinLat, bounds.MaxLat);
+            return spatialIndex.Query(env).Cast<Nts.Polygon>().ToList();
         }
 
         private static string GetDataFile(string name)
