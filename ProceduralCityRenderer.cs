@@ -73,7 +73,8 @@ namespace StrategyGame
                 int totalBuildings = 0;
 
                 var swUrbanProcessing = Stopwatch.StartNew();
-                foreach (var urban in UrbanAreaManager.UrbanPolygons)
+                var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
+                foreach (var urban in relevantUrbanAreas)
                 {
                     var swSpatialCheck = Stopwatch.StartNew();
                     if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
