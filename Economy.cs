@@ -202,6 +202,7 @@ namespace StrategyGame
         public List<Good> InputGoods { get; set; }
         public List<Good> OutputGoods { get; set; }
         public int ProductionCapacity { get; set; }
+        public Building BuildingData { get; set; }
         public int WorkersEmployed { get; set; } // This might become a sum of employed from JobSlots or represent total workforce
         public Dictionary<string, int> JobSlots { get; set; }
         public Dictionary<string, int> ActualEmployed { get; set; } // Tracks actual number employed in each slot type
@@ -220,38 +221,45 @@ namespace StrategyGame
         // Simulate production: consume inputs, produce outputs
         public void Produce(Dictionary<string, Good> cityStockpile, City city)
         {
-            if (this.OwnerCorporation == null) 
+            if (OwnerCorporation == null)
             {
-                return; 
+                return;
             }
+
+            if (BuildingData == null)
+            {
+                return; // factory not linked to physical building
+            }
+
+            int currentProductionCapacity = BuildingData.Level;
 
             double totalInputCost = 0;
             bool allInputsAvailableInStockpile = true;
             foreach (var input in InputGoods)
             {
-                if (!cityStockpile.ContainsKey(input.Name) || cityStockpile[input.Name].Quantity < input.Quantity * ProductionCapacity)
+                if (!cityStockpile.ContainsKey(input.Name) || cityStockpile[input.Name].Quantity < input.Quantity * currentProductionCapacity)
                 {
                     allInputsAvailableInStockpile = false;
                     break;
                 }
                 // Use city.LocalPrices for input cost calculation
-                totalInputCost += (input.Quantity * ProductionCapacity) * (city.LocalPrices.ContainsKey(input.Name) ? city.LocalPrices[input.Name] : input.BasePrice); 
+                totalInputCost += (input.Quantity * currentProductionCapacity) * (city.LocalPrices.ContainsKey(input.Name) ? city.LocalPrices[input.Name] : input.BasePrice);
             }
 
             if (!allInputsAvailableInStockpile) return;
             if (this.OwnerCorporation.Budget < totalInputCost) return; 
 
-            this.OwnerCorporation.Budget -= totalInputCost;
+            OwnerCorporation.Budget -= totalInputCost;
             city.Budget += totalInputCost;
 
             foreach (var input in InputGoods)
             {
-                cityStockpile[input.Name].Quantity -= input.Quantity * ProductionCapacity;
+                cityStockpile[input.Name].Quantity -= input.Quantity * currentProductionCapacity;
                 // Update city.LocalDemand
                 if (city.LocalDemand.ContainsKey(input.Name))
-                    city.LocalDemand[input.Name] += input.Quantity * ProductionCapacity;
+                    city.LocalDemand[input.Name] += input.Quantity * currentProductionCapacity;
                 else
-                    city.LocalDemand[input.Name] = input.Quantity * ProductionCapacity;
+                    city.LocalDemand[input.Name] = input.Quantity * currentProductionCapacity;
             }
 
             double totalOutputValue = 0;
@@ -260,19 +268,19 @@ namespace StrategyGame
                 if (!cityStockpile.ContainsKey(output.Name))
                     cityStockpile[output.Name] = new Good(output.Name, output.BasePrice, output.Category); 
                 
-                cityStockpile[output.Name].Quantity += output.Quantity * ProductionCapacity;
+                cityStockpile[output.Name].Quantity += output.Quantity * currentProductionCapacity;
                 // Use city.LocalPrices for output value calculation
                 double currentMarketPrice = city.LocalPrices.ContainsKey(output.Name) ? city.LocalPrices[output.Name] : output.BasePrice;
-                totalOutputValue += (output.Quantity * ProductionCapacity) * currentMarketPrice;
+                totalOutputValue += (output.Quantity * currentProductionCapacity) * currentMarketPrice;
                 
                 // Update city.LocalSupply
                 if (city.LocalSupply.ContainsKey(output.Name))
-                    city.LocalSupply[output.Name] += output.Quantity * ProductionCapacity;
+                    city.LocalSupply[output.Name] += output.Quantity * currentProductionCapacity;
                 else
-                    city.LocalSupply[output.Name] = output.Quantity * ProductionCapacity;
+                    city.LocalSupply[output.Name] = output.Quantity * currentProductionCapacity;
             }
 
-            this.OwnerCorporation.Budget += totalOutputValue;
+            OwnerCorporation.Budget += totalOutputValue;
             city.Budget -= totalOutputValue;
         }
     }

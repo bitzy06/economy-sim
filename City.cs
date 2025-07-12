@@ -32,12 +32,14 @@ namespace StrategyGame
         public List<SellOrder> SellOrders { get; set; }
         public List<Suburb> Suburbs { get; private set; } // Added Suburbs property
         public List<ConstructionProject> ActiveProjects { get; private set; } // Added to track active construction projects
+        public CityDataModel ProceduralData { get; set; } // Link to procedural representation
 
         public City(string name)
         {
             Name = name;
             Budget = 10000; // Example starting budget
             Population = 100000; // Example starting population
+            ProceduralData = new CityDataModel();
             Factories = new List<Factory>();
             Stockpile = new Dictionary<string, Good>();
             Happiness = 50; // Out of 100
@@ -122,20 +124,35 @@ namespace StrategyGame
 
         public void SimulateGrowth()
         {
+            int maxPopulation = int.MaxValue;
+            if (ProceduralData != null)
+            {
+                maxPopulation = ProceduralData.Buildings
+                    .Where(b => b.LandUse == LandUseType.Residential)
+                    .Sum(b => b.PopulationCapacity);
+            }
+
+            int currentPopulation = PopClasses.Sum(p => p.Size);
+
+            if (currentPopulation >= maxPopulation)
+            {
+                return; // No housing capacity available
+            }
+
             double surplus = Budget - CityExpenses;
             if (surplus > 0)
             {
-                int growth = (int)(surplus / 1000); // Example: population grows with surplus
-                Population += growth;
+                int growth = (int)(surplus / 1000);
+                int allowedGrowth = Math.Min(growth, maxPopulation - currentPopulation);
+                Population += allowedGrowth;
 
-                // Distribute growth among PopClasses proportionally
                 foreach (var pop in PopClasses)
                 {
-                    int popGrowth = (int)(growth * ((double)pop.Size / Population));
+                    int popGrowth = (int)(allowedGrowth * ((double)pop.Size / currentPopulation));
                     pop.Size += popGrowth;
                 }
 
-                Budget += surplus * 0.05; // Example: reinvest surplus
+                Budget += surplus * 0.05;
             }
         }
 
