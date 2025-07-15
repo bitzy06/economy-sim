@@ -8,10 +8,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using NetTopologySuite.IO;
-using NetTopologySuite.IO.Converters;
 using NetTopologySuite.Index.Quadtree;
 
 namespace StrategyGame
@@ -23,12 +21,6 @@ namespace StrategyGame
 
         public static CityGenerationData? Data { get; set; }
 
-        private static readonly JsonSerializerOptions jsonOptions = new()
-        {
-            IncludeFields = true,
-            WriteIndented = true,
-            Converters = { new GeoJsonConverterFactory() }
-        };
 
         public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea, int cellSize)
         {
@@ -44,11 +36,10 @@ namespace StrategyGame
                 try
                 {
                     string id = await File.ReadAllTextAsync(hashPath).ConfigureAwait(false);
-                    string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                    string modelPath = Path.Combine(cacheDir, $"{id}.bin");
                     if (File.Exists(modelPath))
                     {
-                        string jsonIn = await File.ReadAllTextAsync(modelPath).ConfigureAwait(false);
-                        var loaded = JsonSerializer.Deserialize<CityDataModel>(jsonIn, jsonOptions);
+                        var loaded = ReadCityDataModelBinary(modelPath);
                         if (loaded != null)
                         {
                             modelCache[hash] = loaded;
@@ -76,13 +67,19 @@ namespace StrategyGame
             result.Buildings = BuildingGenerator.GenerateBuildings(result);
             BuildingRefiner.RefineBuildings(result);
 
+            // Clean geometries to avoid serialization errors
+            result.Parcels = CleanParcels(result.Parcels);
+            result.Buildings = CleanBuildings(result.Buildings);
+
             Debug.WriteLine($">> Generated {result.Parcels.Count} parcels, {result.Buildings.Count} buildings for {hash}");
 
             try
             {
-                string modelPath = Path.Combine(cacheDir, $"{result.Id}.json");
-                string jsonOut = JsonSerializer.Serialize(result, jsonOptions);
-                await File.WriteAllTextAsync(modelPath, jsonOut).ConfigureAwait(false);
+                string modelPath = Path.Combine(cacheDir, $"{result.Id}.bin");
+                using (var fs = File.Create(modelPath))
+                {
+                    WriteCityDataModelBinary(result, fs);
+                }
                 await File.WriteAllTextAsync(hashPath, result.Id.ToString()).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -285,11 +282,165 @@ namespace StrategyGame
             return $"{e.MinX:F2}_{e.MinY:F2}_{e.MaxX:F2}_{e.MaxY:F2}";
         }
 
+        private static List<Parcel> CleanParcels(List<Parcel> parcels)
+        {
+            var cleanedList = new ConcurrentBag<Parcel>();
+            Parallel.ForEach(parcels, p =>
+            {
+                var cleanShape = p.Shape.Buffer(0);
+                if (cleanShape is Nts.Polygon poly && poly.IsValid && !poly.IsEmpty)
+                {
+                    p.Shape = poly;
+                    cleanedList.Add(p);
+                }
+            });
+            return cleanedList.ToList();
+        }
+
+        private static List<Building> CleanBuildings(List<Building> buildings)
+        {
+            var cleanedList = new ConcurrentBag<Building>();
+            Parallel.ForEach(buildings, b =>
+            {
+                var cleanFootprint = b.Footprint.Buffer(0);
+                if (cleanFootprint is Nts.Polygon poly && poly.IsValid && !poly.IsEmpty)
+                {
+                    b.Footprint = poly;
+                    cleanedList.Add(b);
+                }
+            });
+            return cleanedList.ToList();
+        }
+
         private static string GetCacheDir()
         {
             var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
             Directory.CreateDirectory(dir);
             return dir;
+        }
+
+        private static void WriteCityDataModelBinary(CityDataModel model, Stream stream)
+        {
+            using var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+            var wkbWriter = new WKBWriter();
+
+            writer.Write(model.Id.ToByteArray());
+
+            writer.Write(model.RoadNetwork.Count);
+            foreach (var seg in model.RoadNetwork)
+            {
+                writer.Write(seg.X1);
+                writer.Write(seg.Y1);
+                writer.Write(seg.X2);
+                writer.Write(seg.Y2);
+                writer.Write((int)seg.Type);
+            }
+
+            writer.Write(model.RawBlocks.Count);
+            foreach (var poly in model.RawBlocks)
+            {
+                var bytes = wkbWriter.Write(poly);
+                writer.Write(bytes.Length);
+                writer.Write(bytes);
+            }
+
+            writer.Write(model.Parcels.Count);
+            foreach (var parcel in model.Parcels)
+            {
+                var bytes = wkbWriter.Write(parcel.Shape);
+                writer.Write(bytes.Length);
+                writer.Write(bytes);
+                writer.Write((int)parcel.LandUse);
+                writer.Write(parcel.LandValue);
+            }
+
+            writer.Write(model.Buildings.Count);
+            foreach (var b in model.Buildings)
+            {
+                var bytes = wkbWriter.Write(b.Footprint);
+                writer.Write(bytes.Length);
+                writer.Write(bytes);
+                writer.Write((int)b.LandUse);
+                writer.Write(b.Level);
+                writer.Write(b.PopulationCapacity);
+                writer.Write(b.EconomicOutput);
+                writer.Write(b.PollutionOutput);
+            }
+        }
+
+        private static CityDataModel? ReadCityDataModelBinary(string path)
+        {
+            using var fs = File.OpenRead(path);
+            using var reader = new BinaryReader(fs, System.Text.Encoding.UTF8, leaveOpen: false);
+            var wkbReader = new WKBReader();
+
+            var model = new CityDataModel();
+            model.Id = new Guid(reader.ReadBytes(16));
+
+            int roadCount = reader.ReadInt32();
+            var roads = new List<LineSegment>(roadCount);
+            for (int i = 0; i < roadCount; i++)
+            {
+                double x1 = reader.ReadDouble();
+                double y1 = reader.ReadDouble();
+                double x2 = reader.ReadDouble();
+                double y2 = reader.ReadDouble();
+                var type = (RoadType)reader.ReadInt32();
+                roads.Add(new LineSegment(x1, y1, x2, y2, type));
+            }
+            model.RoadNetwork = roads;
+
+            int blockCount = reader.ReadInt32();
+            var blocks = new List<Nts.Polygon>(blockCount);
+            for (int i = 0; i < blockCount; i++)
+            {
+                int len = reader.ReadInt32();
+                var bytes = reader.ReadBytes(len);
+                if (wkbReader.Read(bytes) is Nts.Polygon p)
+                    blocks.Add(p);
+            }
+            model.RawBlocks = blocks;
+
+            int parcelCount = reader.ReadInt32();
+            var parcels = new List<Parcel>(parcelCount);
+            for (int i = 0; i < parcelCount; i++)
+            {
+                int len = reader.ReadInt32();
+                var bytes = reader.ReadBytes(len);
+                var shape = wkbReader.Read(bytes) as Nts.Polygon;
+                var use = (LandUseType)reader.ReadInt32();
+                double value = reader.ReadDouble();
+                if (shape != null)
+                    parcels.Add(new Parcel { Shape = shape, LandUse = use, LandValue = value });
+            }
+            model.Parcels = parcels;
+
+            int buildCount = reader.ReadInt32();
+            var buildings = new List<Building>(buildCount);
+            for (int i = 0; i < buildCount; i++)
+            {
+                int len = reader.ReadInt32();
+                var bytes = reader.ReadBytes(len);
+                var foot = wkbReader.Read(bytes) as Nts.Polygon;
+                var use = (LandUseType)reader.ReadInt32();
+                int level = reader.ReadInt32();
+                int capacity = reader.ReadInt32();
+                double output = reader.ReadDouble();
+                double pollution = reader.ReadDouble();
+                if (foot != null)
+                    buildings.Add(new Building
+                    {
+                        Footprint = foot,
+                        LandUse = use,
+                        Level = level,
+                        PopulationCapacity = capacity,
+                        EconomicOutput = output,
+                        PollutionOutput = pollution
+                    });
+            }
+            model.Buildings = buildings;
+
+            return model;
         }
 
         private sealed class CoordComparer : IEqualityComparer<Nts.Coordinate>
@@ -329,7 +480,7 @@ namespace StrategyGame
                 try
                 {
                     string id = File.ReadAllText(hashPath);
-                    string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                    string modelPath = Path.Combine(cacheDir, $"{id}.bin");
                     return File.Exists(modelPath);
                 }
                 catch
@@ -362,7 +513,7 @@ namespace StrategyGame
                     string id = File.ReadAllText(hashPath);
                     if (Guid.TryParse(id, out Guid guid))
                     {
-                        string modelPath = Path.Combine(cacheDir, $"{guid}.json");
+                        string modelPath = Path.Combine(cacheDir, $"{guid}.bin");
                         if (File.Exists(modelPath))
                             return guid;
                     }
@@ -390,17 +541,17 @@ namespace StrategyGame
             if (Directory.Exists(cacheDir))
             {
                 var hashFiles = Directory.GetFiles(cacheDir, "*.txt");
-                var jsonFiles = Directory.GetFiles(cacheDir, "*.json");
-                
-                diskCount = jsonFiles.Length;
-                
-                // Count unique models (hash files that have corresponding JSON files)
+                var binFiles = Directory.GetFiles(cacheDir, "*.bin");
+
+                diskCount = binFiles.Length;
+
+                // Count unique models (hash files that have corresponding binary files)
                 foreach (string hashFile in hashFiles)
                 {
                     try
                     {
                         string id = File.ReadAllText(hashFile);
-                        string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                        string modelPath = Path.Combine(cacheDir, $"{id}.bin");
                         if (File.Exists(modelPath))
                             totalUnique++;
                     }
@@ -417,14 +568,13 @@ namespace StrategyGame
         public static CityDataModel? LoadCityDataModel(Guid id)
         {
             string cacheDir = GetCacheDir();
-            string modelPath = Path.Combine(cacheDir, $"{id}.json");
+            string modelPath = Path.Combine(cacheDir, $"{id}.bin");
             if (!File.Exists(modelPath))
                 return null;
 
             try
             {
-                string json = File.ReadAllText(modelPath);
-                return JsonSerializer.Deserialize<CityDataModel>(json, jsonOptions);
+                return ReadCityDataModelBinary(modelPath);
             }
             catch (Exception ex)
             {
