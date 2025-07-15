@@ -1,4 +1,5 @@
-﻿using Nts = NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Prepared;
 using NetTopologySuite.Operation.Union;
 using NetTopologySuite.Operation.Polygonize;
@@ -20,6 +21,12 @@ namespace StrategyGame
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
 
         public static CityGenerationData? Data { get; set; }
+
+        private const double Epsilon = 1e-9;
+
+        private static bool IsBad(Coordinate c) =>
+            double.IsNaN(c.X) || double.IsNaN(c.Y) ||
+            double.IsInfinity(c.X) || double.IsInfinity(c.Y);
 
 
         private static void SaveModelBinary(string path, CityDataModel model)
@@ -286,10 +293,12 @@ namespace StrategyGame
                 iterations++;
                 var (origin, angle) = queue.Dequeue();
 
-                var endPoint = new Nts.Coordinate(
+                var endPoint = new Coordinate(
                     origin.X + Math.Cos(angle) * roadSegmentLength,
                     origin.Y + Math.Sin(angle) * roadSegmentLength
                 );
+                if (IsBad(endPoint) || origin.Distance(endPoint) < Epsilon)
+                    continue;
                 // Envelope for quadtree lookup
                 var proposedEnv = new Nts.Envelope(origin, endPoint);
                 // Global Constraint: Must be within the urban area polygon
@@ -361,17 +370,22 @@ namespace StrategyGame
         private static List<Nts.Polygon> PolygonizeRoadNetwork(List<LineSegment> roads)
         {
             var gf = Nts.GeometryFactory.Default;
-            var lineStrings = roads.Select(seg =>
-                gf.CreateLineString(new[]
+            var validLineStrings = roads
+                .Where(s =>
+                    !IsBad(new Coordinate(s.X1, s.Y1)) &&
+                    !IsBad(new Coordinate(s.X2, s.Y2)) &&
+                    Math.Abs(s.X1 - s.X2) + Math.Abs(s.Y1 - s.Y2) > Epsilon)
+                .Select(s => gf.CreateLineString(new[]
                 {
-                    new Nts.Coordinate(seg.X1, seg.Y1),
-                    new Nts.Coordinate(seg.X2, seg.Y2)
-                })).ToArray();
+                    new Coordinate(s.X1, s.Y1),
+                    new Coordinate(s.X2, s.Y2)
+                }))
+                .ToArray();
 
-            if (lineStrings.Length == 0)
+            if (validLineStrings.Length == 0)
                 return new List<Nts.Polygon>();
 
-            var nodedLines = UnaryUnionOp.Union(lineStrings);
+            var nodedLines = CascadedPolygonUnion.Union(validLineStrings);
             var polygonizer = new Polygonizer();
             polygonizer.Add(nodedLines);
             var rawPolys = polygonizer.GetPolygons();
