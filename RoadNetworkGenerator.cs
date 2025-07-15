@@ -142,11 +142,17 @@ namespace StrategyGame
             // Seed the L-system from points on the highways
             foreach (var highway in highways)
             {
+                if (highway.NumPoints < 2)
+                    continue;
                 for (double i = 0.2; i < 1.0; i += 0.3)
                 {
-                    var pt = highway.GetCoordinateN((int)(highway.NumPoints * i));
-                    queue.Enqueue((pt, Math.Atan2(highway.EndPoint.Y - highway.StartPoint.Y, highway.EndPoint.X - highway.StartPoint.X) + Math.PI / 2));
-                    queue.Enqueue((pt, Math.Atan2(highway.EndPoint.Y - highway.StartPoint.Y, highway.EndPoint.X - highway.StartPoint.X) - Math.PI / 2));
+                    int idx = (int)Math.Min(highway.NumPoints - 1, Math.Round(highway.NumPoints * i));
+                    var pt = highway.GetCoordinateN(idx);
+                    double baseAngle = Math.Atan2(
+                        highway.EndPoint.Y - highway.StartPoint.Y,
+                        highway.EndPoint.X - highway.StartPoint.X);
+                    queue.Enqueue((pt, baseAngle + Math.PI / 2));
+                    queue.Enqueue((pt, baseAngle - Math.PI / 2));
                 }
             }
             if (queue.Count == 0 && area.EnvelopeInternal.Width > 0)
