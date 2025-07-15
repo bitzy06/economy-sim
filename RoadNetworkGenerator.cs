@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using NetTopologySuite.IO;
 using NetTopologySuite.Index.Quadtree;
+using System.Windows.Forms;
 
 namespace StrategyGame
 {
@@ -259,7 +260,12 @@ namespace StrategyGame
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Error] Failed to serialize CityDataModel: {ex.Message}");
+                string errorMessage = $"Failed to save city model file for hash {hash}.\n\n" +
+                                      $"Error: {ex.GetType().Name}\n\n" +
+                                      $"Message: {ex.Message}\n\n" +
+                                      $"Stack Trace:\n{ex.StackTrace}";
+                MessageBox.Show(errorMessage, "Critical Save Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Console.WriteLine($"[CRITICAL ERROR] Failed to serialize CityDataModel: {errorMessage}");
             }
 
             modelCache[hash] = result;
