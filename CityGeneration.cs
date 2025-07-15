@@ -168,6 +168,14 @@ namespace StrategyGame
             {
                 var splitGeometries = poly.Difference(splitLine);
 
+                // If the split did not create two or more pieces, stop recursion to avoid an infinite loop.
+                if (splitGeometries.NumGeometries < 2)
+                {
+                    if (poly.IsValid && !poly.IsEmpty)
+                        output.Add(new Parcel { Shape = poly });
+                    return;
+                }
+
                 for (int i = 0; i < splitGeometries.NumGeometries; i++)
                 {
                     if (splitGeometries.GetGeometryN(i) is Nts.Polygon splitPoly && splitPoly.IsValid && !splitPoly.IsEmpty)
