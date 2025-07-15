@@ -50,9 +50,8 @@ namespace StrategyGame
         private readonly Dictionary<(int cellSize, int x, int y), SystemDrawing.Bitmap> _tileCache = new();
         // LRU order for tile cache entries
         private readonly LinkedList<(int cellSize, int x, int y)> _tileLru = new();
-        private readonly object _cacheLock = new();
+        private readonly object _masterCacheLock = new();
         private readonly object _assembleLock = new();
-        private readonly object _textureLock = new();
         private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileTextures = new();
 
         public static readonly bool GpuAvailable;
@@ -189,7 +188,7 @@ namespace StrategyGame
             System.Drawing.Bitmap bmp = null;
 
             // Try cache first
-            lock (_cacheLock)
+            lock (_masterCacheLock)
             {
                 if (_tileCache.TryGetValue(key, out var cached))
                 {
@@ -262,7 +261,7 @@ namespace StrategyGame
             // Cache result
             if (bmp != null)
             {
-                lock (_cacheLock)
+                lock (_masterCacheLock)
                 {
                     _tileCache[key] = bmp;
                     _tileLru.AddLast(key);
@@ -357,7 +356,7 @@ namespace StrategyGame
 
                         // --- START: Replacement Logic ---
                         SKBitmap textureCopy = null;
-                        lock (_textureLock)
+                        lock (_masterCacheLock)
                         {
                             if (_tileTextures.TryGetValue(key, out var texture))
                             {
@@ -625,7 +624,7 @@ namespace StrategyGame
         private void UploadTileTexture((int cellSize, int x, int y) key, SystemDrawing.Bitmap bmp)
         {
             var sk = SkiaBitmapUtil.ToSKBitmap(bmp);
-            lock (_textureLock)
+            lock (_masterCacheLock)
             {
                 if (_tileTextures.TryGetValue(key, out var old))
                     old.Dispose();
@@ -652,7 +651,7 @@ namespace StrategyGame
                     oldBmp.Dispose();
                     _tileCache.Remove(oldest);
                 }
-                lock (_textureLock)
+                lock (_masterCacheLock)
                 {
                     if (_tileTextures.TryGetValue(oldest, out var tex))
                     {
