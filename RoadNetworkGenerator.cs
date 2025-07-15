@@ -190,10 +190,13 @@ namespace StrategyGame
                 }
             }
 
+            // --- Start of Corrected Logic ---
+
+            // 1. Assign urbanArea immediately upon creation.
             var result = new CityDataModel
             {
                 Id = Guid.NewGuid(),
-                UrbanArea = urbanArea // Immediately assign the urbanArea to the model
+                UrbanArea = urbanArea
             };
             var roadGeometries = GetOrGenerateFor(urbanArea, cellSize);
 
@@ -202,8 +205,11 @@ namespace StrategyGame
                     new LineSegment(s.X, s.Y, e.X, e.Y, tuple.Type)))
                 .ToList();
 
-            // This single call handles block and parcel generation using the urban area boundary.
+            // 2. Delegate ALL block and parcel generation to the robust ParcelGenerator.
+            //    This single line replaces the previous faulty logic.
             result.Parcels = ParcelGenerator.GenerateParcels(result);
+            
+            // --- End of Corrected Logic ---
             LandUseSimulator.Run(result);
             result.Buildings = BuildingGenerator.GenerateBuildings(result);
             BuildingRefiner.RefineBuildings(result);
