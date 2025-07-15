@@ -91,6 +91,10 @@ namespace StrategyGame
             var nodedLines = CascadedPolygonUnion.Union(validLineStrings);
             var polygonizer = new Polygonizer();
             polygonizer.Add(nodedLines);
+            if (model.UrbanArea != null && model.UrbanArea.IsValid)
+            {
+                polygonizer.Add(model.UrbanArea.Boundary);
+            }
             var rawPolys = polygonizer.GetPolygons();
             Debug.WriteLine($"[ParcelGenerator] Polygonizer produced {rawPolys.Count} raw polygons");
 

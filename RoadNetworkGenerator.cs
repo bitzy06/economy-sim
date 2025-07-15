@@ -37,6 +37,18 @@ namespace StrategyGame
 
             bw.Write(model.Id.ToByteArray());
 
+            if (model.UrbanArea != null)
+            {
+                bw.Write(true);
+                byte[] ua = wkbWriter.Write(model.UrbanArea);
+                bw.Write(ua.Length);
+                bw.Write(ua);
+            }
+            else
+            {
+                bw.Write(false);
+            }
+
             bw.Write(model.RoadNetwork.Count);
             foreach (var seg in model.RoadNetwork)
             {
@@ -87,6 +99,13 @@ namespace StrategyGame
 
             var model = new CityDataModel();
             model.Id = new Guid(br.ReadBytes(16));
+
+            if (br.ReadBoolean())
+            {
+                int len = br.ReadInt32();
+                byte[] ua = br.ReadBytes(len);
+                model.UrbanArea = (Nts.Polygon)wkbReader.Read(ua);
+            }
 
             int roadCount = br.ReadInt32();
             for (int i = 0; i < roadCount; i++)
@@ -171,7 +190,7 @@ namespace StrategyGame
                 }
             }
 
-            var result = new CityDataModel { Id = Guid.NewGuid() };
+            var result = new CityDataModel { Id = Guid.NewGuid(), UrbanArea = urbanArea };
             var roadGeometries = GetOrGenerateFor(urbanArea, cellSize);
 
             result.RoadNetwork = roadGeometries
