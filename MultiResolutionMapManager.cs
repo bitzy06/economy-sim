@@ -51,7 +51,6 @@ namespace StrategyGame
         // LRU order for tile cache entries
         private readonly LinkedList<(int cellSize, int x, int y)> _tileLru = new();
         private readonly object _masterCacheLock = new();
-        private readonly object _assembleLock = new();
         private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileTextures = new();
 
         public static readonly bool GpuAvailable;
@@ -320,21 +319,19 @@ namespace StrategyGame
         /// </summary>
         public SKBitmap AssembleView(float zoom, System.Drawing.Rectangle viewArea, Action triggerRefresh = null)
         {
-            lock (_assembleLock)
-            {
-                int cellSize = GetCellSize(zoom);
-                int tileSize = TileSizePx;
+            int cellSize = GetCellSize(zoom);
+            int tileSize = TileSizePx;
 
-                if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
-                    return new SKBitmap(1, 1); // Safe fallback
+            if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
+                return new SKBitmap(1, 1); // Safe fallback
 
-                int tileStartX = Math.Max(0, viewArea.X / tileSize);
-                int tileStartY = Math.Max(0, viewArea.Y / tileSize);
-                int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
-                int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
+            int tileStartX = Math.Max(0, viewArea.X / tileSize);
+            int tileStartY = Math.Max(0, viewArea.Y / tileSize);
+            int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
+            int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
 
-                var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-                var context = GpuAvailable ? SharedContext : null;
+            var info = new SKImageInfo(viewArea.Width, viewArea.Height);
+            var context = GpuAvailable ? SharedContext : null;
                 using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
                 var canvas = surface.Canvas;
                 canvas.Clear(SKColors.DarkGray);
@@ -414,7 +411,6 @@ namespace StrategyGame
                 var result = new SKBitmap(info);
                 surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
                 return result;
-            }
         }
 
         private static void OverlayFeatures(SystemDrawing.Bitmap bmp, ZoomLevel level)
