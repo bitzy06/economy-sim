@@ -272,7 +272,7 @@ namespace economy_sim
                         "data", "tile_cache");
 
                     mapManager.PreloadVisibleTiles(mapZoom, viewRect);
-                    cityTileManager.PreloadVisibleTiles(mapZoom, viewRect);
+                    _ = cityTileManager.PreloadVisibleTilesAsync(mapZoom, viewRect);
 
                     this.Invoke((MethodInvoker)(() =>
                     {
@@ -413,7 +413,7 @@ namespace economy_sim
             }
 
             mapManager.PreloadVisibleTiles(zoom, view);
-            cityTileManager.PreloadVisibleTiles(zoom, view);
+            _ = cityTileManager.PreloadVisibleTilesAsync(zoom, view);
 
             mapRenderInProgress = true;
 
@@ -2384,7 +2384,7 @@ namespace economy_sim
             Debug.WriteLine($"  FINAL_ORIGIN=({mapViewOrigin.X},{mapViewOrigin.Y})");
 
             ApplyZoom();
-            PreloadMapTiles();
+            _ = PreloadMapTilesAsync();
         }
         private void PanelMap_Resize(object sender, EventArgs e)
         {
@@ -2404,7 +2404,7 @@ namespace economy_sim
                     mapZoom = Math.Min(mapZoom + 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
                 }
                 ApplyZoom();
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 return;
@@ -2417,7 +2417,7 @@ namespace economy_sim
                     mapZoom = Math.Max(1, mapZoom - 1);
                 }
                 ApplyZoom();
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 return;
@@ -2461,7 +2461,7 @@ namespace economy_sim
                     mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
                 }
                 ApplyZoom();
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
             }
         }
 
@@ -2504,7 +2504,7 @@ namespace economy_sim
             {
                 isPanning = false;
                 Cursor = Cursors.Default;
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
             }
         }
 
@@ -2528,7 +2528,7 @@ namespace economy_sim
                 this.panelMap.Cursor = Cursors.Default; // Reset panelMap cursor
                 this.panelMap.BackColor = SystemColors.Control;
                 this.pictureBox1.BackColor = SD.Color.Transparent; // Reset pictureBox backcolor
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
             }
         }
 
@@ -2544,7 +2544,7 @@ namespace economy_sim
             }
         }
 
-        private void PreloadMapTiles()
+        private async Task PreloadMapTilesAsync()
         {
             if (mapManager == null)
                 return;
@@ -2555,7 +2555,8 @@ namespace economy_sim
                 view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
                 zoom = mapZoom;
             }
-            _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
+            await mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
+            await cityTileManager.PreloadVisibleTilesAsync(zoom, view);
         }
 
         private void InvalidateMap()
