@@ -130,7 +130,9 @@ namespace StrategyGame
         private static List<Nts.LineString> GenerateLocalRoads(Nts.Polygon area, List<Nts.LineString> highways)
         {
             const double roadSegmentLength = 0.005;
-            const int maxIterations = 500;
+            // Make the iteration limit proportional to the area. Ensures small
+            // towns generate quickly while large cities have room to expand.
+            int maxIterations = (int)Math.Max(500, area.Area * 5000000);
             var gf = Nts.GeometryFactory.Default;
             var random = new Random();
             var roadNetwork = new List<Nts.LineString>(highways);
@@ -149,7 +151,25 @@ namespace StrategyGame
             }
             if (queue.Count == 0 && area.EnvelopeInternal.Width > 0)
             {
+                // Keep the original centroid seed
                 queue.Enqueue((area.Centroid.Coordinate, random.NextDouble() * 2 * Math.PI));
+
+                // Add additional random seeds for large polygons to accelerate generation
+                if (area.Area > 0.001)
+                {
+                    var envelope = area.EnvelopeInternal;
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var randX = envelope.MinX + random.NextDouble() * envelope.Width;
+                        var randY = envelope.MinY + random.NextDouble() * envelope.Height;
+                        var randomPoint = new Nts.Coordinate(randX, randY);
+
+                        if (area.Contains(gf.CreatePoint(randomPoint)))
+                        {
+                            queue.Enqueue((randomPoint, random.NextDouble() * 2 * Math.PI));
+                        }
+                    }
+                }
             }
 
 
