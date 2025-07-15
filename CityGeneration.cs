@@ -291,7 +291,7 @@ namespace StrategyGame
                         return;
                 }
 
-                if (foot is Nts.Polygon p && !foot.IsEmpty)
+                if (foot is Nts.Polygon p && p.IsValid && !p.IsEmpty)
                     buildingBag.Add(new Building { Footprint = p, LandUse = parcel.LandUse });
             });
 
