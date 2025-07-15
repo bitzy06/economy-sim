@@ -309,16 +309,28 @@ namespace StrategyGame
                         ty * tileSize - viewArea.Y + tileSize);
 
                     SKBitmap tex = null;
+                    bool drew = false;
                     lock (_cacheLock)
-                        _tileCache.TryGetValue(key, out tex);
-
-                    if (tex != null)
                     {
-                        TouchKey(key);
-                        canvas.DrawBitmap(tex, rect);
-                        tilesDrawn++;
+                        if (_tileCache.TryGetValue(key, out tex))
+                        {
+                            TouchKey(key);
+                            try
+                            {
+                                canvas.DrawBitmap(tex, rect);
+                                drew = true;
+                                tilesDrawn++;
+                            }
+                            catch (AccessViolationException ex)
+                            {
+                                DebugLogger.Log($"Access violation drawing tile {key}: {ex.Message}");
+                                tex.Dispose();
+                                _tileCache.Remove(key);
+                            }
+                        }
                     }
-                    else
+
+                    if (!drew)
                     {
                         tilesMissing++;
                         var ttx = tx;
