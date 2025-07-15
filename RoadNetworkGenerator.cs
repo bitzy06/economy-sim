@@ -10,6 +10,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 using NetTopologySuite.IO;
 using NetTopologySuite.Index.Quadtree;
 
@@ -19,6 +20,8 @@ namespace StrategyGame
     {
         private static readonly ConcurrentDictionary<string, List<(Nts.LineString Line, RoadType Type)>> networkCache = new();
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
+        private static readonly object _fileLockDictLock = new();
+        private static readonly Dictionary<string, SemaphoreSlim> _fileLocks = new();
 
         public static CityGenerationData? Data { get; set; }
 
@@ -28,14 +31,31 @@ namespace StrategyGame
             double.IsNaN(c.X) || double.IsNaN(c.Y) ||
             double.IsInfinity(c.X) || double.IsInfinity(c.Y);
 
+        private static SemaphoreSlim GetFileLock(string path)
+        {
+            lock (_fileLockDictLock)
+            {
+                if (!_fileLocks.TryGetValue(path, out var sem))
+                {
+                    sem = new SemaphoreSlim(1, 1);
+                    _fileLocks[path] = sem;
+                }
+                return sem;
+            }
+        }
+
 
         private static void SaveModelBinary(string path, CityDataModel model)
         {
-            var wkbWriter = new WKBWriter();
-            using var fs = File.Open(path, FileMode.Create);
-            using var bw = new BinaryWriter(fs);
+            var fileLock = GetFileLock(path);
+            fileLock.Wait();
+            try
+            {
+                var wkbWriter = new WKBWriter();
+                using var fs = File.Open(path, FileMode.Create);
+                using var bw = new BinaryWriter(fs);
 
-            bw.Write(model.Id.ToByteArray());
+                bw.Write(model.Id.ToByteArray());
 
             if (model.UrbanArea != null)
             {
@@ -77,25 +97,34 @@ namespace StrategyGame
                 bw.Write(parcel.LandValue);
             }
 
-            bw.Write(model.Buildings.Count);
-            foreach (var building in model.Buildings)
+                bw.Write(model.Buildings.Count);
+                foreach (var building in model.Buildings)
+                {
+                    byte[] data = wkbWriter.Write(building.Footprint);
+                    bw.Write(data.Length);
+                    bw.Write(data);
+                    bw.Write((int)building.LandUse);
+                    bw.Write(building.Level);
+                    bw.Write(building.PopulationCapacity);
+                    bw.Write(building.EconomicOutput);
+                    bw.Write(building.PollutionOutput);
+                }
+            }
+            finally
             {
-                byte[] data = wkbWriter.Write(building.Footprint);
-                bw.Write(data.Length);
-                bw.Write(data);
-                bw.Write((int)building.LandUse);
-                bw.Write(building.Level);
-                bw.Write(building.PopulationCapacity);
-                bw.Write(building.EconomicOutput);
-                bw.Write(building.PollutionOutput);
+                fileLock.Release();
             }
         }
 
         private static CityDataModel LoadModelBinary(string path)
         {
-            var wkbReader = new WKBReader();
-            using var fs = File.OpenRead(path);
-            using var br = new BinaryReader(fs);
+            var fileLock = GetFileLock(path);
+            fileLock.Wait();
+            try
+            {
+                var wkbReader = new WKBReader();
+                using var fs = File.OpenRead(path);
+                using var br = new BinaryReader(fs);
 
             var model = new CityDataModel();
             model.Id = new Guid(br.ReadBytes(16));
@@ -159,7 +188,12 @@ namespace StrategyGame
                 });
             }
 
-            return model;
+                return model;
+            }
+            finally
+            {
+                fileLock.Release();
+            }
         }
 
         public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea, int cellSize)
