@@ -366,7 +366,7 @@ namespace StrategyGame
             return result;
         }
 
-        public void PreloadVisibleTiles(float zoom, SD.Rectangle viewRect)
+        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, CancellationToken token = default)
         {
             var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
@@ -382,29 +382,27 @@ namespace StrategyGame
                     .Select(y => (x, y)))
                 .ToList();
 
-            int tileCount = coords.Count;
             using var throttle = new SemaphoreSlim(Environment.ProcessorCount);
-            int loaded = 0;
+            var tasks = new List<Task>();
 
-            var swParallel = Stopwatch.StartNew();
-            Parallel.ForEach(coords, coord =>
+            foreach (var coord in coords)
             {
-                throttle.Wait();
-                try
+                await throttle.WaitAsync(token).ConfigureAwait(false);
+                tasks.Add(Task.Run(async () =>
                 {
-                    var swTile = Stopwatch.StartNew();
-                    GetTileAsync(zoom, coord.x, coord.y, CancellationToken.None)
-                        .GetAwaiter().GetResult();
-                    PerformanceTracker.Record("PreloadTile-Single", swTile.Elapsed);
-                    Interlocked.Increment(ref loaded);
-                }
-                finally
-                {
-                    throttle.Release();
-                }
-            });
-            PerformanceTracker.Record("PreloadTiles-Parallel", swParallel.Elapsed);
-            PerformanceTracker.Record("PreloadTiles-Count", TimeSpan.FromMilliseconds(loaded));
+                    try
+                    {
+                        await GetTileAsync(zoom, coord.x, coord.y, token).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        throttle.Release();
+                    }
+                }, token));
+            }
+
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+
             PerformanceTracker.Record("PreloadTiles-Total", sw.Elapsed);
         }
     }
