@@ -190,7 +190,11 @@ namespace StrategyGame
                 }
             }
 
-            var result = new CityDataModel { Id = Guid.NewGuid(), UrbanArea = urbanArea };
+            var result = new CityDataModel
+            {
+                Id = Guid.NewGuid(),
+                UrbanArea = urbanArea // Immediately assign the urbanArea to the model
+            };
             var roadGeometries = GetOrGenerateFor(urbanArea, cellSize);
 
             result.RoadNetwork = roadGeometries
@@ -198,8 +202,8 @@ namespace StrategyGame
                     new LineSegment(s.X, s.Y, e.X, e.Y, tuple.Type)))
                 .ToList();
 
-            result.RawBlocks = PolygonizeRoadNetwork(result.RoadNetwork);
-            result.Parcels = ParcelGenerator.GenerateParcelsFromBlocks(result.RawBlocks);
+            // This single call handles block and parcel generation using the urban area boundary.
+            result.Parcels = ParcelGenerator.GenerateParcels(result);
             LandUseSimulator.Run(result);
             result.Buildings = BuildingGenerator.GenerateBuildings(result);
             BuildingRefiner.RefineBuildings(result);
