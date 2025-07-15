@@ -67,6 +67,10 @@ namespace StrategyGame
             result.Buildings = BuildingGenerator.GenerateBuildings(result);
             BuildingRefiner.RefineBuildings(result);
 
+            // Clean geometries to avoid serialization errors
+            result.Parcels = CleanParcels(result.Parcels);
+            result.Buildings = CleanBuildings(result.Buildings);
+
             Debug.WriteLine($">> Generated {result.Parcels.Count} parcels, {result.Buildings.Count} buildings for {hash}");
 
             try
@@ -276,6 +280,36 @@ namespace StrategyGame
         {
             var e = area.EnvelopeInternal;
             return $"{e.MinX:F2}_{e.MinY:F2}_{e.MaxX:F2}_{e.MaxY:F2}";
+        }
+
+        private static List<Parcel> CleanParcels(List<Parcel> parcels)
+        {
+            var cleanedList = new ConcurrentBag<Parcel>();
+            Parallel.ForEach(parcels, p =>
+            {
+                var cleanShape = p.Shape.Buffer(0);
+                if (cleanShape is Nts.Polygon poly && poly.IsValid && !poly.IsEmpty)
+                {
+                    p.Shape = poly;
+                    cleanedList.Add(p);
+                }
+            });
+            return cleanedList.ToList();
+        }
+
+        private static List<Building> CleanBuildings(List<Building> buildings)
+        {
+            var cleanedList = new ConcurrentBag<Building>();
+            Parallel.ForEach(buildings, b =>
+            {
+                var cleanFootprint = b.Footprint.Buffer(0);
+                if (cleanFootprint is Nts.Polygon poly && poly.IsValid && !poly.IsEmpty)
+                {
+                    b.Footprint = poly;
+                    cleanedList.Add(b);
+                }
+            });
+            return cleanedList.ToList();
         }
 
         private static string GetCacheDir()
