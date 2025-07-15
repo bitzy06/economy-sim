@@ -308,29 +308,35 @@ namespace StrategyGame
                         tx * tileSize - viewArea.X + tileSize,
                         ty * tileSize - viewArea.Y + tileSize);
 
-                    SKBitmap tex = null;
-                    bool drew = false;
+                    // --- START: Replacement Logic ---
+                    SKBitmap tileCopy = null;
                     lock (_cacheLock)
                     {
-                        if (_tileCache.TryGetValue(key, out tex))
+                        if (_tileCache.TryGetValue(key, out var cachedTile))
                         {
                             TouchKey(key);
+                            // Create a private, safe copy of the tile inside the lock
+                            tileCopy = cachedTile.Copy();
+                        }
+                    }
+
+                    if (tileCopy != null)
+                    {
+                        using (tileCopy)
+                        {
                             try
                             {
-                                canvas.DrawBitmap(tex, rect);
-                                drew = true;
+                                canvas.DrawBitmap(tileCopy, rect);
                                 tilesDrawn++;
                             }
                             catch (AccessViolationException ex)
                             {
-                                DebugLogger.Log($"Access violation drawing tile {key}: {ex.Message}");
-                                tex.Dispose();
-                                _tileCache.Remove(key);
+                                // This catch block is now just a fallback
+                                DebugLogger.Log($"Access violation drawing tile copy {key}: {ex.Message}");
                             }
                         }
                     }
-
-                    if (!drew)
+                    else
                     {
                         tilesMissing++;
                         var ttx = tx;
@@ -344,6 +350,7 @@ namespace StrategyGame
                             PerformanceTracker.Record("AssembleView-AsyncTileLoad", swAsync.Elapsed);
                         });
                     }
+                    // --- END: Replacement Logic ---
                 }
             }
             PerformanceTracker.Record("AssembleView-DrawingTiles", swDrawing.Elapsed);
