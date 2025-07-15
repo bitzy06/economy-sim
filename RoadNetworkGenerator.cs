@@ -45,14 +45,14 @@ namespace StrategyGame
         }
 
 
-        private static void SaveModelBinary(string path, CityDataModel model)
+        private static async Task SaveModelBinaryAsync(string path, CityDataModel model)
         {
             var fileLock = GetFileLock(path);
-            fileLock.Wait();
+            await fileLock.WaitAsync();
             try
             {
                 var wkbWriter = new WKBWriter();
-                using var fs = File.Open(path, FileMode.Create);
+                using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
                 using var bw = new BinaryWriter(fs);
 
                 bw.Write(model.Id.ToByteArray());
@@ -116,15 +116,16 @@ namespace StrategyGame
             }
         }
 
-        private static CityDataModel LoadModelBinary(string path)
+        private static async Task<CityDataModel> LoadModelBinaryAsync(string path)
         {
             var fileLock = GetFileLock(path);
-            fileLock.Wait();
+            await fileLock.WaitAsync();
             try
             {
                 var wkbReader = new WKBReader();
-                using var fs = File.OpenRead(path);
-                using var br = new BinaryReader(fs);
+                byte[] fileBytes = await File.ReadAllBytesAsync(path);
+                using var ms = new MemoryStream(fileBytes);
+                using var br = new BinaryReader(ms);
 
             var model = new CityDataModel();
             model.Id = new Guid(br.ReadBytes(16));
@@ -213,7 +214,7 @@ namespace StrategyGame
                     string modelPath = Path.Combine(cacheDir, $"{id}.bin");
                     if (File.Exists(modelPath))
                     {
-                        var loaded = LoadModelBinary(modelPath);
+                        var loaded = await LoadModelBinaryAsync(modelPath);
                         modelCache[hash] = loaded;
                         return loaded;
                     }
@@ -253,7 +254,7 @@ namespace StrategyGame
             try
             {
                 string modelPath = Path.Combine(cacheDir, $"{result.Id}.bin");
-                SaveModelBinary(modelPath, result);
+                await SaveModelBinaryAsync(modelPath, result);
                 await File.WriteAllTextAsync(hashPath, result.Id.ToString()).ConfigureAwait(false);
             }
             catch (Exception ex)
@@ -601,7 +602,7 @@ namespace StrategyGame
 
             try
             {
-                return LoadModelBinary(modelPath);
+                return LoadModelBinaryAsync(modelPath).GetAwaiter().GetResult();
             }
             catch (Exception ex)
             {
