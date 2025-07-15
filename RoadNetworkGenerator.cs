@@ -284,32 +284,50 @@ namespace StrategyGame
 
         private static List<Parcel> CleanParcels(List<Parcel> parcels)
         {
-            var cleanedList = new ConcurrentBag<Parcel>();
-            Parallel.ForEach(parcels, p =>
+            var cleanedList = new List<Parcel>();
+
+            foreach (var p in parcels)
             {
-                var cleanShape = p.Shape.Buffer(0);
-                if (cleanShape is Nts.Polygon poly && poly.IsValid && !poly.IsEmpty)
+                try
                 {
-                    p.Shape = poly;
-                    cleanedList.Add(p);
+                    var cleanShape = p.Shape.Buffer(0);
+                    if (cleanShape is Nts.Polygon poly && poly.IsValid && !poly.IsEmpty)
+                    {
+                        p.Shape = poly;
+                        cleanedList.Add(p);
+                    }
                 }
-            });
-            return cleanedList.ToList();
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Warning] Could not clean a parcel, skipping it. Error: {ex.Message}");
+                }
+            }
+
+            return cleanedList;
         }
 
         private static List<Building> CleanBuildings(List<Building> buildings)
         {
-            var cleanedList = new ConcurrentBag<Building>();
-            Parallel.ForEach(buildings, b =>
+            var cleanedList = new List<Building>();
+
+            foreach (var b in buildings)
             {
-                var cleanFootprint = b.Footprint.Buffer(0);
-                if (cleanFootprint is Nts.Polygon poly && poly.IsValid && !poly.IsEmpty)
+                try
                 {
-                    b.Footprint = poly;
-                    cleanedList.Add(b);
+                    var cleanFootprint = b.Footprint.Buffer(0);
+                    if (cleanFootprint is Nts.Polygon poly && poly.IsValid && !poly.IsEmpty)
+                    {
+                        b.Footprint = poly;
+                        cleanedList.Add(b);
+                    }
                 }
-            });
-            return cleanedList.ToList();
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[Warning] Could not clean a building footprint, skipping it. Error: {ex.Message}");
+                }
+            }
+
+            return cleanedList;
         }
 
         private static string GetCacheDir()
