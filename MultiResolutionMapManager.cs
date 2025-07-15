@@ -355,92 +355,60 @@ namespace StrategyGame
                         if (rect.Width <= 0 || rect.Height <= 0)
                             continue;
 
-                        SKBitmap texture = null;
-                        bool drew = false;
+                        // --- START: Replacement Logic ---
+                        SKBitmap textureCopy = null;
                         lock (_textureLock)
                         {
-                            if (_tileTextures.TryGetValue(key, out texture))
+                            if (_tileTextures.TryGetValue(key, out var texture))
+                            {
+                                // Create a private, safe copy of the texture inside the lock
+                                textureCopy = texture.Copy();
+                            }
+                        }
+
+                        if (textureCopy != null)
+                        {
+                            using (textureCopy)
                             {
                                 try
                                 {
-                                    canvas.DrawBitmap(texture, rect);
-                                    drew = true;
+                                    canvas.DrawBitmap(textureCopy, rect);
                                 }
                                 catch (AccessViolationException ex)
                                 {
-                                    DebugLogger.Log($"Access violation drawing tile {key}: {ex.Message}");
-                                    texture.Dispose();
-                                    _tileTextures.Remove(key);
+                                    DebugLogger.Log($"Access violation drawing texture copy {key}: {ex.Message}");
                                 }
                             }
                         }
-
-                        if (!drew)
+                        else
                         {
-                            // Try to safely create texture from cached bitmap
-                            SKBitmap newTexture = null;
-                            lock (_cacheLock)
+                            lock (_tileLoadLock)
                             {
-                                if (_tileCache.TryGetValue(key, out var tile))
+                                if (!_tilesBeingLoaded.Contains(key))
                                 {
-                                    try
+                                    _tilesBeingLoaded.Add(key);
+                                    var ttx = tx;
+                                    var tty = ty;
+                                    var tileKey = key;
+                                    _ = Task.Run(async () =>
                                     {
-                                        // Check dimensions inside the lock to avoid concurrent access
-                                        if (tile.Width > 0 && tile.Height > 0)
+                                        try
                                         {
-                                            // Create texture directly from the cached bitmap while holding the lock
-                                            // This reduces the window for concurrent access issues
-                                            newTexture = SkiaBitmapUtil.ToSKBitmap(tile);
+                                            var t = await GetTileAsync(zoom, ttx, tty, CancellationToken.None);
+                                            if (t != null)
+                                                UploadTileTexture(tileKey, t);
+                                            triggerRefresh?.Invoke();
                                         }
-                                    }
-                                    catch (InvalidOperationException)
-                                    {
-                                        // Bitmap was disposed or being used elsewhere, skip this tile
-                                        newTexture = null;
-                                    }
-                                    catch (ArgumentException)
-                                    {
-                                        // Bitmap properties became invalid
-                                        newTexture = null;
-                                    }
-                                }
-                            }
-
-                            if (newTexture != null)
-                            {
-                                lock (_textureLock)
-                                    _tileTextures[key] = newTexture;
-                                canvas.DrawBitmap(newTexture, rect);
-                            }
-                            else
-                            {
-                                lock (_tileLoadLock)
-                                {
-                                    if (!_tilesBeingLoaded.Contains(key))
-                                    {
-                                        _tilesBeingLoaded.Add(key);
-                                        var ttx = tx;
-                                        var tty = ty;
-                                        var tileKey = key;
-                                        _ = Task.Run(async () =>
+                                        finally
                                         {
-                                            try
-                                            {
-                                                var t = await GetTileAsync(zoom, ttx, tty, CancellationToken.None);
-                                                if (t != null)
-                                                    UploadTileTexture(tileKey, t);
-                                                triggerRefresh?.Invoke();
-                                            }
-                                            finally
-                                            {
-                                                lock (_tileLoadLock)
-                                                    _tilesBeingLoaded.Remove(tileKey);
-                                            }
-                                        });
-                                    }
+                                            lock (_tileLoadLock)
+                                                _tilesBeingLoaded.Remove(tileKey);
+                                        }
+                                    });
                                 }
                             }
                         }
+                        // --- END: Replacement Logic ---
                     }
                 }
 
