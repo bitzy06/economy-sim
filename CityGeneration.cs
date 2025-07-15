@@ -307,7 +307,13 @@ namespace StrategyGame
                 }
 
                 if (foot is Nts.Polygon p && p.IsValid && !p.IsEmpty)
-                    buildingBag.Add(new Building { Footprint = p, LandUse = parcel.LandUse });
+                {
+                    var cleanedFootprint = p.Buffer(0);
+                    if (cleanedFootprint is Nts.Polygon cleanedP && cleanedP.IsValid && !cleanedP.IsEmpty)
+                    {
+                        buildingBag.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
+                    }
+                }
             });
 
             var buildings = buildingBag.ToList();
