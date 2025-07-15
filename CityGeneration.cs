@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using Nts = NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries;
 using NetTopologySuite.Index.Strtree;
 using NetTopologySuite.Operation.Polygonize;
 using NetTopologySuite.Operation.Union;
@@ -54,6 +55,12 @@ namespace StrategyGame
     // Original ParcelGenerator
     public static class ParcelGenerator
     {
+        private const double Epsilon = 1e-9;
+
+        private static bool IsBad(Coordinate c) =>
+            double.IsNaN(c.X) || double.IsNaN(c.Y) ||
+            double.IsInfinity(c.X) || double.IsInfinity(c.Y);
+
         public static List<Parcel> GenerateParcels(CityDataModel model)
         {
             if (model.RawBlocks != null && model.RawBlocks.Count > 0)
@@ -66,18 +73,22 @@ namespace StrategyGame
                 return parcels;
 
             var gf = Nts.GeometryFactory.Default;
-            var lineStrings = model.RoadNetwork
+            var validLineStrings = model.RoadNetwork
+                .Where(seg =>
+                    !IsBad(new Coordinate(seg.X1, seg.Y1)) &&
+                    !IsBad(new Coordinate(seg.X2, seg.Y2)) &&
+                    Math.Abs(seg.X1 - seg.X2) + Math.Abs(seg.Y1 - seg.Y2) > Epsilon)
                 .Select(seg => gf.CreateLineString(new[]
                 {
-                    new Nts.Coordinate(seg.X1, seg.Y1),
-                    new Nts.Coordinate(seg.X2, seg.Y2)
+                    new Coordinate(seg.X1, seg.Y1),
+                    new Coordinate(seg.X2, seg.Y2)
                 }))
                 .ToArray();
 
-            if (lineStrings.Length == 0)
+            if (validLineStrings.Length == 0)
                 return parcels;
 
-            var nodedLines = UnaryUnionOp.Union(lineStrings);
+            var nodedLines = CascadedPolygonUnion.Union(validLineStrings);
             var polygonizer = new Polygonizer();
             polygonizer.Add(nodedLines);
             var rawPolys = polygonizer.GetPolygons();
