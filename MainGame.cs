@@ -272,21 +272,11 @@ namespace economy_sim
                         "data", "tile_cache");
 
                     mapManager.PreloadVisibleTiles(mapZoom, viewRect);
-                    cityTileManager.PreloadVisibleTiles(mapZoom, viewRect);
+                    _ = cityTileManager.PreloadVisibleTilesAsync(mapZoom, viewRect);
 
                     this.Invoke((MethodInvoker)(() =>
                     {
-                        using var sk = mapManager.AssembleView(mapZoom, viewRect, () =>
-                        {
-                            this.Invoke((MethodInvoker)(() =>
-                            {
-                                var updatedViewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
-                                using var sk2 = mapManager.AssembleView(mapZoom, updatedViewRect);
-                                _currentMapView?.Dispose();
-                                _currentMapView = sk2.Copy();
-                                pictureBox1.Invalidate();
-                            }));
-                        });
+                        using var sk = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: InvalidateMap);
                         _currentMapView?.Dispose();
                         _currentMapView = sk.Copy();
                         pictureBox1.Invalidate();
@@ -327,26 +317,8 @@ namespace economy_sim
             SKBitmap finalSk = null;
             try
             {
-                using SKBitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
-                {
-                    if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
-                        return;
-                    lastInnerRedraw = DateTime.Now;
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(Redraw));
-                    else
-                        Redraw();
-                });
-                using SKBitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
-                {
-                    if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
-                        return;
-                    lastInnerRedraw = DateTime.Now;
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(Redraw));
-                    else
-                        Redraw();
-                });
+                using SKBitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: InvalidateMap);
+                using SKBitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: InvalidateMap);
                 finalSk = CombineMaps(terrain, city);
             }
             catch (ArgumentException ex)
@@ -389,23 +361,9 @@ namespace economy_sim
             {
                 try
                 {
-                    using var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
-                    {
-                        if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
-                        {
-                            lastInnerRedraw = DateTime.Now;
-                            this.BeginInvoke(new Action(RedrawAsync));
-                        }
-                    });
+                    using var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: InvalidateMap);
 
-                    using var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
-                    {
-                        if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
-                        {
-                            lastInnerRedraw = DateTime.Now;
-                            this.BeginInvoke(new Action(RedrawAsync));
-                        }
-                    });
+                    using var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: InvalidateMap);
 
                     using var finalSk = CombineMaps(terrain, city);
 
@@ -455,26 +413,14 @@ namespace economy_sim
             }
 
             mapManager.PreloadVisibleTiles(zoom, view);
-            cityTileManager.PreloadVisibleTiles(zoom, view);
+            _ = cityTileManager.PreloadVisibleTilesAsync(zoom, view);
 
             mapRenderInProgress = true;
 
             Task.Run(() =>
             {
-                using SKBitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
-                {
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(ApplyZoom));
-                    else
-                        ApplyZoom();
-                });
-                using SKBitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
-                {
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(ApplyZoom));
-                    else
-                        ApplyZoom();
-                });
+                using SKBitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: InvalidateMap);
+                using SKBitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: InvalidateMap);
                 if (terrain == null) return;
                 using SKBitmap mapSk = CombineMaps(terrain, city);
                 if (mapSk == null) return;
@@ -2438,7 +2384,7 @@ namespace economy_sim
             Debug.WriteLine($"  FINAL_ORIGIN=({mapViewOrigin.X},{mapViewOrigin.Y})");
 
             ApplyZoom();
-            PreloadMapTiles();
+            _ = PreloadMapTilesAsync();
         }
         private void PanelMap_Resize(object sender, EventArgs e)
         {
@@ -2458,7 +2404,7 @@ namespace economy_sim
                     mapZoom = Math.Min(mapZoom + 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
                 }
                 ApplyZoom();
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 return;
@@ -2471,7 +2417,7 @@ namespace economy_sim
                     mapZoom = Math.Max(1, mapZoom - 1);
                 }
                 ApplyZoom();
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 return;
@@ -2515,7 +2461,7 @@ namespace economy_sim
                     mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
                 }
                 ApplyZoom();
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
             }
         }
 
@@ -2558,7 +2504,7 @@ namespace economy_sim
             {
                 isPanning = false;
                 Cursor = Cursors.Default;
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
             }
         }
 
@@ -2582,7 +2528,7 @@ namespace economy_sim
                 this.panelMap.Cursor = Cursors.Default; // Reset panelMap cursor
                 this.panelMap.BackColor = SystemColors.Control;
                 this.pictureBox1.BackColor = SD.Color.Transparent; // Reset pictureBox backcolor
-                PreloadMapTiles();
+                _ = PreloadMapTilesAsync();
             }
         }
 
@@ -2598,7 +2544,7 @@ namespace economy_sim
             }
         }
 
-        private void PreloadMapTiles()
+        private async Task PreloadMapTilesAsync()
         {
             if (mapManager == null)
                 return;
@@ -2609,7 +2555,20 @@ namespace economy_sim
                 view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
                 zoom = mapZoom;
             }
-            _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
+            await mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
+            await cityTileManager.PreloadVisibleTilesAsync(zoom, view);
+        }
+
+        private void InvalidateMap()
+        {
+            if (pictureBox1.InvokeRequired)
+            {
+                pictureBox1.BeginInvoke(new Action(pictureBox1.Invalidate));
+            }
+            else
+            {
+                pictureBox1.Invalidate();
+            }
         }
 
         private int GetCellSizeForZoom(int zoomLevel)
