@@ -108,44 +108,62 @@ namespace StrategyGame
 
         private static void SubdividePolygon(Nts.Polygon poly, List<Parcel> output)
         {
-            const double DesiredParcelArea = 0.0001;
-            if (poly.Area < DesiredParcelArea * 1.5)
+            const double MinParcelArea = 0.00005;
+            RecursiveSplit(poly, output, MinParcelArea);
+        }
+
+        private static void RecursiveSplit(Nts.Polygon poly, List<Parcel> output, double minArea)
+        {
+            if (poly.Area < minArea * 1.5)
             {
-                output.Add(new Parcel { Shape = poly });
+                if (poly.IsValid && !poly.IsEmpty)
+                {
+                    output.Add(new Parcel { Shape = poly });
+                }
                 return;
             }
 
             var envelope = poly.EnvelopeInternal;
-            int xSplits = (int)Math.Max(1, Math.Round(envelope.Width / Math.Sqrt(DesiredParcelArea)));
-            int ySplits = (int)Math.Max(1, Math.Round(envelope.Height / Math.Sqrt(DesiredParcelArea)));
+            var gf = poly.Factory;
+            bool splitVertical = envelope.Width > envelope.Height;
 
-            double dx = envelope.Width / xSplits;
-            double dy = envelope.Height / ySplits;
-
-            var gf = Nts.GeometryFactory.Default;
-            for (int i = 0; i < xSplits; i++)
+            Nts.Geometry splitLine;
+            if (splitVertical)
             {
-                for (int j = 0; j < ySplits; j++)
+                double midX = envelope.MinX + envelope.Width / 2;
+                splitLine = gf.CreateLineString(new[]
                 {
-                    var subEnvelope = new Nts.Envelope(
-                        envelope.MinX + i * dx,
-                        envelope.MinX + (i + 1) * dx,
-                        envelope.MinY + j * dy,
-                        envelope.MinY + (j + 1) * dy);
+                    new Nts.Coordinate(midX, envelope.MinY),
+                    new Nts.Coordinate(midX, envelope.MaxY)
+                });
+            }
+            else
+            {
+                double midY = envelope.MinY + envelope.Height / 2;
+                splitLine = gf.CreateLineString(new[]
+                {
+                    new Nts.Coordinate(envelope.MinX, midY),
+                    new Nts.Coordinate(envelope.MaxX, midY)
+                });
+            }
 
-                    try
+            try
+            {
+                var splitGeometries = poly.Difference(splitLine);
+                for (int i = 0; i < splitGeometries.NumGeometries; i++)
+                {
+                    if (splitGeometries.GetGeometryN(i) is Nts.Polygon splitPoly &&
+                        splitPoly.IsValid && !splitPoly.IsEmpty)
                     {
-                        var envPoly = gf.ToGeometry(subEnvelope);
-                        var parcelGeom = poly.Intersection(envPoly);
-                        if (parcelGeom is Nts.Polygon p && !p.IsEmpty)
-                        {
-                            output.Add(new Parcel { Shape = p });
-                        }
+                        RecursiveSplit(splitPoly, output, minArea);
                     }
-                    catch
-                    {
-                        // Intersection can fail, just skip this sub-parcel
-                    }
+                }
+            }
+            catch
+            {
+                if (poly.IsValid && !poly.IsEmpty)
+                {
+                    output.Add(new Parcel { Shape = poly });
                 }
             }
         }
@@ -245,22 +263,35 @@ namespace StrategyGame
             var buildingBag = new ConcurrentBag<Building>();
             var gf = Nts.GeometryFactory.Default;
 
+            const double CommercialInset = -0.00002;
+            const double ResidentialInset = -0.00004;
+            const double IndustrialInset = -0.00003;
+
             Parallel.ForEach(model.Parcels, parcel =>
             {
-                Nts.Geometry foot = parcel.Shape;
+                Nts.Geometry foot;
                 switch (parcel.LandUse)
                 {
                     case LandUseType.Commercial:
-                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.05);
+                        foot = parcel.Shape.Buffer(CommercialInset);
                         break;
                     case LandUseType.Residential:
-                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.15);
+                        foot = parcel.Shape.Buffer(ResidentialInset);
                         break;
                     case LandUseType.Industrial:
-                        var temp = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.1);
-                        foot = gf.ToGeometry(temp.EnvelopeInternal);
+                        var temp = parcel.Shape.Buffer(IndustrialInset);
+                        if (!temp.IsEmpty)
+                        {
+                            foot = gf.ToGeometry(temp.EnvelopeInternal);
+                        }
+                        else
+                        {
+                            foot = temp;
+                        }
                         break;
                     case LandUseType.Park:
+                        return;
+                    default:
                         return;
                 }
 
