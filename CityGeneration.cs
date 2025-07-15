@@ -114,16 +114,23 @@ namespace StrategyGame
 
         private static void RecursiveSplit(Nts.Polygon poly, List<Parcel> output, double minArea)
         {
-            if (poly.Area < minArea * 1.5)
+            var envelope = poly.EnvelopeInternal;
+
+            // stop if polygon is invalid or essentially degenerate
+            if (!poly.IsValid || poly.Area < 1e-9 || envelope.Width < 1e-9 || envelope.Height < 1e-9)
             {
                 if (poly.IsValid && !poly.IsEmpty)
-                {
                     output.Add(new Parcel { Shape = poly });
-                }
                 return;
             }
 
-            var envelope = poly.EnvelopeInternal;
+            if (poly.Area < minArea * 1.5)
+            {
+                if (poly.IsValid && !poly.IsEmpty)
+                    output.Add(new Parcel { Shape = poly });
+                return;
+            }
+
             var gf = poly.Factory;
             bool splitVertical = envelope.Width > envelope.Height;
 
@@ -149,7 +156,12 @@ namespace StrategyGame
 
             try
             {
-                var splitGeometries = poly.Difference(splitLine);
+                // clean geometry to avoid subtle topology errors
+                var cleanPoly = poly.Buffer(0) as Nts.Polygon;
+                if (cleanPoly == null || !cleanPoly.IsValid || cleanPoly.IsEmpty)
+                    cleanPoly = poly;
+
+                var splitGeometries = cleanPoly.Difference(splitLine);
                 for (int i = 0; i < splitGeometries.NumGeometries; i++)
                 {
                     if (splitGeometries.GetGeometryN(i) is Nts.Polygon splitPoly &&
@@ -403,10 +415,12 @@ namespace StrategyGame
                     queue.Clear();
                 }
 
-                await Parallel.ForEachAsync(batch, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, async (area, token) =>
+                // Temporarily run synchronously to help identify problematic polygons
+                // Parallel version can be restored once issues are resolved
+                foreach (var area in batch)
                 {
                     await RoadNetworkGenerator.GenerateModelAsync(area, 10).ConfigureAwait(false);
-                }).ConfigureAwait(false);
+                }
             }
         }
     }
