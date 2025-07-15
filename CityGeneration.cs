@@ -129,6 +129,10 @@ namespace StrategyGame
 
         private static void RecursiveSplit(Nts.Polygon poly, List<Parcel> output, double minArea)
         {
+            // --- Start Diagnostic Logging ---
+            Debug.WriteLine($"Splitting polygon. Area: {poly.Area}, IsValid: {poly.IsValid}, Envelope: {poly.EnvelopeInternal}");
+            // --- End Diagnostic Logging ---
+
             if (poly.Area < minArea * 1.5)
             {
                 if (poly.IsValid && !poly.IsEmpty)
@@ -163,6 +167,7 @@ namespace StrategyGame
             try
             {
                 var splitGeometries = poly.Difference(splitLine);
+
                 for (int i = 0; i < splitGeometries.NumGeometries; i++)
                 {
                     if (splitGeometries.GetGeometryN(i) is Nts.Polygon splitPoly && splitPoly.IsValid && !splitPoly.IsEmpty)
@@ -171,8 +176,10 @@ namespace StrategyGame
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                // This will tell us if the split itself throws a C# error
+                Debug.WriteLine($"[RECURSIVE SPLIT ERROR] {ex.Message}");
                 if (poly.IsValid && !poly.IsEmpty)
                     output.Add(new Parcel { Shape = poly });
             }
@@ -277,42 +284,54 @@ namespace StrategyGame
             const double ResidentialInset = -0.00004;
             const double IndustrialInset = -0.00003;
 
+            int parcelIndex = 0;
             foreach (var parcel in model.Parcels)
             {
-                Nts.Geometry foot;
-                switch (parcel.LandUse)
-                {
-                    case LandUseType.Commercial:
-                        foot = parcel.Shape.Buffer(CommercialInset);
-                        break;
-                    case LandUseType.Residential:
-                        foot = parcel.Shape.Buffer(ResidentialInset);
-                        break;
-                    case LandUseType.Industrial:
-                        var temp = parcel.Shape.Buffer(IndustrialInset);
-                        if (!temp.IsEmpty)
-                        {
-                            foot = gf.ToGeometry(temp.EnvelopeInternal);
-                        }
-                        else
-                        {
-                            foot = temp;
-                        }
-                        break;
-                    case LandUseType.Park:
-                        continue;
-                    default:
-                        continue;
-                }
+                // --- Start Diagnostic Logging ---
+                Debug.WriteLine($"--- Processing Parcel Index: {parcelIndex} ---");
+                Debug.WriteLine($"Parcel LandUse: {parcel.LandUse}, Area: {parcel.Shape.Area}, IsValid: {parcel.Shape.IsValid}");
+                // --- End Diagnostic Logging ---
 
-                if (foot is Nts.Polygon p && p.IsValid && !p.IsEmpty)
+                try
                 {
-                    var cleanedFootprint = p.Buffer(0);
-                    if (cleanedFootprint is Nts.Polygon cleanedP && cleanedP.IsValid && !cleanedP.IsEmpty)
+                    Nts.Geometry foot = null;
+                    switch (parcel.LandUse)
                     {
-                        buildings.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
+                        case LandUseType.Commercial:
+                            foot = parcel.Shape.Buffer(CommercialInset);
+                            break;
+                        case LandUseType.Residential:
+                            foot = parcel.Shape.Buffer(ResidentialInset);
+                            break;
+                        case LandUseType.Industrial:
+                            var temp = parcel.Shape.Buffer(IndustrialInset);
+                            if (!temp.IsEmpty) foot = gf.ToGeometry(temp.EnvelopeInternal);
+                            else foot = temp;
+                            break;
+                        default:
+                            parcelIndex++;
+                            continue;
+                    }
+
+                    if (foot is Nts.Polygon p && p.IsValid && !p.IsEmpty)
+                    {
+                        Debug.WriteLine($"Buffer successful for parcel {parcelIndex}. Cleaning footprint...");
+                        var cleanedFootprint = p.Buffer(0);
+
+                        if (cleanedFootprint is Nts.Polygon cleanedP && cleanedP.IsValid && !cleanedP.IsEmpty)
+                        {
+                            buildings.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
+                            Debug.WriteLine($"--> Building added successfully for parcel {parcelIndex}.");
+                        }
                     }
                 }
+                catch (Exception ex)
+                {
+                    // This will tell us if the buffer operation throws a C# error
+                    Debug.WriteLine($"[BUILDING GEN ERROR] on Parcel Index {parcelIndex}: {ex.Message}");
+                }
+
+                parcelIndex++;
             }
 
             model.Buildings = buildings;
