@@ -18,7 +18,7 @@ namespace StrategyGame
     {
         private readonly int _baseWidth;
         private readonly int _baseHeight;
-        private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
+        private readonly Dictionary<(int cellSize, int x, int y), (SKBitmap sk, SD.Bitmap gdi)> _tileCache = new();
         private readonly Dictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
         private readonly object _cacheLock = new();
         private readonly LinkedList<(int cellSize, int x, int y)> _lruOrder = new();
@@ -89,12 +89,12 @@ namespace StrategyGame
             PerformanceTracker.Record("LRU-TouchKey", sw.Elapsed);
         }
 
-        private void AddToCache((int cellSize, int x, int y) key, SKBitmap bmp)
+        private void AddToCache((int cellSize, int x, int y) key, (SKBitmap sk, SD.Bitmap gdi) bitmaps)
         {
             var sw = Stopwatch.StartNew();
             lock (_cacheLock)
             {
-                _tileCache[key] = bmp;
+                _tileCache[key] = bitmaps;
                 if (_lruNodes.TryGetValue(key, out var existing))
                 {
                     _lruOrder.Remove(existing);
@@ -108,8 +108,11 @@ namespace StrategyGame
                     if (last == null) break;
                     _lruOrder.RemoveLast();
                     var remKey = last.Value;
-                    if (_tileCache.TryGetValue(remKey, out var oldBmp))
-                        oldBmp.Dispose();
+                    if (_tileCache.TryGetValue(remKey, out var oldBitmaps))
+                    {
+                        oldBitmaps.sk.Dispose();
+                        oldBitmaps.gdi.Dispose();
+                    }
                     _tileCache.Remove(remKey);
                     _lruNodes.Remove(remKey);
                 }
@@ -211,7 +214,7 @@ namespace StrategyGame
                 {
                     TouchKey(key);
                     PerformanceTracker.Record("LoadTileInternal-CacheHit", sw.Elapsed);
-                    return cached;
+                    return cached.sk;
                 }
             }
 
@@ -227,8 +230,7 @@ namespace StrategyGame
                     using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var bmp = ImageSharpToBitmap(img);
                     var sk = SkiaBitmapUtil.ToSKBitmap(bmp);
-                    bmp.Dispose();
-                    AddToCache(key, sk);
+                    AddToCache(key, (sk, bmp));
                     PerformanceTracker.Record("LoadTileInternal-FromDisk", swFileLoad.Elapsed);
                     PerformanceTracker.Record("LoadTileInternal-Total", sw.Elapsed);
                     return sk;
@@ -267,8 +269,7 @@ namespace StrategyGame
             PerformanceTracker.Record("TileGeneration-SaveToDisk", swSave.Elapsed);
 
             var skBmp = SkiaBitmapUtil.ToSKBitmap(bitmap);
-            bitmap.Dispose();
-            AddToCache(key, skBmp);
+            AddToCache(key, (skBmp, bitmap));
             PerformanceTracker.Record("LoadTileInternal-Generation", swGeneration.Elapsed);
             PerformanceTracker.Record("LoadTileInternal-Total", sw.Elapsed);
             return skBmp;
@@ -316,7 +317,7 @@ namespace StrategyGame
                         {
                             TouchKey(key);
                             // Create a private, safe copy of the tile inside the lock
-                            tileCopy = cachedTile.Copy();
+                            tileCopy = cachedTile.sk.Copy();
                         }
                     }
 
