@@ -356,14 +356,26 @@ namespace StrategyGame
                             continue;
 
                         SKBitmap texture = null;
+                        bool drew = false;
                         lock (_textureLock)
-                            _tileTextures.TryGetValue(key, out texture);
-
-                        if (texture != null)
                         {
-                            canvas.DrawBitmap(texture, rect);
+                            if (_tileTextures.TryGetValue(key, out texture))
+                            {
+                                try
+                                {
+                                    canvas.DrawBitmap(texture, rect);
+                                    drew = true;
+                                }
+                                catch (AccessViolationException ex)
+                                {
+                                    DebugLogger.Log($"Access violation drawing tile {key}: {ex.Message}");
+                                    texture.Dispose();
+                                    _tileTextures.Remove(key);
+                                }
+                            }
                         }
-                        else
+
+                        if (!drew)
                         {
                             // Try to safely create texture from cached bitmap
                             SKBitmap newTexture = null;
