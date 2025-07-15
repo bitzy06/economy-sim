@@ -2222,7 +2222,7 @@ namespace economy_sim
                     try
                     {
                         string id = File.ReadAllText(hashPath);
-                        string modelPath = Path.Combine(dir, $"{id}.json");
+                        string modelPath = Path.Combine(dir, $"{id}.bin");
                         if (!File.Exists(modelPath))
                         {
                             missing.Add(urban);
@@ -2301,7 +2301,7 @@ namespace economy_sim
                     try
                     {
                         string id = File.ReadAllText(hashPath);
-                        string modelPath = Path.Combine(dir, $"{id}.json");
+                        string modelPath = Path.Combine(dir, $"{id}.bin");
                         if (File.Exists(modelPath))
                         {
                             count++;
@@ -2366,7 +2366,7 @@ namespace economy_sim
                         try
                         {
                             string id = File.ReadAllText(hashPath);
-                            string modelPath = Path.Combine(dir, $"{id}.json");
+                        string modelPath = Path.Combine(dir, $"{id}.bin");
                             if (!File.Exists(modelPath))
                             {
                                 missingAreas.Add(urban);
@@ -2699,21 +2699,20 @@ namespace economy_sim
                         continue;
                     }
                     
-                    string modelPath = Path.Combine(dir, $"{guid}.json");
+                    string modelPath = Path.Combine(dir, $"{guid}.bin");
                     if (!File.Exists(modelPath))
                     {
                         invalidCount++;
-                        issues.Add($"Missing model file {guid}.json for hash {hash}");
+                        issues.Add($"Missing model file {guid}.bin for hash {hash}");
                         continue;
                     }
-                    
+
                     // Try to verify the model can be loaded
-                    string jsonContent = File.ReadAllText(modelPath);
-                    var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(jsonContent);
+                    var model = RoadNetworkGenerator.LoadCityDataModel(guid);
                     if (model == null || model.Id != guid)
                     {
                         invalidCount++;
-                        issues.Add($"Model file {guid}.json has invalid or mismatched ID");
+                        issues.Add($"Model file {guid}.bin has invalid or mismatched ID");
                         continue;
                     }
                     
@@ -2759,7 +2758,7 @@ namespace economy_sim
             {
                 details.AppendLine($"City Model ID: {modelId.Value}");
                 
-                string modelPath = Path.Combine(dir, $"{modelId.Value}.json");
+                string modelPath = Path.Combine(dir, $"{modelId.Value}.bin");
                 if (File.Exists(modelPath))
                 {
                     try
@@ -2770,8 +2769,7 @@ namespace economy_sim
                         details.AppendLine($"Model File Modified: {fileInfo.LastWriteTime}");
                         
                         // Try to load and get basic stats
-                        string jsonContent = File.ReadAllText(modelPath);
-                        var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(jsonContent);
+                        var model = RoadNetworkGenerator.LoadCityDataModel(modelId.Value);
                         if (model != null)
                         {
                             details.AppendLine($"Road Segments: {model.RoadNetwork.Count}");
@@ -2814,7 +2812,7 @@ namespace economy_sim
                 try
                 {
                     string oldId = File.ReadAllText(hashPath);
-                    string oldModelPath = Path.Combine(dir, $"{oldId}.json");
+                    string oldModelPath = Path.Combine(dir, $"{oldId}.bin");
                     
                     // Delete old files
                     File.Delete(hashPath);
