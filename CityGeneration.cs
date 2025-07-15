@@ -270,15 +270,14 @@ namespace StrategyGame
     {
         public static List<Building> GenerateBuildings(CityDataModel model)
         {
-            var buildingBag = new ConcurrentBag<Building>();
+            var buildings = new List<Building>();
             var gf = Nts.GeometryFactory.Default;
 
-            // Fixed insets provide much faster buffering while maintaining visual quality
             const double CommercialInset = -0.00002;
             const double ResidentialInset = -0.00004;
             const double IndustrialInset = -0.00003;
 
-            Parallel.ForEach(model.Parcels, parcel =>
+            foreach (var parcel in model.Parcels)
             {
                 Nts.Geometry foot;
                 switch (parcel.LandUse)
@@ -301,9 +300,9 @@ namespace StrategyGame
                         }
                         break;
                     case LandUseType.Park:
-                        return;
+                        continue;
                     default:
-                        return;
+                        continue;
                 }
 
                 if (foot is Nts.Polygon p && p.IsValid && !p.IsEmpty)
@@ -311,12 +310,11 @@ namespace StrategyGame
                     var cleanedFootprint = p.Buffer(0);
                     if (cleanedFootprint is Nts.Polygon cleanedP && cleanedP.IsValid && !cleanedP.IsEmpty)
                     {
-                        buildingBag.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
+                        buildings.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
                     }
                 }
-            });
+            }
 
-            var buildings = buildingBag.ToList();
             model.Buildings = buildings;
             return buildings;
         }
