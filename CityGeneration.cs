@@ -63,17 +63,15 @@ namespace StrategyGame
 
         public static List<Parcel> GenerateParcels(CityDataModel model)
         {
-            if (model.RawBlocks != null && model.RawBlocks.Count > 0)
-            {
-                return GenerateParcelsFromBlocks(model.RawBlocks);
-            }
-
             var parcels = new List<Parcel>();
-            if (model.RoadNetwork == null || !model.RoadNetwork.Any())
+            // Ensure there's a road network and an urban area to work with.
+            if (model.RoadNetwork == null || !model.RoadNetwork.Any() || model.UrbanArea == null)
                 return parcels;
 
             var gf = Nts.GeometryFactory.Default;
-            var validLineStrings = model.RoadNetwork
+
+            // 1. Get all valid road line segments as Geometry.
+            var roadLines = model.RoadNetwork
                 .Where(seg =>
                     !IsBad(new Coordinate(seg.X1, seg.Y1)) &&
                     !IsBad(new Coordinate(seg.X2, seg.Y2)) &&
@@ -83,18 +81,20 @@ namespace StrategyGame
                     new Coordinate(seg.X1, seg.Y1),
                     new Coordinate(seg.X2, seg.Y2)
                 }))
-                .ToArray();
+                .ToList<Nts.Geometry>();
 
-            if (validLineStrings.Length == 0)
-                return parcels;
+            // 2. Add the urban area boundary to the same collection.
+            if (model.UrbanArea.IsValid)
+            {
+                roadLines.Add(model.UrbanArea.Boundary);
+            }
 
-            var nodedLines = CascadedPolygonUnion.Union(validLineStrings);
+            // 3. Union ALL lines together at once. This correctly nodes the entire geometry set.
+            var nodedLines = UnaryUnionOp.Union(roadLines);
+
+            // 4. Polygonize the fully noded line network.
             var polygonizer = new Polygonizer();
             polygonizer.Add(nodedLines);
-            if (model.UrbanArea != null && model.UrbanArea.IsValid)
-            {
-                polygonizer.Add(model.UrbanArea.Boundary);
-            }
             var rawPolys = polygonizer.GetPolygons();
             Debug.WriteLine($"[ParcelGenerator] Polygonizer produced {rawPolys.Count} raw polygons");
 
@@ -102,8 +102,8 @@ namespace StrategyGame
                 .Where(p => p.IsValid && p.Area > 1e-9)
                 .ToList();
 
+            // The rest of the process can now proceed.
             model.RawBlocks = blocks;
-
             parcels = GenerateParcelsFromBlocks(blocks);
 
             Debug.WriteLine($"[ParcelGenerator] Final parcel count: {parcels.Count}");
