@@ -383,21 +383,27 @@ namespace StrategyGame
             return result;
         }
 
-        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, CancellationToken token = default)
+        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, CancellationToken token = default)
         {
             var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
-            int startX = Math.Max(0, viewRect.X / tileSize);
-            int endX = (viewRect.Right + tileSize - 1) / tileSize;
-            int startY = Math.Max(0, viewRect.Y / tileSize);
-            int endY = (viewRect.Bottom + tileSize - 1) / tileSize;
 
-            var coords = Enumerable
-                .Range(startX, endX - startX)
-                .SelectMany(x => Enumerable.Range(startY, endY - startY)
-                    .Select(y => (x, y)))
-                .ToList();
+            var mapSize = new SD.Size(_baseWidth * cellSize, _baseHeight * cellSize);
+
+            int startX = Math.Max(0, viewRect.X / tileSize - radius);
+            int endX = Math.Min((mapSize.Width - 1) / tileSize, (viewRect.Right - 1) / tileSize + radius);
+            int startY = Math.Max(0, viewRect.Y / tileSize - radius);
+            int endY = Math.Min((mapSize.Height - 1) / tileSize, (viewRect.Bottom - 1) / tileSize + radius);
+
+            var coords = new List<(int x, int y)>();
+            for (int x = startX; x <= endX; x++)
+            {
+                for (int y = startY; y <= endY; y++)
+                {
+                    coords.Add((x, y));
+                }
+            }
 
             using var throttle = new SemaphoreSlim(Environment.ProcessorCount);
             var tasks = new List<Task>();
