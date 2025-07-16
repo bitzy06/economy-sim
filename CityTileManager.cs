@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 using System.Linq;
 using SkiaSharp;
 using economy_sim;
-using SixLabors.ImageSharp.Advanced;
 using System.Runtime.InteropServices;
 
 namespace StrategyGame
@@ -66,33 +65,26 @@ namespace StrategyGame
             }
         }
 
-        private static SKBitmap ImageSharpToSkia(Image<Rgba32> img)
+        private static unsafe SKBitmap ImageSharpToSkia(Image<Rgba32> img)
         {
             var info = new SKImageInfo(img.Width, img.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
             var skBitmap = new SKBitmap(info);
+            var ptr = skBitmap.GetPixels();
 
-            // Use a high-performance method to get a memory span of the whole image
-            if (img.TryGetSinglePixelSpan(out Span<Rgba32> pixelSpan))
+            // Process the image row-by-row for broader ImageSharp version compatibility.
+            img.ProcessPixelRows(accessor =>
             {
-                // Safely reinterpret the Rgba32 span as a byte span without allocation
-                var byteSpan = MemoryMarshal.AsBytes(pixelSpan);
-
-                // Copy the raw byte data directly to the Skia bitmap's memory
-                byteSpan.CopyTo(new Span<byte>((void*)skBitmap.GetPixels(), byteSpan.Length));
-            }
-            else
-            {
-                // Provide a fallback for rare cases where image memory isn't contiguous
-                img.ProcessPixelRows(accessor =>
+                for (int y = 0; y < accessor.Height; y++)
                 {
-                    var ptr = skBitmap.GetPixels();
-                    for (int y = 0; y < accessor.Height; y++)
-                    {
-                        var byteSpan = MemoryMarshal.AsBytes(accessor.GetRowSpan(y));
-                        byteSpan.CopyTo(new Span<byte>((void*)(ptr + y * skBitmap.RowBytes), byteSpan.Length));
-                    }
-                });
-            }
+                    // Safely reinterpret the Rgba32 span for the current row as a byte span.
+                    var byteSpan = MemoryMarshal.AsBytes(accessor.GetRowSpan(y));
+
+                    // Create a span for the destination row in the Skia bitmap and copy the data.
+                    var destSpan = new Span<byte>((void*)(ptr + y * skBitmap.RowBytes), byteSpan.Length);
+                    byteSpan.CopyTo(destSpan);
+                }
+            });
+
             return skBitmap;
         }
 
