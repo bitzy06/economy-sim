@@ -18,6 +18,9 @@ namespace StrategyGame
     {
         private readonly int _baseWidth;
         private readonly int _baseHeight;
+        // --- START: Added Field ---
+        private readonly MultiResolutionMapManager _mapManager;
+        // --- END: Added Field ---
         private readonly Dictionary<(int cellSize, int x, int y), (SKBitmap sk, SD.Bitmap gdi)> _tileCache = new();
         private readonly Dictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
         private readonly object _cacheLock = new();
@@ -44,10 +47,13 @@ namespace StrategyGame
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "data", "city_tile_cache");
 
-        public CityTileManager(int baseWidth, int baseHeight)
+        public CityTileManager(int baseWidth, int baseHeight, MultiResolutionMapManager mapManager)
         {
             _baseWidth = baseWidth;
             _baseHeight = baseHeight;
+            // --- START: Added Initialization ---
+            _mapManager = mapManager;
+            // --- END: Added Initialization ---
         }
 
         private static SemaphoreSlim GetFileLock(string path)
@@ -289,6 +295,17 @@ namespace StrategyGame
             canvas.Clear(SKColors.Transparent);
             PerformanceTracker.Record("AssembleView-CreateSurface", swSurface.Elapsed);
 
+            // --- START: Layer Compositing Fix ---
+            // Render the base map layer before drawing city tiles.
+            using (var baseMap = _mapManager.AssembleView(zoom, viewArea, triggerRefresh))
+            {
+                if (baseMap != null)
+                {
+                    canvas.DrawBitmap(baseMap, SKRect.Create(0, 0, viewArea.Width, viewArea.Height));
+                }
+            }
+            // --- END: Layer Compositing Fix ---
+
             int tileStartX = Math.Max(0, viewArea.X / tileSize);
             int tileStartY = Math.Max(0, viewArea.Y / tileSize);
             int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
@@ -366,21 +383,27 @@ namespace StrategyGame
             return result;
         }
 
-        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, CancellationToken token = default)
+        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, CancellationToken token = default)
         {
             var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
-            int startX = Math.Max(0, viewRect.X / tileSize);
-            int endX = (viewRect.Right + tileSize - 1) / tileSize;
-            int startY = Math.Max(0, viewRect.Y / tileSize);
-            int endY = (viewRect.Bottom + tileSize - 1) / tileSize;
 
-            var coords = Enumerable
-                .Range(startX, endX - startX)
-                .SelectMany(x => Enumerable.Range(startY, endY - startY)
-                    .Select(y => (x, y)))
-                .ToList();
+            var mapSize = new SD.Size(_baseWidth * cellSize, _baseHeight * cellSize);
+
+            int startX = Math.Max(0, viewRect.X / tileSize - radius);
+            int endX = Math.Min((mapSize.Width - 1) / tileSize, (viewRect.Right - 1) / tileSize + radius);
+            int startY = Math.Max(0, viewRect.Y / tileSize - radius);
+            int endY = Math.Min((mapSize.Height - 1) / tileSize, (viewRect.Bottom - 1) / tileSize + radius);
+
+            var coords = new List<(int x, int y)>();
+            for (int x = startX; x <= endX; x++)
+            {
+                for (int y = startY; y <= endY; y++)
+                {
+                    coords.Add((x, y));
+                }
+            }
 
             using var throttle = new SemaphoreSlim(Environment.ProcessorCount);
             var tasks = new List<Task>();

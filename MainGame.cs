@@ -261,7 +261,7 @@ namespace economy_sim
                 var baseSize = mapManager.GetMapSize(1);
                 baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
-                cityTileManager = new CityTileManager(baseCellsWidth, baseCellsHeight);
+                cityTileManager = new CityTileManager(baseCellsWidth, baseCellsHeight, mapManager);
 
                 var viewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
 

@@ -102,13 +102,10 @@ namespace StrategyGame
                     PerformanceTracker.Record("CityRenderer-ModelGeneration", swModel.Elapsed);
                     urbanAreasProcessed++;
 
-                    var swRoads = Stopwatch.StartNew();
-                    int roadCount = model.RoadNetwork.Count();
-                    totalRoads += roadCount;
-                    DrawRoads(img, canvas, model.RoadNetwork, tileBounds);
-                    PerformanceTracker.Record("CityRenderer-RoadDrawing", swRoads.Elapsed);
-                    PerformanceTracker.Record("CityRenderer-RoadCount", TimeSpan.FromMilliseconds(roadCount));
+                    // --- START OF FIX ---
+                    // The drawing order has been swapped. Buildings are now drawn BEFORE roads.
 
+                    // STEP 1: Process and draw buildings
                     var swBuildings = Stopwatch.StartNew();
                     var drawList = new List<(Nts.Polygon Poly, LandUseType Use)>();
                     Parallel.ForEach(model.Buildings, b =>
@@ -157,6 +154,16 @@ namespace StrategyGame
                             RenderPolygon(img, null, item.Poly, tileBounds, GetBuildingColor(item.Use));
                     }
                     PerformanceTracker.Record("CityRenderer-BuildingRendering", swRendering.Elapsed);
+
+                    // STEP 2: Process and draw roads on top of buildings
+                    var swRoads = Stopwatch.StartNew();
+                    int roadCount = model.RoadNetwork.Count();
+                    totalRoads += roadCount;
+                    DrawRoads(img, canvas, model.RoadNetwork, tileBounds);
+                    PerformanceTracker.Record("CityRenderer-RoadDrawing", swRoads.Elapsed);
+                    PerformanceTracker.Record("CityRenderer-RoadCount", TimeSpan.FromMilliseconds(roadCount));
+
+                    // --- END OF FIX ---
                 }
                 PerformanceTracker.Record("CityRenderer-UrbanProcessing", swUrbanProcessing.Elapsed);
                 PerformanceTracker.Record("CityRenderer-UrbanAreasProcessed", TimeSpan.FromMilliseconds(urbanAreasProcessed));
