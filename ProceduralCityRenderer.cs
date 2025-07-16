@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Drawing.Processing;
 using System.Linq;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp.Drawing;
 
@@ -68,24 +69,27 @@ namespace StrategyGame
         // Batched building drawing
         private static void DrawBuildings(Image<Rgba32> img, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds)
         {
+            var sw = Stopwatch.StartNew();
             var buildingsByColor = buildings.GroupBy(b => GetBuildingColor(b.Use));
-            
+
             img.Mutate(ctx =>
             {
                 foreach (var group in buildingsByColor)
                 {
                     var color = group.Key;
-                    var paths = new PathCollection(group.Select(item => 
+                    var paths = new PathCollection(group.Select(item =>
                         new Polygon(new LinearLineSegment(item.Poly.ExteriorRing.Coordinates.Select(c => ToPointF(c.X, c.Y, bounds)).ToArray()))
                     ));
                     ctx.Fill(color, paths);
                 }
             });
+            PerformanceTracker.Record("CityRenderer-BuildingRendering", sw.Elapsed);
         }
 
         // Batched road drawing
         private static void DrawRoads(Image<Rgba32> img, IEnumerable<LineSegment> roads, GeoBounds bounds)
         {
+            var sw = Stopwatch.StartNew();
             var primaryPathBuilder = new PathBuilder();
             var secondaryPathBuilder = new PathBuilder();
             foreach (var seg in roads)
@@ -93,7 +97,7 @@ namespace StrategyGame
                 var pathBuilder = seg.Type == RoadType.Primary ? primaryPathBuilder : secondaryPathBuilder;
                 pathBuilder.AddLine(ToPointF(seg.X1, seg.Y1, bounds), ToPointF(seg.X2, seg.Y2, bounds));
             }
-            
+
             var primaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
             var secondaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
 
@@ -101,6 +105,7 @@ namespace StrategyGame
                 .Draw(secondaryPen, secondaryPathBuilder.Build())
                 .Draw(primaryPen, primaryPathBuilder.Build())
             );
+            PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
         }
 
         private static PointF ToPointF(double lon, double lat, GeoBounds b) => new PointF((float)((lon - b.MinLon) / (b.MaxLon - b.MinLon) * MultiResolutionMapManager.TileSizePx), (float)((b.MaxLat - lat) / (b.MaxLat - b.MinLat) * MultiResolutionMapManager.TileSizePx));
