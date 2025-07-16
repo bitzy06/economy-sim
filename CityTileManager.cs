@@ -265,9 +265,6 @@ namespace StrategyGame
             int startY = Math.Max(0, viewRect.Y / tileSize - radius);
             int endY = Math.Min((mapSize.Height - 1) / tileSize, (viewRect.Bottom - 1) / tileSize + radius);
 
-            // --- START: Refactored Logic ---
-
-            // 1. Identify all tiles that need loading in a single, quick lock.
             var missingTiles = new List<(int x, int y)>();
             for (int x = startX; x <= endX; x++)
             {
@@ -281,40 +278,15 @@ namespace StrategyGame
                 }
             }
 
-            // 2. If all tiles are already cached or in-flight, just refresh and exit.
             if (!missingTiles.Any())
             {
                 triggerRefresh?.Invoke();
                 return;
             }
 
-            // 3. Launch throttled tasks only for the truly missing tiles.
-            using var throttle = new SemaphoreSlim(Environment.ProcessorCount);
-            var tasks = new List<Task>();
-
-            foreach (var coord in missingTiles)
-            {
-                await throttle.WaitAsync(token).ConfigureAwait(false);
-                tasks.Add(Task.Run(async () =>
-                {
-                    try
-                    {
-                        // GetTileAsync will create an _inFlight entry, preventing duplicates.
-                        await GetTileAsync(zoom, coord.x, coord.y, token).ConfigureAwait(false);
-                    }
-                    finally
-                    {
-                        throttle.Release();
-                    }
-                }, token));
-            }
-
+            var tasks = missingTiles.Select(coord => GetTileAsync(zoom, coord.x, coord.y, token));
             await Task.WhenAll(tasks).ConfigureAwait(false);
-
-            // 4. Trigger a single refresh after all new tiles are generated.
             triggerRefresh?.Invoke();
-
-            // --- END: Refactored Logic ---
         }
     }
     }

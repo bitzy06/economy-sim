@@ -34,197 +34,80 @@ namespace StrategyGame
 
         public static Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
         {
-            var swTotal = Stopwatch.StartNew();
-            try
+            var img = new Image<Rgba32>(MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, new Rgba32(0, 0, 0, 0));
+            var tilePoly = ToPolygon(tileBounds);
+
+            var allBuildingsToDraw = new List<(Nts.Polygon Poly, LandUseType Use)>();
+            var allRoadsToDraw = new List<LineSegment>();
+            var processedModelIds = new HashSet<Guid>();
+
+            var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
+            foreach (var urban in relevantUrbanAreas)
             {
-                var swInit = Stopwatch.StartNew();
-                var img = new Image<Rgba32>(Configuration.Default,
-                    MultiResolutionMapManager.TileSizePx,
-                    MultiResolutionMapManager.TileSizePx,
-                    new Rgba32(0, 0, 0, 0));
+                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly)) continue;
+                var modelId = RoadNetworkGenerator.GetCityDataModelId(urban);
+                if (!modelId.HasValue || !processedModelIds.Add(modelId.Value)) continue;
 
-                SKSurface? surface = null;
-                SKCanvas? canvas = null;
-                if (GpuAvailable)
+                var model = RoadNetworkGenerator.LoadCityDataModel(modelId.Value);
+                if (model == null) continue;
+
+                allRoadsToDraw.AddRange(model.RoadNetwork);
+
+                var buildingGeoms = model.Buildings
+                    .AsParallel()
+                    .Select(b => new { LandUse = b.LandUse, Visible = b.Footprint.Intersection(tilePoly) })
+                    .Where(b => b.Visible != null && !b.Visible.IsEmpty)
+                    .ToList();
+
+                foreach (var b in buildingGeoms)
                 {
-                    var info = new SKImageInfo(MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-                    try
+                    if (b.Visible is Nts.Polygon p) lock (allBuildingsToDraw) allBuildingsToDraw.Add((p, b.LandUse));
+                    else if (b.Visible is Nts.MultiPolygon mp)
                     {
-                        var context = GRContext.CreateGl();
-                        surface = SKSurface.Create(context, false, info);
-                        canvas = surface.Canvas;
-                        canvas.Clear(SKColors.Transparent);
-                    }
-                    catch { surface = null; canvas = null; }
-                }
-                var tilePoly = ToPolygon(tileBounds);
-                PerformanceTracker.Record("CityRenderer-Initialization", swInit.Elapsed);
-
-                // --- START: Optimization ---
-                // 1. Use centralized lists and caches to avoid redundant processing.
-                var allBuildingsToDraw = new List<(Nts.Polygon Poly, LandUseType Use)>();
-                var allRoadsToDraw = new List<LineSegment>();
-                var processedModelIds = new HashSet<Guid>();
-                var modelCache = new Dictionary<Guid, CityDataModel>();
-                int urbanAreasProcessed = 0;
-                int urbanAreasSkipped = 0;
-
-                var swUrbanProcessing = Stopwatch.StartNew();
-                var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
-
-                // 2. Loop through polygons to collect unique models.
-                foreach (var urban in relevantUrbanAreas)
-                {
-                    if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
-                    {
-                        urbanAreasSkipped++;
-                        continue;
-                    }
-
-                    var modelId = RoadNetworkGenerator.GetCityDataModelId(urban);
-
-                    // If we have no ID or have already processed this model, skip.
-                    if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
-                    {
-                        continue;
-                    }
-
-                    CityDataModel model;
-                    var swModel = Stopwatch.StartNew();
-                    if (!modelCache.TryGetValue(modelId.Value, out model))
-                    {
-                        model = RoadNetworkGenerator.LoadCityDataModel(modelId.Value);
-                        if (model == null)
-                        {
-                            PerformanceTracker.Record("CityRenderer-ModelGeneration-Failed", swModel.Elapsed);
-                            continue;
-                        }
-                        modelCache[modelId.Value] = model;
-                    }
-                    PerformanceTracker.Record("CityRenderer-ModelGeneration", swModel.Elapsed);
-
-                    urbanAreasProcessed++;
-                    allRoadsToDraw.AddRange(model.RoadNetwork);
-
-                    var swBuildings = Stopwatch.StartNew();
-                    Parallel.ForEach(model.Buildings, b =>
-                    {
-                        if (!b.Footprint.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal)) return;
-                        var visible = b.Footprint.Intersection(tilePoly);
-                        if (visible == null || visible.IsEmpty) return;
-
-                        if (visible is Nts.Polygon p)
-                        {
-                            lock (allBuildingsToDraw) allBuildingsToDraw.Add((p, b.LandUse));
-                        }
-                        else if (visible is Nts.MultiPolygon mp)
-                        {
-                            for (int i = 0; i < mp.NumGeometries; i++)
-                            {
-                                if (mp.GetGeometryN(i) is Nts.Polygon pp)
-                                    lock (allBuildingsToDraw) allBuildingsToDraw.Add((pp, b.LandUse));
-                            }
-                        }
-                    });
-                    PerformanceTracker.Record("CityRenderer-BuildingFiltering", swBuildings.Elapsed);
-                }
-                PerformanceTracker.Record("CityRenderer-UrbanProcessing", swUrbanProcessing.Elapsed);
-
-                // 3. Perform drawing operations ONCE using the collected geometries.
-                var swRendering = Stopwatch.StartNew();
-                if (canvas != null)
-                {
-                    foreach (var grp in allBuildingsToDraw.GroupBy(d => d.Use))
-                    {
-                        using var path = new SKPath();
-                        foreach (var item in grp) AppendPolygon(path, item.Poly, tileBounds);
-                        using var paint = new SKPaint { Color = ToSkColor(GetBuildingColor(grp.Key)), Style = SKPaintStyle.Fill, IsAntialias = true };
-                        canvas.DrawPath(path, paint);
+                        for (int i = 0; i < mp.NumGeometries; i++)
+                            if (mp.GetGeometryN(i) is Nts.Polygon pp) lock (allBuildingsToDraw) allBuildingsToDraw.Add((pp, b.LandUse));
                     }
                 }
-                else
-                {
-                    foreach (var item in allBuildingsToDraw) RenderPolygon(img, null, item.Poly, tileBounds, GetBuildingColor(item.Use));
-                }
-                PerformanceTracker.Record("CityRenderer-BuildingRendering", swRendering.Elapsed);
-
-                var swRoads = Stopwatch.StartNew();
-                DrawRoads(img, canvas, allRoadsToDraw, tileBounds);
-                PerformanceTracker.Record("CityRenderer-RoadDrawing", swRoads.Elapsed);
-
-                // --- END: Optimization ---
-
-                // Fix for performance tracking: log the count directly, not as time.
-                PerformanceTracker.Record("CityRenderer-UrbanAreasProcessed", TimeSpan.Zero);
-                PerformanceTracker.Record("CityRenderer-UrbanAreasSkipped", TimeSpan.Zero);
-
-                var swFinalize = Stopwatch.StartNew();
-                if (surface != null)
-                {
-                    using var snapshot = surface.Snapshot();
-                    using var data = snapshot.Encode(SKEncodedImageFormat.Png, 100);
-                    img.Dispose();
-                    img = SixLabors.ImageSharp.Image.Load<Rgba32>(data.AsStream());
-                }
-                PerformanceTracker.Record("CityRenderer-Finalization", swFinalize.Elapsed);
-                PerformanceTracker.Record("CityRenderer-Total", swTotal.Elapsed);
-
-                return Task.FromResult(img);
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Error] RenderCityTileAsync Exception: {ex.Message}\n{ex.StackTrace}");
-                PerformanceTracker.Record("CityRenderer-Exception", swTotal.Elapsed);
-                throw;
-            }
+
+            DrawBuildings(img, allBuildingsToDraw, tileBounds);
+            DrawRoads(img, allRoadsToDraw, tileBounds);
+
+            return Task.FromResult(img);
         }
 
-        private static void DrawRoads(Image<Rgba32> img, SKCanvas? canvas, IEnumerable<LineSegment> roads, GeoBounds bounds)
+        private static void DrawBuildings(Image<Rgba32> img, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds)
         {
-            var sw = Stopwatch.StartNew();
-            if (canvas != null)
+            var buildingsByColor = buildings.GroupBy(b => GetBuildingColor(b.Use));
+
+            img.Mutate(ctx =>
             {
-                // This is the efficient GPU path
-                // (No changes needed here)
-                foreach (var seg in roads)
+                foreach (var group in buildingsByColor)
                 {
-                    float width = seg.Type == RoadType.Primary ? 2f : 1f;
-                    using var paint = new SKPaint
-                    {
-                        Color = new SKColor(180, 180, 180, 200),
-                        StrokeWidth = width,
-                        Style = SKPaintStyle.Stroke,
-                        IsAntialias = true
-                    };
-                    var p1 = ToSKPoint(seg.X1, seg.Y1, bounds);
-                    var p2 = ToSKPoint(seg.X2, seg.Y2, bounds);
-                    canvas.DrawLine(p1, p2, paint);
+                    var color = group.Key;
+                    var paths = new PathCollection(group.Select(item =>
+                        new Polygon(new LinearLineSegment(item.Poly.ExteriorRing.Coordinates.Select(c => ToPointF(c.X, c.Y, bounds)).ToArray()))));
+                    ctx.Fill(color, paths);
                 }
-                PerformanceTracker.Record("DrawRoads-Skia", sw.Elapsed);
-            }
-            else
+            });
+        }
+
+        private static void DrawRoads(Image<Rgba32> img, IEnumerable<LineSegment> roads, GeoBounds bounds)
+        {
+            var primaryPathBuilder = new PathBuilder();
+            var secondaryPathBuilder = new PathBuilder();
+            foreach (var seg in roads)
             {
-                // --- START: Optimized CPU Fallback ---
-                // Create pens once outside the loop to avoid thousands of allocations.
-                var primaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
-                var secondaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
-
-                img.Mutate(ctx =>
-                {
-                    // Loop and draw each line individually, which is faster for this use case.
-                    foreach (var seg in roads)
-                    {
-                        var p1 = ToPointF(seg.X1, seg.Y1, bounds);
-                        var p2 = ToPointF(seg.X2, seg.Y2, bounds);
-
-                        // Select the appropriate pre-made pen.
-                        var pen = seg.Type == RoadType.Primary ? primaryPen : secondaryPen;
-                        ctx.DrawLine(pen, p1, p2);
-                    }
-                });
-                // --- END: Optimized CPU Fallback ---
-                PerformanceTracker.Record("DrawRoads-ImageSharp", sw.Elapsed);
+                var builder = seg.Type == RoadType.Primary ? primaryPathBuilder : secondaryPathBuilder;
+                builder.AddLine(ToPointF(seg.X1, seg.Y1, bounds), ToPointF(seg.X2, seg.Y2, bounds));
             }
+
+            var primaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
+            var secondaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
+
+            img.Mutate(ctx => ctx
+                .Draw(secondaryPen, secondaryPathBuilder.Build())
+                .Draw(primaryPen, primaryPathBuilder.Build()));
         }
 
         private static SixLabors.ImageSharp.PointF ToPointF(double lon, double lat, GeoBounds b)
@@ -286,28 +169,5 @@ namespace StrategyGame
             return result;
         }
 
-        private static void RenderPolygon(Image<Rgba32> img, SKCanvas? canvas, Nts.Polygon poly, GeoBounds bounds, Rgba32 color)
-        {
-            var sw = Stopwatch.StartNew();
-            if (canvas != null)
-            {
-                using var path = new SKPath();
-                AppendPolygon(path, poly, bounds);
-                using var paint = new SKPaint
-                {
-                    Color = ToSkColor(color),
-                    Style = SKPaintStyle.Fill,
-                    IsAntialias = true
-                };
-                canvas.DrawPath(path, paint);
-                PerformanceTracker.Record("RenderPolygon-Skia", sw.Elapsed);
-            }
-            else
-            {
-                var coords = poly.ExteriorRing.Coordinates.Select(c => ToPointF(c.X, c.Y, bounds)).ToArray();
-                img.Mutate(ctx => ctx.Fill(color, new Polygon(coords)));
-                PerformanceTracker.Record("RenderPolygon-ImageSharp", sw.Elapsed);
-            }
-        }
     }
 }

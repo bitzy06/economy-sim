@@ -2344,7 +2344,7 @@ namespace economy_sim
             }
         }
 
-        private void PanelMap_MouseWheel(object sender, MouseEventArgs e)
+        private async void PanelMap_MouseWheel(object sender, MouseEventArgs e)
         {
             // 1) figure out the anchor in panel coords
             SD.Point anchor = panelMap.PointToClient(Cursor.Position);
@@ -2384,7 +2384,7 @@ namespace economy_sim
             Debug.WriteLine($"  FINAL_ORIGIN=({mapViewOrigin.X},{mapViewOrigin.Y})");
 
             ApplyZoom();
-            _ = PreloadMapTilesAsync();
+            await PreloadMapTilesAsync();
         }
         private void PanelMap_Resize(object sender, EventArgs e)
         {
@@ -2498,13 +2498,13 @@ namespace economy_sim
             }
         }
 
-        private void PictureBox1_MouseUp(object sender, MouseEventArgs e)
+        private async void PictureBox1_MouseUp(object sender, MouseEventArgs e)
         {
             if (e.Button == MouseButtons.Left)
             {
                 isPanning = false;
                 Cursor = Cursors.Default;
-                _ = PreloadMapTilesAsync();
+                await PreloadMapTilesAsync();
             }
         }
 
@@ -2546,17 +2546,20 @@ namespace economy_sim
 
         private async Task PreloadMapTilesAsync()
         {
-            if (mapManager == null)
-                return;
+            if (mapManager == null) return;
+
             SD.Rectangle view;
-            int zoom;
+            float zoom;
             lock (_zoomLock)
             {
                 view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
-                zoom = mapZoom;
+                zoom = this.mapZoom;
             }
-            await mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
-            await cityTileManager.PreloadVisibleTilesAsync(zoom, view);
+
+            var baseMapTask = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
+            var cityTileTask = cityTileManager.PreloadVisibleTilesAsync(zoom, view, 1, InvalidateMap, CancellationToken.None);
+
+            await Task.WhenAll(baseMapTask, cityTileTask);
         }
 
         private void InvalidateMap()
