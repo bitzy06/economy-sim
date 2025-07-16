@@ -2631,7 +2631,7 @@ namespace economy_sim
         /// <summary>
         /// Validates that all urban areas have consistent city model IDs
         /// </summary>
-        public void ValidateUrbanAreaData()
+        public async Task ValidateUrbanAreaData()
         {
             int validCount = 0;
             int invalidCount = 0;
@@ -2670,7 +2670,7 @@ namespace economy_sim
                     }
 
                     // Try to verify the model can be loaded
-                    var model = RoadNetworkGenerator.LoadCityDataModel(guid);
+                    var model = await RoadNetworkGenerator.LoadCityDataModelAsync(guid).ConfigureAwait(false);
                     if (model == null || model.Id != guid)
                     {
                         invalidCount++;
@@ -2705,7 +2705,7 @@ namespace economy_sim
         /// <summary>
         /// Gets detailed information about a specific urban area and its city model
         /// </summary>
-        public string GetUrbanAreaDetails(Nts.Polygon urbanArea)
+        public async Task<string> GetUrbanAreaDetails(Nts.Polygon urbanArea)
         {
             string hash = ComputeUrbanAreaHash(urbanArea);
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
@@ -2715,7 +2715,7 @@ namespace economy_sim
             details.AppendLine($"Envelope: {urbanArea.EnvelopeInternal}");
             
             // Check for city model data
-            Guid? modelId = RoadNetworkGenerator.GetCityDataModelId(urbanArea);
+            Guid? modelId = await RoadNetworkGenerator.GetCityDataModelIdAsync(urbanArea).ConfigureAwait(false);
             if (modelId.HasValue)
             {
                 details.AppendLine($"City Model ID: {modelId.Value}");
@@ -2731,7 +2731,7 @@ namespace economy_sim
                         details.AppendLine($"Model File Modified: {fileInfo.LastWriteTime}");
                         
                         // Try to load and get basic stats
-                        var model = RoadNetworkGenerator.LoadCityDataModel(modelId.Value);
+                        var model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId.Value).ConfigureAwait(false);
                         if (model != null)
                         {
                             details.AppendLine($"Road Segments: {model.RoadNetwork.Count}");
