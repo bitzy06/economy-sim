@@ -71,14 +71,18 @@ namespace StrategyGame
             var info = new SKImageInfo(img.Width, img.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
             var skBitmap = new SKBitmap(info);
 
+            // Use a high-performance method to get a memory span of the whole image
             if (img.TryGetSinglePixelSpan(out Span<Rgba32> pixelSpan))
             {
+                // Safely reinterpret the Rgba32 span as a byte span without allocation
                 var byteSpan = MemoryMarshal.AsBytes(pixelSpan);
-                var ptr = skBitmap.GetPixels();
-                byteSpan.CopyTo(new Span<byte>((void*)ptr, byteSpan.Length));
+
+                // Copy the raw byte data directly to the Skia bitmap's memory
+                byteSpan.CopyTo(new Span<byte>((void*)skBitmap.GetPixels(), byteSpan.Length));
             }
             else
             {
+                // Provide a fallback for rare cases where image memory isn't contiguous
                 img.ProcessPixelRows(accessor =>
                 {
                     var ptr = skBitmap.GetPixels();
@@ -89,7 +93,6 @@ namespace StrategyGame
                     }
                 });
             }
-
             return skBitmap;
         }
 
