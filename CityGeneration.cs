@@ -285,21 +285,19 @@ namespace StrategyGame
     {
         public static List<Building> GenerateBuildings(CityDataModel model)
         {
-            var buildings = new List<Building>();
+            // We need the ConcurrentBag again for thread-safe collection
+            var buildingBag = new ConcurrentBag<Building>();
             var gf = Nts.GeometryFactory.Default;
 
             const double CommercialInset = -0.00002;
             const double ResidentialInset = -0.00004;
             const double IndustrialInset = -0.00003;
 
-            int parcelIndex = 0;
-            foreach (var parcel in model.Parcels)
-            {
-                // --- Start Diagnostic Logging ---
-                Debug.WriteLine($"--- Processing Parcel Index: {parcelIndex} ---");
-                Debug.WriteLine($"Parcel LandUse: {parcel.LandUse}, Area: {parcel.Shape.Area}, IsValid: {parcel.Shape.IsValid}");
-                // --- End Diagnostic Logging ---
+            // Create a partitioner to process parcels in efficient, thread-safe chunks.
+            var partitioner = Partitioner.Create(model.Parcels, true);
 
+            Parallel.ForEach(partitioner, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, parcel =>
+            {
                 try
                 {
                     Nts.Geometry foot = null;
@@ -317,31 +315,28 @@ namespace StrategyGame
                             else foot = temp;
                             break;
                         default:
-                            parcelIndex++;
-                            continue;
+                            // No need for continue, just don't process
+                            return;
                     }
 
                     if (foot is Nts.Polygon p && p.IsValid && !p.IsEmpty)
                     {
-                        Debug.WriteLine($"Buffer successful for parcel {parcelIndex}. Cleaning footprint...");
                         var cleanedFootprint = p.Buffer(0);
 
                         if (cleanedFootprint is Nts.Polygon cleanedP && cleanedP.IsValid && !cleanedP.IsEmpty)
                         {
-                            buildings.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
-                            Debug.WriteLine($"--> Building added successfully for parcel {parcelIndex}.");
+                            buildingBag.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    // This will tell us if the buffer operation throws a C# error
-                    Debug.WriteLine($"[BUILDING GEN ERROR] on Parcel Index {parcelIndex}: {ex.Message}");
+                    // It's still good practice to keep this catch block for diagnostics
+                    Debug.WriteLine($"[BUILDING GEN ERROR] on a parcel. Error: {ex.Message}");
                 }
+            });
 
-                parcelIndex++;
-            }
-
+            var buildings = buildingBag.ToList();
             model.Buildings = buildings;
             return buildings;
         }
