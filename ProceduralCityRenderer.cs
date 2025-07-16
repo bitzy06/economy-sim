@@ -184,7 +184,8 @@ namespace StrategyGame
             var sw = Stopwatch.StartNew();
             if (canvas != null)
             {
-                // GPU Path (already efficient)
+                // This is the efficient GPU path
+                // (No changes needed here)
                 foreach (var seg in roads)
                 {
                     float width = seg.Type == RoadType.Primary ? 2f : 1f;
@@ -203,41 +204,25 @@ namespace StrategyGame
             }
             else
             {
-                // --- START: Optimized CPU Path ---
+                // --- START: Optimized CPU Fallback ---
+                // Create pens once outside the loop to avoid thousands of allocations.
+                var primaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
+                var secondaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
 
-                // 1. Build paths for each road type instead of drawing lines individually.
-                var primaryPathBuilder = new PathBuilder();
-                var secondaryPathBuilder = new PathBuilder();
-
-                foreach (var seg in roads)
+                img.Mutate(ctx =>
                 {
-                    var p1 = ToPointF(seg.X1, seg.Y1, bounds);
-                    var p2 = ToPointF(seg.X2, seg.Y2, bounds);
-
-                    if (seg.Type == RoadType.Primary)
+                    // Loop and draw each line individually, which is faster for this use case.
+                    foreach (var seg in roads)
                     {
-                        primaryPathBuilder.AddLine(p1, p2);
+                        var p1 = ToPointF(seg.X1, seg.Y1, bounds);
+                        var p2 = ToPointF(seg.X2, seg.Y2, bounds);
+
+                        // Select the appropriate pre-made pen.
+                        var pen = seg.Type == RoadType.Primary ? primaryPen : secondaryPen;
+                        ctx.DrawLine(pen, p1, p2);
                     }
-                    else
-                    {
-                        secondaryPathBuilder.AddLine(p1, p2);
-                    }
-                }
-
-                var primaryPath = primaryPathBuilder.Build();
-                var secondaryPath = secondaryPathBuilder.Build();
-
-                // 2. Create pens only once.
-                var primaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
-                var secondaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
-
-                // 3. Draw each path in a single, efficient operation.
-                img.Mutate(ctx => ctx
-                    .Draw(secondaryPen, secondaryPath) // Draw smaller roads first
-                    .Draw(primaryPen, primaryPath)   // Draw main roads on top
-                );
-
-                // --- END: Optimized CPU Path ---
+                });
+                // --- END: Optimized CPU Fallback ---
                 PerformanceTracker.Record("DrawRoads-ImageSharp", sw.Elapsed);
             }
         }
