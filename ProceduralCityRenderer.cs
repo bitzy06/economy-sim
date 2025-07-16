@@ -69,8 +69,6 @@ namespace StrategyGame
 
                 int urbanAreasProcessed = 0;
                 int urbanAreasSkipped = 0;
-                int totalRoads = 0;
-                int totalBuildings = 0;
 
                 var swUrbanProcessing = Stopwatch.StartNew();
                 var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
@@ -126,7 +124,6 @@ namespace StrategyGame
                             }
                         }
                     });
-                    totalBuildings += drawList.Count;
                     PerformanceTracker.Record("CityRenderer-BuildingFiltering", swBuildings.Elapsed);
 
                     var swRendering = Stopwatch.StartNew();
@@ -158,18 +155,15 @@ namespace StrategyGame
                     // STEP 2: Process and draw roads on top of buildings
                     var swRoads = Stopwatch.StartNew();
                     int roadCount = model.RoadNetwork.Count();
-                    totalRoads += roadCount;
                     DrawRoads(img, canvas, model.RoadNetwork, tileBounds);
                     PerformanceTracker.Record("CityRenderer-RoadDrawing", swRoads.Elapsed);
-                    PerformanceTracker.Record("CityRenderer-RoadCount", TimeSpan.FromMilliseconds(roadCount));
+                    // Removed incorrect performance tracking of road count
 
                     // --- END OF FIX ---
                 }
                 PerformanceTracker.Record("CityRenderer-UrbanProcessing", swUrbanProcessing.Elapsed);
                 PerformanceTracker.Record("CityRenderer-UrbanAreasProcessed", TimeSpan.FromMilliseconds(urbanAreasProcessed));
                 PerformanceTracker.Record("CityRenderer-UrbanAreasSkipped", TimeSpan.FromMilliseconds(urbanAreasSkipped));
-                PerformanceTracker.Record("CityRenderer-TotalRoads", TimeSpan.FromMilliseconds(totalRoads));
-                PerformanceTracker.Record("CityRenderer-TotalBuildings", TimeSpan.FromMilliseconds(totalBuildings));
 
                 var swFinalize = Stopwatch.StartNew();
                 if (surface != null)

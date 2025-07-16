@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using SD = System.Drawing;
-using SDI = System.Drawing.Imaging;
+using SixLabors.ImageSharp.Advanced;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,7 +21,7 @@ namespace StrategyGame
         // --- START: Added Field ---
         private readonly MultiResolutionMapManager _mapManager;
         // --- END: Added Field ---
-        private readonly Dictionary<(int cellSize, int x, int y), (SKBitmap sk, SD.Bitmap gdi)> _tileCache = new();
+        private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
         private readonly Dictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
         private readonly object _cacheLock = new();
         private readonly LinkedList<(int cellSize, int x, int y)> _lruOrder = new();
@@ -69,15 +69,21 @@ namespace StrategyGame
             }
         }
 
-        private static SD.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
+        private static SKBitmap ImageSharpToSkia(Image<Rgba32> img)
         {
-            var sw = Stopwatch.StartNew();
-            using var ms = new MemoryStream();
-            img.SaveAsPng(ms);
-            ms.Position = 0;
-            var bmp = new SD.Bitmap(ms);
-            PerformanceTracker.Record("ImageSharpToBitmap", sw.Elapsed);
-            return bmp;
+            var info = new SKImageInfo(img.Width, img.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+            var skBitmap = new SKBitmap(info);
+
+            if (img.TryGetSinglePixelSpan(out var pixelSpan))
+            {
+                var ptr = skBitmap.GetPixels();
+                unsafe
+                {
+                    System.Runtime.InteropServices.Marshal.Copy(
+                        (byte[])(object)pixelSpan.ToArray(), 0, ptr, pixelSpan.Length * 4);
+                }
+            }
+            return skBitmap;
         }
 
 
@@ -95,12 +101,12 @@ namespace StrategyGame
             PerformanceTracker.Record("LRU-TouchKey", sw.Elapsed);
         }
 
-        private void AddToCache((int cellSize, int x, int y) key, (SKBitmap sk, SD.Bitmap gdi) bitmaps)
+        private void AddToCache((int cellSize, int x, int y) key, SKBitmap bitmap)
         {
             var sw = Stopwatch.StartNew();
             lock (_cacheLock)
             {
-                _tileCache[key] = bitmaps;
+                _tileCache[key] = bitmap;
                 if (_lruNodes.TryGetValue(key, out var existing))
                 {
                     _lruOrder.Remove(existing);
@@ -114,10 +120,9 @@ namespace StrategyGame
                     if (last == null) break;
                     _lruOrder.RemoveLast();
                     var remKey = last.Value;
-                    if (_tileCache.TryGetValue(remKey, out var oldBitmaps))
+                    if (_tileCache.TryGetValue(remKey, out var oldBitmap))
                     {
-                        oldBitmaps.sk.Dispose();
-                        oldBitmaps.gdi.Dispose();
+                        oldBitmap.Dispose();
                     }
                     _tileCache.Remove(remKey);
                     _lruNodes.Remove(remKey);
@@ -220,7 +225,7 @@ namespace StrategyGame
                 {
                     TouchKey(key);
                     PerformanceTracker.Record("LoadTileInternal-CacheHit", sw.Elapsed);
-                    return cached.sk;
+                    return cached;
                 }
             }
 
@@ -234,9 +239,8 @@ namespace StrategyGame
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
                     using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
-                    var bmp = ImageSharpToBitmap(img);
-                    var sk = SkiaBitmapUtil.ToSKBitmap(bmp);
-                    AddToCache(key, (sk, bmp));
+                    var sk = ImageSharpToSkia(img);
+                    AddToCache(key, sk);
                     PerformanceTracker.Record("LoadTileInternal-FromDisk", swFileLoad.Elapsed);
                     PerformanceTracker.Record("LoadTileInternal-Total", sw.Elapsed);
                     return sk;
@@ -253,10 +257,8 @@ namespace StrategyGame
             using var generated = await ProceduralCityRenderer.RenderCityTileAsync(bounds, cellSize).ConfigureAwait(false);
             PerformanceTracker.Record("TileGeneration", swGen.Elapsed);
             
-            var swBitmap = Stopwatch.StartNew();
-            var bitmap = ImageSharpToBitmap(generated);
-            PerformanceTracker.Record("TileGeneration-ToBitmap", swBitmap.Elapsed);
-            
+            var skBmp = ImageSharpToSkia(generated);
+
             var swSave = Stopwatch.StartNew();
             string dir = Path.Combine(TileCacheDir, cellSize.ToString());
             Directory.CreateDirectory(dir);
@@ -264,9 +266,8 @@ namespace StrategyGame
             await lockFile.WaitAsync(token).ConfigureAwait(false);
             try
             {
-                using var clone = generated.Clone();
                 await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
-                await clone.SaveAsPngAsync(fs, token).ConfigureAwait(false);
+                await generated.SaveAsPngAsync(fs, token).ConfigureAwait(false);
             }
             finally
             {
@@ -274,8 +275,7 @@ namespace StrategyGame
             }
             PerformanceTracker.Record("TileGeneration-SaveToDisk", swSave.Elapsed);
 
-            var skBmp = SkiaBitmapUtil.ToSKBitmap(bitmap);
-            AddToCache(key, (skBmp, bitmap));
+            AddToCache(key, skBmp);
             PerformanceTracker.Record("LoadTileInternal-Generation", swGeneration.Elapsed);
             PerformanceTracker.Record("LoadTileInternal-Total", sw.Elapsed);
             return skBmp;
@@ -334,7 +334,7 @@ namespace StrategyGame
                         {
                             TouchKey(key);
                             // Create a private, safe copy of the tile inside the lock
-                            tileCopy = cachedTile.sk.Copy();
+                            tileCopy = cachedTile.Copy();
                         }
                     }
 
@@ -363,8 +363,7 @@ namespace StrategyGame
                         _ = Task.Run(async () =>
                         {
                             var swAsync = Stopwatch.StartNew();
-                            var t = await GetTileAsync(zoom, ttx, tty, CancellationToken.None).ConfigureAwait(false);
-                            if (t != null) triggerRefresh?.Invoke();
+                            await GetTileAsync(zoom, ttx, tty, CancellationToken.None).ConfigureAwait(false);
                             PerformanceTracker.Record("AssembleView-AsyncTileLoad", swAsync.Elapsed);
                         });
                     }
@@ -383,7 +382,7 @@ namespace StrategyGame
             return result;
         }
 
-        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, CancellationToken token = default)
+        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, Action triggerRefresh = null, CancellationToken token = default)
         {
             var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
@@ -425,6 +424,8 @@ namespace StrategyGame
             }
 
             await Task.WhenAll(tasks).ConfigureAwait(false);
+
+            triggerRefresh?.Invoke();
 
             PerformanceTracker.Record("PreloadTiles-Total", sw.Elapsed);
         }
