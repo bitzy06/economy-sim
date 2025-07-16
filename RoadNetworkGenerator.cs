@@ -21,8 +21,7 @@ namespace StrategyGame
     {
         private static readonly ConcurrentDictionary<string, List<(Nts.LineString Line, RoadType Type)>> networkCache = new();
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
-        private static readonly object _fileLockDictLock = new();
-        private static readonly Dictionary<string, SemaphoreSlim> _fileLocks = new();
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
 
         public static CityGenerationData? Data { get; set; }
 
@@ -34,22 +33,14 @@ namespace StrategyGame
 
         private static SemaphoreSlim GetFileLock(string path)
         {
-            lock (_fileLockDictLock)
-            {
-                if (!_fileLocks.TryGetValue(path, out var sem))
-                {
-                    sem = new SemaphoreSlim(1, 1);
-                    _fileLocks[path] = sem;
-                }
-                return sem;
-            }
+            return _fileLocks.GetOrAdd(path, p => new SemaphoreSlim(1, 1));
         }
 
 
         private static async Task SaveModelBinaryAsync(string path, CityDataModel model)
         {
             var fileLock = GetFileLock(path);
-            await fileLock.WaitAsync();
+            await fileLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 var wkbWriter = new WKBWriter();
@@ -120,11 +111,11 @@ namespace StrategyGame
         private static async Task<CityDataModel> LoadModelBinaryAsync(string path)
         {
             var fileLock = GetFileLock(path);
-            await fileLock.WaitAsync();
+            await fileLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 var wkbReader = new WKBReader();
-                byte[] fileBytes = await File.ReadAllBytesAsync(path);
+                byte[] fileBytes = await File.ReadAllBytesAsync(path).ConfigureAwait(false);
                 using var ms = new MemoryStream(fileBytes);
                 using var br = new BinaryReader(ms);
 
@@ -529,7 +520,7 @@ namespace StrategyGame
         /// <summary>
         /// Gets the ID of the city data model for a given urban area, if it exists
         /// </summary>
-        public static Guid? GetCityDataModelId(Nts.Polygon urbanArea)
+        public static async Task<Guid?> GetCityDataModelIdAsync(Nts.Polygon urbanArea)
         {
             string hash = ComputeHash(urbanArea);
             string cacheDir = GetCacheDir();
@@ -544,8 +535,8 @@ namespace StrategyGame
             {
                 try
                 {
-                    string id = File.ReadAllText(hashPath);
-                    if (Guid.TryParse(id, out Guid guid))
+                    string idStr = await File.ReadAllTextAsync(hashPath).ConfigureAwait(false);
+                    if (Guid.TryParse(idStr, out Guid guid))
                     {
                         string modelPath = Path.Combine(cacheDir, $"{guid}.bin");
                         if (File.Exists(modelPath))
@@ -599,16 +590,15 @@ namespace StrategyGame
             return (inMemoryCount, diskCount, totalUnique);
         }
 
-        public static CityDataModel? LoadCityDataModel(Guid id)
+        public static async Task<CityDataModel?> LoadCityDataModelAsync(Guid id)
         {
             string cacheDir = GetCacheDir();
             string modelPath = Path.Combine(cacheDir, $"{id}.bin");
-            if (!File.Exists(modelPath))
-                return null;
+            if (!File.Exists(modelPath)) return null;
 
             try
             {
-                return LoadModelBinaryAsync(modelPath).GetAwaiter().GetResult();
+                return await LoadModelBinaryAsync(modelPath).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
