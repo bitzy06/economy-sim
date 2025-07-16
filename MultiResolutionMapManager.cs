@@ -334,7 +334,7 @@ namespace StrategyGame
             var context = GpuAvailable ? SharedContext : null;
                 using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
                 var canvas = surface.Canvas;
-                canvas.Clear(SKColors.DarkGray);
+                canvas.Clear(SKColors.Transparent);
 
                 for (int ty = tileStartY; ty < tileEndY; ty++)
                 {
