@@ -24,6 +24,7 @@ namespace StrategyGame
         private readonly MultiResolutionMapManager _mapManager;
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
+        private readonly SemaphoreSlim _preloadLimiter = new(8, 8);
         public static readonly bool GpuAvailable;
 
         static CityTileManager()
@@ -100,6 +101,26 @@ namespace StrategyGame
             return skBitmap;
         }
 
+        private static async Task SaveTileAsync(string path, Image<Rgba32> image)
+        {
+            string? dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
+
+            var fileLock = GetFileLock(path);
+            await fileLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
+                await image.SaveAsPngAsync(fs).ConfigureAwait(false);
+            }
+            finally
+            {
+                fileLock.Release();
+                image.Dispose();
+            }
+        }
+
 
 
         private int GetCellSize(float zoom)
@@ -153,14 +174,17 @@ namespace StrategyGame
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
 
-            // This is a thread-safe way to get an existing task or create a new one.
-            return _inFlight.GetOrAdd(key, (k) => LoadTileInternalAsync(k.cellSize, k.x, k.y, token));
+            if (_tileCache.TryGetValue(key, out var cached))
+                return Task.FromResult(cached);
+
+            return _inFlight.GetOrAdd(key, _ => LoadTileInternalAsync(cellSize, tileX, tileY, token));
         }
 
         private async Task<SKBitmap> LoadTileInternalAsync(int cellSize, int tileX, int tileY, CancellationToken token)
         {
             var totalSw = Stopwatch.StartNew();
             var key = (cellSize, tileX, tileY);
+
             if (_tileCache.TryGetValue(key, out var cached))
             {
                 _inFlight.TryRemove(key, out _);
@@ -179,8 +203,7 @@ namespace StrategyGame
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
                     var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var sk = ImageSharpToSkia(img);
-                    _tileCache.TryAdd(key, sk); // Add to concurrent cache
-                    _inFlight.TryRemove(key, out _); // Clean up in-flight task
+                    _tileCache[key] = sk;
                     PerformanceTracker.Record("CityTileManager-LoadTile-FromDisk", loadSw.Elapsed);
                     return sk;
                 }
@@ -196,24 +219,10 @@ namespace StrategyGame
             var skBmp = ImageSharpToSkia(generated);
             PerformanceTracker.Record("CityTileManager-GenerateTile", genSw.Elapsed);
 
-            string dir = Path.GetDirectoryName(path);
-            Directory.CreateDirectory(dir);
-            var lockFile = GetFileLock(path);
-            await lockFile.WaitAsync(token).ConfigureAwait(false);
-            try
-            {
-                var saveSw = Stopwatch.StartNew();
-                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
-                await generated.SaveAsPngAsync(fs, token).ConfigureAwait(false);
-                PerformanceTracker.Record("CityTileManager-SaveTile", saveSw.Elapsed);
-            }
-            finally
-            {
-                lockFile.Release();
-            }
+            _tileCache[key] = skBmp;
+            _ = Task.Run(() => SaveTileAsync(path, generated));
 
-            _tileCache.TryAdd(key, skBmp); // Add to concurrent cache
-            _inFlight.TryRemove(key, out _); // Clean up in-flight task
+            _inFlight.TryRemove(key, out _);
             PerformanceTracker.Record("CityTileManager-LoadTile", totalSw.Elapsed);
             return skBmp;
         }
@@ -309,7 +318,12 @@ namespace StrategyGame
                 return;
             }
 
-            var tasks = missingTiles.Select(coord => GetTileAsync(zoom, coord.x, coord.y, token));
+            var tasks = missingTiles.Select(async coord =>
+            {
+                await _preloadLimiter.WaitAsync(token).ConfigureAwait(false);
+                try { await GetTileAsync(zoom, coord.x, coord.y, token).ConfigureAwait(false); }
+                finally { _preloadLimiter.Release(); }
+            });
             await Task.WhenAll(tasks).ConfigureAwait(false);
             PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
             triggerRefresh?.Invoke();
