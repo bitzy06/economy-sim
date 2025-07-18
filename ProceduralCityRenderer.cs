@@ -21,6 +21,7 @@ namespace StrategyGame
         // This method is now async to support awaiting the data model.
         public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
         {
+            var sw = Stopwatch.StartNew();
             var img = new Image<Rgba32>(MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, new Rgba32(0, 0, 0, 0));
             var tilePoly = ToPolygon(tileBounds);
 
@@ -73,6 +74,7 @@ namespace StrategyGame
                 DrawBuildings(img, modelId.Value, toDraw, tileBounds, cellSize);
             }
 
+            PerformanceTracker.Record("CityRenderer-RenderTile", sw.Elapsed);
             return img;
         }
 
