@@ -153,7 +153,6 @@ namespace economy_sim
             panelMap.MouseWheel += PanelMap_MouseWheel;
             mapUpdateTimer = new System.Windows.Forms.Timer { Interval = 40 };
             mapUpdateTimer.Tick += MapUpdateTimer_Tick;
-            mapUpdateTimer.Start();
             playerRoleManager = new PlayerRoleManager();
             allCitiesInWorld = new List<StrategyGame.City>();
             allCountries = new List<StrategyGame.Country>();
@@ -288,6 +287,11 @@ namespace economy_sim
 
             pictureBox1.Size = panelMap.ClientSize;
             pictureBox1.Location = new SD.Point(0, 0);
+
+            if (!mapUpdateTimer.Enabled)
+            {
+                mapUpdateTimer.Start();
+            }
         }
 
        
@@ -2383,7 +2387,12 @@ namespace economy_sim
 
         private async Task PreloadMapTilesAsync()
         {
-            if (mapManager == null) return;
+            if (mapManager == null || cityTileManager == null)
+            {
+                RefreshMap();
+                if (mapManager == null || cityTileManager == null)
+                    return;
+            }
 
             SD.Rectangle view;
             float zoom;
@@ -2409,6 +2418,14 @@ namespace economy_sim
 
             try
             {
+                if (mapManager == null || cityTileManager == null)
+                {
+                    RefreshMap();
+                    if (mapManager == null || cityTileManager == null)
+                    {
+                        return;
+                    }
+                }
                 await PreloadMapTilesAsync();
 
                 SD.Rectangle view;
