@@ -12,6 +12,8 @@ using System.Linq;
 using SkiaSharp;
 using economy_sim;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
+using System.Buffers;
 
 namespace StrategyGame
 {
@@ -42,6 +44,24 @@ namespace StrategyGame
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "data", "city_tile_cache");
 
+        private sealed class ImagePixelOwner : IDisposable
+        {
+            public Image<Rgba32> Image { get; }
+            public MemoryHandle Handle { get; }
+
+            public ImagePixelOwner(Image<Rgba32> image)
+            {
+                Image = image;
+                Handle = image.GetPixelMemory().Pin();
+            }
+
+            public void Dispose()
+            {
+                Handle.Dispose();
+                Image.Dispose();
+            }
+        }
+
         public CityTileManager(int baseWidth, int baseHeight, MultiResolutionMapManager mapManager)
         {
             _baseWidth = baseWidth;
@@ -65,22 +85,15 @@ namespace StrategyGame
         private static unsafe SKBitmap ImageSharpToSkia(Image<Rgba32> img)
         {
             var info = new SKImageInfo(img.Width, img.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-            var skBitmap = new SKBitmap(info);
-            var ptr = skBitmap.GetPixels();
+            var owner = new ImagePixelOwner(img);
+            var skBitmap = new SKBitmap();
 
-            // Process the image row-by-row for broader ImageSharp version compatibility.
-            img.ProcessPixelRows(accessor =>
-            {
-                for (int y = 0; y < accessor.Height; y++)
-                {
-                    // Safely reinterpret the Rgba32 span for the current row as a byte span.
-                    var byteSpan = MemoryMarshal.AsBytes(accessor.GetRowSpan(y));
-
-                    // Create a span for the destination row in the Skia bitmap and copy the data.
-                    var destSpan = new Span<byte>((void*)(ptr + y * skBitmap.RowBytes), byteSpan.Length);
-                    byteSpan.CopyTo(destSpan);
-                }
-            });
+            skBitmap.InstallPixels(
+                info,
+                (IntPtr)owner.Handle.Pointer,
+                img.Width * Unsafe.SizeOf<Rgba32>(),
+                (addr, ctx) => ((ImagePixelOwner)ctx!).Dispose(),
+                owner);
 
             return skBitmap;
         }
@@ -159,7 +172,7 @@ namespace StrategyGame
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
-                    using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
+                    var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var sk = ImageSharpToSkia(img);
                     _tileCache.TryAdd(key, sk); // Add to concurrent cache
                     _inFlight.TryRemove(key, out _); // Clean up in-flight task
@@ -172,7 +185,7 @@ namespace StrategyGame
             }
 
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
-            using var generated = await ProceduralCityRenderer.RenderCityTileAsync(bounds, cellSize).ConfigureAwait(false);
+            var generated = await ProceduralCityRenderer.RenderCityTileAsync(bounds, cellSize).ConfigureAwait(false);
             var skBmp = ImageSharpToSkia(generated);
 
             string dir = Path.GetDirectoryName(path);
@@ -229,18 +242,15 @@ namespace StrategyGame
                         tx * tileSize - viewArea.X + tileSize,
                         ty * tileSize - viewArea.Y + tileSize);
 
-                    SKBitmap tileCopy = null;
+                    SKBitmap tileBitmap = null;
                     if (_tileCache.TryGetValue(key, out var cachedTile))
                     {
-                        tileCopy = cachedTile.Copy();
+                        tileBitmap = cachedTile;
                     }
 
-                    if (tileCopy != null)
+                    if (tileBitmap != null)
                     {
-                        using (tileCopy)
-                        {
-                            canvas.DrawBitmap(tileCopy, rect);
-                        }
+                        canvas.DrawBitmap(tileBitmap, rect);
                     }
                     else
                     {
