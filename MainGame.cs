@@ -81,7 +81,7 @@ namespace economy_sim
         private DateTime lastCityModelUpdate = DateTime.Now;
 
         //threading
-        private CancellationTokenSource simCts; // Add this line
+        private CancellationTokenSource simCts = new CancellationTokenSource();
         private void LoadGlobalData()
         {
             string dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
@@ -248,6 +248,7 @@ namespace economy_sim
         {
             // Start the simulation loop on a background thread
             // now that the form is fully loaded and displayed.
+            simCts?.Cancel();
             simCts = new CancellationTokenSource();
             Task.Run(() => RunGameSimulationLoop(simCts.Token), simCts.Token);
         }
