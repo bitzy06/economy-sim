@@ -10,12 +10,13 @@ namespace StrategyGame
 {
     internal static class CityModelCache
     {
-        private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), CachedRoads> _roads = new();
+        private static readonly ConcurrentDictionary<(Guid modelId, int cellSize, double minLon, double minLat, double maxLon, double maxLat), CachedRoads> _roads = new();
         private static readonly ConcurrentDictionary<(Guid modelId, int cellSize, double minLon, double minLat, double maxLon, double maxLat), CachedBuildings> _buildings = new();
 
         public static CachedRoads GetOrAddRoads(Guid modelId, int cellSize, IEnumerable<LineSegment> rawRoads, GeoBounds bounds)
         {
-            return _roads.GetOrAdd((modelId, cellSize), _ =>
+            var key = (modelId, cellSize, bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat);
+            return _roads.GetOrAdd(key, _ =>
             {
                 var tileBox = new NetTopologySuite.Geometries.Envelope(bounds.MinLon, bounds.MaxLon, bounds.MinLat, bounds.MaxLat);
                 var clipped = rawRoads.Where(r =>

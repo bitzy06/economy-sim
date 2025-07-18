@@ -26,29 +26,34 @@ namespace StrategyGame
             var tilePoly = ToPolygon(tileBounds);
 
             var processedModelIds = new HashSet<Guid>();
-            
-            var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
+            var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds).Where(u => u.Intersects(tilePoly)).ToList();
 
-            // This loop now awaits the new async methods, preventing deadlocks.
-            foreach (var urban in relevantUrbanAreas)
+            var models = await Task.WhenAll(relevantUrbanAreas.Select(async u =>
             {
-                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
-                    continue;
+                var id = await RoadNetworkGenerator.GetCityDataModelIdAsync(u).ConfigureAwait(false);
+                if (!id.HasValue || !processedModelIds.Add(id.Value))
+                    return null;
 
-                var modelId = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
-                if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
-                    continue;
-
-                if (!_modelCache.TryGetValue(modelId.Value, out var model))
+                if (!_modelCache.TryGetValue(id.Value, out var m))
                 {
-                    model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId.Value).ConfigureAwait(false);
-                    if (model == null) continue;
-                    _modelCache[modelId.Value] = model;
+                    m = await RoadNetworkGenerator.LoadCityDataModelAsync(id.Value).ConfigureAwait(false);
+                    if (m == null) return null;
+                    _modelCache[id.Value] = m;
                 }
+                return m;
+            }));
 
-                DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize);
-                
-                // Query visible buildings using the model's spatial index
+            var roadCaches = new List<CityModelCache.CachedRoads>();
+            var buildingCaches = new List<CityModelCache.CachedBuildings>();
+
+            foreach (var model in models.Where(m => m != null))
+            {
+                IEnumerable<LineSegment> roads = model.RoadNetwork;
+                if (cellSize <= 40)
+                    roads = roads.Where(r => r.Type == RoadType.Primary);
+                var roadCache = CityModelCache.GetOrAddRoads(model.Id, cellSize, roads, tileBounds);
+                roadCaches.Add(roadCache);
+
                 var tileEnv = tilePoly.EnvelopeInternal;
                 var candidates = (model.BuildingIndex?.Query(tileEnv).Cast<Building>() ?? model.Buildings);
                 var toDraw = new List<(Nts.Polygon, LandUseType)>();
@@ -71,15 +76,21 @@ namespace StrategyGame
                     }
                 }
 
-                DrawBuildings(img, modelId.Value, toDraw, tileBounds, cellSize);
+                var buildingCache = PrepareBuildingCache(model.Id, toDraw, tileBounds, cellSize);
+                buildingCaches.Add(buildingCache);
             }
+
+            if (roadCaches.Count > 0)
+                DrawRoads(img, roadCaches, cellSize);
+            if (buildingCaches.Count > 0)
+                DrawBuildings(img, buildingCaches);
 
             PerformanceTracker.Record("CityRenderer-RenderTile", sw.Elapsed);
             return img;
         }
 
-        // Batched building drawing with caching and dynamic LOD
-        private static void DrawBuildings(Image<Rgba32> img, Guid modelId, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds, int cellSize)
+        // Convert building polygons into cached paths
+        private static CityModelCache.CachedBuildings PrepareBuildingCache(Guid modelId, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
 
@@ -127,14 +138,20 @@ namespace StrategyGame
             }
 
             var cached = CityModelCache.GetOrAddBuildings(modelId, cellSize, bounds, reduced);
+            PerformanceTracker.Record("CityRenderer-BuildingRendering", sw.Elapsed);
+            return cached;
+        }
 
+        private static void DrawBuildings(Image<Rgba32> img, IEnumerable<CityModelCache.CachedBuildings> buildings)
+        {
             img.Mutate(ctx =>
             {
-                foreach (var kvp in cached.PathsByColor)
-                    ctx.Fill(kvp.Key, kvp.Value);
+                foreach (var cached in buildings)
+                {
+                    foreach (var kvp in cached.PathsByColor)
+                        ctx.Fill(kvp.Key, kvp.Value);
+                }
             });
-
-            PerformanceTracker.Record("CityRenderer-BuildingRendering", sw.Elapsed);
         }
 
         // Batched road drawing
@@ -173,23 +190,20 @@ namespace StrategyGame
             }
         }
 
-        private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)
+        private static void DrawRoads(Image<Rgba32> img, IEnumerable<CityModelCache.CachedRoads> roads, int cellSize)
         {
             var sw = Stopwatch.StartNew();
-            if (cellSize <= 40)
-            {
-                roads = roads.Where(r => r.Type == RoadType.Primary);
-            }
-
-            var cached = CityModelCache.GetOrAddRoads(modelId, cellSize, roads, bounds);
-
             var primaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
             var secondaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
 
-            img.Mutate(ctx => ctx
-                .Draw(secondaryPen, cached.SecondaryPath)
-                .Draw(primaryPen, cached.PrimaryPath)
-            );
+            img.Mutate(ctx =>
+            {
+                foreach (var cached in roads)
+                {
+                    ctx.Draw(secondaryPen, cached.SecondaryPath);
+                    ctx.Draw(primaryPen, cached.PrimaryPath);
+                }
+            });
             PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
         }
 
