@@ -52,7 +52,7 @@ namespace StrategyGame
             public ImagePixelOwner(Image<Rgba32> image)
             {
                 Image = image;
-                Handle = image.GetPixelMemory().Pin();
+                Handle = image.Frames.RootFrame.DangerousTryGetSinglePixelMemory(out var memory) ? memory.Pin() : throw new InvalidOperationException("Unable to pin pixel memory.");
             }
 
             public void Dispose()
