@@ -47,23 +47,6 @@ namespace StrategyGame
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "data", "city_tile_cache");
 
-        private sealed class ImagePixelOwner : IDisposable
-        {
-            public Image<Rgba32> Image { get; }
-            public MemoryHandle Handle { get; }
-
-            public ImagePixelOwner(Image<Rgba32> image)
-            {
-                Image = image;
-                Handle = image.Frames.RootFrame.DangerousTryGetSinglePixelMemory(out var memory) ? memory.Pin() : throw new InvalidOperationException("Unable to pin pixel memory.");
-            }
-
-            public void Dispose()
-            {
-                Handle.Dispose();
-                Image.Dispose();
-            }
-        }
 
         public CityTileManager(int baseWidth, int baseHeight, MultiResolutionMapManager mapManager)
         {
@@ -88,16 +71,25 @@ namespace StrategyGame
         private static unsafe SKBitmap ImageSharpToSkia(Image<Rgba32> img)
         {
             var sw = Stopwatch.StartNew();
-            var info = new SKImageInfo(img.Width, img.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-            var owner = new ImagePixelOwner(img);
-            var skBitmap = new SKBitmap();
+            int w = img.Width;
+            int h = img.Height;
+            var info = new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
 
-            skBitmap.InstallPixels(
-                info,
-                (IntPtr)owner.Handle.Pointer,
-                img.Width * Unsafe.SizeOf<Rgba32>(),
-                (addr, ctx) => ((ImagePixelOwner)ctx!).Dispose(),
-                owner);
+            var skBitmap = new SKBitmap(info);
+
+            img.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < h; y++)
+                {
+                    IntPtr dst = skBitmap.GetPixels() + y * skBitmap.RowBytes;
+                    var src = accessor.GetRowSpan(y);
+                    fixed (void* srcPtr = src)
+                    {
+                        Buffer.MemoryCopy(srcPtr, (void*)dst, src.Length * sizeof(Rgba32),
+                                          src.Length * sizeof(Rgba32));
+                    }
+                }
+            });
 
             PerformanceTracker.Record("CityTileManager-ImageSharpToSkia", sw.Elapsed);
             return skBitmap;
