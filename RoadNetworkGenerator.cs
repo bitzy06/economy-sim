@@ -13,6 +13,8 @@ using System.Threading.Tasks;
 using System.Threading;
 using NetTopologySuite.IO;
 using NetTopologySuite.Index.Quadtree;
+using NetTopologySuite.Index.Strtree;
+using NetTopologySuite.Simplify;
 using System.Windows.Forms;
 
 namespace StrategyGame
@@ -22,6 +24,19 @@ namespace StrategyGame
         private static readonly ConcurrentDictionary<string, List<(Nts.LineString Line, RoadType Type)>> networkCache = new();
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
+
+        private static void BuildBuildingStructures(CityDataModel model)
+        {
+            const double tol = 0.0001; // degrees ~10m
+            var index = new STRtree<Building>();
+            foreach (var b in model.Buildings)
+            {
+                b.SimplifiedFootprint = DouglasPeuckerSimplifier.Simplify(b.Footprint, tol);
+                index.Insert(b.Footprint.EnvelopeInternal, b);
+            }
+            index.Build();
+            model.BuildingIndex = index;
+        }
 
         public static CityGenerationData? Data { get; set; }
 
@@ -181,7 +196,9 @@ namespace StrategyGame
                 });
             }
 
-                return model;
+            BuildBuildingStructures(model);
+
+            return model;
             }
             finally
             {
@@ -240,6 +257,7 @@ namespace StrategyGame
             LandUseSimulator.Run(result);
             result.Buildings = BuildingGenerator.GenerateBuildings(result);
             BuildingRefiner.RefineBuildings(result);
+            BuildBuildingStructures(result);
 
             Debug.WriteLine($">> Generated {result.Parcels.Count} parcels, {result.Buildings.Count} buildings for {hash}");
 
