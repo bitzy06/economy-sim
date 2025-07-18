@@ -10,12 +10,13 @@ namespace StrategyGame
 {
     internal static class CityModelCache
     {
-        private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), CachedRoads> _roads = new();
-        private static readonly ConcurrentDictionary<(Guid modelId, int cellSize, double minLon, double minLat, double maxLon, double maxLat), CachedBuildings> _buildings = new();
+        private static readonly ConcurrentDictionary<(int cellSize, double minLon, double minLat, double maxLon, double maxLat), CachedRoads> _roads = new();
+        private static readonly ConcurrentDictionary<(int cellSize, double minLon, double minLat, double maxLon, double maxLat), CachedBuildings> _buildings = new();
 
-        public static CachedRoads GetOrAddRoads(Guid modelId, int cellSize, IEnumerable<LineSegment> rawRoads, GeoBounds bounds)
+        public static CachedRoads GetOrAddRoads(int cellSize, GeoBounds bounds, IEnumerable<LineSegment> rawRoads)
         {
-            return _roads.GetOrAdd((modelId, cellSize), _ =>
+            var key = (cellSize, bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat);
+            return _roads.GetOrAdd(key, _ =>
             {
                 var tileBox = new NetTopologySuite.Geometries.Envelope(bounds.MinLon, bounds.MaxLon, bounds.MinLat, bounds.MaxLat);
                 var clipped = rawRoads.Where(r =>
@@ -47,9 +48,9 @@ namespace StrategyGame
             });
         }
 
-        public static CachedBuildings GetOrAddBuildings(Guid modelId, int cellSize, GeoBounds bounds, IEnumerable<(NetTopologySuite.Geometries.Polygon Poly, LandUseType Use)> buildings)
+        public static CachedBuildings GetOrAddBuildings(int cellSize, GeoBounds bounds, IEnumerable<(NetTopologySuite.Geometries.Polygon Poly, LandUseType Use)> buildings)
         {
-            var key = (modelId, cellSize, bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat);
+            var key = (cellSize, bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat);
             return _buildings.GetOrAdd(key, _ =>
             {
                 var dict = new Dictionary<Rgba32, IPath>();
