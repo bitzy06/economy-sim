@@ -1,5 +1,6 @@
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Drawing;
+using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -57,9 +58,11 @@ namespace StrategyGame
                     var pb = new PathBuilder();
                     foreach (var item in group)
                     {
-                        pb.AddPolygon(new Polygon(new LinearLineSegment(item.Poly.ExteriorRing.Coordinates.Select(c => ProceduralCityRenderer.ToPointF(c.X, c.Y, bounds)).ToArray())));
+                        var points = item.Poly.ExteriorRing.Coordinates.Select(c => ProceduralCityRenderer.ToPointF(c.X, c.Y, bounds)).ToArray();
+                        pb.AddLines(points);
+                        pb.CloseFigure();
                     }
-                    dict[group.Key] = pb.Build();
+                    dict[(Rgba32)group.Key] = pb.Build();
                 }
 
                 return new CachedBuildings { PathsByColor = dict };
