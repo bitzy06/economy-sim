@@ -3,12 +3,14 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Processing;
+using NetTopologySuite.Simplify;
 using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp.Drawing;
+using economy_sim;
 
 namespace StrategyGame
 {
@@ -61,7 +63,7 @@ namespace StrategyGame
 
             // Call the optimized, batched drawing methods
             DrawBuildings(img, allBuildingsToDraw, tileBounds);
-            DrawRoads(img, allRoadsToDraw, tileBounds);
+            DrawRoads(img, allRoadsToDraw, tileBounds, cellSize);
             
             return img;
         }
@@ -87,9 +89,50 @@ namespace StrategyGame
         }
 
         // Batched road drawing
-        private static void DrawRoads(Image<Rgba32> img, IEnumerable<LineSegment> roads, GeoBounds bounds)
+        private static IEnumerable<LineSegment> SimplifyRoads(IEnumerable<LineSegment> roads, GeoBounds bounds)
+        {
+            double tolerance = (bounds.MaxLon - bounds.MinLon) / MultiResolutionMapManager.TileSizePx * 2.0;
+
+            var gf = Nts.GeometryFactory.Default;
+            foreach (var group in roads.GroupBy(r => r.Type))
+            {
+                var lineStrings = group.Select(s =>
+                    gf.CreateLineString(new[]
+                    {
+                        new Nts.Coordinate(s.X1, s.Y1),
+                        new Nts.Coordinate(s.X2, s.Y2)
+                    })).ToArray();
+
+                if (lineStrings.Length == 0) continue;
+
+                var multi = gf.CreateMultiLineString(lineStrings);
+                var simplified = NetTopologySuite.Simplify.DouglasPeuckerSimplifier.Simplify(multi, tolerance) as Nts.MultiLineString;
+                if (simplified == null) continue;
+
+                for (int i = 0; i < simplified.NumGeometries; i++)
+                {
+                    if (simplified.GetGeometryN(i) is Nts.LineString ln)
+                    {
+                        for (int j = 0; j < ln.NumPoints - 1; j++)
+                        {
+                            var c1 = ln.GetCoordinateN(j);
+                            var c2 = ln.GetCoordinateN(j + 1);
+                            yield return new LineSegment(c1.X, c1.Y, c2.X, c2.Y, group.Key);
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void DrawRoads(Image<Rgba32> img, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
+            if (cellSize <= 40)
+            {
+                roads = roads.Where(r => r.Type == RoadType.Primary);
+            }
+
+            roads = SimplifyRoads(roads, bounds).ToList();
             var primaryPathBuilder = new PathBuilder();
             var secondaryPathBuilder = new PathBuilder();
             foreach (var seg in roads)
@@ -98,8 +141,8 @@ namespace StrategyGame
                 pathBuilder.AddLine(ToPointF(seg.X1, seg.Y1, bounds), ToPointF(seg.X2, seg.Y2, bounds));
             }
 
-            var primaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
-            var secondaryPen = Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
+            var primaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
+            var secondaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
 
             img.Mutate(ctx => ctx
                 .Draw(secondaryPen, secondaryPathBuilder.Build())
@@ -108,7 +151,10 @@ namespace StrategyGame
             PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
         }
 
-        private static PointF ToPointF(double lon, double lat, GeoBounds b) => new PointF((float)((lon - b.MinLon) / (b.MaxLon - b.MinLon) * MultiResolutionMapManager.TileSizePx), (float)((b.MaxLat - lat) / (b.MaxLat - b.MinLat) * MultiResolutionMapManager.TileSizePx));
+        private static SixLabors.ImageSharp.PointF ToPointF(double lon, double lat, GeoBounds b) =>
+            new SixLabors.ImageSharp.PointF(
+                (float)((lon - b.MinLon) / (b.MaxLon - b.MinLon) * MultiResolutionMapManager.TileSizePx),
+                (float)((b.MaxLat - lat) / (b.MaxLat - b.MinLat) * MultiResolutionMapManager.TileSizePx));
         private static Nts.Polygon ToPolygon(GeoBounds b) => new Nts.Polygon(new Nts.LinearRing(new[] { new Nts.Coordinate(b.MinLon, b.MinLat), new Nts.Coordinate(b.MaxLon, b.MinLat), new Nts.Coordinate(b.MaxLon, b.MaxLat), new Nts.Coordinate(b.MinLon, b.MaxLat), new Nts.Coordinate(b.MinLon, b.MinLat) }));
         private static Rgba32 GetBuildingColor(LandUseType use) => use switch { LandUseType.Commercial => new Rgba32(200, 50, 50, 180), LandUseType.Residential => new Rgba32(50, 50, 200, 180), LandUseType.Industrial => new Rgba32(120, 120, 120, 180), _ => new Rgba32(60, 160, 60, 180) };
     }
