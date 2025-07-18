@@ -7,6 +7,7 @@ using NetTopologySuite.Simplify;
 using System.Linq;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp.Drawing;
@@ -16,6 +17,7 @@ namespace StrategyGame
 {
     public static class ProceduralCityRenderer
     {
+        private static readonly ConcurrentDictionary<Guid, CityDataModel> _modelCache = new();
         // This method is now async to support awaiting the data model.
         public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
         {
@@ -23,7 +25,6 @@ namespace StrategyGame
             var tilePoly = ToPolygon(tileBounds);
 
             var allBuildingsToDraw = new List<(Nts.Polygon Poly, LandUseType Use)>();
-            var allRoadsToDraw = new List<LineSegment>();
             var processedModelIds = new HashSet<Guid>();
             
             var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
@@ -31,17 +32,21 @@ namespace StrategyGame
             // This loop now awaits the new async methods, preventing deadlocks.
             foreach (var urban in relevantUrbanAreas)
             {
-                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly)) continue;
+                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
+                    continue;
 
-                // Use the new async GetCityDataModelIdAsync
                 var modelId = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
-                if (!modelId.HasValue || !processedModelIds.Add(modelId.Value)) continue;
-                
-                // Use the new async LoadCityDataModelAsync
-                var model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId.Value).ConfigureAwait(false);
-                if (model == null) continue;
+                if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
+                    continue;
 
-                allRoadsToDraw.AddRange(model.RoadNetwork);
+                if (!_modelCache.TryGetValue(modelId.Value, out var model))
+                {
+                    model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId.Value).ConfigureAwait(false);
+                    if (model == null) continue;
+                    _modelCache[modelId.Value] = model;
+                }
+
+                DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize);
                 
                 // Process building geometry in parallel
                 var buildingGeoms = model.Buildings
@@ -63,7 +68,6 @@ namespace StrategyGame
 
             // Call the optimized, batched drawing methods
             DrawBuildings(img, allBuildingsToDraw, tileBounds);
-            DrawRoads(img, allRoadsToDraw, tileBounds, cellSize);
             
             return img;
         }
@@ -89,7 +93,7 @@ namespace StrategyGame
         }
 
         // Batched road drawing
-        private static IEnumerable<LineSegment> SimplifyRoads(IEnumerable<LineSegment> roads, GeoBounds bounds)
+        internal static IEnumerable<LineSegment> SimplifyRoads(IEnumerable<LineSegment> roads, GeoBounds bounds)
         {
             double tolerance = (bounds.MaxLon - bounds.MinLon) / MultiResolutionMapManager.TileSizePx * 2.0;
 
@@ -124,7 +128,7 @@ namespace StrategyGame
             }
         }
 
-        private static void DrawRoads(Image<Rgba32> img, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)
+        private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
             if (cellSize <= 40)
@@ -132,26 +136,19 @@ namespace StrategyGame
                 roads = roads.Where(r => r.Type == RoadType.Primary);
             }
 
-            roads = SimplifyRoads(roads, bounds).ToList();
-            var primaryPathBuilder = new PathBuilder();
-            var secondaryPathBuilder = new PathBuilder();
-            foreach (var seg in roads)
-            {
-                var pathBuilder = seg.Type == RoadType.Primary ? primaryPathBuilder : secondaryPathBuilder;
-                pathBuilder.AddLine(ToPointF(seg.X1, seg.Y1, bounds), ToPointF(seg.X2, seg.Y2, bounds));
-            }
+            var cached = CityModelCache.GetOrAddRoads(modelId, cellSize, roads, bounds);
 
             var primaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
             var secondaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
 
             img.Mutate(ctx => ctx
-                .Draw(secondaryPen, secondaryPathBuilder.Build())
-                .Draw(primaryPen, primaryPathBuilder.Build())
+                .Draw(secondaryPen, cached.SecondaryPath)
+                .Draw(primaryPen, cached.PrimaryPath)
             );
             PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
         }
 
-        private static SixLabors.ImageSharp.PointF ToPointF(double lon, double lat, GeoBounds b) =>
+        internal static SixLabors.ImageSharp.PointF ToPointF(double lon, double lat, GeoBounds b) =>
             new SixLabors.ImageSharp.PointF(
                 (float)((lon - b.MinLon) / (b.MaxLon - b.MinLon) * MultiResolutionMapManager.TileSizePx),
                 (float)((b.MaxLat - lat) / (b.MaxLat - b.MinLat) * MultiResolutionMapManager.TileSizePx));
