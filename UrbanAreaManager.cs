@@ -6,13 +6,23 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.IO;
+using System.Linq;
 
 namespace StrategyGame
 {
     public static class UrbanAreaManager
     {
-        public static List<Nts.Polygon> UrbanPolygons { get; private set; } = new();
-        private static STRtree<Nts.Polygon>? spatialIndex;
+        public static readonly List<Nts.Polygon> UrbanPolygons;
+        private static readonly STRtree<Nts.Polygon> _index;
+
+        static UrbanAreaManager()
+        {
+            UrbanPolygons = LoadAllUrbanPolygons();
+            _index = new STRtree<Nts.Polygon>();
+            foreach (var poly in UrbanPolygons)
+                _index.Insert(poly.EnvelopeInternal, poly);
+            _index.Build();
+        }
 
         private static readonly string RepoRoot =
             Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
@@ -23,12 +33,12 @@ namespace StrategyGame
         private static readonly string DataFileList = Path.Combine(RepoRoot, "DataFileNames");
         private static readonly Dictionary<string, string> DataFiles = LoadDataFiles();
 
-        public static void LoadUrbanAreas()
+        private static List<Nts.Polygon> LoadAllUrbanPolygons()
         {
-            UrbanPolygons.Clear();
+            var list = new List<Nts.Polygon>();
             string shp = GetDataFile("ne_10m_urban_areas.shp");
             if (!File.Exists(shp))
-                return;
+                return list;
 
             var reader = new ShapefileDataReader(shp, Nts.GeometryFactory.Default);
             while (reader.Read())
@@ -39,20 +49,16 @@ namespace StrategyGame
                     for (int i = 0; i < mp.NumGeometries; i++)
                     {
                         if (mp.GetGeometryN(i) is Nts.Polygon p)
-                            UrbanPolygons.Add(p);
+                            list.Add(p);
                     }
                 }
                 else if (geom is Nts.Polygon p)
                 {
-                    UrbanPolygons.Add(p);
+                    list.Add(p);
                 }
             }
 
-            spatialIndex = new STRtree<Nts.Polygon>();
-            foreach (var poly in UrbanPolygons)
-            {
-                spatialIndex.Insert(poly.EnvelopeInternal, poly);
-            }
+            return list;
         }
 
         public static void PrecomputeAllRoadNetworks()
@@ -69,13 +75,10 @@ namespace StrategyGame
             Debug.WriteLine($"Finished pre-computing all road networks in {sw.Elapsed.TotalSeconds:F2} seconds.");
         }
 
-        public static List<Nts.Polygon> Query(GeoBounds bounds)
+        public static IEnumerable<Nts.Polygon> Query(GeoBounds bounds)
         {
-            if (spatialIndex == null)
-                return UrbanPolygons;
-
             var env = new Nts.Envelope(bounds.MinLon, bounds.MaxLon, bounds.MinLat, bounds.MaxLat);
-            return spatialIndex.Query(env).Cast<Nts.Polygon>().ToList();
+            return _index.Query(env).Cast<Nts.Polygon>();
         }
 
         private static string GetDataFile(string name)

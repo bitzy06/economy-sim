@@ -360,8 +360,7 @@ namespace economy_sim
             // 2. Initialize Factory Blueprints (this also populates Market.GoodDefinitions now)
             FactoryBlueprints.InitializeBlueprints();
 
-            // Load urban area polygons for procedural generation
-            UrbanAreaManager.LoadUrbanAreas();
+            // Urban areas and spatial index initialize lazily
             CheckAndPromptForMissingCityData();
 
             // 3. Load World Setup from JSON
