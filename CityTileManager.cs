@@ -193,6 +193,26 @@ namespace StrategyGame
             }
 
             string path = GetTilePath(cellSize, tileX, tileY);
+            var fileLock = GetFileLock(path);
+            await fileLock.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
+                var img = await Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
+                var fromDisk = ImageSharpToSkia(img);
+                _tileCache[key] = fromDisk;
+                _inFlight.TryRemove(key, out _);
+                PerformanceTracker.Record("CityTileManager-LoadTile-FromDisk", totalSw.Elapsed);
+                return fromDisk;
+            }
+            catch (FileNotFoundException)
+            {
+                // fall through to generate
+            }
+            finally
+            {
+                fileLock.Release();
+            }
 
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
             var genSw = Stopwatch.StartNew();
