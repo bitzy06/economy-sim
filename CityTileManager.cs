@@ -12,6 +12,8 @@ using System.Linq;
 using SkiaSharp;
 using economy_sim;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
+using System.Buffers;
 
 namespace StrategyGame
 {
@@ -42,6 +44,24 @@ namespace StrategyGame
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "data", "city_tile_cache");
 
+        private sealed class ImagePixelOwner : IDisposable
+        {
+            public Image<Rgba32> Image { get; }
+            public MemoryHandle Handle { get; }
+
+            public ImagePixelOwner(Image<Rgba32> image)
+            {
+                Image = image;
+                Handle = image.Frames.RootFrame.DangerousTryGetSinglePixelMemory(out var memory) ? memory.Pin() : throw new InvalidOperationException("Unable to pin pixel memory.");
+            }
+
+            public void Dispose()
+            {
+                Handle.Dispose();
+                Image.Dispose();
+            }
+        }
+
         public CityTileManager(int baseWidth, int baseHeight, MultiResolutionMapManager mapManager)
         {
             _baseWidth = baseWidth;
@@ -64,24 +84,19 @@ namespace StrategyGame
 
         private static unsafe SKBitmap ImageSharpToSkia(Image<Rgba32> img)
         {
+            var sw = Stopwatch.StartNew();
             var info = new SKImageInfo(img.Width, img.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-            var skBitmap = new SKBitmap(info);
-            var ptr = skBitmap.GetPixels();
+            var owner = new ImagePixelOwner(img);
+            var skBitmap = new SKBitmap();
 
-            // Process the image row-by-row for broader ImageSharp version compatibility.
-            img.ProcessPixelRows(accessor =>
-            {
-                for (int y = 0; y < accessor.Height; y++)
-                {
-                    // Safely reinterpret the Rgba32 span for the current row as a byte span.
-                    var byteSpan = MemoryMarshal.AsBytes(accessor.GetRowSpan(y));
+            skBitmap.InstallPixels(
+                info,
+                (IntPtr)owner.Handle.Pointer,
+                img.Width * Unsafe.SizeOf<Rgba32>(),
+                (addr, ctx) => ((ImagePixelOwner)ctx!).Dispose(),
+                owner);
 
-                    // Create a span for the destination row in the Skia bitmap and copy the data.
-                    var destSpan = new Span<byte>((void*)(ptr + y * skBitmap.RowBytes), byteSpan.Length);
-                    byteSpan.CopyTo(destSpan);
-                }
-            });
-
+            PerformanceTracker.Record("CityTileManager-ImageSharpToSkia", sw.Elapsed);
             return skBitmap;
         }
 
@@ -144,25 +159,29 @@ namespace StrategyGame
 
         private async Task<SKBitmap> LoadTileInternalAsync(int cellSize, int tileX, int tileY, CancellationToken token)
         {
+            var totalSw = Stopwatch.StartNew();
             var key = (cellSize, tileX, tileY);
             if (_tileCache.TryGetValue(key, out var cached))
             {
                 _inFlight.TryRemove(key, out _);
+                PerformanceTracker.Record("CityTileManager-LoadTile-Cached", totalSw.Elapsed);
                 return cached;
             }
 
             string path = GetTilePath(cellSize, tileX, tileY);
             if (File.Exists(path))
             {
+                var loadSw = Stopwatch.StartNew();
                 var fileLock = GetFileLock(path);
                 await fileLock.WaitAsync(token).ConfigureAwait(false);
                 try
                 {
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
-                    using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
+                    var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var sk = ImageSharpToSkia(img);
                     _tileCache.TryAdd(key, sk); // Add to concurrent cache
                     _inFlight.TryRemove(key, out _); // Clean up in-flight task
+                    PerformanceTracker.Record("CityTileManager-LoadTile-FromDisk", loadSw.Elapsed);
                     return sk;
                 }
                 finally
@@ -172,8 +191,10 @@ namespace StrategyGame
             }
 
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
-            using var generated = await ProceduralCityRenderer.RenderCityTileAsync(bounds, cellSize).ConfigureAwait(false);
+            var genSw = Stopwatch.StartNew();
+            var generated = await ProceduralCityRenderer.RenderCityTileAsync(bounds, cellSize).ConfigureAwait(false);
             var skBmp = ImageSharpToSkia(generated);
+            PerformanceTracker.Record("CityTileManager-GenerateTile", genSw.Elapsed);
 
             string dir = Path.GetDirectoryName(path);
             Directory.CreateDirectory(dir);
@@ -181,8 +202,10 @@ namespace StrategyGame
             await lockFile.WaitAsync(token).ConfigureAwait(false);
             try
             {
+                var saveSw = Stopwatch.StartNew();
                 await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
                 await generated.SaveAsPngAsync(fs, token).ConfigureAwait(false);
+                PerformanceTracker.Record("CityTileManager-SaveTile", saveSw.Elapsed);
             }
             finally
             {
@@ -191,11 +214,13 @@ namespace StrategyGame
 
             _tileCache.TryAdd(key, skBmp); // Add to concurrent cache
             _inFlight.TryRemove(key, out _); // Clean up in-flight task
+            PerformanceTracker.Record("CityTileManager-LoadTile", totalSw.Elapsed);
             return skBmp;
         }
 
         public SKBitmap AssembleView(float zoom, SD.Rectangle viewArea, Action triggerRefresh = null)
         {
+            var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
 
@@ -229,18 +254,15 @@ namespace StrategyGame
                         tx * tileSize - viewArea.X + tileSize,
                         ty * tileSize - viewArea.Y + tileSize);
 
-                    SKBitmap tileCopy = null;
+                    SKBitmap tileBitmap = null;
                     if (_tileCache.TryGetValue(key, out var cachedTile))
                     {
-                        tileCopy = cachedTile.Copy();
+                        tileBitmap = cachedTile;
                     }
 
-                    if (tileCopy != null)
+                    if (tileBitmap != null)
                     {
-                        using (tileCopy)
-                        {
-                            canvas.DrawBitmap(tileCopy, rect);
-                        }
+                        canvas.DrawBitmap(tileBitmap, rect);
                     }
                     else
                     {
@@ -251,11 +273,13 @@ namespace StrategyGame
 
             var result = new SKBitmap(info);
             surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
+            PerformanceTracker.Record("CityTileManager-AssembleView", sw.Elapsed);
             return result;
         }
 
         public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, Action triggerRefresh = null, CancellationToken token = default)
         {
+            var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
             var mapSize = new SD.Size(_baseWidth * cellSize, _baseHeight * cellSize);
@@ -280,12 +304,14 @@ namespace StrategyGame
 
             if (!missingTiles.Any())
             {
+                PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
                 triggerRefresh?.Invoke();
                 return;
             }
 
             var tasks = missingTiles.Select(coord => GetTileAsync(zoom, coord.x, coord.y, token));
             await Task.WhenAll(tasks).ConfigureAwait(false);
+            PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
             triggerRefresh?.Invoke();
         }
     }
