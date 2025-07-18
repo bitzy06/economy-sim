@@ -76,19 +76,62 @@ namespace StrategyGame
             return img;
         }
 
-        // Batched building drawing with caching
+        // Batched building drawing with caching and dynamic LOD
         private static void DrawBuildings(Image<Rgba32> img, Guid modelId, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
-            var cached = CityModelCache.GetOrAddBuildings(modelId, cellSize, bounds, buildings);
+
+            // 1) Cull buildings that would be too small on screen
+            if (cellSize <= 40)
+            {
+                buildings = buildings.Where(b =>
+                {
+                    var env = b.Poly.EnvelopeInternal;
+                    var p0 = ToPointF(env.MinX, env.MinY, bounds);
+                    var p1 = ToPointF(env.MaxX, env.MaxY, bounds);
+                    return Math.Abs(p1.X - p0.X) > 4 || Math.Abs(p1.Y - p0.Y) > 4;
+                }).ToList();
+            }
+
+            // 2) Optionally drop residential buildings at very small scales
+            if (cellSize <= 20)
+            {
+                buildings = buildings.Where(b => b.Use != LandUseType.Residential).ToList();
+            }
+
+            // 3) Dynamically simplify footprints based on zoom level
+            double tol = (bounds.MaxLon - bounds.MinLon)
+                         / MultiResolutionMapManager.TileSizePx
+                         * (cellSize <= 80 ? 2.5 : 1.0);
+
+            var reduced = new List<(Nts.Polygon Poly, LandUseType Use)>();
+            foreach (var (poly, use) in buildings)
+            {
+                var simplified = DouglasPeuckerSimplifier.Simplify(poly, tol);
+                if (simplified == null || simplified.IsEmpty) continue;
+
+                if (simplified is Nts.Polygon p)
+                {
+                    reduced.Add((p, use));
+                }
+                else if (simplified is Nts.MultiPolygon mp)
+                {
+                    for (int i = 0; i < mp.NumGeometries; i++)
+                    {
+                        if (mp.GetGeometryN(i) is Nts.Polygon pp && !pp.IsEmpty)
+                            reduced.Add((pp, use));
+                    }
+                }
+            }
+
+            var cached = CityModelCache.GetOrAddBuildings(modelId, cellSize, bounds, reduced);
 
             img.Mutate(ctx =>
             {
                 foreach (var kvp in cached.PathsByColor)
-                {
                     ctx.Fill(kvp.Key, kvp.Value);
-                }
             });
+
             PerformanceTracker.Record("CityRenderer-BuildingRendering", sw.Elapsed);
         }
 
