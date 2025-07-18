@@ -25,6 +25,8 @@ namespace StrategyGame
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
         private readonly SemaphoreSlim _preloadLimiter = new(8, 8);
+        private SKBitmap? _viewBuffer;
+        private SKSurface? _viewSurface;
         public static readonly bool GpuAvailable;
 
         static CityTileManager()
@@ -235,9 +237,16 @@ namespace StrategyGame
             int tileSize = MultiResolutionMapManager.TileSizePx;
 
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-            var result = new SKBitmap(info);
-            using var surface = SKSurface.Create(info, result.GetPixels(), result.RowBytes);
-            var canvas = surface.Canvas;
+
+            if (_viewBuffer == null || _viewBuffer.Width != info.Width || _viewBuffer.Height != info.Height)
+            {
+                _viewSurface?.Dispose();
+                _viewBuffer?.Dispose();
+                _viewBuffer = new SKBitmap(info);
+                _viewSurface = SKSurface.Create(info, _viewBuffer.GetPixels(), _viewBuffer.RowBytes);
+            }
+
+            var canvas = _viewSurface!.Canvas;
             canvas.Clear(SKColors.Transparent);
 
             using (var baseMap = _mapManager.AssembleView(zoom, viewArea, triggerRefresh))
@@ -281,8 +290,9 @@ namespace StrategyGame
                 }
             }
 
+            _viewSurface!.Canvas.Flush();
             PerformanceTracker.Record("CityTileManager-AssembleView", sw.Elapsed);
-            return result;
+            return _viewBuffer!;
         }
 
         public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, Action triggerRefresh = null, CancellationToken token = default)

@@ -53,6 +53,9 @@ namespace StrategyGame
         private readonly object _masterCacheLock = new();
         private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileTextures = new();
 
+        private SKBitmap? _viewBuffer;
+        private SKSurface? _viewSurface;
+
         public static readonly bool GpuAvailable;
         internal static readonly GRContext? SharedContext;
 
@@ -331,10 +334,17 @@ namespace StrategyGame
             int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
 
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-            var context = GpuAvailable ? SharedContext : null;
-                using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
-                var canvas = surface.Canvas;
-                canvas.Clear(SKColors.Transparent);
+
+            if (_viewBuffer == null || _viewBuffer.Width != info.Width || _viewBuffer.Height != info.Height)
+            {
+                _viewSurface?.Dispose();
+                _viewBuffer?.Dispose();
+                _viewBuffer = new SKBitmap(info);
+                _viewSurface = SKSurface.Create(info, _viewBuffer.GetPixels(), _viewBuffer.RowBytes);
+            }
+
+            var canvas = _viewSurface!.Canvas;
+            canvas.Clear(SKColors.Transparent);
 
                 for (int ty = tileStartY; ty < tileEndY; ty++)
                 {
@@ -351,32 +361,23 @@ namespace StrategyGame
                         if (rect.Width <= 0 || rect.Height <= 0)
                             continue;
 
-                        // --- START: Replacement Logic ---
-                        SKBitmap textureCopy = null;
                         lock (_masterCacheLock)
                         {
                             if (_tileTextures.TryGetValue(key, out var texture))
                             {
-                                // Create a private, safe copy of the texture inside the lock
-                                textureCopy = texture.Copy();
-                            }
-                        }
-
-                        if (textureCopy != null)
-                        {
-                            using (textureCopy)
-                            {
                                 try
                                 {
-                                    canvas.DrawBitmap(textureCopy, rect);
+                                    canvas.DrawBitmap(texture, rect);
                                 }
                                 catch (AccessViolationException ex)
                                 {
-                                    DebugLogger.Log($"Access violation drawing texture copy {key}: {ex.Message}");
+                                    DebugLogger.Log($"Access violation drawing texture {key}: {ex.Message}");
                                 }
+                                continue;
                             }
                         }
-                        else
+
+                        // If not in cache, start loading
                         {
                             lock (_tileLoadLock)
                             {
@@ -404,13 +405,11 @@ namespace StrategyGame
                                 }
                             }
                         }
-                        // --- END: Replacement Logic ---
                     }
                 }
 
-                var result = new SKBitmap(info);
-                surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
-                return result;
+                _viewSurface!.Canvas.Flush();
+                return _viewBuffer!;
         }
 
         private static void OverlayFeatures(SystemDrawing.Bitmap bmp, ZoomLevel level)
