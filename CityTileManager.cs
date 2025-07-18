@@ -2,6 +2,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using SD = System.Drawing;
 using System.IO;
@@ -19,12 +20,8 @@ namespace StrategyGame
         private readonly int _baseWidth;
         private readonly int _baseHeight;
         private readonly MultiResolutionMapManager _mapManager;
-        private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
-        private readonly Dictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
-        private readonly object _cacheLock = new();
-        private readonly LinkedList<(int cellSize, int x, int y)> _lruOrder = new();
-        private readonly Dictionary<(int cellSize, int x, int y), LinkedListNode<(int cellSize, int x, int y)>> _lruNodes = new();
-        private const int MaxCacheSize = 256;
+        private readonly ConcurrentDictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
+        private readonly ConcurrentDictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
         public static readonly bool GpuAvailable;
 
         static CityTileManager()
@@ -88,51 +85,7 @@ namespace StrategyGame
             return skBitmap;
         }
 
-        private void TouchKey((int cellSize, int x, int y) key)
-        {
-            lock (_cacheLock)
-            {
-                if (_lruNodes.TryGetValue(key, out var node))
-                {
-                    _lruOrder.Remove(node);
-                    _lruOrder.AddFirst(node);
-                }
-            }
-        }
 
-        private void AddToCache((int cellSize, int x, int y) key, SKBitmap bitmap)
-        {
-            lock (_cacheLock)
-            {
-                if (_tileCache.ContainsKey(key))
-                {
-                    _tileCache[key]?.Dispose();
-                }
-
-                _tileCache[key] = bitmap;
-                if (_lruNodes.TryGetValue(key, out var existing))
-                {
-                    _lruOrder.Remove(existing);
-                }
-                var node = _lruOrder.AddFirst(key);
-                _lruNodes[key] = node;
-
-                while (_tileCache.Count > MaxCacheSize)
-                {
-                    var last = _lruOrder.Last;
-                    if (last == null) break;
-
-                    var remKey = last.Value;
-                    if (_tileCache.TryGetValue(remKey, out var oldBitmap))
-                    {
-                        oldBitmap?.Dispose();
-                    }
-                    _tileCache.Remove(remKey);
-                    _lruNodes.Remove(remKey);
-                    _lruOrder.RemoveLast();
-                }
-            }
-        }
 
         private int GetCellSize(float zoom)
         {
@@ -184,40 +137,18 @@ namespace StrategyGame
         {
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
-            Task<SKBitmap> result;
-            lock (_cacheLock)
-            {
-                if (_inFlight.TryGetValue(key, out var existing))
-                {
-                    result = existing;
-                }
-                else
-                {
-                    var task = LoadTileInternalAsync(cellSize, tileX, tileY, token);
-                    _inFlight[key] = task;
-                    task.ContinueWith(_ =>
-                    {
-                        lock (_cacheLock)
-                        {
-                            _inFlight.Remove(key);
-                        }
-                    }, TaskScheduler.Default);
-                    result = task;
-                }
-            }
-            return result;
+
+            // This is a thread-safe way to get an existing task or create a new one.
+            return _inFlight.GetOrAdd(key, (k) => LoadTileInternalAsync(k.cellSize, k.x, k.y, token));
         }
 
         private async Task<SKBitmap> LoadTileInternalAsync(int cellSize, int tileX, int tileY, CancellationToken token)
         {
             var key = (cellSize, tileX, tileY);
-            lock (_cacheLock)
+            if (_tileCache.TryGetValue(key, out var cached))
             {
-                if (_tileCache.TryGetValue(key, out var cached))
-                {
-                    TouchKey(key);
-                    return cached;
-                }
+                _inFlight.TryRemove(key, out _);
+                return cached;
             }
 
             string path = GetTilePath(cellSize, tileX, tileY);
@@ -230,7 +161,8 @@ namespace StrategyGame
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
                     using var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var sk = ImageSharpToSkia(img);
-                    AddToCache(key, sk);
+                    _tileCache.TryAdd(key, sk); // Add to concurrent cache
+                    _inFlight.TryRemove(key, out _); // Clean up in-flight task
                     return sk;
                 }
                 finally
@@ -257,7 +189,8 @@ namespace StrategyGame
                 lockFile.Release();
             }
 
-            AddToCache(key, skBmp);
+            _tileCache.TryAdd(key, skBmp); // Add to concurrent cache
+            _inFlight.TryRemove(key, out _); // Clean up in-flight task
             return skBmp;
         }
 
@@ -297,13 +230,9 @@ namespace StrategyGame
                         ty * tileSize - viewArea.Y + tileSize);
 
                     SKBitmap tileCopy = null;
-                    lock (_cacheLock)
+                    if (_tileCache.TryGetValue(key, out var cachedTile))
                     {
-                        if (_tileCache.TryGetValue(key, out var cachedTile))
-                        {
-                            TouchKey(key);
-                            tileCopy = cachedTile.Copy();
-                        }
+                        tileCopy = cachedTile.Copy();
                     }
 
                     if (tileCopy != null)
@@ -336,60 +265,28 @@ namespace StrategyGame
             int startY = Math.Max(0, viewRect.Y / tileSize - radius);
             int endY = Math.Min((mapSize.Height - 1) / tileSize, (viewRect.Bottom - 1) / tileSize + radius);
 
-            // --- START: Refactored Logic ---
-
-            // 1. Identify all tiles that need loading in a single, quick lock.
             var missingTiles = new List<(int x, int y)>();
-            lock (_cacheLock)
+            for (int x = startX; x <= endX; x++)
             {
-                for (int x = startX; x <= endX; x++)
+                for (int y = startY; y <= endY; y++)
                 {
-                    for (int y = startY; y <= endY; y++)
+                    var key = (cellSize, x, y);
+                    if (!_tileCache.ContainsKey(key) && !_inFlight.ContainsKey(key))
                     {
-                        var key = (cellSize, x, y);
-                        // Check both the tile cache and the in-flight generation list.
-                        if (!_tileCache.ContainsKey(key) && !_inFlight.ContainsKey(key))
-                        {
-                            missingTiles.Add((x, y));
-                        }
+                        missingTiles.Add((x, y));
                     }
                 }
             }
 
-            // 2. If all tiles are already cached or in-flight, just refresh and exit.
             if (!missingTiles.Any())
             {
                 triggerRefresh?.Invoke();
                 return;
             }
 
-            // 3. Launch throttled tasks only for the truly missing tiles.
-            using var throttle = new SemaphoreSlim(Environment.ProcessorCount);
-            var tasks = new List<Task>();
-
-            foreach (var coord in missingTiles)
-            {
-                await throttle.WaitAsync(token).ConfigureAwait(false);
-                tasks.Add(Task.Run(async () =>
-                {
-                    try
-                    {
-                        // GetTileAsync will create an _inFlight entry, preventing duplicates.
-                        await GetTileAsync(zoom, coord.x, coord.y, token).ConfigureAwait(false);
-                    }
-                    finally
-                    {
-                        throttle.Release();
-                    }
-                }, token));
-            }
-
+            var tasks = missingTiles.Select(coord => GetTileAsync(zoom, coord.x, coord.y, token));
             await Task.WhenAll(tasks).ConfigureAwait(false);
-
-            // 4. Trigger a single refresh after all new tiles are generated.
             triggerRefresh?.Invoke();
-
-            // --- END: Refactored Logic ---
         }
     }
     }
