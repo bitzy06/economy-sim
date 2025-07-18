@@ -193,25 +193,6 @@ namespace StrategyGame
             }
 
             string path = GetTilePath(cellSize, tileX, tileY);
-            if (File.Exists(path))
-            {
-                var loadSw = Stopwatch.StartNew();
-                var fileLock = GetFileLock(path);
-                await fileLock.WaitAsync(token).ConfigureAwait(false);
-                try
-                {
-                    await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
-                    var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
-                    var sk = ImageSharpToSkia(img);
-                    _tileCache[key] = sk;
-                    PerformanceTracker.Record("CityTileManager-LoadTile-FromDisk", loadSw.Elapsed);
-                    return sk;
-                }
-                finally
-                {
-                    fileLock.Release();
-                }
-            }
 
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
             var genSw = Stopwatch.StartNew();
@@ -234,8 +215,8 @@ namespace StrategyGame
             int tileSize = MultiResolutionMapManager.TileSizePx;
 
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-            var context = GpuAvailable ? MultiResolutionMapManager.SharedContext : null;
-            using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
+            var result = new SKBitmap(info);
+            using var surface = SKSurface.Create(info, result.GetPixels(), result.RowBytes);
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
 
@@ -280,8 +261,6 @@ namespace StrategyGame
                 }
             }
 
-            var result = new SKBitmap(info);
-            surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
             PerformanceTracker.Record("CityTileManager-AssembleView", sw.Elapsed);
             return result;
         }
