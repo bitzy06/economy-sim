@@ -26,75 +26,65 @@ namespace StrategyGame
             var tilePoly = ToPolygon(tileBounds);
 
             var processedModelIds = new HashSet<Guid>();
-            var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds).Where(u => u.Intersects(tilePoly)).ToList();
+            var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
 
-            var models = await Task.WhenAll(relevantUrbanAreas.Select(async u =>
+            var allRoads = new List<LineSegment>();
+            var allBuildings = new List<(Nts.Polygon Poly, LandUseType Use)>();
+
+            foreach (var urban in relevantUrbanAreas)
             {
-                var id = await RoadNetworkGenerator.GetCityDataModelIdAsync(u).ConfigureAwait(false);
-                if (!id.HasValue || !processedModelIds.Add(id.Value))
-                    return null;
+                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
+                    continue;
 
-                if (!_modelCache.TryGetValue(id.Value, out var m))
+                var modelId = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
+                if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
+                    continue;
+
+                if (!_modelCache.TryGetValue(modelId.Value, out var model))
                 {
-                    m = await RoadNetworkGenerator.LoadCityDataModelAsync(id.Value).ConfigureAwait(false);
-                    if (m == null) return null;
-                    _modelCache[id.Value] = m;
+                    model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId.Value).ConfigureAwait(false);
+                    if (model == null) continue;
+                    _modelCache[modelId.Value] = model;
                 }
-                return m;
-            }));
 
-            var roadCaches = new List<CityModelCache.CachedRoads>();
-            var buildingCaches = new List<CityModelCache.CachedBuildings>();
+                var env = tilePoly.EnvelopeInternal;
+                allRoads.AddRange(model.RoadNetwork.Where(seg =>
+                    !(Math.Max(seg.X1, seg.X2) < env.MinX ||
+                      Math.Min(seg.X1, seg.X2) > env.MaxX ||
+                      Math.Max(seg.Y1, seg.Y2) < env.MinY ||
+                      Math.Min(seg.Y1, seg.Y2) > env.MaxY)));
 
-            foreach (var model in models.Where(m => m != null))
-            {
-                IEnumerable<LineSegment> roads = model.RoadNetwork;
-                if (cellSize <= 40)
-                    roads = roads.Where(r => r.Type == RoadType.Primary);
-                var roadCache = CityModelCache.GetOrAddRoads(model.Id, cellSize, roads, tileBounds);
-                roadCaches.Add(roadCache);
-
-                var tileEnv = tilePoly.EnvelopeInternal;
-                var candidates = (model.BuildingIndex?.Query(tileEnv).Cast<Building>() ?? model.Buildings);
-                var toDraw = new List<(Nts.Polygon, LandUseType)>();
+                var candidates = (model.BuildingIndex?.Query(env).Cast<Building>() ?? model.Buildings);
                 foreach (var b in candidates)
                 {
-                    var env = b.Footprint.EnvelopeInternal;
-                    if (!env.Intersects(tileEnv)) continue;
+                    var be = b.Footprint.EnvelopeInternal;
+                    if (!be.Intersects(env)) continue;
+
                     var baseGeom = b.SimplifiedFootprint ?? b.Footprint;
-                    Nts.Geometry clipped = tileEnv.Contains(env)
-                        ? baseGeom
-                        : baseGeom.Intersection(tilePoly);
+                    var clipped = env.Contains(be) ? baseGeom : baseGeom.Intersection(tilePoly);
 
                     if (clipped is Nts.Polygon p && !p.IsEmpty)
-                        toDraw.Add((p, b.LandUse));
+                        allBuildings.Add((p, b.LandUse));
                     else if (clipped is Nts.MultiPolygon mp)
                     {
                         for (int i = 0; i < mp.NumGeometries; i++)
                             if (mp.GetGeometryN(i) is Nts.Polygon pp && !pp.IsEmpty)
-                                toDraw.Add((pp, b.LandUse));
+                                allBuildings.Add((pp, b.LandUse));
                     }
                 }
-
-                var buildingCache = PrepareBuildingCache(model.Id, toDraw, tileBounds, cellSize);
-                buildingCaches.Add(buildingCache);
             }
 
-            if (roadCaches.Count > 0)
-                DrawRoads(img, roadCaches, cellSize);
-            if (buildingCaches.Count > 0)
-                DrawBuildings(img, buildingCaches);
+            if (allRoads.Count > 0)
+                DrawRoads(img, allRoads, tileBounds, cellSize);
+            if (allBuildings.Count > 0)
+                DrawBuildings(img, allBuildings, tileBounds, cellSize);
 
             PerformanceTracker.Record("CityRenderer-RenderTile", sw.Elapsed);
             return img;
         }
 
-        // Convert building polygons into cached paths
-        private static CityModelCache.CachedBuildings PrepareBuildingCache(Guid modelId, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds, int cellSize)
+        private static void DrawBuildings(Image<Rgba32> img, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds, int cellSize)
         {
-            var sw = Stopwatch.StartNew();
-
-            // 1) Cull buildings that would be too small on screen
             if (cellSize <= 40)
             {
                 buildings = buildings.Where(b =>
@@ -106,13 +96,9 @@ namespace StrategyGame
                 }).ToList();
             }
 
-            // 2) Optionally drop residential buildings at very small scales
             if (cellSize <= 20)
-            {
                 buildings = buildings.Where(b => b.Use != LandUseType.Residential).ToList();
-            }
 
-            // 3) Dynamically simplify footprints based on zoom level
             double tol = (bounds.MaxLon - bounds.MinLon)
                          / MultiResolutionMapManager.TileSizePx
                          * (cellSize <= 80 ? 2.5 : 1.0);
@@ -124,9 +110,7 @@ namespace StrategyGame
                 if (simplified == null || simplified.IsEmpty) continue;
 
                 if (simplified is Nts.Polygon p)
-                {
                     reduced.Add((p, use));
-                }
                 else if (simplified is Nts.MultiPolygon mp)
                 {
                     for (int i = 0; i < mp.NumGeometries; i++)
@@ -137,21 +121,16 @@ namespace StrategyGame
                 }
             }
 
-            var cached = CityModelCache.GetOrAddBuildings(modelId, cellSize, bounds, reduced);
-            PerformanceTracker.Record("CityRenderer-BuildingRendering", sw.Elapsed);
-            return cached;
-        }
+            var sw = Stopwatch.StartNew();
+            var cached = CityModelCache.GetOrAddBuildings(cellSize, bounds, reduced);
 
-        private static void DrawBuildings(Image<Rgba32> img, IEnumerable<CityModelCache.CachedBuildings> buildings)
-        {
             img.Mutate(ctx =>
             {
-                foreach (var cached in buildings)
-                {
-                    foreach (var kvp in cached.PathsByColor)
-                        ctx.Fill(kvp.Key, kvp.Value);
-                }
+                foreach (var kvp in cached.PathsByColor)
+                    ctx.Fill(kvp.Key, kvp.Value);
             });
+
+            PerformanceTracker.Record("CityRenderer-BuildingRendering", sw.Elapsed);
         }
 
         // Batched road drawing
@@ -190,20 +169,21 @@ namespace StrategyGame
             }
         }
 
-        private static void DrawRoads(Image<Rgba32> img, IEnumerable<CityModelCache.CachedRoads> roads, int cellSize)
+        private static void DrawRoads(Image<Rgba32> img, List<LineSegment> roads, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
+            if (cellSize <= 40)
+                roads = roads.Where(r => r.Type == RoadType.Primary).ToList();
+
+            var cached = CityModelCache.GetOrAddRoads(cellSize, bounds, roads);
+
             var primaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
             var secondaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
 
             img.Mutate(ctx =>
-            {
-                foreach (var cached in roads)
-                {
-                    ctx.Draw(secondaryPen, cached.SecondaryPath);
-                    ctx.Draw(primaryPen, cached.PrimaryPath);
-                }
-            });
+                ctx.Draw(secondaryPen, cached.SecondaryPath)
+                   .Draw(primaryPen, cached.PrimaryPath));
+
             PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
         }
 
