@@ -295,7 +295,7 @@ namespace StrategyGame
             return _viewBuffer!;
         }
 
-        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, Action triggerRefresh = null, CancellationToken token = default)
+        public Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, Action triggerRefresh = null, CancellationToken token = default)
         {
             var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
@@ -324,7 +324,7 @@ namespace StrategyGame
             {
                 PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
                 triggerRefresh?.Invoke();
-                return;
+                return Task.CompletedTask;
             }
 
             var tasks = missingTiles.Select(async coord =>
@@ -332,10 +332,15 @@ namespace StrategyGame
                 await _preloadLimiter.WaitAsync(token).ConfigureAwait(false);
                 try { await GetTileAsync(zoom, coord.x, coord.y, token).ConfigureAwait(false); }
                 finally { _preloadLimiter.Release(); }
-            });
-            await Task.WhenAll(tasks).ConfigureAwait(false);
-            PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
-            triggerRefresh?.Invoke();
+            }).ToArray();
+
+            _ = Task.WhenAll(tasks).ContinueWith(_ =>
+            {
+                PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
+                triggerRefresh?.Invoke();
+            }, TaskScheduler.Default);
+
+            return Task.CompletedTask;
         }
     }
     }

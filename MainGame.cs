@@ -266,14 +266,13 @@ namespace economy_sim
 
                 var viewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
 
-                Task.Run(() =>
+                Task.Run(async () =>
                 {
                     string tileDir = Path.Combine(
                         Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                         "data", "tile_cache");
 
-                    mapManager.PreloadVisibleTiles(mapZoom, viewRect);
-                    _ = cityTileManager.PreloadVisibleTilesAsync(mapZoom, viewRect);
+                    await cityTileManager.PreloadVisibleTilesAsync(mapZoom, viewRect, token: simCts.Token);
 
                     this.Invoke((MethodInvoker)(() =>
                     {
