@@ -368,6 +368,7 @@ namespace StrategyGame
                                 try
                                 {
                                     canvas.DrawBitmap(texture, rect);
+                                    canvas.Flush();
                                 }
                                 catch (AccessViolationException ex)
                                 {
