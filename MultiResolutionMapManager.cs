@@ -53,6 +53,7 @@ namespace StrategyGame
         private readonly object _masterCacheLock = new();
         private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileTextures = new();
 
+        private readonly object _viewBufferLock = new();
         private SKBitmap? _viewBuffer;
         private SKSurface? _viewSurface;
 
@@ -336,16 +337,18 @@ namespace StrategyGame
 
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
 
-            if (_viewBuffer == null || _viewBuffer.Width != info.Width || _viewBuffer.Height != info.Height)
+            lock (_viewBufferLock)
             {
-                _viewSurface?.Dispose();
-                _viewBuffer?.Dispose();
-                _viewBuffer = new SKBitmap(info);
-                _viewSurface = SKSurface.Create(info, _viewBuffer.GetPixels(), _viewBuffer.RowBytes);
-            }
+                if (_viewBuffer == null || _viewBuffer.Width != info.Width || _viewBuffer.Height != info.Height)
+                {
+                    _viewSurface?.Dispose();
+                    _viewBuffer?.Dispose();
+                    _viewBuffer = new SKBitmap(info);
+                    _viewSurface = SKSurface.Create(info, _viewBuffer.GetPixels(), _viewBuffer.RowBytes);
+                }
 
-            var canvas = _viewSurface!.Canvas;
-            canvas.Clear(SKColors.Transparent);
+                var canvas = _viewSurface!.Canvas;
+                canvas.Clear(SKColors.Transparent);
 
                 for (int ty = tileStartY; ty < tileEndY; ty++)
                 {
