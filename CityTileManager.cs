@@ -77,18 +77,16 @@ namespace StrategyGame
             var info = new SKImageInfo(w, h, SKColorType.Rgba8888, SKAlphaType.Premul);
 
             var skBitmap = new SKBitmap(info);
+            IntPtr dstPtr = skBitmap.GetPixels();
 
             img.ProcessPixelRows(accessor =>
             {
                 for (int y = 0; y < h; y++)
                 {
-                    IntPtr dst = skBitmap.GetPixels() + y * skBitmap.RowBytes;
-                    var src = accessor.GetRowSpan(y);
-                    fixed (void* srcPtr = src)
-                    {
-                        Buffer.MemoryCopy(srcPtr, (void*)dst, src.Length * sizeof(Rgba32),
-                                          src.Length * sizeof(Rgba32));
-                    }
+                    ReadOnlySpan<Rgba32> sourceRowSpan = accessor.GetRowSpan(y);
+                    ReadOnlySpan<byte> sourceByteSpan = MemoryMarshal.AsBytes(sourceRowSpan);
+                    Span<byte> destByteSpan = new Span<byte>((void*)(dstPtr + y * skBitmap.RowBytes), sourceByteSpan.Length);
+                    sourceByteSpan.CopyTo(destByteSpan);
                 }
             });
 
