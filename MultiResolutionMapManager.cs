@@ -267,8 +267,9 @@ namespace StrategyGame
                 {
                     _tileCache[key] = bmp;
                     _tileLru.AddLast(key);
-                    EnforceTileLimit();
                 }
+
+                EnforceTileLimit();
                 UploadTileTexture(key, bmp);
             }
 
@@ -638,17 +639,19 @@ namespace StrategyGame
 
         private void EnforceTileLimit()
         {
-            while (_tileLru.Count > TileCacheLimit)
+            lock (_masterCacheLock)
             {
-                var oldest = _tileLru.First.Value;
-                _tileLru.RemoveFirst();
-                if (_tileCache.TryGetValue(oldest, out var oldBmp))
+                while (_tileLru.Count > TileCacheLimit)
                 {
-                    oldBmp.Dispose();
-                    _tileCache.Remove(oldest);
-                }
-                lock (_masterCacheLock)
-                {
+                    var oldest = _tileLru.First.Value;
+                    _tileLru.RemoveFirst();
+
+                    if (_tileCache.TryGetValue(oldest, out var oldBmp))
+                    {
+                        oldBmp.Dispose();
+                        _tileCache.Remove(oldest);
+                    }
+
                     if (_tileTextures.TryGetValue(oldest, out var tex))
                     {
                         tex.Dispose();
