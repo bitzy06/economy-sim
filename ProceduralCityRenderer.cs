@@ -4,6 +4,7 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using NetTopologySuite.Simplify;
+using NetTopologySuite.Geometries.Prepared;
 using System.Linq;
 using System;
 using System.Collections.Generic;
@@ -17,57 +18,73 @@ namespace StrategyGame
 {
     public static class ProceduralCityRenderer
     {
-        private static readonly ConcurrentDictionary<Guid, CityDataModel> _modelCache = new();
-        // This method is now async to support awaiting the data model.
-        public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
+        // Rendering should never block on disk. Models must be supplied via cache.
+        private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), List<LineSegment>> _simplifiedRoadCache = new();
+        public static async Task<Image<Rgba32>> RenderCityTileAsync(
+            GeoBounds tileBounds,
+            int cellSize,
+            IReadOnlyDictionary<Guid, CityDataModel> cityModelCache,
+            Action<Guid> requestModel)
         {
             var sw = Stopwatch.StartNew();
             var img = new Image<Rgba32>(MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, new Rgba32(0, 0, 0, 0));
             var tilePoly = ToPolygon(tileBounds);
 
+            var preparedFactory = new PreparedGeometryFactory();
+            var preparedTilePoly = preparedFactory.Create(tilePoly);
+
             var processedModelIds = new HashSet<Guid>();
-            
+
             var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
 
-            // This loop now awaits the new async methods, preventing deadlocks.
+            var modelIdTasks = new List<Task<(Guid? Id, Nts.Polygon Urban)>>();
             foreach (var urban in relevantUrbanAreas)
             {
-                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
+                if (!preparedTilePoly.Intersects(urban))
                     continue;
 
-                var modelId = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
+                modelIdTasks.Add(async () =>
+                {
+                    var id = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
+                    return (id, urban);
+                }());
+            }
+
+            var results = await Task.WhenAll(modelIdTasks).ConfigureAwait(false);
+
+            foreach (var (modelId, urban) in results)
+            {
                 if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
                     continue;
 
-                if (!_modelCache.TryGetValue(modelId.Value, out var model))
+                if (!cityModelCache.TryGetValue(modelId.Value, out var model))
                 {
-                    model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId.Value).ConfigureAwait(false);
-                    if (model == null) continue;
-                    _modelCache[modelId.Value] = model;
+                    requestModel(modelId.Value);
+                    continue;
                 }
 
                 DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize);
-                
-                // Query visible buildings using the model's spatial index
+
                 var tileEnv = tilePoly.EnvelopeInternal;
                 var candidates = (model.BuildingIndex?.Query(tileEnv).Cast<Building>() ?? model.Buildings);
-                var toDraw = new List<(Nts.Polygon, LandUseType)>();
+                var toDraw = new List<(Nts.Polygon, LandUseType, Building)>();
                 foreach (var b in candidates)
                 {
                     var env = b.Footprint.EnvelopeInternal;
                     if (!env.Intersects(tileEnv)) continue;
-                    var baseGeom = b.SimplifiedFootprint ?? b.Footprint;
-                    Nts.Geometry clipped = tileEnv.Contains(env)
-                        ? baseGeom
-                        : baseGeom.Intersection(tilePoly);
+                    var baseGeom = b.SimplifiedFootprints.TryGetValue(0, out var g) ? g : b.Footprint;
 
-                    if (clipped is Nts.Polygon p && !p.IsEmpty)
-                        toDraw.Add((p, b.LandUse));
-                    else if (clipped is Nts.MultiPolygon mp)
+                    if (baseGeom is Nts.Polygon p && !p.IsEmpty)
+                    {
+                        toDraw.Add((p, b.LandUse, b));
+                    }
+                    else if (baseGeom is Nts.MultiPolygon mp)
                     {
                         for (int i = 0; i < mp.NumGeometries; i++)
+                        {
                             if (mp.GetGeometryN(i) is Nts.Polygon pp && !pp.IsEmpty)
-                                toDraw.Add((pp, b.LandUse));
+                                toDraw.Add((pp, b.LandUse, b));
+                        }
                     }
                 }
 
@@ -79,26 +96,30 @@ namespace StrategyGame
         }
 
         // Batched building drawing with caching and dynamic LOD
-        private static void DrawBuildings(Image<Rgba32> img, Guid modelId, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds, int cellSize)
+        private static void DrawBuildings(Image<Rgba32> img, Guid modelId, List<(Nts.Polygon Poly, LandUseType Use, Building Bld)> buildings, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
 
-            // 1) Cull buildings that would be too small on screen
-            if (cellSize <= 40)
+            // Consolidated culling loop to reduce allocations
+            var culledBuildings = new List<(Nts.Polygon Poly, LandUseType Use, Building Bld)>();
+            bool cullBySize = cellSize <= 40;
+            bool cullResidential = cellSize <= 20;
+
+            foreach (var bld in buildings)
             {
-                buildings = buildings.Where(b =>
+                if (cullResidential && bld.Use == LandUseType.Residential)
+                    continue;
+
+                if (cullBySize)
                 {
-                    var env = b.Poly.EnvelopeInternal;
+                    var env = bld.Poly.EnvelopeInternal;
                     var p0 = ToPointF(env.MinX, env.MinY, bounds);
                     var p1 = ToPointF(env.MaxX, env.MaxY, bounds);
-                    return Math.Abs(p1.X - p0.X) > 4 || Math.Abs(p1.Y - p0.Y) > 4;
-                }).ToList();
-            }
+                    if (Math.Abs(p1.X - p0.X) < 4 && Math.Abs(p1.Y - p0.Y) < 4)
+                        continue;
+                }
 
-            // 2) Optionally drop residential buildings at very small scales
-            if (cellSize <= 20)
-            {
-                buildings = buildings.Where(b => b.Use != LandUseType.Residential).ToList();
+                culledBuildings.Add(bld);
             }
 
             // 3) Dynamically simplify footprints based on zoom level
@@ -107,10 +128,13 @@ namespace StrategyGame
                          * (cellSize <= 80 ? 2.5 : 1.0);
 
             var reduced = new List<(Nts.Polygon Poly, LandUseType Use)>();
-            foreach (var (poly, use) in buildings)
+            foreach (var (poly, use, bld) in culledBuildings)
             {
-                var simplified = DouglasPeuckerSimplifier.Simplify(poly, tol);
-                if (simplified == null || simplified.IsEmpty) continue;
+                var simplified = bld.SimplifiedFootprints.GetOrAdd(cellSize, _ =>
+                {
+                    var simplifiedGeom = DouglasPeuckerSimplifier.Simplify(poly, tol);
+                    return (simplifiedGeom == null || simplifiedGeom.IsEmpty) ? poly : simplifiedGeom;
+                });
 
                 if (simplified is Nts.Polygon p)
                 {
@@ -143,31 +167,23 @@ namespace StrategyGame
             double tolerance = (bounds.MaxLon - bounds.MinLon) / MultiResolutionMapManager.TileSizePx * 2.0;
 
             var gf = Nts.GeometryFactory.Default;
-            foreach (var group in roads.GroupBy(r => r.Type))
+            foreach (var road in roads)
             {
-                var lineStrings = group.Select(s =>
-                    gf.CreateLineString(new[]
-                    {
-                        new Nts.Coordinate(s.X1, s.Y1),
-                        new Nts.Coordinate(s.X2, s.Y2)
-                    })).ToArray();
-
-                if (lineStrings.Length == 0) continue;
-
-                var multi = gf.CreateMultiLineString(lineStrings);
-                var simplified = NetTopologySuite.Simplify.DouglasPeuckerSimplifier.Simplify(multi, tolerance) as Nts.MultiLineString;
-                if (simplified == null) continue;
-
-                for (int i = 0; i < simplified.NumGeometries; i++)
+                var line = gf.CreateLineString(new[]
                 {
-                    if (simplified.GetGeometryN(i) is Nts.LineString ln)
+                    new Nts.Coordinate(road.X1, road.Y1),
+                    new Nts.Coordinate(road.X2, road.Y2)
+                });
+
+                var simplified = DouglasPeuckerSimplifier.Simplify(line, tolerance);
+
+                if (simplified is Nts.LineString ln)
+                {
+                    for (int j = 0; j < ln.NumPoints - 1; j++)
                     {
-                        for (int j = 0; j < ln.NumPoints - 1; j++)
-                        {
-                            var c1 = ln.GetCoordinateN(j);
-                            var c2 = ln.GetCoordinateN(j + 1);
-                            yield return new LineSegment(c1.X, c1.Y, c2.X, c2.Y, group.Key);
-                        }
+                        var c1 = ln.GetCoordinateN(j);
+                        var c2 = ln.GetCoordinateN(j + 1);
+                        yield return new LineSegment(c1.X, c1.Y, c2.X, c2.Y, road.Type);
                     }
                 }
             }
@@ -176,19 +192,30 @@ namespace StrategyGame
         private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
-            if (cellSize <= 40)
+
+            var simplifiedRoads = _simplifiedRoadCache.GetOrAdd((modelId, cellSize), _ =>
             {
-                roads = roads.Where(r => r.Type == RoadType.Primary);
+                var filteredRoads = cellSize <= 40
+                    ? roads.Where(r => r.Type == RoadType.Primary).ToList()
+                    : roads.ToList();
+
+                return SimplifyRoads(filteredRoads, bounds).ToList();
+            });
+
+            if (!simplifiedRoads.Any())
+            {
+                PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
+                return;
             }
 
-            var cached = CityModelCache.GetOrAddRoads(modelId, cellSize, roads, bounds);
+            var cachedPaths = CityModelCache.GetOrAddRoads(modelId, cellSize, simplifiedRoads, bounds);
 
             var primaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
             var secondaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
 
             img.Mutate(ctx => ctx
-                .Draw(secondaryPen, cached.SecondaryPath)
-                .Draw(primaryPen, cached.PrimaryPath)
+                .Draw(secondaryPen, cachedPaths.SecondaryPath)
+                .Draw(primaryPen, cachedPaths.PrimaryPath)
             );
             PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
         }

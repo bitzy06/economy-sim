@@ -601,12 +601,18 @@ namespace StrategyGame
             return (int)Math.Round(size);
         }
 
-        private static SystemDrawing.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
+        private static unsafe SystemDrawing.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
         {
-            using var ms = new MemoryStream();
-            img.SaveAsBmp(ms);
-            ms.Position = 0;
-            return new SystemDrawing.Bitmap(ms);
+            var bmp = new SystemDrawing.Bitmap(img.Width, img.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var bmpData = bmp.LockBits(
+                new SystemDrawing.Rectangle(0, 0, img.Width, img.Height),
+                System.Drawing.Imaging.ImageLockMode.WriteOnly,
+                bmp.PixelFormat);
+
+            img.CopyPixelDataTo(new Span<byte>((byte*)bmpData.Scan0, bmpData.Stride * bmpData.Height));
+
+            bmp.UnlockBits(bmpData);
+            return bmp;
         }
 
         private static SystemDrawing.Bitmap CreateWaterTile(int width, int height)
