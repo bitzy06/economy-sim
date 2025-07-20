@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using SixLabors.ImageSharp.Drawing;
 using economy_sim;
 
@@ -19,7 +20,7 @@ namespace StrategyGame
     {
         // Rendering should never block on disk. Models must be supplied via cache.
         private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), List<LineSegment>> _simplifiedRoadCache = new();
-        public static Image<Rgba32> RenderCityTile(
+        public static async Task<Image<Rgba32>> RenderCityTileAsync(
             GeoBounds tileBounds,
             int cellSize,
             IReadOnlyDictionary<Guid, CityDataModel> cityModelCache,
@@ -36,12 +37,23 @@ namespace StrategyGame
 
             var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
 
+            var modelIdTasks = new List<Task<(Guid? Id, Nts.Polygon Urban)>>();
             foreach (var urban in relevantUrbanAreas)
             {
                 if (!preparedTilePoly.Intersects(urban))
                     continue;
 
-                var modelId = RoadNetworkGenerator.GetCityDataModelIdAsync(urban).Result;
+                modelIdTasks.Add(async () =>
+                {
+                    var id = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
+                    return (id, urban);
+                }());
+            }
+
+            var results = await Task.WhenAll(modelIdTasks).ConfigureAwait(false);
+
+            foreach (var (modelId, urban) in results)
+            {
                 if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
                     continue;
 
@@ -52,8 +64,7 @@ namespace StrategyGame
                 }
 
                 DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize);
-                
-                // Query visible buildings using the model's spatial index
+
                 var tileEnv = tilePoly.EnvelopeInternal;
                 var candidates = (model.BuildingIndex?.Query(tileEnv).Cast<Building>() ?? model.Buildings);
                 var toDraw = new List<(Nts.Polygon, LandUseType, Building)>();
@@ -63,7 +74,6 @@ namespace StrategyGame
                     if (!env.Intersects(tileEnv)) continue;
                     var baseGeom = b.SimplifiedFootprints.TryGetValue(0, out var g) ? g : b.Footprint;
 
-                    // Skip expensive clipping; ImageSharp will clip while filling
                     if (baseGeom is Nts.Polygon p && !p.IsEmpty)
                     {
                         toDraw.Add((p, b.LandUse, b));
