@@ -31,7 +31,10 @@ namespace StrategyGame
             var index = new STRtree<Building>();
             foreach (var b in model.Buildings)
             {
-                b.SimplifiedFootprint = DouglasPeuckerSimplifier.Simplify(b.Footprint, tol);
+                var simplified = DouglasPeuckerSimplifier.Simplify(b.Footprint, tol);
+                if (simplified == null || simplified.IsEmpty)
+                    simplified = b.Footprint;
+                b.SimplifiedFootprints[0] = simplified;
                 index.Insert(b.Footprint.EnvelopeInternal, b);
             }
             index.Build();

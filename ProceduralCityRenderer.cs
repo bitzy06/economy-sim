@@ -51,23 +51,23 @@ namespace StrategyGame
                 // Query visible buildings using the model's spatial index
                 var tileEnv = tilePoly.EnvelopeInternal;
                 var candidates = (model.BuildingIndex?.Query(tileEnv).Cast<Building>() ?? model.Buildings);
-                var toDraw = new List<(Nts.Polygon, LandUseType)>();
+                var toDraw = new List<(Nts.Polygon, LandUseType, Building)>();
                 foreach (var b in candidates)
                 {
                     var env = b.Footprint.EnvelopeInternal;
                     if (!env.Intersects(tileEnv)) continue;
-                    var baseGeom = b.SimplifiedFootprint ?? b.Footprint;
+                    var baseGeom = b.SimplifiedFootprints.TryGetValue(0, out var g) ? g : b.Footprint;
                     Nts.Geometry clipped = tileEnv.Contains(env)
                         ? baseGeom
                         : baseGeom.Intersection(tilePoly);
 
                     if (clipped is Nts.Polygon p && !p.IsEmpty)
-                        toDraw.Add((p, b.LandUse));
+                        toDraw.Add((p, b.LandUse, b));
                     else if (clipped is Nts.MultiPolygon mp)
                     {
                         for (int i = 0; i < mp.NumGeometries; i++)
                             if (mp.GetGeometryN(i) is Nts.Polygon pp && !pp.IsEmpty)
-                                toDraw.Add((pp, b.LandUse));
+                                toDraw.Add((pp, b.LandUse, b));
                     }
                 }
 
@@ -79,7 +79,7 @@ namespace StrategyGame
         }
 
         // Batched building drawing with caching and dynamic LOD
-        private static void DrawBuildings(Image<Rgba32> img, Guid modelId, List<(Nts.Polygon Poly, LandUseType Use)> buildings, GeoBounds bounds, int cellSize)
+        private static void DrawBuildings(Image<Rgba32> img, Guid modelId, List<(Nts.Polygon Poly, LandUseType Use, Building Bld)> buildings, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
 
@@ -107,10 +107,13 @@ namespace StrategyGame
                          * (cellSize <= 80 ? 2.5 : 1.0);
 
             var reduced = new List<(Nts.Polygon Poly, LandUseType Use)>();
-            foreach (var (poly, use) in buildings)
+            foreach (var (poly, use, bld) in buildings)
             {
-                var simplified = DouglasPeuckerSimplifier.Simplify(poly, tol);
-                if (simplified == null || simplified.IsEmpty) continue;
+                var simplified = bld.SimplifiedFootprints.GetOrAdd(cellSize, _ =>
+                {
+                    var simplifiedGeom = DouglasPeuckerSimplifier.Simplify(poly, tol);
+                    return (simplifiedGeom == null || simplifiedGeom.IsEmpty) ? poly : simplifiedGeom;
+                });
 
                 if (simplified is Nts.Polygon p)
                 {
