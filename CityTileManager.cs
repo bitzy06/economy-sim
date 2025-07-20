@@ -219,12 +219,12 @@ namespace StrategyGame
 
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
             var genSw = Stopwatch.StartNew();
-            var generated = ProceduralCityRenderer.RenderCityTile(
+            var generated = await ProceduralCityRenderer.RenderCityTileAsync(
                 bounds,
                 cellSize,
                 _cityModelCache,
                 id => RequestModel(id, triggerRefresh)
-            );
+            ).ConfigureAwait(false);
             var skBmp = ImageSharpToSkia(generated);
             PerformanceTracker.Record("CityTileManager-GenerateTile", genSw.Elapsed);
 
