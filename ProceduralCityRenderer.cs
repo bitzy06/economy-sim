@@ -12,6 +12,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp.Drawing;
+using SkiaSharp;
 using economy_sim;
 
 namespace StrategyGame
@@ -20,7 +21,34 @@ namespace StrategyGame
     {
         // Rendering should never block on disk. Models must be supplied via cache.
         private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), List<LineSegment>> _simplifiedRoadCache = new();
+
+
+        // Pre-created brushes and pens for drawing roads. These objects are immutable
+        // which makes them safe for use across threads during tile rendering.
+        private static readonly IBrush PrimaryRoadBrush = new SolidBrush<Rgba32>(new Rgba32(180, 180, 180, 200));
+        private static readonly IBrush SecondaryRoadBrush = new SolidBrush<Rgba32>(new Rgba32(180, 180, 180, 200));
+
+        private static readonly IPen PrimaryRoadPen = Pens.Solid(PrimaryRoadBrush, 2f);
+        private static readonly IPen SecondaryRoadPen = Pens.Solid(SecondaryRoadBrush, 1f);
+
+        private static readonly SKPaint PrimaryRoadPaint = new SKPaint
+        {
+            Color = new SKColor(180, 180, 180, 200),
+            StrokeWidth = 2f,
+            Style = SKPaintStyle.Stroke,
+            IsAntialias = true
+        };
+
+        private static readonly SKPaint SecondaryRoadPaint = new SKPaint
+        {
+            Color = new SKColor(180, 180, 180, 200),
+            StrokeWidth = 1f,
+            Style = SKPaintStyle.Stroke,
+            IsAntialias = true
+        };
+
         private static readonly Nts.GeometryFactory _geomFactory = Nts.GeometryFactory.Default;
+
         public static async Task<Image<Rgba32>> RenderCityTileAsync(
             GeoBounds tileBounds,
             int cellSize,
@@ -210,12 +238,10 @@ namespace StrategyGame
 
             var cachedPaths = CityModelCache.GetOrAddRoads(modelId, cellSize, simplifiedRoads, bounds);
 
-            var primaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
-            var secondaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
-
+            // Use shared pen instances to avoid allocations during rendering
             img.Mutate(ctx => ctx
-                .Draw(secondaryPen, cachedPaths.SecondaryPath)
-                .Draw(primaryPen, cachedPaths.PrimaryPath)
+                .Draw(SecondaryRoadPen, cachedPaths.SecondaryPath)
+                .Draw(PrimaryRoadPen, cachedPaths.PrimaryPath)
             );
             PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
         }
