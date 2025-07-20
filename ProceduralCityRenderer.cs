@@ -37,24 +37,20 @@ namespace StrategyGame
             var processedModelIds = new HashSet<Guid>();
 
             var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
+            var intersectingUrbanAreas = relevantUrbanAreas
+                .Where(preparedTilePoly.Intersects)
+                .ToList();
 
-            var modelIdTasks = new List<Task<(Guid? Id, Nts.Polygon Urban)>>();
-            foreach (var urban in relevantUrbanAreas)
+            var results = await Task
+                .WhenAll(intersectingUrbanAreas
+                    .Select(RoadNetworkGenerator.GetCityDataModelIdAsync))
+                .ConfigureAwait(false);
+
+            for (int i = 0; i < results.Length; i++)
             {
-                if (!preparedTilePoly.Intersects(urban))
-                    continue;
+                var modelId = results[i];
+                var urban = intersectingUrbanAreas[i];
 
-                modelIdTasks.Add(async () =>
-                {
-                    var id = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
-                    return (id, urban);
-                }());
-            }
-
-            var results = await Task.WhenAll(modelIdTasks).ConfigureAwait(false);
-
-            foreach (var (modelId, urban) in results)
-            {
                 if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
                     continue;
 
