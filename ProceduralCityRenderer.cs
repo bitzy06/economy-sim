@@ -57,17 +57,19 @@ namespace StrategyGame
                     var env = b.Footprint.EnvelopeInternal;
                     if (!env.Intersects(tileEnv)) continue;
                     var baseGeom = b.SimplifiedFootprints.TryGetValue(0, out var g) ? g : b.Footprint;
-                    Nts.Geometry clipped = tileEnv.Contains(env)
-                        ? baseGeom
-                        : baseGeom.Intersection(tilePoly);
 
-                    if (clipped is Nts.Polygon p && !p.IsEmpty)
+                    // Skip expensive clipping; ImageSharp will clip while filling
+                    if (baseGeom is Nts.Polygon p && !p.IsEmpty)
+                    {
                         toDraw.Add((p, b.LandUse, b));
-                    else if (clipped is Nts.MultiPolygon mp)
+                    }
+                    else if (baseGeom is Nts.MultiPolygon mp)
                     {
                         for (int i = 0; i < mp.NumGeometries; i++)
+                        {
                             if (mp.GetGeometryN(i) is Nts.Polygon pp && !pp.IsEmpty)
                                 toDraw.Add((pp, b.LandUse, b));
+                        }
                     }
                 }
 
