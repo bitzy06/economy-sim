@@ -31,12 +31,18 @@ namespace StrategyGame
 
                 var primaryBuilder = new PathBuilder();
                 var secondaryBuilder = new PathBuilder();
+                float sx = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLon - bounds.MinLon);
+                float sy = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLat - bounds.MinLat);
                 foreach (var seg in simplified)
                 {
                     var pb = seg.Type == RoadType.Primary ? primaryBuilder : secondaryBuilder;
                     pb.AddLine(
-                        ProceduralCityRenderer.ToPointF(seg.X1, seg.Y1, bounds),
-                        ProceduralCityRenderer.ToPointF(seg.X2, seg.Y2, bounds));
+                        new PointF(
+                            (float)((seg.X1 - bounds.MinLon) * sx),
+                            (float)((bounds.MaxLat - seg.Y1) * sy)),
+                        new PointF(
+                            (float)((seg.X2 - bounds.MinLon) * sx),
+                            (float)((bounds.MaxLat - seg.Y2) * sy)));
                 }
 
                 return new CachedRoads
@@ -53,12 +59,17 @@ namespace StrategyGame
             return _buildings.GetOrAdd(key, _ =>
             {
                 var dict = new Dictionary<Rgba32, IPath>();
+                float sx = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLon - bounds.MinLon);
+                float sy = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLat - bounds.MinLat);
                 foreach (var group in buildings.GroupBy(b => ProceduralCityRenderer.GetBuildingColor(b.Use)))
                 {
                     var pb = new PathBuilder();
                     foreach (var item in group)
                     {
-                        var points = item.Poly.ExteriorRing.Coordinates.Select(c => ProceduralCityRenderer.ToPointF(c.X, c.Y, bounds)).ToArray();
+                        var points = item.Poly.ExteriorRing.Coordinates.Select(c =>
+                            new PointF(
+                                (float)((c.X - bounds.MinLon) * sx),
+                                (float)((bounds.MaxLat - c.Y) * sy))).ToArray();
                         pb.AddLines(points);
                         pb.CloseFigure();
                     }
