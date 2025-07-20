@@ -24,6 +24,8 @@ namespace StrategyGame
         private readonly MultiResolutionMapManager _mapManager;
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
+        private readonly ConcurrentDictionary<Guid, CityDataModel> _cityModelCache = new();
+        private readonly ConcurrentDictionary<Guid, Task> _cityModelLoadTasks = new();
         public static readonly bool GpuAvailable;
 
         static CityTileManager()
@@ -80,6 +82,31 @@ namespace StrategyGame
                 }
                 return sem;
             }
+        }
+
+        private void RequestModel(Guid modelId, Action triggerRefresh)
+        {
+            if (_cityModelCache.ContainsKey(modelId) || _cityModelLoadTasks.ContainsKey(modelId))
+                return;
+
+            var loadTask = Task.Run(async () =>
+            {
+                try
+                {
+                    var model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId).ConfigureAwait(false);
+                    if (model != null)
+                    {
+                        _cityModelCache.TryAdd(model.Id, model);
+                        triggerRefresh?.Invoke();
+                    }
+                }
+                finally
+                {
+                    _cityModelLoadTasks.TryRemove(modelId, out _);
+                }
+            });
+
+            _cityModelLoadTasks.TryAdd(modelId, loadTask);
         }
 
         private static unsafe SKBitmap ImageSharpToSkia(Image<Rgba32> img)
@@ -148,16 +175,16 @@ namespace StrategyGame
             return Path.Combine(tileFolder, $"{tileX}_{tileY}.png");
         }
 
-        public Task<SKBitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
+        public Task<SKBitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token, Action triggerRefresh = null)
         {
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
 
             // This is a thread-safe way to get an existing task or create a new one.
-            return _inFlight.GetOrAdd(key, (k) => LoadTileInternalAsync(k.cellSize, k.x, k.y, token));
+            return _inFlight.GetOrAdd(key, (k) => LoadTileInternalAsync(k.cellSize, k.x, k.y, token, triggerRefresh));
         }
 
-        private async Task<SKBitmap> LoadTileInternalAsync(int cellSize, int tileX, int tileY, CancellationToken token)
+        private async Task<SKBitmap> LoadTileInternalAsync(int cellSize, int tileX, int tileY, CancellationToken token, Action triggerRefresh)
         {
             var totalSw = Stopwatch.StartNew();
             var key = (cellSize, tileX, tileY);
@@ -192,7 +219,12 @@ namespace StrategyGame
 
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
             var genSw = Stopwatch.StartNew();
-            var generated = await ProceduralCityRenderer.RenderCityTileAsync(bounds, cellSize).ConfigureAwait(false);
+            var generated = ProceduralCityRenderer.RenderCityTile(
+                bounds,
+                cellSize,
+                _cityModelCache,
+                id => RequestModel(id, triggerRefresh)
+            );
             var skBmp = ImageSharpToSkia(generated);
             PerformanceTracker.Record("CityTileManager-GenerateTile", genSw.Elapsed);
 
@@ -266,7 +298,7 @@ namespace StrategyGame
                     }
                     else
                     {
-                        _ = GetTileAsync(zoom, tx, ty, CancellationToken.None);
+                        _ = GetTileAsync(zoom, tx, ty, CancellationToken.None, triggerRefresh);
                     }
                 }
             }
@@ -309,7 +341,7 @@ namespace StrategyGame
                 return;
             }
 
-            var tasks = missingTiles.Select(coord => GetTileAsync(zoom, coord.x, coord.y, token));
+            var tasks = missingTiles.Select(coord => GetTileAsync(zoom, coord.x, coord.y, token, triggerRefresh));
             await Task.WhenAll(tasks).ConfigureAwait(false);
             PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
             triggerRefresh?.Invoke();

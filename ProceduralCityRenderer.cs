@@ -7,9 +7,7 @@ using NetTopologySuite.Simplify;
 using System.Linq;
 using System;
 using System.Collections.Generic;
-using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Threading.Tasks;
 using SixLabors.ImageSharp.Drawing;
 using economy_sim;
 
@@ -17,33 +15,34 @@ namespace StrategyGame
 {
     public static class ProceduralCityRenderer
     {
-        private static readonly ConcurrentDictionary<Guid, CityDataModel> _modelCache = new();
-        // This method is now async to support awaiting the data model.
-        public static async Task<Image<Rgba32>> RenderCityTileAsync(GeoBounds tileBounds, int cellSize)
+        // Rendering should never block on disk. Models must be supplied via cache.
+        public static Image<Rgba32> RenderCityTile(
+            GeoBounds tileBounds,
+            int cellSize,
+            IReadOnlyDictionary<Guid, CityDataModel> cityModelCache,
+            Action<Guid> requestModel)
         {
             var sw = Stopwatch.StartNew();
             var img = new Image<Rgba32>(MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, new Rgba32(0, 0, 0, 0));
             var tilePoly = ToPolygon(tileBounds);
 
             var processedModelIds = new HashSet<Guid>();
-            
+
             var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
 
-            // This loop now awaits the new async methods, preventing deadlocks.
             foreach (var urban in relevantUrbanAreas)
             {
                 if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
                     continue;
 
-                var modelId = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
+                var modelId = RoadNetworkGenerator.GetCityDataModelIdAsync(urban).Result;
                 if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
                     continue;
 
-                if (!_modelCache.TryGetValue(modelId.Value, out var model))
+                if (!cityModelCache.TryGetValue(modelId.Value, out var model))
                 {
-                    model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId.Value).ConfigureAwait(false);
-                    if (model == null) continue;
-                    _modelCache[modelId.Value] = model;
+                    requestModel(modelId.Value);
+                    continue;
                 }
 
                 DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize);
