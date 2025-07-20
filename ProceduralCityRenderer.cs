@@ -105,6 +105,8 @@ namespace StrategyGame
             bool cullBySize = cellSize <= 40;
             bool cullResidential = cellSize <= 20;
 
+            float sx = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLon - bounds.MinLon);
+            float sy = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLat - bounds.MinLat);
             foreach (var bld in buildings)
             {
                 if (cullResidential && bld.Use == LandUseType.Residential)
@@ -113,9 +115,11 @@ namespace StrategyGame
                 if (cullBySize)
                 {
                     var env = bld.Poly.EnvelopeInternal;
-                    var p0 = ToPointF(env.MinX, env.MinY, bounds);
-                    var p1 = ToPointF(env.MaxX, env.MaxY, bounds);
-                    if (Math.Abs(p1.X - p0.X) < 4 && Math.Abs(p1.Y - p0.Y) < 4)
+                    float p0x = (float)((env.MinX - bounds.MinLon) * sx);
+                    float p0y = (float)((bounds.MaxLat - env.MinY) * sy);
+                    float p1x = (float)((env.MaxX - bounds.MinLon) * sx);
+                    float p1y = (float)((bounds.MaxLat - env.MaxY) * sy);
+                    if (Math.Abs(p1x - p0x) < 4 && Math.Abs(p1y - p0y) < 4)
                         continue;
                 }
 
