@@ -100,22 +100,26 @@ namespace StrategyGame
         {
             var sw = Stopwatch.StartNew();
 
-            // 1) Cull buildings that would be too small on screen
-            if (cellSize <= 40)
+            // Consolidated culling loop to reduce allocations
+            var culledBuildings = new List<(Nts.Polygon Poly, LandUseType Use, Building Bld)>();
+            bool cullBySize = cellSize <= 40;
+            bool cullResidential = cellSize <= 20;
+
+            foreach (var bld in buildings)
             {
-                buildings = buildings.Where(b =>
+                if (cullResidential && bld.Use == LandUseType.Residential)
+                    continue;
+
+                if (cullBySize)
                 {
-                    var env = b.Poly.EnvelopeInternal;
+                    var env = bld.Poly.EnvelopeInternal;
                     var p0 = ToPointF(env.MinX, env.MinY, bounds);
                     var p1 = ToPointF(env.MaxX, env.MaxY, bounds);
-                    return Math.Abs(p1.X - p0.X) > 4 || Math.Abs(p1.Y - p0.Y) > 4;
-                }).ToList();
-            }
+                    if (Math.Abs(p1.X - p0.X) < 4 && Math.Abs(p1.Y - p0.Y) < 4)
+                        continue;
+                }
 
-            // 2) Optionally drop residential buildings at very small scales
-            if (cellSize <= 20)
-            {
-                buildings = buildings.Where(b => b.Use != LandUseType.Residential).ToList();
+                culledBuildings.Add(bld);
             }
 
             // 3) Dynamically simplify footprints based on zoom level
@@ -124,7 +128,7 @@ namespace StrategyGame
                          * (cellSize <= 80 ? 2.5 : 1.0);
 
             var reduced = new List<(Nts.Polygon Poly, LandUseType Use)>();
-            foreach (var (poly, use, bld) in buildings)
+            foreach (var (poly, use, bld) in culledBuildings)
             {
                 var simplified = bld.SimplifiedFootprints.GetOrAdd(cellSize, _ =>
                 {
@@ -163,31 +167,23 @@ namespace StrategyGame
             double tolerance = (bounds.MaxLon - bounds.MinLon) / MultiResolutionMapManager.TileSizePx * 2.0;
 
             var gf = Nts.GeometryFactory.Default;
-            foreach (var group in roads.GroupBy(r => r.Type))
+            foreach (var road in roads)
             {
-                var lineStrings = group.Select(s =>
-                    gf.CreateLineString(new[]
-                    {
-                        new Nts.Coordinate(s.X1, s.Y1),
-                        new Nts.Coordinate(s.X2, s.Y2)
-                    })).ToArray();
-
-                if (lineStrings.Length == 0) continue;
-
-                var multi = gf.CreateMultiLineString(lineStrings);
-                var simplified = NetTopologySuite.Simplify.DouglasPeuckerSimplifier.Simplify(multi, tolerance) as Nts.MultiLineString;
-                if (simplified == null) continue;
-
-                for (int i = 0; i < simplified.NumGeometries; i++)
+                var line = gf.CreateLineString(new[]
                 {
-                    if (simplified.GetGeometryN(i) is Nts.LineString ln)
+                    new Nts.Coordinate(road.X1, road.Y1),
+                    new Nts.Coordinate(road.X2, road.Y2)
+                });
+
+                var simplified = DouglasPeuckerSimplifier.Simplify(line, tolerance);
+
+                if (simplified is Nts.LineString ln)
+                {
+                    for (int j = 0; j < ln.NumPoints - 1; j++)
                     {
-                        for (int j = 0; j < ln.NumPoints - 1; j++)
-                        {
-                            var c1 = ln.GetCoordinateN(j);
-                            var c2 = ln.GetCoordinateN(j + 1);
-                            yield return new LineSegment(c1.X, c1.Y, c2.X, c2.Y, group.Key);
-                        }
+                        var c1 = ln.GetCoordinateN(j);
+                        var c2 = ln.GetCoordinateN(j + 1);
+                        yield return new LineSegment(c1.X, c1.Y, c2.X, c2.Y, road.Type);
                     }
                 }
             }
