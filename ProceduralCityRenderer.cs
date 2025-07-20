@@ -4,9 +4,11 @@ using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.Drawing.Processing;
 using NetTopologySuite.Simplify;
+using NetTopologySuite.Geometries.Prepared;
 using System.Linq;
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using SixLabors.ImageSharp.Drawing;
 using economy_sim;
@@ -16,6 +18,7 @@ namespace StrategyGame
     public static class ProceduralCityRenderer
     {
         // Rendering should never block on disk. Models must be supplied via cache.
+        private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), List<LineSegment>> _simplifiedRoadCache = new();
         public static Image<Rgba32> RenderCityTile(
             GeoBounds tileBounds,
             int cellSize,
@@ -26,13 +29,16 @@ namespace StrategyGame
             var img = new Image<Rgba32>(MultiResolutionMapManager.TileSizePx, MultiResolutionMapManager.TileSizePx, new Rgba32(0, 0, 0, 0));
             var tilePoly = ToPolygon(tileBounds);
 
+            var preparedFactory = new PreparedGeometryFactory();
+            var preparedTilePoly = preparedFactory.Create(tilePoly);
+
             var processedModelIds = new HashSet<Guid>();
 
             var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
 
             foreach (var urban in relevantUrbanAreas)
             {
-                if (!urban.EnvelopeInternal.Intersects(tilePoly.EnvelopeInternal) || !urban.Intersects(tilePoly))
+                if (!preparedTilePoly.Intersects(urban))
                     continue;
 
                 var modelId = RoadNetworkGenerator.GetCityDataModelIdAsync(urban).Result;
@@ -180,19 +186,30 @@ namespace StrategyGame
         private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)
         {
             var sw = Stopwatch.StartNew();
-            if (cellSize <= 40)
+
+            var simplifiedRoads = _simplifiedRoadCache.GetOrAdd((modelId, cellSize), _ =>
             {
-                roads = roads.Where(r => r.Type == RoadType.Primary);
+                var filteredRoads = cellSize <= 40
+                    ? roads.Where(r => r.Type == RoadType.Primary).ToList()
+                    : roads.ToList();
+
+                return SimplifyRoads(filteredRoads, bounds).ToList();
+            });
+
+            if (!simplifiedRoads.Any())
+            {
+                PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
+                return;
             }
 
-            var cached = CityModelCache.GetOrAddRoads(modelId, cellSize, roads, bounds);
+            var cachedPaths = CityModelCache.GetOrAddRoads(modelId, cellSize, simplifiedRoads, bounds);
 
             var primaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 2f);
             var secondaryPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(new Rgba32(180, 180, 180, 200), 1f);
 
             img.Mutate(ctx => ctx
-                .Draw(secondaryPen, cached.SecondaryPath)
-                .Draw(primaryPen, cached.PrimaryPath)
+                .Draw(secondaryPen, cachedPaths.SecondaryPath)
+                .Draw(primaryPen, cachedPaths.PrimaryPath)
             );
             PerformanceTracker.Record("CityRenderer-RoadDrawing", sw.Elapsed);
         }
