@@ -25,9 +25,6 @@ namespace StrategyGame
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
         private readonly SemaphoreSlim _preloadLimiter = new(8, 8);
-        private readonly object _viewBufferLock = new();
-        private SKBitmap? _viewBuffer;
-        private SKSurface? _viewSurface;
         public static readonly bool GpuAvailable;
 
         static CityTileManager()
@@ -227,27 +224,22 @@ namespace StrategyGame
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
 
+            if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
+                return new SKBitmap(1, 1);
+
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
 
-            lock (_viewBufferLock)
-            {
-                if (_viewBuffer == null || _viewBuffer.Width != info.Width || _viewBuffer.Height != info.Height)
-                {
-                    _viewSurface?.Dispose();
-                    _viewBuffer?.Dispose();
-                    _viewBuffer = new SKBitmap(info);
-                    _viewSurface = SKSurface.Create(info, _viewBuffer.GetPixels(), _viewBuffer.RowBytes);
-                }
+            using var surface = SKSurface.Create(info);
+            if (surface == null)
+                return new SKBitmap(info.Width, info.Height);
 
-                var canvas = _viewSurface!.Canvas;
-                canvas.Clear(SKColors.Transparent);
+            var canvas = surface.Canvas;
+            canvas.Clear(SKColors.Transparent);
 
             using (var baseMap = _mapManager.AssembleView(zoom, viewArea, triggerRefresh))
             {
                 if (baseMap != null)
-                {
                     canvas.DrawBitmap(baseMap, SKRect.Create(0, 0, viewArea.Width, viewArea.Height));
-                }
             }
 
             int tileStartX = Math.Max(0, viewArea.X / tileSize);
@@ -266,26 +258,58 @@ namespace StrategyGame
                         tx * tileSize - viewArea.X + tileSize,
                         ty * tileSize - viewArea.Y + tileSize);
 
-                    SKBitmap tileBitmap = null;
-                    if (_tileCache.TryGetValue(key, out var cachedTile))
-                    {
-                        tileBitmap = cachedTile;
-                    }
+                    if (rect.Width <= 0 || rect.Height <= 0)
+                        continue;
 
-                    if (tileBitmap != null)
+                    SKBitmap texture = null;
+                    lock (_masterCacheLock)
+                        _tileTextures.TryGetValue(key, out texture);
+
+                    if (texture != null && !texture.IsDisposed)
                     {
-                        canvas.DrawBitmap(tileBitmap, rect);
+                        try
+                        {
+                            canvas.DrawBitmap(texture, rect);
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Error drawing texture for tile {key}: {ex.Message}");
+                        }
                     }
                     else
                     {
-                        _ = GetTileAsync(zoom, tx, ty, CancellationToken.None);
+                        lock (_tileLoadLock)
+                        {
+                            if (!_tilesBeingLoaded.Contains(key))
+                            {
+                                _tilesBeingLoaded.Add(key);
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        var bmp = await GetTileAsync(zoom, tx, ty, CancellationToken.None);
+                                        if (bmp != null)
+                                        {
+                                            UploadTileTexture(key, bmp);
+                                            triggerRefresh?.Invoke();
+                                        }
+                                    }
+                                    finally
+                                    {
+                                        lock (_tileLoadLock)
+                                            _tilesBeingLoaded.Remove(key);
+                                    }
+                                });
+                            }
+                        }
                     }
                 }
             }
 
-            _viewSurface!.Canvas.Flush();
+            var snapshot = surface.Snapshot();
+            var result = SKBitmap.FromImage(snapshot);
             PerformanceTracker.Record("CityTileManager-AssembleView", sw.Elapsed);
-            return _viewBuffer!;
+            return result;
         }
 
         public Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, Action triggerRefresh = null, CancellationToken token = default)
