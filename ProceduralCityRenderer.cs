@@ -22,6 +22,7 @@ namespace StrategyGame
         // Rendering should never block on disk. Models must be supplied via cache.
         private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), List<LineSegment>> _simplifiedRoadCache = new();
 
+
         // Pre-created brushes and pens for drawing roads. These objects are immutable
         // which makes them safe for use across threads during tile rendering.
         private static readonly IBrush PrimaryRoadBrush = new SolidBrush<Rgba32>(new Rgba32(180, 180, 180, 200));
@@ -45,6 +46,9 @@ namespace StrategyGame
             Style = SKPaintStyle.Stroke,
             IsAntialias = true
         };
+
+        private static readonly Nts.GeometryFactory _geomFactory = Nts.GeometryFactory.Default;
+
         public static async Task<Image<Rgba32>> RenderCityTileAsync(
             GeoBounds tileBounds,
             int cellSize,
@@ -61,24 +65,20 @@ namespace StrategyGame
             var processedModelIds = new HashSet<Guid>();
 
             var relevantUrbanAreas = UrbanAreaManager.Query(tileBounds);
+            var intersectingUrbanAreas = relevantUrbanAreas
+                .Where(preparedTilePoly.Intersects)
+                .ToList();
 
-            var modelIdTasks = new List<Task<(Guid? Id, Nts.Polygon Urban)>>();
-            foreach (var urban in relevantUrbanAreas)
+            var results = await Task
+                .WhenAll(intersectingUrbanAreas
+                    .Select(RoadNetworkGenerator.GetCityDataModelIdAsync))
+                .ConfigureAwait(false);
+
+            for (int i = 0; i < results.Length; i++)
             {
-                if (!preparedTilePoly.Intersects(urban))
-                    continue;
+                var modelId = results[i];
+                var urban = intersectingUrbanAreas[i];
 
-                modelIdTasks.Add(async () =>
-                {
-                    var id = await RoadNetworkGenerator.GetCityDataModelIdAsync(urban).ConfigureAwait(false);
-                    return (id, urban);
-                }());
-            }
-
-            var results = await Task.WhenAll(modelIdTasks).ConfigureAwait(false);
-
-            foreach (var (modelId, urban) in results)
-            {
                 if (!modelId.HasValue || !processedModelIds.Add(modelId.Value))
                     continue;
 
@@ -130,6 +130,8 @@ namespace StrategyGame
             bool cullBySize = cellSize <= 40;
             bool cullResidential = cellSize <= 20;
 
+            float sx = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLon - bounds.MinLon);
+            float sy = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLat - bounds.MinLat);
             foreach (var bld in buildings)
             {
                 if (cullResidential && bld.Use == LandUseType.Residential)
@@ -138,9 +140,11 @@ namespace StrategyGame
                 if (cullBySize)
                 {
                     var env = bld.Poly.EnvelopeInternal;
-                    var p0 = ToPointF(env.MinX, env.MinY, bounds);
-                    var p1 = ToPointF(env.MaxX, env.MaxY, bounds);
-                    if (Math.Abs(p1.X - p0.X) < 4 && Math.Abs(p1.Y - p0.Y) < 4)
+                    float p0x = (float)((env.MinX - bounds.MinLon) * sx);
+                    float p0y = (float)((bounds.MaxLat - env.MinY) * sy);
+                    float p1x = (float)((env.MaxX - bounds.MinLon) * sx);
+                    float p1y = (float)((bounds.MaxLat - env.MaxY) * sy);
+                    if (Math.Abs(p1x - p0x) < 4 && Math.Abs(p1y - p0y) < 4)
                         continue;
                 }
 
@@ -191,10 +195,9 @@ namespace StrategyGame
         {
             double tolerance = (bounds.MaxLon - bounds.MinLon) / MultiResolutionMapManager.TileSizePx * 2.0;
 
-            var gf = Nts.GeometryFactory.Default;
             foreach (var road in roads)
             {
-                var line = gf.CreateLineString(new[]
+                var line = _geomFactory.CreateLineString(new[]
                 {
                     new Nts.Coordinate(road.X1, road.Y1),
                     new Nts.Coordinate(road.X2, road.Y2)
