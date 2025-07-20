@@ -236,11 +236,9 @@ namespace StrategyGame
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
 
-            using (var baseMap = _mapManager.AssembleView(zoom, viewArea, triggerRefresh))
-            {
-                if (baseMap != null)
-                    canvas.DrawBitmap(baseMap, SKRect.Create(0, 0, viewArea.Width, viewArea.Height));
-            }
+            var baseMap = _mapManager.AssembleView(zoom, viewArea, triggerRefresh);
+            if (baseMap != null)
+                canvas.DrawBitmap(baseMap, SKRect.Create(0, 0, viewArea.Width, viewArea.Height));
 
             int tileStartX = Math.Max(0, viewArea.X / tileSize);
             int tileStartY = Math.Max(0, viewArea.Y / tileSize);
@@ -307,6 +305,7 @@ namespace StrategyGame
             }
 
             var snapshot = surface.Snapshot();
+            baseMap?.Dispose();
             var result = SKBitmap.FromImage(snapshot);
             PerformanceTracker.Record("CityTileManager-AssembleView", sw.Elapsed);
             return result;
