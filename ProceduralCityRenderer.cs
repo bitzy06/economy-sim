@@ -20,6 +20,7 @@ namespace StrategyGame
     {
         // Rendering should never block on disk. Models must be supplied via cache.
         private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), List<LineSegment>> _simplifiedRoadCache = new();
+        private static readonly Nts.GeometryFactory _geomFactory = Nts.GeometryFactory.Default;
         public static async Task<Image<Rgba32>> RenderCityTileAsync(
             GeoBounds tileBounds,
             int cellSize,
@@ -170,10 +171,9 @@ namespace StrategyGame
         {
             double tolerance = (bounds.MaxLon - bounds.MinLon) / MultiResolutionMapManager.TileSizePx * 2.0;
 
-            var gf = Nts.GeometryFactory.Default;
             foreach (var road in roads)
             {
-                var line = gf.CreateLineString(new[]
+                var line = _geomFactory.CreateLineString(new[]
                 {
                     new Nts.Coordinate(road.X1, road.Y1),
                     new Nts.Coordinate(road.X2, road.Y2)
