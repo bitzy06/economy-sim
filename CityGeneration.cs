@@ -289,9 +289,10 @@ namespace StrategyGame
             var buildingBag = new ConcurrentBag<Building>();
             var gf = Nts.GeometryFactory.Default;
 
-            const double CommercialInset = -0.00002;
-            const double ResidentialInset = -0.00004;
-            const double IndustrialInset = -0.00003;
+            double spacingFactor = 1 - CityGen.AestheticMappingLayer.Parameters.GreenSpaceRatio;
+            double CommercialInset = -0.00002 * spacingFactor;
+            double ResidentialInset = -0.00004 * spacingFactor;
+            double IndustrialInset = -0.00003 * spacingFactor;
 
             // Create a partitioner to process parcels in efficient, thread-safe chunks.
             var partitioner = Partitioner.Create(model.Parcels, true);
@@ -379,6 +380,8 @@ namespace StrategyGame
                     b.Level = 0;
                     break;
             }
+
+            b.Level = (int)Math.Max(1, b.Level * CityGen.AestheticMappingLayer.Parameters.BuildingHeightScale);
         }
     }
 
