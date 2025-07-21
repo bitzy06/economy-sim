@@ -481,6 +481,7 @@ namespace economy_sim
                                 }
                                 currentState.Cities.Add(currentCity);
                                 allCitiesInWorld.Add(currentCity);
+                                SimulationLODManager.Instance.RegisterCity(currentCity);
                             }
                         }
                         // Recalculate state population/budget from cities if specified as 0 in JSON, or for verification
@@ -611,6 +612,7 @@ namespace economy_sim
             }
             defaultState.Cities.Add(defaultCity);
             allCitiesInWorld.Add(defaultCity);
+            SimulationLODManager.Instance.RegisterCity(defaultCity);
 
             allCountries.Add(defaultCountry);
             comboBoxCountry.Items.Add(defaultCountry.Name);
@@ -872,18 +874,25 @@ namespace economy_sim
             {
                 foreach (var city in allCitiesInWorld)
                 {
-                    Market.ResetCitySupplyDemand(city);
-                    foreach (var factory in city.Factories)
+                    if (SimulationLODManager.Instance.ShouldSimulateHighFidelity(city))
                     {
-                        factory.Produce(city.Stockpile, city);
+                        Market.ResetCitySupplyDemand(city);
+                        foreach (var factory in city.Factories)
+                        {
+                            factory.Produce(city.Stockpile, city);
+                        }
+                        StrategyGame.Economy.UpdateCityEconomy(city); // Populates ImportNeeds and ExportableSurplus
+                        city.ProgressConstruction();
+                        if (constructionForm.Visible && constructionForm.CurrentCity == city)
+                        {
+                            constructionForm.UpdateProjects();
+                        }
+                        Market.UpdateCityPrices(city);
                     }
-                    StrategyGame.Economy.UpdateCityEconomy(city); // Populates ImportNeeds and ExportableSurplus
-                    city.ProgressConstruction();
-                    if (constructionForm.Visible && constructionForm.CurrentCity == city)
+                    else
                     {
-                        constructionForm.UpdateProjects();
+                        SimulationLODManager.Instance.LowFidelityStep(city);
                     }
-                    Market.UpdateCityPrices(city);
                 }
             }
             // --- End City Economies Update Phase ---
@@ -1162,6 +1171,10 @@ namespace economy_sim
                 if (citiesToUpdate.Count == 0 && allCitiesInWorld != null)
                     citiesToUpdate = allCitiesInWorld.Take(citiesPerTick).ToList();
 
+                StrategyGame.City playerFocus = null;
+                this.Invoke((Action)(() => { playerFocus = GetSelectedCity(); }));
+                SimulationLODManager.Instance.PlayerCity = playerFocus;
+
                 await Task.Run(() =>
                 {
                     if (Market.AllCorporations != null && allCitiesInWorld != null && FactoryBlueprints.AllBlueprints.Any())
@@ -1176,12 +1189,19 @@ namespace economy_sim
 
                     foreach (var city in citiesToUpdate)
                     {
-                        Market.ResetCitySupplyDemand(city);
-                        foreach (var factory in city.Factories)
-                            factory.Produce(city.Stockpile, city);
-                        StrategyGame.Economy.UpdateCityEconomy(city);
-                        city.ProgressConstruction();
-                        Market.UpdateCityPrices(city);
+                        if (SimulationLODManager.Instance.ShouldSimulateHighFidelity(city))
+                        {
+                            Market.ResetCitySupplyDemand(city);
+                            foreach (var factory in city.Factories)
+                                factory.Produce(city.Stockpile, city);
+                            StrategyGame.Economy.UpdateCityEconomy(city);
+                            city.ProgressConstruction();
+                            Market.UpdateCityPrices(city);
+                        }
+                        else
+                        {
+                            SimulationLODManager.Instance.LowFidelityStep(city);
+                        }
                     }
 
                     if (allCitiesInWorld != null && allCitiesInWorld.Count > 1)
