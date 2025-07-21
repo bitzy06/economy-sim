@@ -52,6 +52,8 @@ namespace StrategyGame
         public static async Task<Image<Rgba32>> RenderCityTileAsync(
             GeoBounds tileBounds,
             int cellSize,
+            int tileX,
+            int tileY,
             IReadOnlyDictionary<Guid, CityDataModel> cityModelCache,
             Action<Guid> requestModel)
         {
@@ -88,7 +90,7 @@ namespace StrategyGame
                     continue;
                 }
 
-                DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize);
+                DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize, tileX, tileY);
 
                 var tileEnv = tilePoly.EnvelopeInternal;
                 var candidates = (model.BuildingIndex?.Query(tileEnv).Cast<Building>() ?? model.Buildings);
@@ -276,7 +278,7 @@ namespace StrategyGame
             return Math.Abs(a.X - b.X) < Eps && Math.Abs(a.Y - b.Y) < Eps;
         }
 
-        private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)
+        private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize, int tileX, int tileY)
         {
             var sw = Stopwatch.StartNew();
 
@@ -295,7 +297,7 @@ namespace StrategyGame
                 return;
             }
 
-            var cachedPaths = CityModelCache.GetOrAddRoads(modelId, cellSize, simplifiedRoads, bounds);
+            var cachedPaths = CityModelCache.GetOrAddRoads(modelId, cellSize, tileX, tileY, simplifiedRoads, bounds);
 
             // Use shared pen instances to avoid allocations during rendering
             img.Mutate(ctx => ctx
