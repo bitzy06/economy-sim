@@ -101,11 +101,6 @@
                 <ProjectReference Include="Messaging/Messaging.csproj" />
         </ItemGroup>
 
-        <!-- Generated FlatBuffers -->
-        <ItemGroup>
-                <Compile Include="Generated\**\*.cs" />
-        </ItemGroup>
-
-	<!-- Rely on SDK implicit Compile and EmbeddedResource items -->
+        <!-- Rely on SDK implicit Compile and EmbeddedResource items -->
 
 </Project>
