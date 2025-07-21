@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using System;
 using System.Linq;
+using FlatBuffers;
+using Messaging;
+using EconomySim.Protocols;
 
 namespace StrategyGame
 {
@@ -136,6 +139,30 @@ namespace StrategyGame
 
             // Process detailed city economy including buy/sell order generation
             CityEconomy.ProcessCityEconomy(city);
+
+            // Calculate key metrics
+            double gdp = city.PopClasses.Sum(p => p.Size * p.IncomePerPerson);
+            double avgPrice = city.LocalPrices.Values.DefaultIfEmpty(0).Average();
+            double inflation = city.LastAveragePrice > 0 ? (avgPrice - city.LastAveragePrice) / city.LastAveragePrice : 0;
+
+            bool changed = Math.Abs(gdp - city.LastRecordedGdp) > 0.01 || Math.Abs(inflation) > 0.0001;
+            if (changed)
+            {
+                var builder = new FlatBufferBuilder(64);
+                var idOffset = builder.CreateString(city.ProceduralData?.Id.ToString() ?? string.Empty);
+                EconomyUpdatedEvent.StartEconomyUpdatedEvent(builder);
+                EconomyUpdatedEvent.AddCityId(builder, idOffset);
+                EconomyUpdatedEvent.AddTimestamp(builder, (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                EconomyUpdatedEvent.AddGdp(builder, (float)gdp);
+                EconomyUpdatedEvent.AddInflation(builder, (float)inflation);
+                var evtOffset = EconomyUpdatedEvent.EndEconomyUpdatedEvent(builder);
+                EconomyUpdatedEvent.FinishSizePrefixedEconomyUpdatedEventBuffer(builder, evtOffset);
+                var buffer = new ByteBuffer(builder.SizedByteArray());
+                var evt = EconomyUpdatedEvent.GetRootAsEconomyUpdatedEvent(buffer);
+                GameServices.Bus.Publish(evt);
+                city.LastRecordedGdp = gdp;
+                city.LastAveragePrice = avgPrice;
+            }
         }
 
         public static void UpdatePopGrowth(PopClass pop)

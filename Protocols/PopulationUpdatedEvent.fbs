@@ -1,6 +1,8 @@
 namespace EconomySim.Protocols;
 
 table PopulationUpdatedEvent {
+  city_id:string;
+  timestamp:ulong;
   population:int;
   birth_rate:float;
   death_rate:float;
