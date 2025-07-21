@@ -1,4 +1,5 @@
-﻿using Nts = NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Prepared;
 using NetTopologySuite.Operation.Union;
 using NetTopologySuite.Operation.Polygonize;
@@ -8,11 +9,13 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
+using System.Threading;
 using NetTopologySuite.IO;
-using NetTopologySuite.IO.Converters;
 using NetTopologySuite.Index.Quadtree;
+using NetTopologySuite.Index.Strtree;
+using NetTopologySuite.Simplify;
+using System.Windows.Forms;
 
 namespace StrategyGame
 {
@@ -20,15 +23,200 @@ namespace StrategyGame
     {
         private static readonly ConcurrentDictionary<string, List<(Nts.LineString Line, RoadType Type)>> networkCache = new();
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
+        private static readonly ConcurrentDictionary<Guid, CityDataModel> modelCacheById = new();
+
+        public static IReadOnlyDictionary<Guid, CityDataModel> ModelCacheById => modelCacheById;
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
+
+        private static void BuildBuildingStructures(CityDataModel model)
+        {
+            const double tol = 0.0001; // degrees ~10m
+            var index = new STRtree<Building>();
+            foreach (var b in model.Buildings)
+            {
+                var simplified = DouglasPeuckerSimplifier.Simplify(b.Footprint, tol);
+                if (simplified == null || simplified.IsEmpty)
+                    simplified = b.Footprint;
+                b.SimplifiedFootprints[0] = simplified;
+                index.Insert(b.Footprint.EnvelopeInternal, b);
+            }
+            index.Build();
+            model.BuildingIndex = index;
+        }
 
         public static CityGenerationData? Data { get; set; }
 
-        private static readonly JsonSerializerOptions jsonOptions = new()
+        private const double Epsilon = 1e-9;
+
+        private static bool IsBad(Coordinate c) =>
+            double.IsNaN(c.X) || double.IsNaN(c.Y) ||
+            double.IsInfinity(c.X) || double.IsInfinity(c.Y);
+
+        private static SemaphoreSlim GetFileLock(string path)
         {
-            IncludeFields = true,
-            WriteIndented = true,
-            Converters = { new GeoJsonConverterFactory() }
-        };
+            return _fileLocks.GetOrAdd(path, p => new SemaphoreSlim(1, 1));
+        }
+
+        private static void AddToCache(string hash, CityDataModel model)
+        {
+            modelCache[hash] = model;
+            modelCacheById[model.Id] = model;
+        }
+
+
+        private static async Task SaveModelBinaryAsync(string path, CityDataModel model)
+        {
+            var fileLock = GetFileLock(path);
+            await fileLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var wkbWriter = new WKBWriter();
+                using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
+                using var bw = new BinaryWriter(fs);
+
+                bw.Write(model.Id.ToByteArray());
+
+            if (model.UrbanArea != null)
+            {
+                bw.Write(true);
+                byte[] ua = wkbWriter.Write(model.UrbanArea);
+                bw.Write(ua.Length);
+                bw.Write(ua);
+            }
+            else
+            {
+                bw.Write(false);
+            }
+
+            bw.Write(model.RoadNetwork.Count);
+            foreach (var seg in model.RoadNetwork)
+            {
+                bw.Write(seg.X1);
+                bw.Write(seg.Y1);
+                bw.Write(seg.X2);
+                bw.Write(seg.Y2);
+                bw.Write((int)seg.Type);
+            }
+
+            bw.Write(model.RawBlocks.Count);
+            foreach (var poly in model.RawBlocks)
+            {
+                byte[] data = wkbWriter.Write(poly);
+                bw.Write(data.Length);
+                bw.Write(data);
+            }
+
+            bw.Write(model.Parcels.Count);
+            foreach (var parcel in model.Parcels)
+            {
+                byte[] data = wkbWriter.Write(parcel.Shape);
+                bw.Write(data.Length);
+                bw.Write(data);
+                bw.Write((int)parcel.LandUse);
+                bw.Write(parcel.LandValue);
+            }
+
+                bw.Write(model.Buildings.Count);
+                foreach (var building in model.Buildings)
+                {
+                    byte[] data = wkbWriter.Write(building.Footprint);
+                    bw.Write(data.Length);
+                    bw.Write(data);
+                    bw.Write((int)building.LandUse);
+                    bw.Write(building.Level);
+                    bw.Write(building.PopulationCapacity);
+                    bw.Write(building.EconomicOutput);
+                    bw.Write(building.PollutionOutput);
+                }
+            }
+            finally
+            {
+                fileLock.Release();
+            }
+        }
+
+        private static async Task<CityDataModel> LoadModelBinaryAsync(string path)
+        {
+            var fileLock = GetFileLock(path);
+            await fileLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var wkbReader = new WKBReader();
+                byte[] fileBytes = await File.ReadAllBytesAsync(path).ConfigureAwait(false);
+                using var ms = new MemoryStream(fileBytes);
+                using var br = new BinaryReader(ms);
+
+            var model = new CityDataModel();
+            model.Id = new Guid(br.ReadBytes(16));
+
+            if (br.ReadBoolean())
+            {
+                int len = br.ReadInt32();
+                byte[] ua = br.ReadBytes(len);
+                model.UrbanArea = (Nts.Polygon)wkbReader.Read(ua);
+            }
+
+            int roadCount = br.ReadInt32();
+            for (int i = 0; i < roadCount; i++)
+            {
+                double x1 = br.ReadDouble();
+                double y1 = br.ReadDouble();
+                double x2 = br.ReadDouble();
+                double y2 = br.ReadDouble();
+                var type = (RoadType)br.ReadInt32();
+                model.RoadNetwork.Add(new LineSegment(x1, y1, x2, y2, type));
+            }
+
+            int blockCount = br.ReadInt32();
+            for (int i = 0; i < blockCount; i++)
+            {
+                int len = br.ReadInt32();
+                byte[] data = br.ReadBytes(len);
+                model.RawBlocks.Add((Nts.Polygon)wkbReader.Read(data));
+            }
+
+            int parcelCount = br.ReadInt32();
+            for (int i = 0; i < parcelCount; i++)
+            {
+                int len = br.ReadInt32();
+                byte[] data = br.ReadBytes(len);
+                var shape = (Nts.Polygon)wkbReader.Read(data);
+                var landUse = (LandUseType)br.ReadInt32();
+                double value = br.ReadDouble();
+                model.Parcels.Add(new Parcel { Shape = shape, LandUse = landUse, LandValue = value });
+            }
+
+            int buildingCount = br.ReadInt32();
+            for (int i = 0; i < buildingCount; i++)
+            {
+                int len = br.ReadInt32();
+                byte[] data = br.ReadBytes(len);
+                var footprint = (Nts.Polygon)wkbReader.Read(data);
+                var landUse = (LandUseType)br.ReadInt32();
+                int level = br.ReadInt32();
+                int popCap = br.ReadInt32();
+                double econ = br.ReadDouble();
+                double poll = br.ReadDouble();
+                model.Buildings.Add(new Building
+                {
+                    Footprint = footprint,
+                    LandUse = landUse,
+                    Level = level,
+                    PopulationCapacity = popCap,
+                    EconomicOutput = econ,
+                    PollutionOutput = poll
+                });
+            }
+
+            BuildBuildingStructures(model);
+
+            return model;
+            }
+            finally
+            {
+                fileLock.Release();
+            }
+        }
 
         public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea, int cellSize)
         {
@@ -36,7 +224,10 @@ namespace StrategyGame
             string cacheDir = GetCacheDir();
 
             if (modelCache.TryGetValue(hash, out var cachedModel))
+            {
+                modelCacheById[cachedModel.Id] = cachedModel;
                 return cachedModel;
+            }
 
             string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
             if (File.Exists(hashPath))
@@ -44,16 +235,12 @@ namespace StrategyGame
                 try
                 {
                     string id = await File.ReadAllTextAsync(hashPath).ConfigureAwait(false);
-                    string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                    string modelPath = Path.Combine(cacheDir, $"{id}.bin");
                     if (File.Exists(modelPath))
                     {
-                        string jsonIn = await File.ReadAllTextAsync(modelPath).ConfigureAwait(false);
-                        var loaded = JsonSerializer.Deserialize<CityDataModel>(jsonIn, jsonOptions);
-                        if (loaded != null)
-                        {
-                            modelCache[hash] = loaded;
-                            return loaded;
-                        }
+                        var loaded = await LoadModelBinaryAsync(modelPath);
+                        AddToCache(hash, loaded);
+                        return loaded;
                     }
                 }
                 catch (Exception ex)
@@ -62,7 +249,14 @@ namespace StrategyGame
                 }
             }
 
-            var result = new CityDataModel { Id = Guid.NewGuid() };
+            // --- Start of Corrected Logic ---
+
+            // 1. Assign urbanArea immediately upon creation.
+            var result = new CityDataModel
+            {
+                Id = Guid.NewGuid(),
+                UrbanArea = urbanArea
+            };
             var roadGeometries = GetOrGenerateFor(urbanArea, cellSize);
 
             result.RoadNetwork = roadGeometries
@@ -70,27 +264,35 @@ namespace StrategyGame
                     new LineSegment(s.X, s.Y, e.X, e.Y, tuple.Type)))
                 .ToList();
 
-            result.RawBlocks = PolygonizeRoadNetwork(result.RoadNetwork);
-            result.Parcels = ParcelGenerator.GenerateParcelsFromBlocks(result.RawBlocks);
+            // 2. Delegate ALL block and parcel generation to the robust ParcelGenerator.
+            //    This single line replaces the previous faulty logic.
+            result.Parcels = ParcelGenerator.GenerateParcels(result);
+            
+            // --- End of Corrected Logic ---
             LandUseSimulator.Run(result);
             result.Buildings = BuildingGenerator.GenerateBuildings(result);
             BuildingRefiner.RefineBuildings(result);
+            BuildBuildingStructures(result);
 
             Debug.WriteLine($">> Generated {result.Parcels.Count} parcels, {result.Buildings.Count} buildings for {hash}");
 
             try
             {
-                string modelPath = Path.Combine(cacheDir, $"{result.Id}.json");
-                string jsonOut = JsonSerializer.Serialize(result, jsonOptions);
-                await File.WriteAllTextAsync(modelPath, jsonOut).ConfigureAwait(false);
+                string modelPath = Path.Combine(cacheDir, $"{result.Id}.bin");
+                await SaveModelBinaryAsync(modelPath, result);
                 await File.WriteAllTextAsync(hashPath, result.Id.ToString()).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Error] Failed to serialize CityDataModel: {ex.Message}");
+                string errorMessage = $"Failed to save city model file for hash {hash}.\n\n" +
+                                      $"Error: {ex.GetType().Name}\n\n" +
+                                      $"Message: {ex.Message}\n\n" +
+                                      $"Stack Trace:\n{ex.StackTrace}";
+                MessageBox.Show(errorMessage, "Critical Save Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Console.WriteLine($"[CRITICAL ERROR] Failed to serialize CityDataModel: {errorMessage}");
             }
 
-            modelCache[hash] = result;
+            AddToCache(hash, result);
             return result;
         }
 
@@ -185,10 +387,12 @@ namespace StrategyGame
                 iterations++;
                 var (origin, angle) = queue.Dequeue();
 
-                var endPoint = new Nts.Coordinate(
+                var endPoint = new Coordinate(
                     origin.X + Math.Cos(angle) * roadSegmentLength,
                     origin.Y + Math.Sin(angle) * roadSegmentLength
                 );
+                if (IsBad(endPoint) || origin.Distance(endPoint) < Epsilon)
+                    continue;
                 // Envelope for quadtree lookup
                 var proposedEnv = new Nts.Envelope(origin, endPoint);
                 // Global Constraint: Must be within the urban area polygon
@@ -260,17 +464,22 @@ namespace StrategyGame
         private static List<Nts.Polygon> PolygonizeRoadNetwork(List<LineSegment> roads)
         {
             var gf = Nts.GeometryFactory.Default;
-            var lineStrings = roads.Select(seg =>
-                gf.CreateLineString(new[]
+            var validLineStrings = roads
+                .Where(s =>
+                    !IsBad(new Coordinate(s.X1, s.Y1)) &&
+                    !IsBad(new Coordinate(s.X2, s.Y2)) &&
+                    Math.Abs(s.X1 - s.X2) + Math.Abs(s.Y1 - s.Y2) > Epsilon)
+                .Select(s => gf.CreateLineString(new[]
                 {
-                    new Nts.Coordinate(seg.X1, seg.Y1),
-                    new Nts.Coordinate(seg.X2, seg.Y2)
-                })).ToArray();
+                    new Coordinate(s.X1, s.Y1),
+                    new Coordinate(s.X2, s.Y2)
+                }))
+                .ToArray();
 
-            if (lineStrings.Length == 0)
+            if (validLineStrings.Length == 0)
                 return new List<Nts.Polygon>();
 
-            var nodedLines = UnaryUnionOp.Union(lineStrings);
+            var nodedLines = CascadedPolygonUnion.Union(validLineStrings);
             var polygonizer = new Polygonizer();
             polygonizer.Add(nodedLines);
             var rawPolys = polygonizer.GetPolygons();
@@ -329,7 +538,7 @@ namespace StrategyGame
                 try
                 {
                     string id = File.ReadAllText(hashPath);
-                    string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                    string modelPath = Path.Combine(cacheDir, $"{id}.bin");
                     return File.Exists(modelPath);
                 }
                 catch
@@ -344,14 +553,17 @@ namespace StrategyGame
         /// <summary>
         /// Gets the ID of the city data model for a given urban area, if it exists
         /// </summary>
-        public static Guid? GetCityDataModelId(Nts.Polygon urbanArea)
+        public static async Task<Guid?> GetCityDataModelIdAsync(Nts.Polygon urbanArea)
         {
             string hash = ComputeHash(urbanArea);
             string cacheDir = GetCacheDir();
             
             // Check in-memory cache first
             if (modelCache.TryGetValue(hash, out var cachedModel))
+            {
+                modelCacheById[cachedModel.Id] = cachedModel;
                 return cachedModel.Id;
+            }
                 
             // Check disk cache
             string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
@@ -359,10 +571,10 @@ namespace StrategyGame
             {
                 try
                 {
-                    string id = File.ReadAllText(hashPath);
-                    if (Guid.TryParse(id, out Guid guid))
+                    string idStr = await File.ReadAllTextAsync(hashPath).ConfigureAwait(false);
+                    if (Guid.TryParse(idStr, out Guid guid))
                     {
-                        string modelPath = Path.Combine(cacheDir, $"{guid}.json");
+                        string modelPath = Path.Combine(cacheDir, $"{guid}.bin");
                         if (File.Exists(modelPath))
                             return guid;
                     }
@@ -390,17 +602,17 @@ namespace StrategyGame
             if (Directory.Exists(cacheDir))
             {
                 var hashFiles = Directory.GetFiles(cacheDir, "*.txt");
-                var jsonFiles = Directory.GetFiles(cacheDir, "*.json");
-                
-                diskCount = jsonFiles.Length;
-                
-                // Count unique models (hash files that have corresponding JSON files)
+                var binFiles = Directory.GetFiles(cacheDir, "*.bin");
+
+                diskCount = binFiles.Length;
+
+                // Count unique models (hash files that have corresponding binary files)
                 foreach (string hashFile in hashFiles)
                 {
                     try
                     {
                         string id = File.ReadAllText(hashFile);
-                        string modelPath = Path.Combine(cacheDir, $"{id}.json");
+                        string modelPath = Path.Combine(cacheDir, $"{id}.bin");
                         if (File.Exists(modelPath))
                             totalUnique++;
                     }
@@ -414,17 +626,24 @@ namespace StrategyGame
             return (inMemoryCount, diskCount, totalUnique);
         }
 
-        public static CityDataModel? LoadCityDataModel(Guid id)
+        public static async Task<CityDataModel?> LoadCityDataModelAsync(Guid id)
         {
+            if (modelCacheById.TryGetValue(id, out var cached))
+                return cached;
+
             string cacheDir = GetCacheDir();
-            string modelPath = Path.Combine(cacheDir, $"{id}.json");
-            if (!File.Exists(modelPath))
-                return null;
+            string modelPath = Path.Combine(cacheDir, $"{id}.bin");
+            if (!File.Exists(modelPath)) return null;
 
             try
             {
-                string json = File.ReadAllText(modelPath);
-                return JsonSerializer.Deserialize<CityDataModel>(json, jsonOptions);
+                var model = await LoadModelBinaryAsync(modelPath).ConfigureAwait(false);
+                if (model.UrbanArea != null)
+                {
+                    string hash = ComputeHash(model.UrbanArea);
+                    AddToCache(hash, model);
+                }
+                return model;
             }
             catch (Exception ex)
             {

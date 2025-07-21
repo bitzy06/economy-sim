@@ -50,9 +50,7 @@ namespace StrategyGame
         private readonly Dictionary<(int cellSize, int x, int y), SystemDrawing.Bitmap> _tileCache = new();
         // LRU order for tile cache entries
         private readonly LinkedList<(int cellSize, int x, int y)> _tileLru = new();
-        private readonly object _cacheLock = new();
-        private readonly object _assembleLock = new();
-        private readonly object _textureLock = new();
+        private readonly object _masterCacheLock = new();
         private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileTextures = new();
 
         public static readonly bool GpuAvailable;
@@ -189,7 +187,7 @@ namespace StrategyGame
             System.Drawing.Bitmap bmp = null;
 
             // Try cache first
-            lock (_cacheLock)
+            lock (_masterCacheLock)
             {
                 if (_tileCache.TryGetValue(key, out var cached))
                 {
@@ -262,7 +260,7 @@ namespace StrategyGame
             // Cache result
             if (bmp != null)
             {
-                lock (_cacheLock)
+                lock (_masterCacheLock)
                 {
                     _tileCache[key] = bmp;
                     _tileLru.AddLast(key);
@@ -321,24 +319,22 @@ namespace StrategyGame
         /// </summary>
         public SKBitmap AssembleView(float zoom, System.Drawing.Rectangle viewArea, Action triggerRefresh = null)
         {
-            lock (_assembleLock)
-            {
-                int cellSize = GetCellSize(zoom);
-                int tileSize = TileSizePx;
+            int cellSize = GetCellSize(zoom);
+            int tileSize = TileSizePx;
 
-                if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
-                    return new SKBitmap(1, 1); // Safe fallback
+            if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
+                return new SKBitmap(1, 1); // Safe fallback
 
-                int tileStartX = Math.Max(0, viewArea.X / tileSize);
-                int tileStartY = Math.Max(0, viewArea.Y / tileSize);
-                int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
-                int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
+            int tileStartX = Math.Max(0, viewArea.X / tileSize);
+            int tileStartY = Math.Max(0, viewArea.Y / tileSize);
+            int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
+            int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
 
-                var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-                var context = GpuAvailable ? SharedContext : null;
+            var info = new SKImageInfo(viewArea.Width, viewArea.Height);
+            var context = GpuAvailable ? SharedContext : null;
                 using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
                 var canvas = surface.Canvas;
-                canvas.Clear(SKColors.DarkGray);
+                canvas.Clear(SKColors.Transparent);
 
                 for (int ty = tileStartY; ty < tileEndY; ty++)
                 {
@@ -355,87 +351,66 @@ namespace StrategyGame
                         if (rect.Width <= 0 || rect.Height <= 0)
                             continue;
 
-                        SKBitmap texture = null;
-                        lock (_textureLock)
-                            _tileTextures.TryGetValue(key, out texture);
-
-                        if (texture != null)
+                        // --- START: Replacement Logic ---
+                        SKBitmap textureCopy = null;
+                        lock (_masterCacheLock)
                         {
-                            canvas.DrawBitmap(texture, rect);
+                            if (_tileTextures.TryGetValue(key, out var texture))
+                            {
+                                // Create a private, safe copy of the texture inside the lock
+                                textureCopy = texture.Copy();
+                            }
+                        }
+
+                        if (textureCopy != null)
+                        {
+                            using (textureCopy)
+                            {
+                                try
+                                {
+                                    canvas.DrawBitmap(textureCopy, rect);
+                                }
+                                catch (AccessViolationException ex)
+                                {
+                                    DebugLogger.Log($"Access violation drawing texture copy {key}: {ex.Message}");
+                                }
+                            }
                         }
                         else
                         {
-                            // Try to safely create texture from cached bitmap
-                            SKBitmap newTexture = null;
-                            lock (_cacheLock)
+                            lock (_tileLoadLock)
                             {
-                                if (_tileCache.TryGetValue(key, out var tile))
+                                if (!_tilesBeingLoaded.Contains(key))
                                 {
-                                    try
+                                    _tilesBeingLoaded.Add(key);
+                                    var ttx = tx;
+                                    var tty = ty;
+                                    var tileKey = key;
+                                    _ = Task.Run(async () =>
                                     {
-                                        // Check dimensions inside the lock to avoid concurrent access
-                                        if (tile.Width > 0 && tile.Height > 0)
+                                        try
                                         {
-                                            // Create texture directly from the cached bitmap while holding the lock
-                                            // This reduces the window for concurrent access issues
-                                            newTexture = SkiaBitmapUtil.ToSKBitmap(tile);
+                                            var t = await GetTileAsync(zoom, ttx, tty, CancellationToken.None);
+                                            if (t != null)
+                                                UploadTileTexture(tileKey, t);
+                                            triggerRefresh?.Invoke();
                                         }
-                                    }
-                                    catch (InvalidOperationException)
-                                    {
-                                        // Bitmap was disposed or being used elsewhere, skip this tile
-                                        newTexture = null;
-                                    }
-                                    catch (ArgumentException)
-                                    {
-                                        // Bitmap properties became invalid
-                                        newTexture = null;
-                                    }
-                                }
-                            }
-
-                            if (newTexture != null)
-                            {
-                                lock (_textureLock)
-                                    _tileTextures[key] = newTexture;
-                                canvas.DrawBitmap(newTexture, rect);
-                            }
-                            else
-                            {
-                                lock (_tileLoadLock)
-                                {
-                                    if (!_tilesBeingLoaded.Contains(key))
-                                    {
-                                        _tilesBeingLoaded.Add(key);
-                                        var ttx = tx;
-                                        var tty = ty;
-                                        var tileKey = key;
-                                        _ = Task.Run(async () =>
+                                        finally
                                         {
-                                            try
-                                            {
-                                                var t = await GetTileAsync(zoom, ttx, tty, CancellationToken.None);
-                                                if (t != null)
-                                                    UploadTileTexture(tileKey, t);
-                                                triggerRefresh?.Invoke();
-                                            }
-                                            finally
-                                            {
-                                                lock (_tileLoadLock)
-                                                    _tilesBeingLoaded.Remove(tileKey);
-                                            }
-                                        });
-                                    }
+                                            lock (_tileLoadLock)
+                                                _tilesBeingLoaded.Remove(tileKey);
+                                        }
+                                    });
                                 }
                             }
                         }
+                        // --- END: Replacement Logic ---
                     }
                 }
 
                 var result = new SKBitmap(info);
                 surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
                 return result;
-            }
         }
 
         private static void OverlayFeatures(SystemDrawing.Bitmap bmp, ZoomLevel level)
@@ -626,12 +601,18 @@ namespace StrategyGame
             return (int)Math.Round(size);
         }
 
-        private static SystemDrawing.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
+        private static unsafe SystemDrawing.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
         {
-            using var ms = new MemoryStream();
-            img.SaveAsBmp(ms);
-            ms.Position = 0;
-            return new SystemDrawing.Bitmap(ms);
+            var bmp = new SystemDrawing.Bitmap(img.Width, img.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var bmpData = bmp.LockBits(
+                new SystemDrawing.Rectangle(0, 0, img.Width, img.Height),
+                System.Drawing.Imaging.ImageLockMode.WriteOnly,
+                bmp.PixelFormat);
+
+            img.CopyPixelDataTo(new Span<byte>((byte*)bmpData.Scan0, bmpData.Stride * bmpData.Height));
+
+            bmp.UnlockBits(bmpData);
+            return bmp;
         }
 
         private static SystemDrawing.Bitmap CreateWaterTile(int width, int height)
@@ -645,7 +626,7 @@ namespace StrategyGame
         private void UploadTileTexture((int cellSize, int x, int y) key, SystemDrawing.Bitmap bmp)
         {
             var sk = SkiaBitmapUtil.ToSKBitmap(bmp);
-            lock (_textureLock)
+            lock (_masterCacheLock)
             {
                 if (_tileTextures.TryGetValue(key, out var old))
                     old.Dispose();
@@ -672,7 +653,7 @@ namespace StrategyGame
                     oldBmp.Dispose();
                     _tileCache.Remove(oldest);
                 }
-                lock (_textureLock)
+                lock (_masterCacheLock)
                 {
                     if (_tileTextures.TryGetValue(oldest, out var tex))
                     {
