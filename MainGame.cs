@@ -147,6 +147,7 @@ namespace economy_sim
 
             InitializeComponent();
             LoadGlobalData();
+            MessageBus.Instance.Subscribe<CityGenerationCompletedEventData>(OnCityGenerationCompleted);
             // In your constructor, after InitializeComponent():
             panelMap.TabStop = true;                        // make panel focusable
             panelMap.MouseEnter += (s, e) => panelMap.Focus();
@@ -2563,6 +2564,14 @@ namespace economy_sim
             // Log to console for debugging
             Console.WriteLine($"[Urban Area Status] {statusMessage}");
             Console.WriteLine($"[Cache Stats] In-Memory: {inMemoryCount}, Disk: {diskCount}, Unique: {totalUnique}");
+        }
+
+        private void OnCityGenerationCompleted(CityGenerationCompletedEventData data)
+        {
+            if (IsHandleCreated)
+            {
+                BeginInvoke((Action)(UpdateUrbanAreaStatus));
+            }
         }
 
         /// <summary>

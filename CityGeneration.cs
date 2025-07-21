@@ -389,69 +389,75 @@ namespace StrategyGame
     }
 
     // Manager used during generation time
-    public class CityGenerationManager
+    public class CityGenerationManager : IDisposable
     {
-        private readonly Queue<Nts.Polygon> queue = new();
+        private readonly ConcurrentQueue<Nts.Polygon> queue = new();
+        private readonly SemaphoreSlim signal = new(0);
+        private readonly CancellationTokenSource cts = new();
         private readonly CityGenerationData data;
-        private bool processing;
+        private int activeWorkers;
+        private readonly Task worker;
 
         public CityGenerationManager(CityGenerationData data)
         {
             this.data = data;
             RoadNetworkGenerator.Data = data;
+            MessageBus.Instance.Subscribe<CityGenerationRequestEventData>(OnRequest);
+            worker = Task.Run(ProcessQueueAsync);
+        }
+
+        private void OnRequest(CityGenerationRequestEventData req)
+        {
+            QueueArea(req.Area);
         }
 
         public void QueueArea(Nts.Polygon area)
         {
-            lock (queue)
+            queue.Enqueue(area);
+            signal.Release();
+        }
+
+        public bool IsProcessing() => !queue.IsEmpty || Volatile.Read(ref activeWorkers) > 0;
+
+        public int GetQueueCount() => queue.Count;
+
+        private async Task ProcessQueueAsync()
+        {
+            while (!cts.IsCancellationRequested)
             {
-                queue.Enqueue(area);
-                if (!processing)
+                try
                 {
-                    processing = true;
-                    _ = ProcessQueue();
+                    await signal.WaitAsync(cts.Token).ConfigureAwait(false);
                 }
-            }
-        }
-
-        public bool IsProcessing()
-        {
-            lock (queue)
-            {
-                return processing || queue.Count > 0;
-            }
-        }
-
-        public int GetQueueCount()
-        {
-            lock (queue)
-            {
-                return queue.Count;
-            }
-        }
-
-        private async Task ProcessQueue()
-        {
-            while (true)
-            {
-                List<Nts.Polygon> batch;
-                lock (queue)
+                catch (OperationCanceledException)
                 {
-                    if (queue.Count == 0)
-                    {
-                        processing = false;
-                        return;
-                    }
-                    batch = new List<Nts.Polygon>(queue);
-                    queue.Clear();
+                    break;
                 }
 
-                await Parallel.ForEachAsync(batch, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, async (area, token) =>
+                if (!queue.TryDequeue(out var area))
+                    continue;
+
+                Interlocked.Increment(ref activeWorkers);
+                try
                 {
                     var p = AestheticMappingLayer.Instance.CurrentParameters;
-                    await RoadNetworkGenerator.GenerateModelAsync(area, 10, p).ConfigureAwait(false);
-                }).ConfigureAwait(false);
+                    var model = await RoadNetworkGenerator.GenerateModelAsync(area, 10, p).ConfigureAwait(false);
+                    MessageBus.Instance.Publish(new CityGenerationCompletedEventData(model.Id, area));
+                }
+                finally
+                {
+                    Interlocked.Decrement(ref activeWorkers);
+                }
             }
+        }
+
+        public void Cancel() => cts.Cancel();
+
+        public void Dispose()
+        {
+            Cancel();
+            signal.Dispose();
+            cts.Dispose();
         }
     }
 

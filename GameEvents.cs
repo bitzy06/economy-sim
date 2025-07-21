@@ -1,4 +1,5 @@
 using System;
+using NetTopologySuite.Geometries;
 
 namespace StrategyGame
 {
@@ -41,4 +42,14 @@ namespace StrategyGame
     /// Summary event containing high level city data for low LOD rendering.
     /// </summary>
     public record CityStatusEventData(string CityName, int Population, double Budget, CityLOD LOD);
+
+    /// <summary>
+    /// Request to generate city data for the given urban area.
+    /// </summary>
+    public record CityGenerationRequestEventData(Polygon Area);
+
+    /// <summary>
+    /// Published when city generation for an area completes.
+    /// </summary>
+    public record CityGenerationCompletedEventData(Guid ModelId, Polygon Area);
 }
