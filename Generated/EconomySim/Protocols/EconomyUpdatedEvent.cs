@@ -8,8 +8,9 @@ namespace EconomySim.Protocols
 using global::System;
 using global::System.Collections.Generic;
 using global::FlatBuffers;
+using Messaging;
 
-public struct EconomyUpdatedEvent : IFlatbufferObject
+public partial struct EconomyUpdatedEvent : IFlatbufferObject, IBusMessage
 {
   private Table __p;
   public ByteBuffer ByteBuffer { get { return __p.bb; } }
@@ -54,6 +55,7 @@ public struct EconomyUpdatedEvent : IFlatbufferObject
   }
   public static void FinishEconomyUpdatedEventBuffer(FlatBufferBuilder builder, Offset<EconomySim.Protocols.EconomyUpdatedEvent> offset) { builder.Finish(offset.Value); }
   public static void FinishSizePrefixedEconomyUpdatedEventBuffer(FlatBufferBuilder builder, Offset<EconomySim.Protocols.EconomyUpdatedEvent> offset) { builder.FinishSizePrefixed(offset.Value); }
+  public string CityOrigin => CityId;
 }
 
 
