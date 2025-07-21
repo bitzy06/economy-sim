@@ -881,12 +881,22 @@ namespace economy_sim
                 {
                     if (SimulationLODManager.Instance.ShouldSimulateHighFidelity(city))
                     {
+                        // --- Land value & land use update ---
+                        if (city.ProceduralData != null)
+                        {
+                            LandValueCalculator.Calculate(city.ProceduralData);
+                            LandUseSimulator.Run(city.ProceduralData);
+                            BuildingRefiner.RefineBuildings(city.ProceduralData);
+                        }
+
                         Market.ResetCitySupplyDemand(city);
                         foreach (var factory in city.Factories)
                         {
                             factory.Produce(city.Stockpile, city);
                         }
+
                         StrategyGame.Economy.UpdateCityEconomy(city); // Populates ImportNeeds and ExportableSurplus
+
                         city.ProgressConstruction();
                         if (constructionForm.Visible && constructionForm.CurrentCity == city)
                         {
