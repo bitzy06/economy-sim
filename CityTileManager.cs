@@ -222,6 +222,8 @@ namespace StrategyGame
             var generated = await ProceduralCityRenderer.RenderCityTileAsync(
                 bounds,
                 cellSize,
+                tileX,
+                tileY,
                 RoadNetworkGenerator.ModelCacheById,
                 id => RequestModel(id, triggerRefresh)
             ).ConfigureAwait(false);
