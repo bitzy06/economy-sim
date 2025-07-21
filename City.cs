@@ -15,6 +15,7 @@ namespace StrategyGame
         public double CityExpenses { get; set; }
         public List<Factory> Factories { get; set; }
         public Dictionary<string, Good> Stockpile { get; set; }
+        public CityDataModel ProceduralData { get; set; }
         
         // Local market data
         public Dictionary<string, double> LocalPrices { get; set; }

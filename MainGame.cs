@@ -467,6 +467,18 @@ namespace economy_sim
                                         }
                                     }
                                 }
+                                if (cityData.CityModelId != Guid.Empty)
+                                {
+                                    var model = RoadNetworkGenerator.LoadCityDataModelAsync(cityData.CityModelId).GetAwaiter().GetResult();
+                                    currentCity.ProceduralData = model;
+                                    if (model != null)
+                                    {
+                                        for (int idx = 0; idx < currentCity.Factories.Count && idx < model.Buildings.Count; idx++)
+                                        {
+                                            currentCity.Factories[idx].BuildingData = model.Buildings[idx];
+                                        }
+                                    }
+                                }
                                 currentState.Cities.Add(currentCity);
                                 allCitiesInWorld.Add(currentCity);
                             }
@@ -554,6 +566,17 @@ namespace economy_sim
             defaultCity.TaxRate = 0.05;
             defaultCity.CityExpenses = 1000;
 
+            var fallbackArea = new Nts.Polygon(new Nts.LinearRing(new[]
+            {
+                new Nts.Coordinate(0,0),
+                new Nts.Coordinate(0,1),
+                new Nts.Coordinate(1,1),
+                new Nts.Coordinate(1,0),
+                new Nts.Coordinate(0,0)
+            }));
+            var fallbackModel = RoadNetworkGenerator.GenerateModelAsync(fallbackArea, 10).GetAwaiter().GetResult();
+            defaultCity.ProceduralData = fallbackModel;
+
             // Add a basic farm to the default city
             StrategyGame.FactoryBlueprint farmBlueprint = StrategyGame.FactoryBlueprints.AllBlueprints.FirstOrDefault(bp => bp.FactoryTypeName == "Grain Farm");
             if (farmBlueprint != null)
@@ -583,6 +606,8 @@ namespace economy_sim
                     }
                 }
                 defaultCity.Factories.Add(farm);
+                if (fallbackModel != null && fallbackModel.Buildings.Any())
+                    farm.BuildingData = fallbackModel.Buildings.First();
             }
             defaultState.Cities.Add(defaultCity);
             allCitiesInWorld.Add(defaultCity);

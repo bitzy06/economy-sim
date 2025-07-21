@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Nts = NetTopologySuite.Geometries;
 
 namespace StrategyGame
 {
@@ -904,6 +905,9 @@ new List<CountryTemplate>
         {
             var rnd = new Random();
             var world = new WorldSetupData { Countries = new List<CountryData>(), ConstructionCompanies = new List<ConstructionCompanyData>() };
+            UrbanAreaManager.LoadUrbanAreas();
+            if (RoadNetworkGenerator.Data == null)
+                RoadNetworkGenerator.Data = new CityGenerationData(new float[1, 1], new bool[1, 1], new float[1, 1]);
             var usedCountryNames = new HashSet<string>();
             var usedStateNames = new HashSet<string>();
             var usedCityNames = new HashSet<string>();
@@ -1010,6 +1014,24 @@ new List<CountryTemplate>
                             CityExpenses = rnd.Next(10000, (int)Math.Max(stateData.StateExpenses / (numCitiesToGenerate + 1), 10000) + 1),
                             InitialFactories = new List<InitialFactoryData>()
                         };
+
+                        Nts.Polygon area;
+                        if (UrbanAreaManager.UrbanPolygons.Count > 0)
+                            area = UrbanAreaManager.UrbanPolygons[rnd.Next(UrbanAreaManager.UrbanPolygons.Count)];
+                        else
+                        {
+                            var gf = Nts.GeometryFactory.Default;
+                            area = gf.CreatePolygon(new[]
+                            {
+                                new Nts.Coordinate(0,0),
+                                new Nts.Coordinate(0,1),
+                                new Nts.Coordinate(1,1),
+                                new Nts.Coordinate(1,0),
+                                new Nts.Coordinate(0,0)
+                            });
+                        }
+                        var model = RoadNetworkGenerator.GenerateModelAsync(area, 10).GetAwaiter().GetResult();
+                        cityData.CityModelId = model.Id;
 
                         world.ConstructionCompanies.Add(new ConstructionCompanyData
                         {
