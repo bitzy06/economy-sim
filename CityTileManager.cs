@@ -228,21 +228,27 @@ namespace StrategyGame
             var skBmp = ImageSharpToSkia(generated);
             PerformanceTracker.Record("CityTileManager-GenerateTile", genSw.Elapsed);
 
-            string dir = Path.GetDirectoryName(path);
-            Directory.CreateDirectory(dir);
-            var lockFile = GetFileLock(path);
-            await lockFile.WaitAsync(token).ConfigureAwait(false);
-            try
+            // Save the generated tile image in the background. The caller
+            // shouldn't wait for disk IO before receiving the bitmap.
+            _ = Task.Run(async () =>
             {
-                var saveSw = Stopwatch.StartNew();
-                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
-                await generated.SaveAsPngAsync(fs, token).ConfigureAwait(false);
-                PerformanceTracker.Record("CityTileManager-SaveTile", saveSw.Elapsed);
-            }
-            finally
-            {
-                lockFile.Release();
-            }
+                string dir = Path.GetDirectoryName(path);
+                Directory.CreateDirectory(dir);
+                var lockFile = GetFileLock(path);
+                await lockFile.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+                try
+                {
+                    var saveSw = Stopwatch.StartNew();
+                    await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
+                    await generated.SaveAsPngAsync(fs, CancellationToken.None).ConfigureAwait(false);
+                    PerformanceTracker.Record("CityTileManager-SaveTile", saveSw.Elapsed);
+                }
+                finally
+                {
+                    lockFile.Release();
+                    generated.Dispose();
+                }
+            });
 
             _tileCache.TryAdd(key, skBmp); // Add to concurrent cache
             _inFlight.TryRemove(key, out _); // Clean up in-flight task
