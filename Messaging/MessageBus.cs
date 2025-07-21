@@ -16,6 +16,11 @@ namespace Messaging
         private readonly BlockingCollection<object> _queue = new();
         private readonly Thread _worker;
 
+        /// <summary>
+        /// Invoked whenever a message is published.
+        /// </summary>
+        public event Action<object>? MessagePublished;
+
         public MessageBus()
         {
             _worker = new Thread(EventLoop) { IsBackground = true };
@@ -42,7 +47,8 @@ namespace Messaging
         public void Publish<T>(T evt)
         {
             if (evt == null) throw new ArgumentNullException(nameof(evt));
-            _queue.Add(evt);
+            MessagePublished?.Invoke(evt!);
+            _queue.Add(evt!);
         }
 
         private void EventLoop()
