@@ -144,6 +144,16 @@ namespace StrategyGame
             Suburbs.Add(suburb);
         }
 
+        public void DestroySuburb(string name)
+        {
+            var suburb = Suburbs.FirstOrDefault(s => s.Name == name);
+            if (suburb == null)
+                return;
+            Suburbs.Remove(suburb);
+            Population = Math.Max(0, Population - suburb.Population);
+            MessageBus.Instance.Publish(new DistrictDestroyedEventData(Name, suburb.Name, suburb.Population));
+        }
+
         public double CalculateCityQualityOfLife()
         {
             double suburbQoL = 0;
@@ -205,6 +215,7 @@ namespace StrategyGame
                     break;
                 case ProjectType.Railway:
                     IncreaseRailwayKilometers(project.Output);
+                    MessageBus.Instance.Publish(new MajorInfrastructureBuiltEventData(Name, "Railway", project.Output));
                     break;
             }
         }

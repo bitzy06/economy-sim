@@ -1,0 +1,10 @@
+namespace StrategyGame;
+
+table MajorInfrastructureBuiltEvent {
+  version:ushort = 1;
+  city:string;
+  infrastructureType:string;
+  value:double;
+}
+
+root_type MajorInfrastructureBuiltEvent;
