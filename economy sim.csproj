@@ -96,10 +96,6 @@
                 </None>
         </ItemGroup>
 
-        <!-- Project references -->
-        <ItemGroup>
-                <ProjectReference Include="Messaging/Messaging.csproj" />
-        </ItemGroup>
 
         <!-- Generated FlatBuffers -->
         <ItemGroup>
