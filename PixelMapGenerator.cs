@@ -374,9 +374,10 @@ namespace StrategyGame
 
             SixLabors.ImageSharp.PixelFormats.Rgba32 borderColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(0, 0, 0, 255); // black
 
-            using (var reader = new NetTopologySuite.IO.ShapefileDataReader(
-                ShpPath, NetTopologySuite.Geometries.GeometryFactory.Default))
+            try
             {
+                using var reader = new NetTopologySuite.IO.ShapefileDataReader(
+                    ShpPath, NetTopologySuite.Geometries.GeometryFactory.Default);
                 while (reader.Read())
                 {
                     var geometry = reader.Geometry;
@@ -394,6 +395,14 @@ namespace StrategyGame
                         DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
                     }
                 }
+            }
+            catch (NetTopologySuite.IO.ParseException ex)
+            {
+                throw new InvalidDataException("The shapefile may be missing or corrupted.", ex);
+            }
+            catch (EndOfStreamException ex)
+            {
+                throw new InvalidDataException("The shapefile may be missing or corrupted.", ex);
             }
             }
 

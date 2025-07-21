@@ -131,6 +131,10 @@ Overlay each layer dynamically based on zoom level.
 - No need to parse OSM or large vector maps
 - Easy to LOD filter towns and provinces by relevance
 - Works offline and loads fast
+## Data Setup
+
+Download the Natural Earth shapefiles and DEM GeoTIFFs into `Documents/data/` before running the game. If using Git LFS, run `git lfs pull` to fetch them. The engine expects files like `ne_10m_admin_0_countries.shp` and `NE1_HR_LC.tif` to exist in that folder.
+
 
 ---
 

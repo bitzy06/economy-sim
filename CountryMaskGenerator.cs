@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using OSGeo.GDAL;
 using OSGeo.OGR;
 
@@ -28,6 +29,11 @@ namespace StrategyGame
                     Ogr.RegisterAll();
                     _gdalRegistered = true;
                 }
+
+            if (!File.Exists(demPath))
+                throw new FileNotFoundException($"DEM file not found: {demPath}");
+            if (!File.Exists(shpPath))
+                throw new FileNotFoundException($"Shapefile not found: {shpPath}");
 
             Dataset dem = Gdal.Open(demPath, Access.GA_ReadOnly);
             if (dem == null)
@@ -98,6 +104,10 @@ namespace StrategyGame
                     _gdalRegistered = true;
                 }
 
+            if (!File.Exists(demPath))
+                throw new FileNotFoundException($"DEM file not found: {demPath}");
+            if (!File.Exists(shpPath))
+                throw new FileNotFoundException($"Shapefile not found: {shpPath}");
             Dataset dem = Gdal.Open(demPath, Access.GA_ReadOnly);
             if (dem == null)
                 throw new ApplicationException($"Failed to open {demPath}");
