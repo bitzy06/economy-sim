@@ -261,7 +261,7 @@ namespace StrategyGame // Reverted from EconomySim
             
             // Accumulate global trade value
             GlobalTradeValue += totalValue;
-            
+
             // Record significant trade events
             if (quantity > 100 || totalValue > 10000)
             {
@@ -275,6 +275,8 @@ namespace StrategyGame // Reverted from EconomySim
                     TurnsAgo = 0
                 });
             }
+
+            MessageBus.Instance.Publish(new TradeRecordedEvent(goodName, exportingCountry, importingCountry, quantity, totalValue));
         }
         
         private void EnsureCountryInTradeFlows(string countryName)
