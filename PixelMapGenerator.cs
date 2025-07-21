@@ -374,25 +374,27 @@ namespace StrategyGame
 
             SixLabors.ImageSharp.PixelFormats.Rgba32 borderColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(0, 0, 0, 255); // black
 
-            var reader = new NetTopologySuite.IO.ShapefileDataReader(
-                ShpPath, NetTopologySuite.Geometries.GeometryFactory.Default);
-
-            while (reader.Read())
+            using (var reader = new NetTopologySuite.IO.ShapefileDataReader(
+                ShpPath, NetTopologySuite.Geometries.GeometryFactory.Default))
             {
-                var geometry = reader.Geometry;
-
-                if (geometry is NetTopologySuite.Geometries.MultiPolygon multi)
+                while (reader.Read())
                 {
-                    for (int i = 0; i < multi.NumGeometries; i++)
+                    var geometry = reader.Geometry;
+
+                    if (geometry is NetTopologySuite.Geometries.MultiPolygon multi)
                     {
-                        var poly = (NetTopologySuite.Geometries.Polygon)multi.GetGeometryN(i);
+                        for (int i = 0; i < multi.NumGeometries; i++)
+                        {
+                            var poly = (NetTopologySuite.Geometries.Polygon)multi.GetGeometryN(i);
+                            DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
+                        }
+                    }
+                    else if (geometry is NetTopologySuite.Geometries.Polygon poly)
+                    {
                         DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
                     }
                 }
-                else if (geometry is NetTopologySuite.Geometries.Polygon poly)
-                {
-                    DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
-                }
+            }
             }
 
             return result;
