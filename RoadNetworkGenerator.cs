@@ -25,6 +25,10 @@ namespace StrategyGame
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
         private static readonly ConcurrentDictionary<Guid, CityDataModel> modelCacheById = new();
 
+        // Economic model used to influence road generation.
+        public static IEconomicRoadModel EconomicModel { get; set; } = new SimpleEconomicRoadModel();
+        public static EconomicData EconomicData { get; set; } = new EconomicData();
+
         public static IReadOnlyDictionary<Guid, CityDataModel> ModelCacheById => modelCacheById;
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
 
@@ -340,9 +344,10 @@ namespace StrategyGame
         private static List<Nts.LineString> GenerateLocalRoads(Nts.Polygon area, List<Nts.LineString> highways, RoadNetworkType roadType)
         {
             const double roadSegmentLength = 0.005;
-            // Make the iteration limit proportional to the area. Ensures small
-            // towns generate quickly while large cities have room to expand.
-            int maxIterations = (int)Math.Max(500, area.Area * 5000000);
+            // Allow the economic model to adjust how dense the local road network becomes.
+            double densityFactor = EconomicModel?.PredictRoadDensity(EconomicData) ?? 1.0;
+            // Make the iteration limit proportional to the area and scaled by the economy.
+            int maxIterations = (int)Math.Max(500, area.Area * 5000000 * densityFactor);
             var gf = Nts.GeometryFactory.Default;
             var random = new Random();
             var roadNetwork = new List<Nts.LineString>(highways);

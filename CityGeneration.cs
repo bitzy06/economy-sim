@@ -266,6 +266,36 @@ namespace StrategyGame
             }
         }
 
+        public static void RunWithCompetition(CityDataModel model, AgentDevelopmentManager manager, EconomicData data)
+        {
+            if (model.Parcels == null || model.RoadNetwork == null)
+                return;
+
+            var env = new Nts.Envelope();
+            foreach (var seg in model.RoadNetwork)
+            {
+                env.ExpandToInclude(seg.X1, seg.Y1);
+                env.ExpandToInclude(seg.X2, seg.Y2);
+            }
+            if (env.IsNull) return;
+
+            var center = env.Centre;
+            var centerPt = new Nts.Point(center);
+            double maxDist = center.Distance(new Nts.Coordinate(env.MinX, env.MinY));
+            if (maxDist < 1e-6) maxDist = 1.0;
+
+            foreach (var parcel in model.Parcels)
+            {
+                var pCenter = parcel.Shape.Centroid;
+                double dist = pCenter.Distance(centerPt);
+                double landValue = Math.Max(0, 100 * (1 - dist / maxDist));
+                landValue += Rng.Value.NextDouble() * 20 - 10; // noise
+                parcel.LandValue = Math.Clamp(landValue, 0, 100);
+            }
+
+            manager.AllocateParcels(model.Parcels, data);
+        }
+
         private static LandUseType SelectLandUse(Dictionary<LandUseType, double> weights)
         {
             double total = weights.Values.Sum();
