@@ -24,7 +24,6 @@ namespace StrategyGame
         private readonly MultiResolutionMapManager _mapManager;
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
-        private readonly ConcurrentDictionary<Guid, CityDataModel> _cityModelCache = new();
         private readonly ConcurrentDictionary<Guid, Task> _cityModelLoadTasks = new();
         public static readonly bool GpuAvailable;
 
@@ -84,9 +83,9 @@ namespace StrategyGame
             }
         }
 
-        private void RequestModel(Guid modelId, Action triggerRefresh)
+        private void RequestModel(Guid modelId, Action? triggerRefresh)
         {
-            if (_cityModelCache.ContainsKey(modelId) || _cityModelLoadTasks.ContainsKey(modelId))
+            if (RoadNetworkGenerator.ModelCacheById.ContainsKey(modelId) || _cityModelLoadTasks.ContainsKey(modelId))
                 return;
 
             var loadTask = Task.Run(async () =>
@@ -95,10 +94,7 @@ namespace StrategyGame
                 {
                     var model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId).ConfigureAwait(false);
                     if (model != null)
-                    {
-                        _cityModelCache.TryAdd(model.Id, model);
                         triggerRefresh?.Invoke();
-                    }
                 }
                 finally
                 {
@@ -222,7 +218,7 @@ namespace StrategyGame
             var generated = await ProceduralCityRenderer.RenderCityTileAsync(
                 bounds,
                 cellSize,
-                _cityModelCache,
+                RoadNetworkGenerator.ModelCacheById,
                 id => RequestModel(id, triggerRefresh)
             ).ConfigureAwait(false);
             var skBmp = ImageSharpToSkia(generated);
