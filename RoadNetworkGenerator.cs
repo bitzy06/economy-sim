@@ -76,6 +76,10 @@ namespace StrategyGame
 
                 bw.Write(model.Id.ToByteArray());
 
+            // generation parameters
+            bw.Write((int)model.GenerationParameters.BuildingStyle);
+            bw.Write((int)model.GenerationParameters.RoadNetworkType);
+
             if (model.UrbanArea != null)
             {
                 bw.Write(true);
@@ -148,6 +152,9 @@ namespace StrategyGame
 
             var model = new CityDataModel();
             model.Id = new Guid(br.ReadBytes(16));
+            var style = (BuildingStyle)br.ReadInt32();
+            var roadType = (RoadNetworkType)br.ReadInt32();
+            model.GenerationParameters = new CityGenerationParameters { BuildingStyle = style, RoadNetworkType = roadType };
 
             if (br.ReadBoolean())
             {
@@ -218,7 +225,7 @@ namespace StrategyGame
             }
         }
 
-        public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea, int cellSize)
+        public static async Task<CityDataModel> GenerateModelAsync(Nts.Polygon urbanArea, int cellSize, CityGenerationParameters parameters)
         {
             string hash = ComputeHash(urbanArea);
             string cacheDir = GetCacheDir();
@@ -255,9 +262,10 @@ namespace StrategyGame
             var result = new CityDataModel
             {
                 Id = Guid.NewGuid(),
-                UrbanArea = urbanArea
+                UrbanArea = urbanArea,
+                GenerationParameters = parameters
             };
-            var roadGeometries = GetOrGenerateFor(urbanArea, cellSize);
+            var roadGeometries = GetOrGenerateFor(urbanArea, cellSize, parameters.RoadNetworkType);
 
             result.RoadNetwork = roadGeometries
                 .SelectMany(tuple => tuple.Line.Coordinates.Zip(tuple.Line.Coordinates.Skip(1), (s, e) =>
@@ -296,14 +304,14 @@ namespace StrategyGame
             return result;
         }
 
-        public static List<(Nts.LineString Line, RoadType Type)> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize)
+        public static List<(Nts.LineString Line, RoadType Type)> GetOrGenerateFor(Nts.Polygon urbanArea, int cellSize, RoadNetworkType roadType)
         {
             string key = ComputeHash(urbanArea);
             if (networkCache.TryGetValue(key, out var cachedNet))
                 return cachedNet;
 
             var highways = GenerateHighways(urbanArea).ToList();
-            var localRoads = GenerateLocalRoads(urbanArea, highways);
+            var localRoads = GenerateLocalRoads(urbanArea, highways, roadType);
 
             var allRoads = highways.Select(h => (h, RoadType.Primary))
                                  .Concat(localRoads.Select(l => (l, RoadType.Secondary)))
@@ -329,7 +337,7 @@ namespace StrategyGame
             }
         }
 
-        private static List<Nts.LineString> GenerateLocalRoads(Nts.Polygon area, List<Nts.LineString> highways)
+        private static List<Nts.LineString> GenerateLocalRoads(Nts.Polygon area, List<Nts.LineString> highways, RoadNetworkType roadType)
         {
             const double roadSegmentLength = 0.005;
             // Make the iteration limit proportional to the area. Ensures small
@@ -353,8 +361,17 @@ namespace StrategyGame
                     double baseAngle = Math.Atan2(
                         highway.EndPoint.Y - highway.StartPoint.Y,
                         highway.EndPoint.X - highway.StartPoint.X);
-                    queue.Enqueue((pt, baseAngle + Math.PI / 2));
-                    queue.Enqueue((pt, baseAngle - Math.PI / 2));
+                    if (roadType == RoadNetworkType.Grid)
+                    {
+                        queue.Enqueue((pt, baseAngle + Math.PI / 2));
+                        queue.Enqueue((pt, baseAngle - Math.PI / 2));
+                    }
+                    else
+                    {
+                        double a = random.NextDouble() * Math.PI;
+                        queue.Enqueue((pt, baseAngle + a));
+                        queue.Enqueue((pt, baseAngle - a));
+                    }
                 }
             }
             if (queue.Count == 0 && area.EnvelopeInternal.Width > 0)
@@ -440,11 +457,13 @@ namespace StrategyGame
                     // Branch left/right
                     if (random.NextDouble() < (0.2 + density * 0.5)) // Branching probability
                     {
-                        queue.Enqueue((endPoint, angle + Math.PI / 2));
+                        double a = roadType == RoadNetworkType.Grid ? Math.PI / 2 : random.NextDouble() * Math.PI;
+                        queue.Enqueue((endPoint, angle + a));
                     }
                     if (random.NextDouble() < (0.2 + density * 0.5))
                     {
-                        queue.Enqueue((endPoint, angle - Math.PI / 2));
+                        double a = roadType == RoadNetworkType.Grid ? Math.PI / 2 : random.NextDouble() * Math.PI;
+                        queue.Enqueue((endPoint, angle - a));
                     }
                 }
             }

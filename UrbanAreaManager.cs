@@ -62,7 +62,8 @@ namespace StrategyGame
 
             Parallel.ForEach(UrbanPolygons, urbanArea =>
             {
-                RoadNetworkGenerator.GetOrGenerateFor(urbanArea, 40);
+                var p = AestheticMappingLayer.Instance.CurrentParameters;
+                RoadNetworkGenerator.GetOrGenerateFor(urbanArea, 40, p.RoadNetworkType);
             });
 
             sw.Stop();
