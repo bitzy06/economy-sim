@@ -604,14 +604,29 @@ namespace StrategyGame
         private static unsafe SystemDrawing.Bitmap ImageSharpToBitmap(Image<Rgba32> img)
         {
             var bmp = new SystemDrawing.Bitmap(img.Width, img.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            var bmpData = bmp.LockBits(
-                new SystemDrawing.Rectangle(0, 0, img.Width, img.Height),
-                System.Drawing.Imaging.ImageLockMode.WriteOnly,
-                bmp.PixelFormat);
+            var rect = new SystemDrawing.Rectangle(0, 0, img.Width, img.Height);
+            var bmpData = bmp.LockBits(rect, System.Drawing.Imaging.ImageLockMode.WriteOnly, bmp.PixelFormat);
 
-            img.CopyPixelDataTo(new Span<byte>((byte*)bmpData.Scan0, bmpData.Stride * bmpData.Height));
+            try
+            {
+                for (int y = 0; y < img.Height; y++)
+                {
+                    Span<Rgba32> src = img.DangerousGetPixelRowMemory(y).Span;
+                    byte* destRow = (byte*)bmpData.Scan0 + y * bmpData.Stride;
+                    for (int x = 0; x < img.Width; x++)
+                    {
+                        destRow[x * 4 + 0] = src[x].B;
+                        destRow[x * 4 + 1] = src[x].G;
+                        destRow[x * 4 + 2] = src[x].R;
+                        destRow[x * 4 + 3] = src[x].A;
+                    }
+                }
+            }
+            finally
+            {
+                bmp.UnlockBits(bmpData);
+            }
 
-            bmp.UnlockBits(bmpData);
             return bmp;
         }
 
