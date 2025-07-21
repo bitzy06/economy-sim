@@ -95,7 +95,13 @@
                 <None Include="world_setup.json">
                         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
                 </None>
-	</ItemGroup>
+                <None Include="schema_registry.json">
+                        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                </None>
+                <None Include="FlatBuffersSchemas\**\*">
+                        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                </None>
+        </ItemGroup>
 
 	<!-- Rely on SDK implicit Compile and EmbeddedResource items -->
 

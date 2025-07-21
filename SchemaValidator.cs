@@ -11,17 +11,24 @@ namespace StrategyGame
     /// </summary>
     public static class SchemaValidator
     {
-        private const string RegistryFile = "schema_registry.json";
+        private static readonly string RepoRoot = Path.GetFullPath(Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
+
+        private static readonly string RegistryPath = Path.Combine(RepoRoot, "schema_registry.json");
 
         public static void Validate()
         {
-            if (!File.Exists(RegistryFile))
-                throw new FileNotFoundException($"Schema registry '{RegistryFile}' not found.");
+            if (!File.Exists(RegistryPath))
+                throw new FileNotFoundException($"Schema registry '{RegistryPath}' not found.");
 
-            var registry = JsonSerializer.Deserialize<Dictionary<string, ushort>>(File.ReadAllText(RegistryFile))
+            var registry = JsonSerializer.Deserialize<Dictionary<string, ushort>>(File.ReadAllText(RegistryPath))
                            ?? new Dictionary<string, ushort>();
 
-            foreach (var fbs in Directory.GetFiles("FlatBuffersSchemas", "*.fbs"))
+            var schemaDir = Path.Combine(RepoRoot, "FlatBuffersSchemas");
+            if (!Directory.Exists(schemaDir))
+                return;
+
+            foreach (var fbs in Directory.GetFiles(schemaDir, "*.fbs"))
             {
                 var name = Path.GetFileNameWithoutExtension(fbs);
                 var text = File.ReadAllText(fbs);
