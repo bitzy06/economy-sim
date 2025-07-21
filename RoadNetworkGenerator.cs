@@ -75,8 +75,9 @@ namespace StrategyGame
             try
             {
                 var wkbWriter = new WKBWriter();
-                using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
-                using var bw = new BinaryWriter(fs);
+                using var ms = new MemoryStream();
+                using (var bw = new BinaryWriter(ms, System.Text.Encoding.Default, true))
+                {
 
                 bw.Write(model.Id.ToByteArray());
 
@@ -124,18 +125,24 @@ namespace StrategyGame
                 bw.Write(parcel.LandValue);
             }
 
-                bw.Write(model.Buildings.Count);
-                foreach (var building in model.Buildings)
-                {
-                    byte[] data = wkbWriter.Write(building.Footprint);
-                    bw.Write(data.Length);
-                    bw.Write(data);
-                    bw.Write((int)building.LandUse);
-                    bw.Write(building.Level);
-                    bw.Write(building.PopulationCapacity);
-                    bw.Write(building.EconomicOutput);
-                    bw.Write(building.PollutionOutput);
+                    bw.Write(model.Buildings.Count);
+                    foreach (var building in model.Buildings)
+                    {
+                        byte[] data = wkbWriter.Write(building.Footprint);
+                        bw.Write(data.Length);
+                        bw.Write(data);
+                        bw.Write((int)building.LandUse);
+                        bw.Write(building.Level);
+                        bw.Write(building.PopulationCapacity);
+                        bw.Write(building.EconomicOutput);
+                        bw.Write(building.PollutionOutput);
+                    }
+
+                    bw.Flush();
                 }
+
+                byte[] buffer = ms.ToArray();
+                await File.WriteAllBytesAsync(path, buffer).ConfigureAwait(false);
             }
             finally
             {
