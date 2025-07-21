@@ -3,6 +3,9 @@ using System.Linq;
 using System; // Added for Console
 using StrategyGame; // Added to reference Suburb class
 using StrategyGame; // Ensure namespace for ProjectType and ConstructionProject is included
+using Messaging;
+using EconomySim.Protocols;
+using FlatBuffers;
 
 namespace StrategyGame
 {
@@ -33,6 +36,11 @@ namespace StrategyGame
         public List<SellOrder> SellOrders { get; set; }
         public List<Suburb> Suburbs { get; private set; } // Added Suburbs property
         public List<ConstructionProject> ActiveProjects { get; private set; } // Added to track active construction projects
+
+        // Metrics for event generation
+        public double LastRecordedGdp { get; set; }
+        public double LastAveragePrice { get; set; }
+        public int LastPopulation { get; set; }
 
         public City(string name)
         {
@@ -119,11 +127,16 @@ namespace StrategyGame
             clerks.Needs["Education"] = 0.5;
             PopClasses.Add(clerks);
             DebugLogger.Log($"[City] Created Clerks class - Size: {clerks.Size}, Income: {clerks.IncomePerPerson}", DebugLogger.LogCategory.Pop);
+
+            LastPopulation = Population;
+            LastRecordedGdp = PopClasses.Sum(p => p.Size * p.IncomePerPerson);
+            LastAveragePrice = LocalPrices.Values.DefaultIfEmpty(0).Average();
         }
 
         public void SimulateGrowth()
         {
             double surplus = Budget - CityExpenses;
+            int previousPopulation = Population;
             if (surplus > 0)
             {
                 int growth = (int)(surplus / 1000); // Example: population grows with surplus
@@ -137,6 +150,25 @@ namespace StrategyGame
                 }
 
                 Budget += surplus * 0.05; // Example: reinvest surplus
+            }
+
+            if (Population != LastPopulation)
+            {
+                var builder = new FlatBufferBuilder(64);
+                var idOffset = builder.CreateString(ProceduralData?.Id.ToString() ?? string.Empty);
+                PopulationUpdatedEvent.StartPopulationUpdatedEvent(builder);
+                PopulationUpdatedEvent.AddCityId(builder, idOffset);
+                PopulationUpdatedEvent.AddTimestamp(builder, (ulong)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+                PopulationUpdatedEvent.AddPopulation(builder, Population);
+                float birthRate = previousPopulation > 0 ? (float)(Population - previousPopulation) / previousPopulation : 0f;
+                PopulationUpdatedEvent.AddBirthRate(builder, birthRate);
+                PopulationUpdatedEvent.AddDeathRate(builder, 0f);
+                var evtOffset = PopulationUpdatedEvent.EndPopulationUpdatedEvent(builder);
+                PopulationUpdatedEvent.FinishSizePrefixedPopulationUpdatedEventBuffer(builder, evtOffset);
+                var buffer = new ByteBuffer(builder.SizedByteArray());
+                var evt = PopulationUpdatedEvent.GetRootAsPopulationUpdatedEvent(buffer);
+                GameServices.Bus.Publish(evt);
+                LastPopulation = Population;
             }
         }
 
