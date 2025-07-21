@@ -1,0 +1,10 @@
+namespace StrategyGame;
+
+table EconomyUpdatedEvent {
+  version:ushort = 1;
+  country:string;
+  newBudget:double;
+  gdp:double;
+}
+
+root_type EconomyUpdatedEvent;
