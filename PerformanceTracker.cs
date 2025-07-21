@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace economy_sim
+namespace EconomySim
 {
     public static class PerformanceTracker
     {

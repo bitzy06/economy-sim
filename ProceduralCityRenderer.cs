@@ -13,7 +13,7 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using SixLabors.ImageSharp.Drawing;
 using SkiaSharp;
-using economy_sim;
+using EconomySim;
 
 namespace StrategyGame
 {

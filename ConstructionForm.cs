@@ -3,7 +3,7 @@ using System.Linq;
 using System.Windows.Forms;
 using StrategyGame;
 
-namespace economy_sim
+namespace EconomySim
 {
     public partial class ConstructionForm : Form
     {

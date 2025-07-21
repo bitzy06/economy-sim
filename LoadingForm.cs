@@ -1,6 +1,6 @@
 using System.Windows.Forms;
 
-namespace economy_sim
+namespace EconomySim
 {
     public partial class LoadingForm : Form
     {

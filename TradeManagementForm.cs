@@ -4,9 +4,9 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Linq;
 using StrategyGame;
-using economy_sim;
+using EconomySim;
 
-namespace economy_sim
+namespace EconomySim
 {    public partial class TradeManagementForm : Form
     {
         private StrategyGame.Country playerCountry;

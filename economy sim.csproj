@@ -8,8 +8,8 @@
 
 		<!-- Output settings -->
 		<OutputType>WinExe</OutputType>
-		<AssemblyName>economy_sim</AssemblyName>
-		<RootNamespace>economy_sim</RootNamespace>
+		<AssemblyName>EconomySim</AssemblyName>
+		<RootNamespace>EconomySim</RootNamespace>
 		<UseWindowsForms>true</UseWindowsForms>
 
 		<!-- Target framework -->

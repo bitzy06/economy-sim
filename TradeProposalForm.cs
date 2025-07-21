@@ -2,7 +2,7 @@ using System;
 using System.Windows.Forms;
 using System.Linq;
 
-namespace economy_sim
+namespace EconomySim
 {
     public partial class TradeProposalForm : Form
     {

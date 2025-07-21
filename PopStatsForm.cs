@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace economy_sim
+namespace EconomySim
 {
     public partial class PopStatsForm : Form
     {

@@ -1,7 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace economy_sim
+namespace EconomySim
 {
     public partial class DiplomaticRelationsForm : Form
     {

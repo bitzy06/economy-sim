@@ -5,7 +5,7 @@ using System.Windows.Forms;
 using System.Linq;
 using StrategyGame;
 
-namespace economy_sim
+namespace EconomySim
 {
     /// <summary>
     /// Helper class for enhancing trade displays

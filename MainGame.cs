@@ -19,7 +19,7 @@ using Nts = NetTopologySuite.Geometries;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
 
-namespace economy_sim
+namespace EconomySim
 {
     public partial class MainGame : Form
     {
@@ -1942,7 +1942,7 @@ namespace economy_sim
         private void ButtonOpenTradeManagement_Click(object sender, EventArgs e)
         {
             // Create and show the TradeManagementForm
-            var tradeManagementForm = new economy_sim.TradeManagementForm(
+            var tradeManagementForm = new EconomySim.TradeManagementForm(
                 playerCountry,
                 allCountries,
                 allCitiesInWorld,
