@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using Nts = NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries;
 using NetTopologySuite.Index.Strtree;
 using NetTopologySuite.Operation.Polygonize;
 using NetTopologySuite.Operation.Union;
@@ -54,30 +55,44 @@ namespace StrategyGame
     // Original ParcelGenerator
     public static class ParcelGenerator
     {
+        private const double Epsilon = 1e-9;
+
+        private static bool IsBad(Coordinate c) =>
+            double.IsNaN(c.X) || double.IsNaN(c.Y) ||
+            double.IsInfinity(c.X) || double.IsInfinity(c.Y);
+
         public static List<Parcel> GenerateParcels(CityDataModel model)
         {
-            if (model.RawBlocks != null && model.RawBlocks.Count > 0)
-            {
-                return GenerateParcelsFromBlocks(model.RawBlocks);
-            }
-
             var parcels = new List<Parcel>();
-            if (model.RoadNetwork == null || !model.RoadNetwork.Any())
+            // Ensure there's a road network and an urban area to work with.
+            if (model.RoadNetwork == null || !model.RoadNetwork.Any() || model.UrbanArea == null)
                 return parcels;
 
             var gf = Nts.GeometryFactory.Default;
-            var lineStrings = model.RoadNetwork
+
+            // 1. Get all valid road line segments as Geometry.
+            var roadLines = model.RoadNetwork
+                .Where(seg =>
+                    !IsBad(new Coordinate(seg.X1, seg.Y1)) &&
+                    !IsBad(new Coordinate(seg.X2, seg.Y2)) &&
+                    Math.Abs(seg.X1 - seg.X2) + Math.Abs(seg.Y1 - seg.Y2) > Epsilon)
                 .Select(seg => gf.CreateLineString(new[]
                 {
-                    new Nts.Coordinate(seg.X1, seg.Y1),
-                    new Nts.Coordinate(seg.X2, seg.Y2)
+                    new Coordinate(seg.X1, seg.Y1),
+                    new Coordinate(seg.X2, seg.Y2)
                 }))
-                .ToArray();
+                .ToList<Nts.Geometry>();
 
-            if (lineStrings.Length == 0)
-                return parcels;
+            // 2. Add the urban area boundary to the same collection.
+            if (model.UrbanArea.IsValid)
+            {
+                roadLines.Add(model.UrbanArea.Boundary);
+            }
 
-            var nodedLines = UnaryUnionOp.Union(lineStrings);
+            // 3. Union ALL lines together at once. This correctly nodes the entire geometry set.
+            var nodedLines = UnaryUnionOp.Union(roadLines);
+
+            // 4. Polygonize the fully noded line network.
             var polygonizer = new Polygonizer();
             polygonizer.Add(nodedLines);
             var rawPolys = polygonizer.GetPolygons();
@@ -87,8 +102,8 @@ namespace StrategyGame
                 .Where(p => p.IsValid && p.Area > 1e-9)
                 .ToList();
 
+            // The rest of the process can now proceed.
             model.RawBlocks = blocks;
-
             parcels = GenerateParcelsFromBlocks(blocks);
 
             Debug.WriteLine($"[ParcelGenerator] Final parcel count: {parcels.Count}");
@@ -108,45 +123,73 @@ namespace StrategyGame
 
         private static void SubdividePolygon(Nts.Polygon poly, List<Parcel> output)
         {
-            const double DesiredParcelArea = 0.0001;
-            if (poly.Area < DesiredParcelArea * 1.5)
+            const double MinParcelArea = 0.00005;
+            RecursiveSplit(poly, output, MinParcelArea);
+        }
+
+        private static void RecursiveSplit(Nts.Polygon poly, List<Parcel> output, double minArea)
+        {
+            // --- Start Diagnostic Logging ---
+            Debug.WriteLine($"Splitting polygon. Area: {poly.Area}, IsValid: {poly.IsValid}, Envelope: {poly.EnvelopeInternal}");
+            // --- End Diagnostic Logging ---
+
+            if (poly.Area < minArea * 1.5)
             {
-                output.Add(new Parcel { Shape = poly });
+                if (poly.IsValid && !poly.IsEmpty)
+                    output.Add(new Parcel { Shape = poly });
                 return;
             }
 
             var envelope = poly.EnvelopeInternal;
-            int xSplits = (int)Math.Max(1, Math.Round(envelope.Width / Math.Sqrt(DesiredParcelArea)));
-            int ySplits = (int)Math.Max(1, Math.Round(envelope.Height / Math.Sqrt(DesiredParcelArea)));
+            var gf = poly.Factory;
+            bool splitVertical = envelope.Width > envelope.Height;
 
-            double dx = envelope.Width / xSplits;
-            double dy = envelope.Height / ySplits;
-
-            var gf = Nts.GeometryFactory.Default;
-            for (int i = 0; i < xSplits; i++)
+            Nts.Geometry splitLine;
+            if (splitVertical)
             {
-                for (int j = 0; j < ySplits; j++)
+                double midX = envelope.MinX + envelope.Width / 2;
+                splitLine = gf.CreateLineString(new[]
                 {
-                    var subEnvelope = new Nts.Envelope(
-                        envelope.MinX + i * dx,
-                        envelope.MinX + (i + 1) * dx,
-                        envelope.MinY + j * dy,
-                        envelope.MinY + (j + 1) * dy);
+                    new Nts.Coordinate(midX, envelope.MinY),
+                    new Nts.Coordinate(midX, envelope.MaxY)
+                });
+            }
+            else
+            {
+                double midY = envelope.MinY + envelope.Height / 2;
+                splitLine = gf.CreateLineString(new[]
+                {
+                    new Nts.Coordinate(envelope.MinX, midY),
+                    new Nts.Coordinate(envelope.MaxX, midY)
+                });
+            }
 
-                    try
+            try
+            {
+                var splitGeometries = poly.Difference(splitLine);
+
+                // If the split did not create two or more pieces, stop recursion to avoid an infinite loop.
+                if (splitGeometries.NumGeometries < 2)
+                {
+                    if (poly.IsValid && !poly.IsEmpty)
+                        output.Add(new Parcel { Shape = poly });
+                    return;
+                }
+
+                for (int i = 0; i < splitGeometries.NumGeometries; i++)
+                {
+                    if (splitGeometries.GetGeometryN(i) is Nts.Polygon splitPoly && splitPoly.IsValid && !splitPoly.IsEmpty)
                     {
-                        var envPoly = gf.ToGeometry(subEnvelope);
-                        var parcelGeom = poly.Intersection(envPoly);
-                        if (parcelGeom is Nts.Polygon p && !p.IsEmpty)
-                        {
-                            output.Add(new Parcel { Shape = p });
-                        }
-                    }
-                    catch
-                    {
-                        // Intersection can fail, just skip this sub-parcel
+                        RecursiveSplit(splitPoly, output, minArea);
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                // This will tell us if the split itself throws a C# error
+                Debug.WriteLine($"[RECURSIVE SPLIT ERROR] {ex.Message}");
+                if (poly.IsValid && !poly.IsEmpty)
+                    output.Add(new Parcel { Shape = poly });
             }
         }
     }
@@ -242,30 +285,55 @@ namespace StrategyGame
     {
         public static List<Building> GenerateBuildings(CityDataModel model)
         {
+            // We need the ConcurrentBag again for thread-safe collection
             var buildingBag = new ConcurrentBag<Building>();
             var gf = Nts.GeometryFactory.Default;
 
-            Parallel.ForEach(model.Parcels, parcel =>
-            {
-                Nts.Geometry foot = parcel.Shape;
-                switch (parcel.LandUse)
-                {
-                    case LandUseType.Commercial:
-                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.05);
-                        break;
-                    case LandUseType.Residential:
-                        foot = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.15);
-                        break;
-                    case LandUseType.Industrial:
-                        var temp = parcel.Shape.Buffer(-parcel.Shape.EnvelopeInternal.Width * 0.1);
-                        foot = gf.ToGeometry(temp.EnvelopeInternal);
-                        break;
-                    case LandUseType.Park:
-                        return;
-                }
+            const double CommercialInset = -0.00002;
+            const double ResidentialInset = -0.00004;
+            const double IndustrialInset = -0.00003;
 
-                if (foot is Nts.Polygon p && !foot.IsEmpty)
-                    buildingBag.Add(new Building { Footprint = p, LandUse = parcel.LandUse });
+            // Create a partitioner to process parcels in efficient, thread-safe chunks.
+            var partitioner = Partitioner.Create(model.Parcels, true);
+
+            Parallel.ForEach(partitioner, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, parcel =>
+            {
+                try
+                {
+                    Nts.Geometry foot = null;
+                    switch (parcel.LandUse)
+                    {
+                        case LandUseType.Commercial:
+                            foot = parcel.Shape.Buffer(CommercialInset);
+                            break;
+                        case LandUseType.Residential:
+                            foot = parcel.Shape.Buffer(ResidentialInset);
+                            break;
+                        case LandUseType.Industrial:
+                            var temp = parcel.Shape.Buffer(IndustrialInset);
+                            if (!temp.IsEmpty) foot = gf.ToGeometry(temp.EnvelopeInternal);
+                            else foot = temp;
+                            break;
+                        default:
+                            // No need for continue, just don't process
+                            return;
+                    }
+
+                    if (foot is Nts.Polygon p && p.IsValid && !p.IsEmpty)
+                    {
+                        var cleanedFootprint = p.Buffer(0);
+
+                        if (cleanedFootprint is Nts.Polygon cleanedP && cleanedP.IsValid && !cleanedP.IsEmpty)
+                        {
+                            buildingBag.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // It's still good practice to keep this catch block for diagnostics
+                    Debug.WriteLine($"[BUILDING GEN ERROR] on a parcel. Error: {ex.Message}");
+                }
             });
 
             var buildings = buildingBag.ToList();

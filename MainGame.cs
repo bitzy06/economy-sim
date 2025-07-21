@@ -73,6 +73,8 @@ namespace economy_sim
         private bool mapRenderInProgress = false;
         private bool mapRenderQueued = false;
         private SKBitmap _currentMapView;
+        private bool _isUpdatingMap = false;
+        private readonly object _mapUpdateLock = new object();
         private readonly object _zoomLock = new();
         private float _zoom = 1f;
         private int lastCityModelCount = 0;
@@ -151,7 +153,6 @@ namespace economy_sim
             panelMap.MouseWheel += PanelMap_MouseWheel;
             mapUpdateTimer = new System.Windows.Forms.Timer { Interval = 40 };
             mapUpdateTimer.Tick += MapUpdateTimer_Tick;
-            mapUpdateTimer.Start();
             playerRoleManager = new PlayerRoleManager();
             allCitiesInWorld = new List<StrategyGame.City>();
             allCountries = new List<StrategyGame.Country>();
@@ -243,8 +244,10 @@ namespace economy_sim
                 MainGame_Shown(s, e); // Call your new handler
             };
         }
-        private void MainGame_Shown(object sender, EventArgs e)
+        private async void MainGame_Shown(object sender, EventArgs e)
         {
+            await PreGenerateMissingCityDataAsync();
+
             // Start the simulation loop on a background thread
             // now that the form is fully loaded and displayed.
             simCts = new CancellationTokenSource();
@@ -261,7 +264,7 @@ namespace economy_sim
                 var baseSize = mapManager.GetMapSize(1);
                 baseCellsWidth = baseSize.Width / MultiResolutionMapManager.PixelsPerCellLevels[0];
                 baseCellsHeight = baseSize.Height / MultiResolutionMapManager.PixelsPerCellLevels[0];
-                cityTileManager = new CityTileManager(baseCellsWidth, baseCellsHeight);
+                cityTileManager = new CityTileManager(baseCellsWidth, baseCellsHeight, mapManager);
 
                 var viewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
 
@@ -272,21 +275,11 @@ namespace economy_sim
                         "data", "tile_cache");
 
                     mapManager.PreloadVisibleTiles(mapZoom, viewRect);
-                    cityTileManager.PreloadVisibleTiles(mapZoom, viewRect);
+                    _ = cityTileManager.PreloadVisibleTilesAsync(mapZoom, viewRect);
 
                     this.Invoke((MethodInvoker)(() =>
                     {
-                        using var sk = mapManager.AssembleView(mapZoom, viewRect, () =>
-                        {
-                            this.Invoke((MethodInvoker)(() =>
-                            {
-                                var updatedViewRect = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
-                                using var sk2 = mapManager.AssembleView(mapZoom, updatedViewRect);
-                                _currentMapView?.Dispose();
-                                _currentMapView = sk2.Copy();
-                                pictureBox1.Invalidate();
-                            }));
-                        });
+                        using var sk = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: InvalidateMap);
                         _currentMapView?.Dispose();
                         _currentMapView = sk.Copy();
                         pictureBox1.Invalidate();
@@ -296,212 +289,15 @@ namespace economy_sim
 
             pictureBox1.Size = panelMap.ClientSize;
             pictureBox1.Location = new SD.Point(0, 0);
+
+            if (!mapUpdateTimer.Enabled)
+            {
+                mapUpdateTimer.Start();
+            }
         }
 
        
 
-        private void Redraw()
-        {
-            if ((DateTime.Now - _lastRedrawTime).TotalMilliseconds < 100)
-                return;
-
-            _lastRedrawTime = DateTime.Now;
-
-            if (mapManager == null || panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
-                return;
-
-            SD.Rectangle viewRect = new SD.Rectangle(
-                -panelMap.AutoScrollPosition.X,
-                -panelMap.AutoScrollPosition.Y,
-                panelMap.ClientSize.Width,
-                panelMap.ClientSize.Height
-            );
-
-            if (viewRect.Width <= 0 || viewRect.Height <= 0)
-                return;
-
-            float zoomLevel = mapZoom;
-
-            DateTime lastInnerRedraw = DateTime.MinValue;
-
-            SKBitmap finalSk = null;
-            try
-            {
-                using SKBitmap terrain = mapManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
-                {
-                    if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
-                        return;
-                    lastInnerRedraw = DateTime.Now;
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(Redraw));
-                    else
-                        Redraw();
-                });
-                using SKBitmap city = cityTileManager.AssembleView(zoomLevel, viewRect, triggerRefresh: () =>
-                {
-                    if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds < 100)
-                        return;
-                    lastInnerRedraw = DateTime.Now;
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(Redraw));
-                    else
-                        Redraw();
-                });
-                finalSk = CombineMaps(terrain, city);
-            }
-            catch (ArgumentException ex)
-            {
-                Debug.WriteLine($"Redraw bitmap generation failed: {ex.Message}");
-                return;
-            }
-
-            if (finalSk == null)
-                return;
-
-            _currentMapView?.Dispose();
-            _currentMapView = finalSk.Copy();
-            pictureBox1.Invalidate();
-        }
-        private CancellationTokenSource redrawCts;
-
-        private void RedrawAsync()
-        {
-            if (panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0 || mapManager == null)
-                return;
-
-            redrawCts?.Cancel();
-            redrawCts = new CancellationTokenSource();
-            var token = redrawCts.Token;
-
-            SD.Rectangle viewRect = new SD.Rectangle(
-                -panelMap.AutoScrollPosition.X,
-                -panelMap.AutoScrollPosition.Y,
-                panelMap.ClientSize.Width,
-                panelMap.ClientSize.Height
-            );
-
-            if (viewRect.Width <= 0 || viewRect.Height <= 0)
-                return;
-
-            DateTime lastInnerRedraw = DateTime.MinValue;
-
-            Task.Run(() =>
-            {
-                try
-                {
-                    using var terrain = mapManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
-                    {
-                        if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
-                        {
-                            lastInnerRedraw = DateTime.Now;
-                            this.BeginInvoke(new Action(RedrawAsync));
-                        }
-                    });
-
-                    using var city = cityTileManager.AssembleView(mapZoom, viewRect, triggerRefresh: () =>
-                    {
-                        if ((DateTime.Now - lastInnerRedraw).TotalMilliseconds >= 100 && !token.IsCancellationRequested)
-                        {
-                            lastInnerRedraw = DateTime.Now;
-                            this.BeginInvoke(new Action(RedrawAsync));
-                        }
-                    });
-
-                    using var finalSk = CombineMaps(terrain, city);
-
-                    if (finalSk != null && !token.IsCancellationRequested)
-                    {
-                        this.Invoke(() =>
-                        {
-                            _currentMapView?.Dispose();
-                            _currentMapView = finalSk.Copy();
-                            pictureBox1.Invalidate();
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"RedrawAsync failed: {ex.Message}");
-                }
-            }, token);
-        }
-
-        private void ApplyZoom()
-        {
-            if (mapManager == null)
-                return;
-
-            if (panelMap.ClientSize.Width <= 0 || panelMap.ClientSize.Height <= 0)
-            {
-                Debug.WriteLine("ApplyZoom skipped: panelMap has invalid size.");
-                return;
-            }
-
-            SD.Rectangle view;
-            int zoom;
-            lock (_zoomLock)
-            {
-                SD.Size mapSize = mapManager.GetMapSize(mapZoom);
-                mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
-                mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
-                zoom = mapZoom;
-                view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
-            }
-
-            if (mapRenderInProgress)
-            {
-                mapRenderQueued = true;
-                return;
-            }
-
-            mapManager.PreloadVisibleTiles(zoom, view);
-            cityTileManager.PreloadVisibleTiles(zoom, view);
-
-            mapRenderInProgress = true;
-
-            Task.Run(() =>
-            {
-                using SKBitmap terrain = mapManager.AssembleView(zoom, view, triggerRefresh: () =>
-                {
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(ApplyZoom));
-                    else
-                        ApplyZoom();
-                });
-                using SKBitmap city = cityTileManager.AssembleView(zoom, view, triggerRefresh: () =>
-                {
-                    if (this.InvokeRequired)
-                        this.BeginInvoke(new Action(ApplyZoom));
-                    else
-                        ApplyZoom();
-                });
-                if (terrain == null) return;
-                using SKBitmap mapSk = CombineMaps(terrain, city);
-                if (mapSk == null) return;
-
-                void setImage()
-                {
-                    _currentMapView?.Dispose();
-                    _currentMapView = mapSk.Copy();
-                    pictureBox1.Invalidate();
-                    mapRenderInProgress = false;
-                    if (mapRenderQueued)
-                    {
-                        mapRenderQueued = false;
-                        ApplyZoom();
-                    }
-                }
-
-                if (pictureBox1.InvokeRequired)
-                {
-                    pictureBox1.Invoke((Action)setImage);
-                }
-                else
-                {
-                    setImage();
-                }
-            });
-        }
 
 
         private SD.Bitmap ScaleBitmapNearest(SD.Bitmap src, int width, int height)
@@ -568,7 +364,6 @@ namespace economy_sim
 
             // Load urban area polygons for procedural generation
             UrbanAreaManager.LoadUrbanAreas();
-            CheckAndPromptForMissingCityData();
 
             // 3. Load World Setup from JSON
             string jsonFilePath = "world_setup.json";
@@ -2222,7 +2017,7 @@ namespace economy_sim
                     try
                     {
                         string id = File.ReadAllText(hashPath);
-                        string modelPath = Path.Combine(dir, $"{id}.json");
+                        string modelPath = Path.Combine(dir, $"{id}.bin");
                         if (!File.Exists(modelPath))
                         {
                             missing.Add(urban);
@@ -2282,6 +2077,37 @@ namespace economy_sim
             }
         }
 
+        private async Task PreGenerateMissingCityDataAsync()
+        {
+            var missing = new List<Nts.Polygon>();
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                if (!RoadNetworkGenerator.HasCityDataModel(urban))
+                    missing.Add(urban);
+            }
+
+            if (missing.Count == 0)
+                return;
+
+            using var loading = new LoadingForm();
+            loading.UpdateProgress(0, missing.Count);
+            loading.Show();
+
+            foreach (var urban in missing)
+                cityGenerationManager.QueueArea(urban);
+
+            while (true)
+            {
+                int completed = missing.Count(a => RoadNetworkGenerator.HasCityDataModel(a));
+                loading.UpdateProgress(completed, missing.Count);
+                if (completed >= missing.Count && !cityGenerationManager.IsProcessing())
+                    break;
+                await Task.Delay(500).ConfigureAwait(true);
+            }
+
+            loading.Close();
+        }
+
         /// <summary>
         /// Gets count of urban areas that have complete procedural city data
         /// </summary>
@@ -2301,7 +2127,7 @@ namespace economy_sim
                     try
                     {
                         string id = File.ReadAllText(hashPath);
-                        string modelPath = Path.Combine(dir, $"{id}.json");
+                        string modelPath = Path.Combine(dir, $"{id}.bin");
                         if (File.Exists(modelPath))
                         {
                             count++;
@@ -2366,7 +2192,7 @@ namespace economy_sim
                         try
                         {
                             string id = File.ReadAllText(hashPath);
-                            string modelPath = Path.Combine(dir, $"{id}.json");
+                        string modelPath = Path.Combine(dir, $"{id}.bin");
                             if (!File.Exists(modelPath))
                             {
                                 missingAreas.Add(urban);
@@ -2437,14 +2263,13 @@ namespace economy_sim
 
             Debug.WriteLine($"  FINAL_ORIGIN=({mapViewOrigin.X},{mapViewOrigin.Y})");
 
-            ApplyZoom();
-            PreloadMapTiles();
+            _ = UpdateMapDisplayAsync();
         }
         private void PanelMap_Resize(object sender, EventArgs e)
         {
             // This method is called whenever the map panel is resized.
-            // We call ApplyZoom() to generate a new map image that fits the new dimensions.
-            ApplyZoom();
+            // Kick off an update so the view fits the new dimensions.
+            _ = UpdateMapDisplayAsync();
         }
         private void panelMap_KeyDown(object sender, KeyEventArgs e)
         {
@@ -2457,8 +2282,7 @@ namespace economy_sim
                 {
                     mapZoom = Math.Min(mapZoom + 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
                 }
-                ApplyZoom();
-                PreloadMapTiles();
+                _ = UpdateMapDisplayAsync();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 return;
@@ -2470,8 +2294,7 @@ namespace economy_sim
                 {
                     mapZoom = Math.Max(1, mapZoom - 1);
                 }
-                ApplyZoom();
-                PreloadMapTiles();
+                _ = UpdateMapDisplayAsync();
                 e.Handled = true;
                 e.SuppressKeyPress = true;
                 return;
@@ -2514,8 +2337,7 @@ namespace economy_sim
                     mapViewOrigin.X = Math.Max(0, Math.Min(mapViewOrigin.X, mapSize.Width - panelMap.ClientSize.Width));
                     mapViewOrigin.Y = Math.Max(0, Math.Min(mapViewOrigin.Y, mapSize.Height - panelMap.ClientSize.Height));
                 }
-                ApplyZoom();
-                PreloadMapTiles();
+                _ = UpdateMapDisplayAsync();
             }
         }
 
@@ -2558,7 +2380,7 @@ namespace economy_sim
             {
                 isPanning = false;
                 Cursor = Cursors.Default;
-                PreloadMapTiles();
+                _ = UpdateMapDisplayAsync();
             }
         }
 
@@ -2582,7 +2404,7 @@ namespace economy_sim
                 this.panelMap.Cursor = Cursors.Default; // Reset panelMap cursor
                 this.panelMap.BackColor = SystemColors.Control;
                 this.pictureBox1.BackColor = SD.Color.Transparent; // Reset pictureBox backcolor
-                PreloadMapTiles();
+                _ = UpdateMapDisplayAsync();
             }
         }
 
@@ -2590,26 +2412,99 @@ namespace economy_sim
         {
             if (pendingMapUpdate)
             {
+                _ = UpdateMapDisplayAsync();
+                pendingMapUpdate = false;
+            }
+        }
+
+        private async Task PreloadMapTilesAsync()
+        {
+            if (mapManager == null || cityTileManager == null)
+            {
+                RefreshMap();
+                if (mapManager == null || cityTileManager == null)
+                    return;
+            }
+
+            SD.Rectangle view;
+            float zoom;
+            lock (_zoomLock)
+            {
+                view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
+                zoom = this.mapZoom;
+            }
+
+            var baseMapTask = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
+            var cityTileTask = cityTileManager.PreloadVisibleTilesAsync(zoom, view, 1, InvalidateMap, CancellationToken.None);
+
+            await Task.WhenAll(baseMapTask, cityTileTask);
+        }
+
+        private async Task UpdateMapDisplayAsync()
+        {
+            lock (_mapUpdateLock)
+            {
+                if (_isUpdatingMap) return;
+                _isUpdatingMap = true;
+            }
+
+            try
+            {
+                if (mapManager == null || cityTileManager == null)
+                {
+                    RefreshMap();
+                    if (mapManager == null || cityTileManager == null)
+                    {
+                        return;
+                    }
+                }
+                await PreloadMapTilesAsync();
+
+                SD.Rectangle view;
+                float zoom;
                 lock (_zoomLock)
                 {
-                    ApplyZoom();
-                    pendingMapUpdate = false;
+                    view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
+                    zoom = this.mapZoom;
+                }
+
+                if (view.Width <= 0 || view.Height <= 0) return;
+
+                using var terrain = mapManager.AssembleView(zoom, view);
+                using var city = cityTileManager.AssembleView(zoom, view);
+                using var finalSk = CombineMaps(terrain, city);
+
+                if (finalSk != null)
+                {
+                    if (this.IsHandleCreated)
+                    {
+                        this.Invoke((Action)(() => {
+                            _currentMapView?.Dispose();
+                            _currentMapView = finalSk.Copy();
+                            pictureBox1.Invalidate();
+                        }));
+                    }
+                }
+            }
+            finally
+            {
+                lock (_mapUpdateLock)
+                {
+                    _isUpdatingMap = false;
                 }
             }
         }
 
-        private void PreloadMapTiles()
+        private void InvalidateMap()
         {
-            if (mapManager == null)
-                return;
-            SD.Rectangle view;
-            int zoom;
-            lock (_zoomLock)
+            if (pictureBox1.InvokeRequired)
             {
-                view = new SD.Rectangle(mapViewOrigin, panelMap.ClientSize);
-                zoom = mapZoom;
+                pictureBox1.BeginInvoke(new Action(pictureBox1.Invalidate));
             }
-            _ = mapManager.PreloadTilesAsync(zoom, view, 1, CancellationToken.None);
+            else
+            {
+                pictureBox1.Invalidate();
+            }
         }
 
         private int GetCellSizeForZoom(int zoomLevel)
@@ -2669,7 +2564,7 @@ namespace economy_sim
         /// <summary>
         /// Validates that all urban areas have consistent city model IDs
         /// </summary>
-        public void ValidateUrbanAreaData()
+        public async Task ValidateUrbanAreaData()
         {
             int validCount = 0;
             int invalidCount = 0;
@@ -2699,21 +2594,20 @@ namespace economy_sim
                         continue;
                     }
                     
-                    string modelPath = Path.Combine(dir, $"{guid}.json");
+                    string modelPath = Path.Combine(dir, $"{guid}.bin");
                     if (!File.Exists(modelPath))
                     {
                         invalidCount++;
-                        issues.Add($"Missing model file {guid}.json for hash {hash}");
+                        issues.Add($"Missing model file {guid}.bin for hash {hash}");
                         continue;
                     }
-                    
+
                     // Try to verify the model can be loaded
-                    string jsonContent = File.ReadAllText(modelPath);
-                    var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(jsonContent);
+                    var model = await RoadNetworkGenerator.LoadCityDataModelAsync(guid).ConfigureAwait(false);
                     if (model == null || model.Id != guid)
                     {
                         invalidCount++;
-                        issues.Add($"Model file {guid}.json has invalid or mismatched ID");
+                        issues.Add($"Model file {guid}.bin has invalid or mismatched ID");
                         continue;
                     }
                     
@@ -2744,7 +2638,7 @@ namespace economy_sim
         /// <summary>
         /// Gets detailed information about a specific urban area and its city model
         /// </summary>
-        public string GetUrbanAreaDetails(Nts.Polygon urbanArea)
+        public async Task<string> GetUrbanAreaDetails(Nts.Polygon urbanArea)
         {
             string hash = ComputeUrbanAreaHash(urbanArea);
             string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "city_models");
@@ -2754,12 +2648,12 @@ namespace economy_sim
             details.AppendLine($"Envelope: {urbanArea.EnvelopeInternal}");
             
             // Check for city model data
-            Guid? modelId = RoadNetworkGenerator.GetCityDataModelId(urbanArea);
+            Guid? modelId = await RoadNetworkGenerator.GetCityDataModelIdAsync(urbanArea).ConfigureAwait(false);
             if (modelId.HasValue)
             {
                 details.AppendLine($"City Model ID: {modelId.Value}");
                 
-                string modelPath = Path.Combine(dir, $"{modelId.Value}.json");
+                string modelPath = Path.Combine(dir, $"{modelId.Value}.bin");
                 if (File.Exists(modelPath))
                 {
                     try
@@ -2770,8 +2664,7 @@ namespace economy_sim
                         details.AppendLine($"Model File Modified: {fileInfo.LastWriteTime}");
                         
                         // Try to load and get basic stats
-                        string jsonContent = File.ReadAllText(modelPath);
-                        var model = System.Text.Json.JsonSerializer.Deserialize<CityDataModel>(jsonContent);
+                        var model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId.Value).ConfigureAwait(false);
                         if (model != null)
                         {
                             details.AppendLine($"Road Segments: {model.RoadNetwork.Count}");
@@ -2814,7 +2707,7 @@ namespace economy_sim
                 try
                 {
                     string oldId = File.ReadAllText(hashPath);
-                    string oldModelPath = Path.Combine(dir, $"{oldId}.json");
+                    string oldModelPath = Path.Combine(dir, $"{oldId}.bin");
                     
                     // Delete old files
                     File.Delete(hashPath);
