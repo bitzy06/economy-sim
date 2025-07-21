@@ -25,11 +25,11 @@ namespace StrategyGame
 
         // Pre-created brushes and pens for drawing roads. These objects are immutable
         // which makes them safe for use across threads during tile rendering.
-        private static readonly IBrush PrimaryRoadBrush = new SolidBrush<Rgba32>(new Rgba32(180, 180, 180, 200));
-        private static readonly IBrush SecondaryRoadBrush = new SolidBrush<Rgba32>(new Rgba32(180, 180, 180, 200));
+        private static readonly SixLabors.ImageSharp.Color PrimaryRoadBrush = new Rgba32(180, 180, 180, 200);
+        private static readonly SixLabors.ImageSharp.Color SecondaryRoadBrush = new Rgba32(180, 180, 180, 200);
 
-        private static readonly IPen PrimaryRoadPen = Pens.Solid(PrimaryRoadBrush, 2f);
-        private static readonly IPen SecondaryRoadPen = Pens.Solid(SecondaryRoadBrush, 1f);
+        private static readonly SixLabors.ImageSharp.Drawing.Processing.Pen PrimaryRoadPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(PrimaryRoadBrush, 2f);
+        private static readonly SixLabors.ImageSharp.Drawing.Processing.Pen SecondaryRoadPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(SecondaryRoadBrush, 1f);
 
         private static readonly SKPaint PrimaryRoadPaint = new SKPaint
         {
@@ -107,7 +107,7 @@ namespace StrategyGame
                     }
                     else if (baseGeom is Nts.MultiPolygon mp)
                     {
-                        for (int i = 0; i < mp.NumGeometries; i++)
+                        for (int j = 0; i < mp.NumGeometries; i++)
                         {
                             if (mp.GetGeometryN(i) is Nts.Polygon pp && !pp.IsEmpty)
                                 toDraw.Add((pp, b.LandUse, b));
@@ -254,7 +254,7 @@ namespace StrategyGame
                     while (pointsToSegments.TryGetValue(current, out var conns))
                     {
                         var next = conns.FirstOrDefault(s => !visited.Contains(s));
-                        if (next == null)
+                        if (next.Equals(default(LineSegment))) // Check for default value instead of null
                             break;
 
                         visited.Add(next);
@@ -271,7 +271,7 @@ namespace StrategyGame
                     while (pointsToSegments.TryGetValue(current, out var conns))
                     {
                         var next = conns.FirstOrDefault(s => !visited.Contains(s));
-                        if (next == null)
+                        if (next.Equals(default(LineSegment))) // Check for default value instead of null
                             break;
 
                         visited.Add(next);
