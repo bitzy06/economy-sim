@@ -166,6 +166,14 @@ namespace StrategyGame
             };
         }
 
+        private async Task EnsureModelsForBoundsAsync(GeoBounds bounds, int cellSize)
+        {
+            var parameters = AestheticMappingLayer.Instance.CurrentParameters;
+            var areas = UrbanAreaManager.Query(bounds);
+            var tasks = areas.Select(a => RoadNetworkGenerator.GetOrCreateModelAsync(a, cellSize, parameters));
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+        }
+
         private string GetTilePath(int cellSize, int tileX, int tileY)
         {
             string tileFolder = Path.Combine(TileCacheDir, cellSize.ToString());
@@ -218,6 +226,7 @@ namespace StrategyGame
             }
 
             GeoBounds bounds = ComputeTileBounds(cellSize, tileX, tileY);
+            await EnsureModelsForBoundsAsync(bounds, cellSize).ConfigureAwait(false);
             var genSw = Stopwatch.StartNew();
             var generated = await ProceduralCityRenderer.RenderCityTileAsync(
                 bounds,

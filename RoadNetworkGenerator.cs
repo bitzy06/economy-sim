@@ -30,6 +30,8 @@ namespace StrategyGame
         public static EconomicData EconomicData { get; set; } = new EconomicData();
 
         public static IReadOnlyDictionary<Guid, CityDataModel> ModelCacheById => modelCacheById;
+
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _modelLocks = new();
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
 
         private static void BuildBuildingStructures(CityDataModel model)
@@ -695,6 +697,54 @@ namespace StrategyGame
             {
                 Console.WriteLine($"[Error] Failed to load CityDataModel {id}: {ex.Message}");
                 return null;
+            }
+        }
+
+        public static async Task<CityDataModel> GetOrCreateModelAsync(Nts.Polygon urbanArea, int cellSize, CityGenerationParameters parameters)
+        {
+            string hash = ComputeHash(urbanArea);
+            var sem = _modelLocks.GetOrAdd(hash, _ => new SemaphoreSlim(1, 1));
+            await sem.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                if (modelCache.TryGetValue(hash, out var cached))
+                {
+                    modelCacheById[cached.Id] = cached;
+                    return cached;
+                }
+
+                string cacheDir = GetCacheDir();
+                string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
+                if (File.Exists(hashPath))
+                {
+                    try
+                    {
+                        string idStr = await File.ReadAllTextAsync(hashPath).ConfigureAwait(false);
+                        if (Guid.TryParse(idStr, out Guid guid))
+                        {
+                            string modelPath = Path.Combine(cacheDir, $"{guid}.bin");
+                            if (File.Exists(modelPath))
+                            {
+                                var loaded = await LoadModelBinaryAsync(modelPath).ConfigureAwait(false);
+                                if (loaded != null)
+                                {
+                                    AddToCache(hash, loaded);
+                                    return loaded;
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // ignore and fall through to generation
+                    }
+                }
+
+                return await GenerateModelAsync(urbanArea, cellSize, parameters).ConfigureAwait(false);
+            }
+            finally
+            {
+                sem.Release();
             }
         }
     }
