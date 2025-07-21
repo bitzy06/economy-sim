@@ -389,13 +389,18 @@ namespace StrategyGame
     }
 
     // Manager used during generation time
-    public class CityGenerationManager
+    public class CityGenerationManager : IDisposable
     {
         private readonly Queue<Nts.Polygon> queue = new();
         private readonly CityGenerationData data;
         private readonly MessageBus bus;
         private readonly ConcurrentDictionary<Guid, (decimal Gdp, int Pop)> metrics = new();
         private bool processing;
+
+        private readonly ConcurrentQueue<CityDataModel> regenQueue = new();
+        private readonly AutoResetEvent queueEvent = new(false);
+        private readonly CancellationTokenSource cts = new();
+        private readonly Thread worker;
 
         public CityGenerationManager(CityGenerationData data, MessageBus? bus = null)
         {
@@ -404,6 +409,9 @@ namespace StrategyGame
             this.bus = bus ?? GameServices.Bus;
             this.bus.Subscribe<EconomyUpdatedEvent>(HandleEconomyUpdated);
             this.bus.Subscribe<PopulationUpdatedEvent>(HandlePopulationUpdated);
+
+            worker = new Thread(WorkerLoop) { IsBackground = true, Name = "CityGenWorker" };
+            worker.Start();
         }
 
         public void QueueArea(Nts.Polygon area)
@@ -435,6 +443,56 @@ namespace StrategyGame
             }
         }
 
+        private void EnqueueRegeneration(CityDataModel model)
+        {
+            if (model == null)
+                return;
+            regenQueue.Enqueue(model);
+            queueEvent.Set();
+        }
+
+        private void WorkerLoop()
+        {
+            try
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    queueEvent.WaitOne();
+                    while (regenQueue.TryDequeue(out var model))
+                    {
+                        try
+                        {
+                            RegenerateCity(model);
+                        }
+                        catch (Exception ex)
+                        {
+                            DebugLogger.Log($"CityGeneration worker error: {ex.Message}");
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                DebugLogger.Log($"CityGeneration worker fatal: {ex.Message}");
+            }
+        }
+
+        public void Dispose()
+        {
+            cts.Cancel();
+            queueEvent.Set();
+            try
+            {
+                worker.Join();
+            }
+            catch
+            {
+                // ignore
+            }
+            queueEvent.Dispose();
+            cts.Dispose();
+        }
+
         private void HandleEconomyUpdated(EconomyUpdatedEvent evt)
         {
             if (!Guid.TryParse(evt.CityId, out var id))
@@ -464,8 +522,7 @@ namespace StrategyGame
 
             var metricsEvent = new CityGen.AestheticMappingLayer.CityMetricsEvent(gdp, density, 1f);
             bus.Publish(metricsEvent);
-
-            RegenerateCity(model);
+            EnqueueRegeneration(model);
         }
 
         private static void RegenerateCity(CityDataModel model)

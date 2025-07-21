@@ -1920,6 +1920,7 @@ namespace economy_sim
                 DebugLogger.LogDetailedCityData(selectedCity); // Log detailed data for the selected city
             }
             DebugLogger.FinalizeLog(allCountries); // Pass the list of countries to the logger
+            cityGenerationManager?.Dispose();
             base.OnFormClosing(e);
         }
 
