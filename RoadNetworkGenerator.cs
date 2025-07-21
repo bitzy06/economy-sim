@@ -23,6 +23,9 @@ namespace StrategyGame
     {
         private static readonly ConcurrentDictionary<string, List<(Nts.LineString Line, RoadType Type)>> networkCache = new();
         private static readonly ConcurrentDictionary<string, CityDataModel> modelCache = new();
+        private static readonly ConcurrentDictionary<Guid, CityDataModel> modelCacheById = new();
+
+        public static IReadOnlyDictionary<Guid, CityDataModel> ModelCacheById => modelCacheById;
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
 
         private static void BuildBuildingStructures(CityDataModel model)
@@ -52,6 +55,12 @@ namespace StrategyGame
         private static SemaphoreSlim GetFileLock(string path)
         {
             return _fileLocks.GetOrAdd(path, p => new SemaphoreSlim(1, 1));
+        }
+
+        private static void AddToCache(string hash, CityDataModel model)
+        {
+            modelCache[hash] = model;
+            modelCacheById[model.Id] = model;
         }
 
 
@@ -215,7 +224,10 @@ namespace StrategyGame
             string cacheDir = GetCacheDir();
 
             if (modelCache.TryGetValue(hash, out var cachedModel))
+            {
+                modelCacheById[cachedModel.Id] = cachedModel;
                 return cachedModel;
+            }
 
             string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
             if (File.Exists(hashPath))
@@ -227,7 +239,7 @@ namespace StrategyGame
                     if (File.Exists(modelPath))
                     {
                         var loaded = await LoadModelBinaryAsync(modelPath);
-                        modelCache[hash] = loaded;
+                        AddToCache(hash, loaded);
                         return loaded;
                     }
                 }
@@ -280,7 +292,7 @@ namespace StrategyGame
                 Console.WriteLine($"[CRITICAL ERROR] Failed to serialize CityDataModel: {errorMessage}");
             }
 
-            modelCache[hash] = result;
+            AddToCache(hash, result);
             return result;
         }
 
@@ -548,7 +560,10 @@ namespace StrategyGame
             
             // Check in-memory cache first
             if (modelCache.TryGetValue(hash, out var cachedModel))
+            {
+                modelCacheById[cachedModel.Id] = cachedModel;
                 return cachedModel.Id;
+            }
                 
             // Check disk cache
             string hashPath = Path.Combine(cacheDir, $"{hash}.txt");
@@ -613,13 +628,22 @@ namespace StrategyGame
 
         public static async Task<CityDataModel?> LoadCityDataModelAsync(Guid id)
         {
+            if (modelCacheById.TryGetValue(id, out var cached))
+                return cached;
+
             string cacheDir = GetCacheDir();
             string modelPath = Path.Combine(cacheDir, $"{id}.bin");
             if (!File.Exists(modelPath)) return null;
 
             try
             {
-                return await LoadModelBinaryAsync(modelPath).ConfigureAwait(false);
+                var model = await LoadModelBinaryAsync(modelPath).ConfigureAwait(false);
+                if (model.UrbanArea != null)
+                {
+                    string hash = ComputeHash(model.UrbanArea);
+                    AddToCache(hash, model);
+                }
+                return model;
             }
             catch (Exception ex)
             {
