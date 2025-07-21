@@ -24,7 +24,6 @@ namespace StrategyGame
         private readonly MultiResolutionMapManager _mapManager;
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
-        private readonly ConcurrentDictionary<Guid, CityDataModel> _cityModelCache = new();
         private readonly ConcurrentDictionary<Guid, Task> _cityModelLoadTasks = new();
         public static readonly bool GpuAvailable;
 
@@ -84,9 +83,9 @@ namespace StrategyGame
             }
         }
 
-        private void RequestModel(Guid modelId, Action triggerRefresh)
+        private void RequestModel(Guid modelId, Action? triggerRefresh)
         {
-            if (_cityModelCache.ContainsKey(modelId) || _cityModelLoadTasks.ContainsKey(modelId))
+            if (RoadNetworkGenerator.ModelCacheById.ContainsKey(modelId) || _cityModelLoadTasks.ContainsKey(modelId))
                 return;
 
             var loadTask = Task.Run(async () =>
@@ -95,10 +94,7 @@ namespace StrategyGame
                 {
                     var model = await RoadNetworkGenerator.LoadCityDataModelAsync(modelId).ConfigureAwait(false);
                     if (model != null)
-                    {
-                        _cityModelCache.TryAdd(model.Id, model);
                         triggerRefresh?.Invoke();
-                    }
                 }
                 finally
                 {
@@ -222,27 +218,35 @@ namespace StrategyGame
             var generated = await ProceduralCityRenderer.RenderCityTileAsync(
                 bounds,
                 cellSize,
-                _cityModelCache,
+                RoadNetworkGenerator.ModelCacheById,
                 id => RequestModel(id, triggerRefresh)
             ).ConfigureAwait(false);
             var skBmp = ImageSharpToSkia(generated);
             PerformanceTracker.Record("CityTileManager-GenerateTile", genSw.Elapsed);
 
-            string dir = Path.GetDirectoryName(path);
-            Directory.CreateDirectory(dir);
-            var lockFile = GetFileLock(path);
-            await lockFile.WaitAsync(token).ConfigureAwait(false);
-            try
+            // Save the generated tile image in the background. The caller
+            // shouldn't wait for disk IO before receiving the bitmap. Clone
+            // the image so disposing it won't affect the SKBitmap.
+            _ = Task.Run(async () =>
             {
-                var saveSw = Stopwatch.StartNew();
-                await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
-                await generated.SaveAsPngAsync(fs, token).ConfigureAwait(false);
-                PerformanceTracker.Record("CityTileManager-SaveTile", saveSw.Elapsed);
-            }
-            finally
-            {
-                lockFile.Release();
-            }
+                using var imageToSave = generated.Clone();
+
+                string dir = Path.GetDirectoryName(path);
+                Directory.CreateDirectory(dir);
+                var lockFile = GetFileLock(path);
+                await lockFile.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+                try
+                {
+                    var saveSw = Stopwatch.StartNew();
+                    await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
+                    await imageToSave.SaveAsPngAsync(fs, CancellationToken.None).ConfigureAwait(false);
+                    PerformanceTracker.Record("CityTileManager-SaveTile", saveSw.Elapsed);
+                }
+                finally
+                {
+                    lockFile.Release();
+                }
+            });
 
             _tileCache.TryAdd(key, skBmp); // Add to concurrent cache
             _inFlight.TryRemove(key, out _); // Clean up in-flight task
