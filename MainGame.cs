@@ -796,6 +796,7 @@ namespace economy_sim
 
             StrategyGame.City cityCurrentlySelectedForUI = null;
             this.Invoke((Action)(() => { cityCurrentlySelectedForUI = GetSelectedCity(); }));
+            WorldSim.UpdateCityLODs(cityCurrentlySelectedForUI);
 
             // 1. Capture Previous Stats for the Selected City (if any, and not the first tick)
             if (cityCurrentlySelectedForUI != null && !firstTick)
@@ -1181,6 +1182,7 @@ namespace economy_sim
                     UpdateCountryStats();
 
                     var cityCurrentlySelectedForUI = GetSelectedCity();
+                    WorldSim.UpdateCityLODs(cityCurrentlySelectedForUI);
                     if (cityCurrentlySelectedForUI != null)
                     {
                         if (popStatsForm != null && popStatsForm.Visible)
