@@ -21,4 +21,14 @@ namespace StrategyGame
     /// Event raised when a population count changes for an entity.
     /// </summary>
     public record PopulationUpdatedEventData(int EntityId, int NewPopulation);
+
+    /// <summary>
+    /// Event raised when a city district is destroyed.
+    /// </summary>
+    public record DistrictDestroyedEventData(string CityName, string DistrictName, int LostPopulation);
+
+    /// <summary>
+    /// Event raised when major infrastructure is built in a city.
+    /// </summary>
+    public record MajorInfrastructureBuiltEventData(string CityName, string InfrastructureType, double Value);
 }

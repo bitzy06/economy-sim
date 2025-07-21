@@ -10,6 +10,7 @@ namespace StrategyGame
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            WorldSim.Initialize();
             Application.Run(new economy_sim.MainGame());
         }
     }

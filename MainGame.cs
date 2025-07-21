@@ -469,6 +469,7 @@ namespace economy_sim
                                 }
                                 currentState.Cities.Add(currentCity);
                                 allCitiesInWorld.Add(currentCity);
+                                WorldSim.RegisterCity(currentCity);
                             }
                         }
                         // Recalculate state population/budget from cities if specified as 0 in JSON, or for verification
@@ -586,6 +587,7 @@ namespace economy_sim
             }
             defaultState.Cities.Add(defaultCity);
             allCitiesInWorld.Add(defaultCity);
+            WorldSim.RegisterCity(defaultCity);
 
             allCountries.Add(defaultCountry);
             comboBoxCountry.Items.Add(defaultCountry.Name);
