@@ -6,9 +6,18 @@ using StrategyGame; // Ensure namespace for ProjectType and ConstructionProject 
 
 namespace StrategyGame
 {
+    public enum CityLOD
+    {
+        Full,
+        Simplified,
+        Dormant
+    }
+
     public class City
     {
         public string Name { get; set; }
+        public int Index { get; internal set; }
+        public CityLOD LOD { get; set; } = CityLOD.Full;
         public double Budget { get; set; }
         public int Population { get; set; }
         public double TaxRate { get; set; } // Percentage (e.g., 0.1 for 10%)

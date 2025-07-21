@@ -31,4 +31,14 @@ namespace StrategyGame
     /// Event raised when major infrastructure is built in a city.
     /// </summary>
     public record MajorInfrastructureBuiltEventData(string CityName, string InfrastructureType, double Value);
+
+    /// <summary>
+    /// Event raised when a city's level of detail changes.
+    /// </summary>
+    public record CityLODChangedEventData(string CityName, CityLOD NewLOD);
+
+    /// <summary>
+    /// Summary event containing high level city data for low LOD rendering.
+    /// </summary>
+    public record CityStatusEventData(string CityName, int Population, double Budget, CityLOD LOD);
 }
