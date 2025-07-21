@@ -8,6 +8,7 @@ namespace StrategyGame
         [STAThread]
         static void Main()
         {
+            SchemaValidator.Validate();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             WorldSim.Initialize();

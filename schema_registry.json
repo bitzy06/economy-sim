@@ -1,0 +1,6 @@
+{
+  "EconomyUpdatedEvent": 1,
+  "PopulationUpdatedEvent": 1,
+  "DistrictDestroyedEvent": 1,
+  "MajorInfrastructureBuiltEvent": 1
+}
