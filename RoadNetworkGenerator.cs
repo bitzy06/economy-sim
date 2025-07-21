@@ -150,7 +150,7 @@ namespace StrategyGame
             }
         }
 
-        private static async Task<CityDataModel> LoadModelBinaryAsync(string path)
+        private static async Task<CityDataModel?> LoadModelBinaryAsync(string path)
         {
             var fileLock = GetFileLock(path);
             await fileLock.WaitAsync().ConfigureAwait(false);
@@ -230,6 +230,14 @@ namespace StrategyGame
 
             return model;
             }
+            catch (Exception ex) when (
+                ex is EndOfStreamException ||
+                ex is ArgumentOutOfRangeException ||
+                ex is NetTopologySuite.IO.ParseException)
+            {
+                Console.WriteLine($"[Error] Failed to read city model {path}: {ex.Message}");
+                return null;
+            }
             finally
             {
                 fileLock.Release();
@@ -257,8 +265,11 @@ namespace StrategyGame
                     if (File.Exists(modelPath))
                     {
                         var loaded = await LoadModelBinaryAsync(modelPath);
-                        AddToCache(hash, loaded);
-                        return loaded;
+                        if (loaded != null)
+                        {
+                            AddToCache(hash, loaded);
+                            return loaded;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -669,12 +680,16 @@ namespace StrategyGame
             try
             {
                 var model = await LoadModelBinaryAsync(modelPath).ConfigureAwait(false);
-                if (model.UrbanArea != null)
+                if (model != null)
                 {
-                    string hash = ComputeHash(model.UrbanArea);
-                    AddToCache(hash, model);
+                    if (model.UrbanArea != null)
+                    {
+                        string hash = ComputeHash(model.UrbanArea);
+                        AddToCache(hash, model);
+                    }
+                    return model;
                 }
-                return model;
+                return null;
             }
             catch (Exception ex)
             {
