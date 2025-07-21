@@ -30,21 +30,23 @@ namespace StrategyGame
             if (!File.Exists(shp))
                 return;
 
-            var reader = new ShapefileDataReader(shp, Nts.GeometryFactory.Default);
-            while (reader.Read())
+            using (var reader = new ShapefileDataReader(shp, Nts.GeometryFactory.Default))
             {
-                var geom = reader.Geometry;
-                if (geom is Nts.MultiPolygon mp)
+                while (reader.Read())
                 {
-                    for (int i = 0; i < mp.NumGeometries; i++)
+                    var geom = reader.Geometry;
+                    if (geom is Nts.MultiPolygon mp)
                     {
-                        if (mp.GetGeometryN(i) is Nts.Polygon p)
-                            UrbanPolygons.Add(p);
+                        for (int i = 0; i < mp.NumGeometries; i++)
+                        {
+                            if (mp.GetGeometryN(i) is Nts.Polygon p)
+                                UrbanPolygons.Add(p);
+                        }
                     }
-                }
-                else if (geom is Nts.Polygon p)
-                {
-                    UrbanPolygons.Add(p);
+                    else if (geom is Nts.Polygon p)
+                    {
+                        UrbanPolygons.Add(p);
+                    }
                 }
             }
 
