@@ -244,8 +244,10 @@ namespace economy_sim
                 MainGame_Shown(s, e); // Call your new handler
             };
         }
-        private void MainGame_Shown(object sender, EventArgs e)
+        private async void MainGame_Shown(object sender, EventArgs e)
         {
+            await PreGenerateMissingCityDataAsync();
+
             // Start the simulation loop on a background thread
             // now that the form is fully loaded and displayed.
             simCts = new CancellationTokenSource();
@@ -362,7 +364,6 @@ namespace economy_sim
 
             // Load urban area polygons for procedural generation
             UrbanAreaManager.LoadUrbanAreas();
-            CheckAndPromptForMissingCityData();
 
             // 3. Load World Setup from JSON
             string jsonFilePath = "world_setup.json";
@@ -2074,6 +2075,37 @@ namespace economy_sim
             {
                 await Task.Delay(100).ConfigureAwait(false);
             }
+        }
+
+        private async Task PreGenerateMissingCityDataAsync()
+        {
+            var missing = new List<Nts.Polygon>();
+            foreach (var urban in UrbanAreaManager.UrbanPolygons)
+            {
+                if (!RoadNetworkGenerator.HasCityDataModel(urban))
+                    missing.Add(urban);
+            }
+
+            if (missing.Count == 0)
+                return;
+
+            using var loading = new LoadingForm();
+            loading.UpdateProgress(0, missing.Count);
+            loading.Show();
+
+            foreach (var urban in missing)
+                cityGenerationManager.QueueArea(urban);
+
+            while (true)
+            {
+                int completed = missing.Count(a => RoadNetworkGenerator.HasCityDataModel(a));
+                loading.UpdateProgress(completed, missing.Count);
+                if (completed >= missing.Count && !cityGenerationManager.IsProcessing())
+                    break;
+                await Task.Delay(500).ConfigureAwait(true);
+            }
+
+            loading.Close();
         }
 
         /// <summary>
