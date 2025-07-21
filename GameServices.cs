@@ -11,6 +11,7 @@ namespace StrategyGame
 
         static GameServices()
         {
+            Bus.MessagePublished += EventLogger.Log;
             CityGen.AestheticMappingLayer.Initialize(Bus);
         }
     }
