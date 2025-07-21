@@ -14,6 +14,11 @@ namespace StrategyGame
         public List<Parcel> Parcels { get; set; } = new();
         public List<Building> Buildings { get; set; } = new();
 
+        /// <summary>
+        /// Parameters controlling how this city's geometry is generated.
+        /// </summary>
+        public CityGenerationParameters GenerationParameters { get; set; } = new();
+
         // Spatial index of buildings for faster tile queries
         public STRtree<Building>? BuildingIndex { get; set; }
     }

@@ -379,6 +379,12 @@ namespace StrategyGame
                     b.Level = 0;
                     break;
             }
+
+            var style = AestheticMappingLayer.Instance.CurrentParameters.BuildingStyle;
+            if (style == BuildingStyle.Modern)
+            {
+                b.Level += 1;
+            }
         }
     }
 
@@ -442,7 +448,8 @@ namespace StrategyGame
 
                 await Parallel.ForEachAsync(batch, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, async (area, token) =>
                 {
-                    await RoadNetworkGenerator.GenerateModelAsync(area, 10).ConfigureAwait(false);
+                    var p = AestheticMappingLayer.Instance.CurrentParameters;
+                    await RoadNetworkGenerator.GenerateModelAsync(area, 10, p).ConfigureAwait(false);
                 }).ConfigureAwait(false);
             }
         }
