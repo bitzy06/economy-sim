@@ -257,5 +257,17 @@ namespace StrategyGame
                 suburb.RailwayKilometers += value / Suburbs.Count; // Distribute railway kilometers
             }
         }
+
+        public void DestroyBuilding(Guid buildingId)
+        {
+            if (ProceduralData == null) return;
+            var building = ProceduralData.Buildings.FirstOrDefault(b => b.Id == buildingId);
+            if (building == null) return;
+
+            ProceduralData.Buildings.Remove(building);
+
+            var evt = new BuildingDestroyedEvent(ProceduralData.Id, building.Id, building.LandUse);
+            GameServices.Bus.Publish(evt);
+        }
     }
 }

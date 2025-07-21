@@ -45,6 +45,8 @@ namespace StrategyGame // Reverted from EconomySim
             RecentTradeEvents = new List<GlobalTradeEvent>();
             TradeHistory = new List<DetailedTradeRecord>();
             GlobalTradeValue = 0;
+
+            GameServices.Bus.Subscribe<BuildingDestroyedEvent>(HandleBuildingDestroyed);
             
             // Initialize with goods from the Market class
             foreach (var goodDef in Market.GoodDefinitions.Values)
@@ -199,6 +201,15 @@ namespace StrategyGame // Reverted from EconomySim
             }
             // Execute international trade between countries
             InternationalTrade.ExecuteTradeTurn(allCountries, this, tradeManager);
+        }
+
+        private void HandleBuildingDestroyed(BuildingDestroyedEvent evt)
+        {
+            // Simple example: reduce global supply of Tools when an industrial building is lost
+            if (evt.LandUse == LandUseType.Industrial && GlobalSupply.ContainsKey("Tools"))
+            {
+                GlobalSupply["Tools"] = Math.Max(0, GlobalSupply["Tools"] - 10);
+            }
         }
           public void RecordTrade(string goodName, string exportingCountry, string importingCountry, 
                                int quantity, double totalValue)

@@ -1,10 +1,12 @@
 using Nts = NetTopologySuite.Geometries;
+using System;
 using System.Collections.Concurrent;
 
 namespace StrategyGame
 {
     public class Building
     {
+        public Guid Id { get; set; } = Guid.NewGuid();
         public Nts.Polygon Footprint { get; set; }
         // Simplified footprints cached by cell size for rendering
         public ConcurrentDictionary<int, Nts.Geometry> SimplifiedFootprints { get; } = new();

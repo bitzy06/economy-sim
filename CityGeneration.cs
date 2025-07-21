@@ -329,7 +329,7 @@ namespace StrategyGame
 
                         if (cleanedFootprint is Nts.Polygon cleanedP && cleanedP.IsValid && !cleanedP.IsEmpty)
                         {
-                            buildingBag.Add(new Building { Footprint = cleanedP, LandUse = parcel.LandUse });
+                            buildingBag.Add(new Building { Id = Guid.NewGuid(), Footprint = cleanedP, LandUse = parcel.LandUse });
                         }
                     }
                 }
@@ -530,6 +530,13 @@ namespace StrategyGame
         {
             LandUseSimulator.Run(model);
             BuildingRefiner.RefineBuildings(model);
+
+            if (model.Buildings.Count > 0 && Random.Shared.NextDouble() < 0.05)
+            {
+                var building = model.Buildings[0];
+                model.Buildings.RemoveAt(0);
+                GameServices.Bus.Publish(new BuildingDestroyedEvent(model.Id, building.Id, building.LandUse));
+            }
         }
     }
 }
