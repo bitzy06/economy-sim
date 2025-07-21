@@ -225,9 +225,12 @@ namespace StrategyGame
             PerformanceTracker.Record("CityTileManager-GenerateTile", genSw.Elapsed);
 
             // Save the generated tile image in the background. The caller
-            // shouldn't wait for disk IO before receiving the bitmap.
+            // shouldn't wait for disk IO before receiving the bitmap. Clone
+            // the image so disposing it won't affect the SKBitmap.
             _ = Task.Run(async () =>
             {
+                using var imageToSave = generated.Clone();
+
                 string dir = Path.GetDirectoryName(path);
                 Directory.CreateDirectory(dir);
                 var lockFile = GetFileLock(path);
@@ -236,13 +239,12 @@ namespace StrategyGame
                 {
                     var saveSw = Stopwatch.StartNew();
                     await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true);
-                    await generated.SaveAsPngAsync(fs, CancellationToken.None).ConfigureAwait(false);
+                    await imageToSave.SaveAsPngAsync(fs, CancellationToken.None).ConfigureAwait(false);
                     PerformanceTracker.Record("CityTileManager-SaveTile", saveSw.Elapsed);
                 }
                 finally
                 {
                     lockFile.Release();
-                    generated.Dispose();
                 }
             });
 
