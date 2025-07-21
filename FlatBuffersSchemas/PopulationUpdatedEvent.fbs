@@ -1,9 +1,0 @@
-namespace StrategyGame;
-
-table PopulationUpdatedEvent {
-  version:ushort = 1;
-  entityId:int;
-  newPopulation:int;
-}
-
-root_type PopulationUpdatedEvent;
