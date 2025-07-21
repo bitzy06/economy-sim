@@ -11,6 +11,9 @@ using NetTopologySuite.Index.Strtree;
 using NetTopologySuite.Operation.Polygonize;
 using NetTopologySuite.Operation.Union;
 using NetTopologySuite.Geometries.Utilities;
+using NetTopologySuite.Simplify;
+using Messaging;
+using EconomySim.Protocols;
 
 namespace StrategyGame
 {
@@ -390,12 +393,17 @@ namespace StrategyGame
     {
         private readonly Queue<Nts.Polygon> queue = new();
         private readonly CityGenerationData data;
+        private readonly MessageBus bus;
+        private readonly ConcurrentDictionary<Guid, (decimal Gdp, int Pop)> metrics = new();
         private bool processing;
 
-        public CityGenerationManager(CityGenerationData data)
+        public CityGenerationManager(CityGenerationData data, MessageBus? bus = null)
         {
             this.data = data;
             RoadNetworkGenerator.Data = data;
+            this.bus = bus ?? GameServices.Bus;
+            this.bus.Subscribe<EconomyUpdatedEvent>(HandleEconomyUpdated);
+            this.bus.Subscribe<PopulationUpdatedEvent>(HandlePopulationUpdated);
         }
 
         public void QueueArea(Nts.Polygon area)
@@ -425,6 +433,63 @@ namespace StrategyGame
             {
                 return queue.Count;
             }
+        }
+
+        private void HandleEconomyUpdated(EconomyUpdatedEvent evt)
+        {
+            if (!Guid.TryParse(evt.CityId, out var id))
+                return;
+            metrics.AddOrUpdate(id, _ => ((decimal)evt.Gdp, 0), (k, v) => ((decimal)evt.Gdp, v.Pop));
+            if (metrics.TryGetValue(id, out var m))
+                PublishMetrics(id, m.Gdp, m.Pop);
+        }
+
+        private void HandlePopulationUpdated(PopulationUpdatedEvent evt)
+        {
+            if (!Guid.TryParse(evt.CityId, out var id))
+                return;
+            metrics.AddOrUpdate(id, _ => (0m, evt.Population), (k, v) => (v.Gdp, evt.Population));
+            if (metrics.TryGetValue(id, out var m))
+                PublishMetrics(id, m.Gdp, m.Pop);
+        }
+
+        private void PublishMetrics(Guid id, decimal gdp, int population)
+        {
+            if (!RoadNetworkGenerator.ModelCacheById.TryGetValue(id, out var model))
+                return;
+
+            float density = 0f;
+            if (model.UrbanArea != null && model.UrbanArea.Area > 0)
+                density = (float)(population / model.UrbanArea.Area);
+
+            var metricsEvent = new CityGen.AestheticMappingLayer.CityMetricsEvent(gdp, density, 1f);
+            bus.Publish(metricsEvent);
+
+            RegenerateCity(model);
+        }
+
+        private static void RegenerateCity(CityDataModel model)
+        {
+            LandUseSimulator.Run(model);
+            model.Buildings = BuildingGenerator.GenerateBuildings(model);
+            BuildingRefiner.RefineBuildings(model);
+            RebuildBuildingIndex(model);
+        }
+
+        private static void RebuildBuildingIndex(CityDataModel model)
+        {
+            const double tol = 0.0001;
+            var index = new STRtree<Building>();
+            foreach (var b in model.Buildings)
+            {
+                var simplified = DouglasPeuckerSimplifier.Simplify(b.Footprint, tol);
+                if (simplified == null || simplified.IsEmpty)
+                    simplified = b.Footprint;
+                b.SimplifiedFootprints[0] = simplified;
+                index.Insert(b.Footprint.EnvelopeInternal, b);
+            }
+            index.Build();
+            model.BuildingIndex = index;
         }
 
         private async Task ProcessQueue()
