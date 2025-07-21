@@ -195,26 +195,85 @@ namespace StrategyGame
         {
             double tolerance = (bounds.MaxLon - bounds.MinLon) / MultiResolutionMapManager.TileSizePx * 2.0;
 
-            foreach (var road in roads)
+            foreach (var group in roads.GroupBy(r => r.Type))
             {
-                var line = _geomFactory.CreateLineString(new[]
+                var polylines = GroupSegments(group.ToList());
+                foreach (var lineCoords in polylines)
                 {
-                    new Nts.Coordinate(road.X1, road.Y1),
-                    new Nts.Coordinate(road.X2, road.Y2)
-                });
-
-                var simplified = DouglasPeuckerSimplifier.Simplify(line, tolerance);
-
-                if (simplified is Nts.LineString ln)
-                {
-                    for (int j = 0; j < ln.NumPoints - 1; j++)
+                    var line = _geomFactory.CreateLineString(lineCoords.Select(p => new Nts.Coordinate(p.X, p.Y)).ToArray());
+                    var simplified = DouglasPeuckerSimplifier.Simplify(line, tolerance);
+                    if (simplified is Nts.LineString ln)
                     {
-                        var c1 = ln.GetCoordinateN(j);
-                        var c2 = ln.GetCoordinateN(j + 1);
-                        yield return new LineSegment(c1.X, c1.Y, c2.X, c2.Y, road.Type);
+                        for (int j = 0; j < ln.NumPoints - 1; j++)
+                        {
+                            var c1 = ln.GetCoordinateN(j);
+                            var c2 = ln.GetCoordinateN(j + 1);
+                            yield return new LineSegment(c1.X, c1.Y, c2.X, c2.Y, group.Key);
+                        }
                     }
                 }
             }
+        }
+
+        private static List<List<(double X, double Y)>> GroupSegments(List<LineSegment> segments)
+        {
+            var result = new List<List<(double X, double Y)>>();
+            var remaining = new List<LineSegment>(segments);
+
+            while (remaining.Count > 0)
+            {
+                var seg = remaining[^1];
+                remaining.RemoveAt(remaining.Count - 1);
+                var poly = new List<(double X, double Y)> { (seg.X1, seg.Y1), (seg.X2, seg.Y2) };
+
+                bool changed;
+                do
+                {
+                    changed = false;
+                    for (int i = 0; i < remaining.Count; i++)
+                    {
+                        var s = remaining[i];
+                        if (PointsEqual(poly[^1], (s.X1, s.Y1)))
+                        {
+                            poly.Add((s.X2, s.Y2));
+                            remaining.RemoveAt(i);
+                            changed = true;
+                            break;
+                        }
+                        if (PointsEqual(poly[^1], (s.X2, s.Y2)))
+                        {
+                            poly.Add((s.X1, s.Y1));
+                            remaining.RemoveAt(i);
+                            changed = true;
+                            break;
+                        }
+                        if (PointsEqual(poly[0], (s.X2, s.Y2)))
+                        {
+                            poly.Insert(0, (s.X1, s.Y1));
+                            remaining.RemoveAt(i);
+                            changed = true;
+                            break;
+                        }
+                        if (PointsEqual(poly[0], (s.X1, s.Y1)))
+                        {
+                            poly.Insert(0, (s.X2, s.Y2));
+                            remaining.RemoveAt(i);
+                            changed = true;
+                            break;
+                        }
+                    }
+                } while (changed);
+
+                result.Add(poly);
+            }
+
+            return result;
+        }
+
+        private static bool PointsEqual((double X, double Y) a, (double X, double Y) b)
+        {
+            const double Eps = 1e-9;
+            return Math.Abs(a.X - b.X) < Eps && Math.Abs(a.Y - b.Y) < Eps;
         }
 
         private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)

@@ -25,6 +25,7 @@ namespace StrategyGame
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), SKBitmap> _tileCache = new();
         private readonly ConcurrentDictionary<(int cellSize, int x, int y), Task<SKBitmap>> _inFlight = new();
         private readonly ConcurrentDictionary<Guid, Task> _cityModelLoadTasks = new();
+        private static readonly SemaphoreSlim _tileProcessingLimiter = new SemaphoreSlim(Environment.ProcessorCount);
         public static readonly bool GpuAvailable;
 
         static CityTileManager()
@@ -202,7 +203,10 @@ namespace StrategyGame
                     await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
                     var img = await SixLabors.ImageSharp.Image.LoadAsync<Rgba32>(fs, token).ConfigureAwait(false);
                     var sk = ImageSharpToSkia(img);
-                    _tileCache.TryAdd(key, sk); // Add to concurrent cache
+                    if (_tileCache.TryAdd(key, sk))
+                    {
+                        triggerRefresh?.Invoke();
+                    }
                     _inFlight.TryRemove(key, out _); // Clean up in-flight task
                     PerformanceTracker.Record("CityTileManager-LoadTile-FromDisk", loadSw.Elapsed);
                     return sk;
@@ -248,7 +252,10 @@ namespace StrategyGame
                 }
             });
 
-            _tileCache.TryAdd(key, skBmp); // Add to concurrent cache
+            if (_tileCache.TryAdd(key, skBmp))
+            {
+                triggerRefresh?.Invoke();
+            }
             _inFlight.TryRemove(key, out _); // Clean up in-flight task
             PerformanceTracker.Record("CityTileManager-LoadTile", totalSw.Elapsed);
             return skBmp;
@@ -338,6 +345,21 @@ namespace StrategyGame
                 }
             }
 
+            if (missingTiles.Any())
+            {
+                var viewCenterX = viewRect.X + viewRect.Width / 2.0;
+                var viewCenterY = viewRect.Y + viewRect.Height / 2.0;
+                missingTiles = missingTiles
+                    .OrderBy(tile =>
+                    {
+                        var tileCenterX = tile.x * tileSize + tileSize / 2.0;
+                        var tileCenterY = tile.y * tileSize + tileSize / 2.0;
+                        return Math.Pow(tileCenterX - viewCenterX, 2) +
+                               Math.Pow(tileCenterY - viewCenterY, 2);
+                    })
+                    .ToList();
+            }
+
             if (!missingTiles.Any())
             {
                 PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
@@ -345,7 +367,18 @@ namespace StrategyGame
                 return;
             }
 
-            var tasks = missingTiles.Select(coord => GetTileAsync(zoom, coord.x, coord.y, token, triggerRefresh));
+            var tasks = missingTiles.Select(async coord =>
+            {
+                await _tileProcessingLimiter.WaitAsync(token).ConfigureAwait(false);
+                try
+                {
+                    await GetTileAsync(zoom, coord.x, coord.y, token, triggerRefresh).ConfigureAwait(false);
+                }
+                finally
+                {
+                    _tileProcessingLimiter.Release();
+                }
+            });
             await Task.WhenAll(tasks).ConfigureAwait(false);
             PerformanceTracker.Record("CityTileManager-PreloadTiles", sw.Elapsed);
             triggerRefresh?.Invoke();
