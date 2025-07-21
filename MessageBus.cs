@@ -35,6 +35,7 @@ namespace StrategyGame
         /// </summary>
         public void Publish<T>(T message)
         {
+            EventLogger.Record(message);
             if (!handlers.TryGetValue(typeof(T), out var list))
                 return;
 
