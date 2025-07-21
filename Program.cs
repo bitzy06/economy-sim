@@ -8,6 +8,8 @@ namespace StrategyGame
         [STAThread]
         static void Main()
         {
+            // Ensure shared services are initialized
+            _ = GameServices.Bus;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new economy_sim.MainGame());
