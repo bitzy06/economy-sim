@@ -205,6 +205,7 @@ namespace StrategyGame
         public int WorkersEmployed { get; set; } // This might become a sum of employed from JobSlots or represent total workforce
         public Dictionary<string, int> JobSlots { get; set; }
         public Dictionary<string, int> ActualEmployed { get; set; } // Tracks actual number employed in each slot type
+        public Building BuildingData { get; set; }
 
         public Factory(string name, int productionCapacity)
         {

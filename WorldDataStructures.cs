@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace StrategyGame
@@ -19,6 +20,7 @@ namespace StrategyGame
         public double TaxRate { get; set; }
         public double CityExpenses { get; set; }
         public List<InitialFactoryData> InitialFactories { get; set; }
+        public Guid CityModelId { get; set; }
         // Add other city-specific initial properties if needed, e.g., starting stockpile
     }
 
