@@ -1,0 +1,9 @@
+namespace EconomySim.Protocols;
+
+table PopulationUpdatedEvent {
+  population:int;
+  birth_rate:float;
+  death_rate:float;
+}
+
+root_type PopulationUpdatedEvent;

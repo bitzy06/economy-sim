@@ -1,0 +1,8 @@
+namespace EconomySim.Protocols;
+
+table EconomyUpdatedEvent {
+  gdp:float;
+  inflation:float;
+}
+
+root_type EconomyUpdatedEvent;
