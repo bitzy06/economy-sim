@@ -17,17 +17,20 @@ namespace StrategyGame
         {
             return _roads.GetOrAdd((modelId, cellSize), _ =>
             {
-                var tileBox = new NetTopologySuite.Geometries.Envelope(bounds.MinLon, bounds.MaxLon, bounds.MinLat, bounds.MaxLat);
-                var clipped = rawRoads.Where(r =>
+                var clippedSegments = new List<LineSegment>();
+                foreach (var seg in rawRoads)
                 {
-                    double minX = Math.Min(r.X1, r.X2);
-                    double maxX = Math.Max(r.X1, r.X2);
-                    double minY = Math.Min(r.Y1, r.Y2);
-                    double maxY = Math.Max(r.Y1, r.Y2);
-                    return !(maxX < tileBox.MinX || minX > tileBox.MaxX || maxY < tileBox.MinY || minY > tileBox.MaxY);
-                });
+                    double x1 = seg.X1;
+                    double y1 = seg.Y1;
+                    double x2 = seg.X2;
+                    double y2 = seg.Y2;
+                    if (GeometryUtil.ClipLine(bounds, ref x1, ref y1, ref x2, ref y2))
+                    {
+                        clippedSegments.Add(new LineSegment(x1, y1, x2, y2, seg.Type));
+                    }
+                }
 
-                var simplified = ProceduralCityRenderer.SimplifyRoads(clipped, bounds).ToList();
+                var simplified = ProceduralCityRenderer.SimplifyRoads(clippedSegments, bounds).ToList();
 
                 var primaryBuilder = new PathBuilder();
                 var secondaryBuilder = new PathBuilder();
