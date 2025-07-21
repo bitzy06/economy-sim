@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 
-namespace Messaging
+namespace EconomySim.Messaging
 {
     /// <summary>
     /// Simple in-memory message bus with publish/subscribe semantics.

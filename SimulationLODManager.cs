@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using EconomySim.Protocols;
-using Messaging;
+using EconomySim.Messaging;
 
 namespace StrategyGame
 {
