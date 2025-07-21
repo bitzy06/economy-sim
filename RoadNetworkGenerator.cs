@@ -116,18 +116,19 @@ namespace StrategyGame
                 bw.Write(parcel.LandValue);
             }
 
-                bw.Write(model.Buildings.Count);
-                foreach (var building in model.Buildings)
-                {
-                    byte[] data = wkbWriter.Write(building.Footprint);
-                    bw.Write(data.Length);
-                    bw.Write(data);
-                    bw.Write((int)building.LandUse);
-                    bw.Write(building.Level);
-                    bw.Write(building.PopulationCapacity);
-                    bw.Write(building.EconomicOutput);
-                    bw.Write(building.PollutionOutput);
-                }
+            bw.Write(model.Buildings.Count);
+            foreach (var building in model.Buildings)
+            {
+                bw.Write(building.Id.ToByteArray());
+                byte[] data = wkbWriter.Write(building.Footprint);
+                bw.Write(data.Length);
+                bw.Write(data);
+                bw.Write((int)building.LandUse);
+                bw.Write(building.Level);
+                bw.Write(building.PopulationCapacity);
+                bw.Write(building.EconomicOutput);
+                bw.Write(building.PollutionOutput);
+            }
             }
             finally
             {
@@ -189,6 +190,7 @@ namespace StrategyGame
             int buildingCount = br.ReadInt32();
             for (int i = 0; i < buildingCount; i++)
             {
+                var id = new Guid(br.ReadBytes(16));
                 int len = br.ReadInt32();
                 byte[] data = br.ReadBytes(len);
                 var footprint = (Nts.Polygon)wkbReader.Read(data);
@@ -199,6 +201,7 @@ namespace StrategyGame
                 double poll = br.ReadDouble();
                 model.Buildings.Add(new Building
                 {
+                    Id = id,
                     Footprint = footprint,
                     LandUse = landUse,
                     Level = level,
