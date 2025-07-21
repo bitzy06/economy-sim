@@ -25,11 +25,11 @@ namespace StrategyGame
 
         // Pre-created brushes and pens for drawing roads. These objects are immutable
         // which makes them safe for use across threads during tile rendering.
-        private static readonly IBrush PrimaryRoadBrush = new SolidBrush<Rgba32>(new Rgba32(180, 180, 180, 200));
-        private static readonly IBrush SecondaryRoadBrush = new SolidBrush<Rgba32>(new Rgba32(180, 180, 180, 200));
+        private static readonly SixLabors.ImageSharp.Color PrimaryRoadBrush = new Rgba32(180, 180, 180, 200);
+        private static readonly SixLabors.ImageSharp.Color SecondaryRoadBrush = new Rgba32(180, 180, 180, 200);
 
-        private static readonly IPen PrimaryRoadPen = Pens.Solid(PrimaryRoadBrush, 2f);
-        private static readonly IPen SecondaryRoadPen = Pens.Solid(SecondaryRoadBrush, 1f);
+        private static readonly SixLabors.ImageSharp.Drawing.Processing.Pen PrimaryRoadPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(PrimaryRoadBrush, 2f);
+        private static readonly SixLabors.ImageSharp.Drawing.Processing.Pen SecondaryRoadPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(SecondaryRoadBrush, 1f);
 
         private static readonly SKPaint PrimaryRoadPaint = new SKPaint
         {
@@ -52,6 +52,8 @@ namespace StrategyGame
         public static async Task<Image<Rgba32>> RenderCityTileAsync(
             GeoBounds tileBounds,
             int cellSize,
+            int tileX,
+            int tileY,
             IReadOnlyDictionary<Guid, CityDataModel> cityModelCache,
             Action<Guid> requestModel)
         {
@@ -88,7 +90,7 @@ namespace StrategyGame
                     continue;
                 }
 
-                DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize);
+                DrawRoads(img, modelId.Value, model.RoadNetwork, tileBounds, cellSize, tileX, tileY);
 
                 var tileEnv = tilePoly.EnvelopeInternal;
                 var candidates = (model.BuildingIndex?.Query(tileEnv).Cast<Building>() ?? model.Buildings);
@@ -105,7 +107,7 @@ namespace StrategyGame
                     }
                     else if (baseGeom is Nts.MultiPolygon mp)
                     {
-                        for (int i = 0; i < mp.NumGeometries; i++)
+                        for (int j = 0; i < mp.NumGeometries; i++)
                         {
                             if (mp.GetGeometryN(i) is Nts.Polygon pp && !pp.IsEmpty)
                                 toDraw.Add((pp, b.LandUse, b));
@@ -217,66 +219,80 @@ namespace StrategyGame
 
         private static List<List<(double X, double Y)>> GroupSegments(List<LineSegment> segments)
         {
-            var result = new List<List<(double X, double Y)>>();
-            var remaining = new List<LineSegment>(segments);
+            var pointsToSegments = new Dictionary<QuantizedPoint, List<LineSegment>>(segments.Count * 2);
+            var visited = new HashSet<LineSegment>(segments.Count);
+            var polylines = new List<List<(double X, double Y)>>();
 
-            while (remaining.Count > 0)
+            void AddPoint(double x, double y, LineSegment s)
             {
-                var seg = remaining[^1];
-                remaining.RemoveAt(remaining.Count - 1);
-                var poly = new List<(double X, double Y)> { (seg.X1, seg.Y1), (seg.X2, seg.Y2) };
-
-                bool changed;
-                do
+                var qp = new QuantizedPoint(x, y);
+                if (!pointsToSegments.TryGetValue(qp, out var list))
                 {
-                    changed = false;
-                    for (int i = 0; i < remaining.Count; i++)
-                    {
-                        var s = remaining[i];
-                        if (PointsEqual(poly[^1], (s.X1, s.Y1)))
-                        {
-                            poly.Add((s.X2, s.Y2));
-                            remaining.RemoveAt(i);
-                            changed = true;
-                            break;
-                        }
-                        if (PointsEqual(poly[^1], (s.X2, s.Y2)))
-                        {
-                            poly.Add((s.X1, s.Y1));
-                            remaining.RemoveAt(i);
-                            changed = true;
-                            break;
-                        }
-                        if (PointsEqual(poly[0], (s.X2, s.Y2)))
-                        {
-                            poly.Insert(0, (s.X1, s.Y1));
-                            remaining.RemoveAt(i);
-                            changed = true;
-                            break;
-                        }
-                        if (PointsEqual(poly[0], (s.X1, s.Y1)))
-                        {
-                            poly.Insert(0, (s.X2, s.Y2));
-                            remaining.RemoveAt(i);
-                            changed = true;
-                            break;
-                        }
-                    }
-                } while (changed);
-
-                result.Add(poly);
+                    list = new List<LineSegment>();
+                    pointsToSegments[qp] = list;
+                }
+                list.Add(s);
             }
 
-            return result;
+            foreach (var s in segments)
+            {
+                AddPoint(s.X1, s.Y1, s);
+                AddPoint(s.X2, s.Y2, s);
+            }
+
+            foreach (var start in segments)
+            {
+                if (!visited.Add(start))
+                    continue;
+
+                var poly = new LinkedList<(double X, double Y)>();
+                poly.AddLast((start.X1, start.Y1));
+                poly.AddLast((start.X2, start.Y2));
+
+                void ExtendForward(QuantizedPoint current)
+                {
+                    while (pointsToSegments.TryGetValue(current, out var conns))
+                    {
+                        var next = conns.FirstOrDefault(s => !visited.Contains(s));
+                        if (next.Equals(default(LineSegment))) // Check for default value instead of null
+                            break;
+
+                        visited.Add(next);
+                        var p1 = new QuantizedPoint(next.X1, next.Y1);
+                        current = current.Equals(p1)
+                            ? new QuantizedPoint(next.X2, next.Y2)
+                            : p1;
+                        poly.AddLast((current.X, current.Y));
+                    }
+                }
+
+                void ExtendBackward(QuantizedPoint current)
+                {
+                    while (pointsToSegments.TryGetValue(current, out var conns))
+                    {
+                        var next = conns.FirstOrDefault(s => !visited.Contains(s));
+                        if (next.Equals(default(LineSegment))) // Check for default value instead of null
+                            break;
+
+                        visited.Add(next);
+                        var p1 = new QuantizedPoint(next.X1, next.Y1);
+                        current = current.Equals(p1)
+                            ? new QuantizedPoint(next.X2, next.Y2)
+                            : p1;
+                        poly.AddFirst((current.X, current.Y));
+                    }
+                }
+
+                ExtendForward(new QuantizedPoint(start.X2, start.Y2));
+                ExtendBackward(new QuantizedPoint(start.X1, start.Y1));
+
+                polylines.Add(new List<(double X, double Y)>(poly));
+            }
+
+            return polylines;
         }
 
-        private static bool PointsEqual((double X, double Y) a, (double X, double Y) b)
-        {
-            const double Eps = 1e-9;
-            return Math.Abs(a.X - b.X) < Eps && Math.Abs(a.Y - b.Y) < Eps;
-        }
-
-        private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize)
+        private static void DrawRoads(Image<Rgba32> img, Guid modelId, IEnumerable<LineSegment> roads, GeoBounds bounds, int cellSize, int tileX, int tileY)
         {
             var sw = Stopwatch.StartNew();
 
@@ -295,7 +311,7 @@ namespace StrategyGame
                 return;
             }
 
-            var cachedPaths = CityModelCache.GetOrAddRoads(modelId, cellSize, simplifiedRoads, bounds);
+            var cachedPaths = CityModelCache.GetOrAddRoads(modelId, cellSize, tileX, tileY, simplifiedRoads, bounds);
 
             // Use shared pen instances to avoid allocations during rendering
             img.Mutate(ctx => ctx

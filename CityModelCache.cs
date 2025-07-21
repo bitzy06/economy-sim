@@ -10,12 +10,13 @@ namespace StrategyGame
 {
     internal static class CityModelCache
     {
-        private static readonly ConcurrentDictionary<(Guid modelId, int cellSize), CachedRoads> _roads = new();
+        private static readonly ConcurrentDictionary<TileKey, CachedRoads> _roads = new();
         private static readonly ConcurrentDictionary<(Guid modelId, int cellSize, double minLon, double minLat, double maxLon, double maxLat), CachedBuildings> _buildings = new();
 
-        public static CachedRoads GetOrAddRoads(Guid modelId, int cellSize, IEnumerable<LineSegment> rawRoads, GeoBounds bounds)
+        public static CachedRoads GetOrAddRoads(Guid modelId, int cellSize, int tileX, int tileY, IEnumerable<LineSegment> rawRoads, GeoBounds bounds)
         {
-            return _roads.GetOrAdd((modelId, cellSize), _ =>
+            var key = new TileKey(modelId, cellSize, tileX, tileY);
+            return _roads.GetOrAdd(key, _ =>
             {
                 var clippedSegments = new List<LineSegment>();
                 foreach (var seg in rawRoads)
@@ -40,10 +41,10 @@ namespace StrategyGame
                 {
                     var pb = seg.Type == RoadType.Primary ? primaryBuilder : secondaryBuilder;
                     pb.AddLine(
-                        new PointF(
+                        new SixLabors.ImageSharp.PointF(
                             (float)((seg.X1 - bounds.MinLon) * sx),
                             (float)((bounds.MaxLat - seg.Y1) * sy)),
-                        new PointF(
+                        new SixLabors.ImageSharp.PointF(
                             (float)((seg.X2 - bounds.MinLon) * sx),
                             (float)((bounds.MaxLat - seg.Y2) * sy)));
                 }
@@ -70,7 +71,7 @@ namespace StrategyGame
                     foreach (var item in group)
                     {
                         var points = item.Poly.ExteriorRing.Coordinates.Select(c =>
-                            new PointF(
+                            new SixLabors.ImageSharp.PointF(
                                 (float)((c.X - bounds.MinLon) * sx),
                                 (float)((bounds.MaxLat - c.Y) * sy))).ToArray();
                         pb.AddLines(points);
