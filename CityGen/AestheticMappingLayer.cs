@@ -1,7 +1,7 @@
 using System;
-using Messaging;
+using EconomySim.Messaging;
 
-namespace StrategyGame.CityGen
+namespace EconomySim.CityGen
 {
     /// <summary>
     /// Maps high level economic and cultural metrics into parameters

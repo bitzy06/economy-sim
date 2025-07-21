@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
 using SkiaSharp;
-using economy_sim;
+using EconomySim;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Buffers;

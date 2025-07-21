@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using StrategyGame; // Assuming City, Factory, Good classes are in this namespace
 
-namespace economy_sim // Assuming this is your project's namespace
+namespace EconomySim // Assuming this is your project's namespace
 {
     public partial class FactoryStatsForm : Form
     {

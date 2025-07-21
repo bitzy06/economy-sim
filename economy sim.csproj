@@ -8,8 +8,8 @@
 
 		<!-- Output settings -->
 		<OutputType>WinExe</OutputType>
-		<AssemblyName>economy_sim</AssemblyName>
-		<RootNamespace>economy_sim</RootNamespace>
+		<AssemblyName>EconomySim</AssemblyName>
+		<RootNamespace>EconomySim</RootNamespace>
 		<UseWindowsForms>true</UseWindowsForms>
 
 		<!-- Target framework -->
@@ -96,16 +96,7 @@
                 </None>
         </ItemGroup>
 
-        <!-- Project references -->
-        <ItemGroup>
-                <ProjectReference Include="Messaging/Messaging.csproj" />
-        </ItemGroup>
 
-        <!-- Generated FlatBuffers -->
-        <ItemGroup>
-                <Compile Include="Generated\**\*.cs" />
-        </ItemGroup>
-
-	<!-- Rely on SDK implicit Compile and EmbeddedResource items -->
+        <!-- Rely on SDK implicit Compile and EmbeddedResource items -->
 
 </Project>

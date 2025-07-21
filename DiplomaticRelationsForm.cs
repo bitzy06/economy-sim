@@ -3,7 +3,7 @@ using System.Windows.Forms;
 using System.Drawing;
 using System.Linq;
 
-namespace economy_sim
+namespace EconomySim
 {
     public partial class DiplomaticRelationsForm : Form
     {

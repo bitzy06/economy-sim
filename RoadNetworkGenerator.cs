@@ -16,6 +16,7 @@ using NetTopologySuite.Index.Quadtree;
 using NetTopologySuite.Index.Strtree;
 using NetTopologySuite.Simplify;
 using System.Windows.Forms;
+using EconomySim.CityGen;
 
 namespace StrategyGame
 {
@@ -334,10 +335,10 @@ namespace StrategyGame
 
         private static List<Nts.LineString> GenerateLocalRoads(Nts.Polygon area, List<Nts.LineString> highways)
         {
-            double roadSegmentLength = 0.005 * CityGen.AestheticMappingLayer.Parameters.RoadDensity;
+            double roadSegmentLength = 0.005 * EconomySim.CityGen.AestheticMappingLayer.Parameters.RoadDensity;
             // Make the iteration limit proportional to the area. Ensures small
             // towns generate quickly while large cities have room to expand.
-            int maxIterations = (int)Math.Max(500, area.Area * 5000000 * CityGen.AestheticMappingLayer.Parameters.RoadDensity);
+            int maxIterations = (int)Math.Max(500, area.Area * 5000000 * EconomySim.CityGen.AestheticMappingLayer.Parameters.RoadDensity);
             var gf = Nts.GeometryFactory.Default;
             var random = new Random();
             var roadNetwork = new List<Nts.LineString>(highways);

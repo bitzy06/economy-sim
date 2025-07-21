@@ -12,8 +12,9 @@ using NetTopologySuite.Operation.Polygonize;
 using NetTopologySuite.Operation.Union;
 using NetTopologySuite.Geometries.Utilities;
 using NetTopologySuite.Simplify;
-using Messaging;
+using EconomySim.Messaging;
 using EconomySim.Protocols;
+using EconomySim.CityGen;
 
 namespace StrategyGame
 {
@@ -292,7 +293,7 @@ namespace StrategyGame
             var buildingBag = new ConcurrentBag<Building>();
             var gf = Nts.GeometryFactory.Default;
 
-            double spacingFactor = 1 - CityGen.AestheticMappingLayer.Parameters.GreenSpaceRatio;
+            double spacingFactor = 1 - EconomySim.CityGen.AestheticMappingLayer.Parameters.GreenSpaceRatio;
             double CommercialInset = -0.00002 * spacingFactor;
             double ResidentialInset = -0.00004 * spacingFactor;
             double IndustrialInset = -0.00003 * spacingFactor;
@@ -384,7 +385,7 @@ namespace StrategyGame
                     break;
             }
 
-            b.Level = (int)Math.Max(1, b.Level * CityGen.AestheticMappingLayer.Parameters.BuildingHeightScale);
+            b.Level = (int)Math.Max(1, b.Level * EconomySim.CityGen.AestheticMappingLayer.Parameters.BuildingHeightScale);
         }
     }
 
@@ -520,7 +521,7 @@ namespace StrategyGame
             if (model.UrbanArea != null && model.UrbanArea.Area > 0)
                 density = (float)(population / model.UrbanArea.Area);
 
-            var metricsEvent = new CityGen.AestheticMappingLayer.CityMetricsEvent(gdp, density, 1f);
+            var metricsEvent = new EconomySim.CityGen.AestheticMappingLayer.CityMetricsEvent(gdp, density, 1f);
             bus.Publish(metricsEvent);
             EnqueueRegeneration(model);
         }

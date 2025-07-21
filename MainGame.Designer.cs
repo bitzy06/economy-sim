@@ -1,4 +1,4 @@
-﻿namespace economy_sim
+﻿namespace EconomySim
 {
     partial class MainGame
     {

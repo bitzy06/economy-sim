@@ -1,4 +1,4 @@
-using Messaging;
+using EconomySim.Messaging;
 
 namespace StrategyGame
 {
@@ -12,7 +12,7 @@ namespace StrategyGame
         static GameServices()
         {
             Bus.MessagePublished += EventLogger.Log;
-            CityGen.AestheticMappingLayer.Initialize(Bus);
+            EconomySim.CityGen.AestheticMappingLayer.Initialize(Bus);
         }
     }
 }

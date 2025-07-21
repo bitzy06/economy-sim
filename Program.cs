@@ -12,7 +12,7 @@ namespace StrategyGame
             _ = GameServices.Bus;
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new economy_sim.MainGame());
+            Application.Run(new EconomySim.MainGame());
         }
     }
 } 
