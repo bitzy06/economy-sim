@@ -33,6 +33,7 @@ namespace economy_sim
         private FactoryStatsForm factoryStatsForm;
         private ConstructionForm constructionForm;
         private PerformanceStatsForm performanceStatsForm;
+        private MessageMonitorForm messageMonitorForm;
         private List<State> states;
         private PlayerRoleManager playerRoleManager;
         private Random random = new Random(); // Add a Random instance for AI and other uses
@@ -219,6 +220,7 @@ namespace economy_sim
             factoryStatsForm = new FactoryStatsForm();
             constructionForm = new ConstructionForm();
             performanceStatsForm = new PerformanceStatsForm();
+            messageMonitorForm = new MessageMonitorForm();
             tabControlMain.SelectedIndexChanged += TabControlMain_SelectedIndexChanged;
 
             this.listBoxCityStats.DrawMode = DrawMode.OwnerDrawFixed;
@@ -237,6 +239,9 @@ namespace economy_sim
 
             this.buttonShowPerformance.Location = new SD.Point(this.buttonShowConstruction.Right + 10, buttonsTargetY);
             this.buttonShowPerformance.Click += ButtonShowPerformance_Click;
+
+            this.buttonOpenMessageMonitor.Location = new SD.Point(this.buttonShowPerformance.Right + 10, buttonsTargetY);
+            this.buttonOpenMessageMonitor.Click += ButtonOpenMessageMonitor_Click;
 
             Console.WriteLine($"[Startup] TOTAL startup time: {totalSw.Elapsed.TotalSeconds:F2} seconds");
             this.Shown += (s, e) =>
@@ -1368,6 +1373,12 @@ namespace economy_sim
         {
             performanceStatsForm.Show();
             performanceStatsForm.BringToFront();
+        }
+
+        private void ButtonOpenMessageMonitor_Click(object sender, EventArgs e)
+        {
+            messageMonitorForm.Show();
+            messageMonitorForm.BringToFront();
         }
 
         private void UpdateOrderLists()

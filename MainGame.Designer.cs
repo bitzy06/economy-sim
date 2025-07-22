@@ -68,6 +68,7 @@
             buttonGenerateTileCache = new Button();
             buttonGenerateCityData = new Button();
             buttonShowPerformance = new Button();
+            buttonOpenMessageMonitor = new Button();
             tabPageDiplomacy = new TabPage();
             labelProposedTrades = new Label();
             listBoxProposedTradeAgreements = new ListBox();
@@ -272,6 +273,7 @@
             tabPageDebug.Controls.Add(buttonGenerateTileCache);
             tabPageDebug.Controls.Add(buttonGenerateCityData);
             tabPageDebug.Controls.Add(buttonShowPerformance);
+            tabPageDebug.Controls.Add(buttonOpenMessageMonitor);
             tabPageDebug.Controls.Add(buttonToggleDebugMode);
             tabPageDebug.Location = new Point(4, 29);
             tabPageDebug.Margin = new Padding(5, 4, 5, 4);
@@ -473,6 +475,16 @@
             buttonShowPerformance.Text = "Performance Stats";
             buttonShowPerformance.UseVisualStyleBackColor = true;
             buttonShowPerformance.Click += ButtonShowPerformance_Click;
+
+            // buttonOpenMessageMonitor
+            buttonOpenMessageMonitor.Location = new Point(692, 662);
+            buttonOpenMessageMonitor.Margin = new Padding(5, 4, 5, 4);
+            buttonOpenMessageMonitor.Name = "buttonOpenMessageMonitor";
+            buttonOpenMessageMonitor.Size = new Size(160, 36);
+            buttonOpenMessageMonitor.TabIndex = 19;
+            buttonOpenMessageMonitor.Text = "Message Monitor";
+            buttonOpenMessageMonitor.UseVisualStyleBackColor = true;
+            buttonOpenMessageMonitor.Click += ButtonOpenMessageMonitor_Click;
 
             // 
             // tabPageDiplomacy
@@ -769,6 +781,7 @@
         private System.Windows.Forms.Button buttonGenerateTileCache;
         private System.Windows.Forms.Button buttonGenerateCityData;
         private System.Windows.Forms.Button buttonShowPerformance;
+        private System.Windows.Forms.Button buttonOpenMessageMonitor;
         private System.Windows.Forms.TabPage tabPageDiplomacy;
         private System.Windows.Forms.Label labelProposedTrades;
         private System.Windows.Forms.ListBox listBoxProposedTradeAgreements;

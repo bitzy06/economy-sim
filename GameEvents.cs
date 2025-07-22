@@ -52,4 +52,9 @@ namespace StrategyGame
     /// Published when city generation for an area completes.
     /// </summary>
     public record CityGenerationCompletedEventData(Guid ModelId, Polygon Area);
+
+    /// <summary>
+    /// Simple debug event used for testing the message bus and monitor UI.
+    /// </summary>
+    public record CustomDebugEvent(string Message);
 }
