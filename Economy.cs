@@ -82,6 +82,9 @@ namespace StrategyGame
             decimal currentGdp = totalAssessablePopIncome + totalCorporateProfits; // Highly simplified GDP
             fs.UpdateFinancialIndicators(currentGdp);
 
+            MessageBus.Instance.Publish(
+                new EconomyUpdatedEventData(country.Name, country.Budget, (double)currentGdp));
+
             // The old fund distribution to states is now in Country.DistributeFunds(), which can be called separately if needed.
             // country.DistributeFunds(); // This call can be made here or as part of a different game phase.
 
