@@ -115,7 +115,8 @@ namespace StrategyGame
                     }
                 }
 
-                DrawBuildings(img, modelId.Value, toDraw, tileBounds, cellSize);
+                var style = model.GenerationParameters.BuildingStyle;
+                DrawBuildings(img, modelId.Value, toDraw, tileBounds, cellSize, style);
             }
 
             PerformanceTracker.Record("CityRenderer-RenderTile", sw.Elapsed);
@@ -123,7 +124,7 @@ namespace StrategyGame
         }
 
         // Batched building drawing with caching and dynamic LOD
-        private static void DrawBuildings(Image<Rgba32> img, Guid modelId, List<(Nts.Polygon Poly, LandUseType Use, Building Bld)> buildings, GeoBounds bounds, int cellSize)
+        private static void DrawBuildings(Image<Rgba32> img, Guid modelId, List<(Nts.Polygon Poly, LandUseType Use, Building Bld)> buildings, GeoBounds bounds, int cellSize, BuildingStyle style)
         {
             var sw = Stopwatch.StartNew();
 
@@ -181,7 +182,7 @@ namespace StrategyGame
                 }
             }
 
-            var cached = CityModelCache.GetOrAddBuildings(modelId, cellSize, bounds, reduced);
+            var cached = CityModelCache.GetOrAddBuildings(modelId, cellSize, style, bounds, reduced);
 
             img.Mutate(ctx =>
             {
@@ -326,6 +327,19 @@ namespace StrategyGame
                 (float)((lon - b.MinLon) / (b.MaxLon - b.MinLon) * MultiResolutionMapManager.TileSizePx),
                 (float)((b.MaxLat - lat) / (b.MaxLat - b.MinLat) * MultiResolutionMapManager.TileSizePx));
         private static Nts.Polygon ToPolygon(GeoBounds b) => new Nts.Polygon(new Nts.LinearRing(new[] { new Nts.Coordinate(b.MinLon, b.MinLat), new Nts.Coordinate(b.MaxLon, b.MinLat), new Nts.Coordinate(b.MaxLon, b.MaxLat), new Nts.Coordinate(b.MinLon, b.MaxLat), new Nts.Coordinate(b.MinLon, b.MinLat) }));
-        internal static Rgba32 GetBuildingColor(LandUseType use) => use switch { LandUseType.Commercial => new Rgba32(200, 50, 50, 180), LandUseType.Residential => new Rgba32(50, 50, 200, 180), LandUseType.Industrial => new Rgba32(120, 120, 120, 180), _ => new Rgba32(60, 160, 60, 180) };
+        internal static Rgba32 GetBuildingColor(LandUseType use, BuildingStyle style, int level = 0)
+        {
+            var palettes = AestheticMappingLayer.Instance.CurrentParameters.BuildingPalettes;
+            if (palettes.TryGetValue(style, out var palette) && palette.TryGetValue(use, out var color))
+                return color;
+
+            return use switch
+            {
+                LandUseType.Commercial => new Rgba32(200, 50, 50, 180),
+                LandUseType.Residential => new Rgba32(50, 50, 200, 180),
+                LandUseType.Industrial => new Rgba32(120, 120, 120, 180),
+                _ => new Rgba32(60, 160, 60, 180)
+            };
+        }
     }
 }

@@ -11,7 +11,7 @@ namespace StrategyGame
     internal static class CityModelCache
     {
         private static readonly ConcurrentDictionary<TileKey, CachedRoads> _roads = new();
-        private static readonly ConcurrentDictionary<(Guid modelId, int cellSize, double minLon, double minLat, double maxLon, double maxLat), CachedBuildings> _buildings = new();
+        private static readonly ConcurrentDictionary<(Guid modelId, BuildingStyle style, int cellSize, double minLon, double minLat, double maxLon, double maxLat), CachedBuildings> _buildings = new();
 
         public static CachedRoads GetOrAddRoads(Guid modelId, int cellSize, int tileX, int tileY, IEnumerable<LineSegment> rawRoads, GeoBounds bounds)
         {
@@ -57,15 +57,15 @@ namespace StrategyGame
             });
         }
 
-        public static CachedBuildings GetOrAddBuildings(Guid modelId, int cellSize, GeoBounds bounds, IEnumerable<(NetTopologySuite.Geometries.Polygon Poly, LandUseType Use)> buildings)
+        public static CachedBuildings GetOrAddBuildings(Guid modelId, int cellSize, BuildingStyle style, GeoBounds bounds, IEnumerable<(NetTopologySuite.Geometries.Polygon Poly, LandUseType Use)> buildings)
         {
-            var key = (modelId, cellSize, bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat);
+            var key = (modelId, style, cellSize, bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat);
             return _buildings.GetOrAdd(key, _ =>
             {
                 var dict = new Dictionary<Rgba32, IPath>();
                 float sx = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLon - bounds.MinLon);
                 float sy = MultiResolutionMapManager.TileSizePx / (float)(bounds.MaxLat - bounds.MinLat);
-                foreach (var group in buildings.GroupBy(b => ProceduralCityRenderer.GetBuildingColor(b.Use)))
+                foreach (var group in buildings.GroupBy(b => ProceduralCityRenderer.GetBuildingColor(b.Use, style)))
                 {
                     var pb = new PathBuilder();
                     foreach (var item in group)
