@@ -25,6 +25,12 @@ namespace economy_sim
 
         private void HandleEvent<T>(T evt)
         {
+            if (!IsHandleCreated)
+            {
+                DebugLogger.Log($"MessageMonitorForm not yet created. Dropping event: {evt}");
+                return;
+            }
+
             BeginInvoke(() =>
             {
                 listBoxEvents.Items.Insert(0, evt?.ToString());
