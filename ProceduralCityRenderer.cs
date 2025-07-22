@@ -107,9 +107,9 @@ namespace StrategyGame
                     }
                     else if (baseGeom is Nts.MultiPolygon mp)
                     {
-                        for (int j = 0; i < mp.NumGeometries; i++)
+                        for (int j = 0; j < mp.NumGeometries; j++)
                         {
-                            if (mp.GetGeometryN(i) is Nts.Polygon pp && !pp.IsEmpty)
+                            if (mp.GetGeometryN(j) is Nts.Polygon pp && !pp.IsEmpty)
                                 toDraw.Add((pp, b.LandUse, b));
                         }
                     }
