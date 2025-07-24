@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using SD = System.Drawing;
+using SDRect = SkiaSharp.SKRectI;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -263,7 +263,7 @@ namespace StrategyGame
             return skBmp;
         }
 
-        public SKBitmap AssembleView(float zoom, SD.Rectangle viewArea, Action triggerRefresh = null)
+        public SKBitmap AssembleView(float zoom, SDRect viewArea, Action triggerRefresh = null)
         {
             var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
@@ -283,8 +283,8 @@ namespace StrategyGame
                 }
             }
 
-            int tileStartX = Math.Max(0, viewArea.X / tileSize);
-            int tileStartY = Math.Max(0, viewArea.Y / tileSize);
+            int tileStartX = Math.Max(0, viewArea.Left / tileSize);
+            int tileStartY = Math.Max(0, viewArea.Top / tileSize);
             int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
             int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
 
@@ -293,11 +293,11 @@ namespace StrategyGame
                 for (int tx = tileStartX; tx < tileEndX; tx++)
                 {
                     var key = (cellSize, tx, ty);
-                    var rect = new SKRect(
-                        tx * tileSize - viewArea.X,
-                        ty * tileSize - viewArea.Y,
-                        tx * tileSize - viewArea.X + tileSize,
-                        ty * tileSize - viewArea.Y + tileSize);
+                        var rect = new SKRect(
+                            tx * tileSize - viewArea.Left,
+                            ty * tileSize - viewArea.Top,
+                            tx * tileSize - viewArea.Left + tileSize,
+                            ty * tileSize - viewArea.Top + tileSize);
 
                     SKBitmap tileBitmap = null;
                     if (_tileCache.TryGetValue(key, out var cachedTile))
@@ -322,16 +322,16 @@ namespace StrategyGame
             return result;
         }
 
-        public async Task PreloadVisibleTilesAsync(float zoom, SD.Rectangle viewRect, int radius = 1, Action triggerRefresh = null, CancellationToken token = default)
+        public async Task PreloadVisibleTilesAsync(float zoom, SDRect viewRect, int radius = 1, Action triggerRefresh = null, CancellationToken token = default)
         {
             var sw = Stopwatch.StartNew();
             int cellSize = GetCellSize(zoom);
             int tileSize = MultiResolutionMapManager.TileSizePx;
-            var mapSize = new SD.Size(_baseWidth * cellSize, _baseHeight * cellSize);
+            var mapSize = new SKSizeI(_baseWidth * cellSize, _baseHeight * cellSize);
 
-            int startX = Math.Max(0, viewRect.X / tileSize - radius);
+            int startX = Math.Max(0, viewRect.Left / tileSize - radius);
             int endX = Math.Min((mapSize.Width - 1) / tileSize, (viewRect.Right - 1) / tileSize + radius);
-            int startY = Math.Max(0, viewRect.Y / tileSize - radius);
+            int startY = Math.Max(0, viewRect.Top / tileSize - radius);
             int endY = Math.Min((mapSize.Height - 1) / tileSize, (viewRect.Bottom - 1) / tileSize + radius);
 
             var missingTiles = new List<(int x, int y)>();
@@ -349,8 +349,8 @@ namespace StrategyGame
 
             if (missingTiles.Any())
             {
-                var viewCenterX = viewRect.X + viewRect.Width / 2.0;
-                var viewCenterY = viewRect.Y + viewRect.Height / 2.0;
+                var viewCenterX = viewRect.Left + viewRect.Width / 2.0;
+                var viewCenterY = viewRect.Top + viewRect.Height / 2.0;
                 missingTiles = missingTiles
                     .OrderBy(tile =>
                     {
