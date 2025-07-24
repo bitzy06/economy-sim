@@ -15,7 +15,6 @@ using NetTopologySuite.IO;
 using NetTopologySuite.Index.Quadtree;
 using NetTopologySuite.Index.Strtree;
 using NetTopologySuite.Simplify;
-using System.Windows.Forms;
 
 namespace StrategyGame
 {
@@ -288,7 +287,7 @@ namespace StrategyGame
                                       $"Error: {ex.GetType().Name}\n\n" +
                                       $"Message: {ex.Message}\n\n" +
                                       $"Stack Trace:\n{ex.StackTrace}";
-                MessageBox.Show(errorMessage, "Critical Save Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _ = DialogHelper.ShowMessage(errorMessage, "Critical Save Error");
                 Console.WriteLine($"[CRITICAL ERROR] Failed to serialize CityDataModel: {errorMessage}");
             }
 

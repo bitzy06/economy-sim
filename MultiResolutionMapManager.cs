@@ -13,7 +13,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 using SystemDrawing = System.Drawing;
 using DrawingPoint = System.Drawing.Point;
 using DrawingRectangle = System.Drawing.Rectangle;
@@ -804,7 +803,7 @@ namespace StrategyGame
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to save tile:\n{path}\n{ex.Message}", "Tile Save Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _ = DialogHelper.ShowMessage($"Failed to save tile:\n{path}\n{ex.Message}", "Tile Save Error");
                 Debug.WriteLine($"[TILE SAVE ERROR] {ex.Message} while saving {path}");
             }
         }
@@ -850,14 +849,14 @@ namespace StrategyGame
             catch (IOException ioEx)
             {
                 Debug.WriteLine($"[FILE IN USE] {path} - {ioEx.Message}");
-                MessageBox.Show($"Failed to save tile:\n{path}\n{ioEx.Message}", "Tile Save Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                _ = DialogHelper.ShowMessage($"Failed to save tile:\n{path}\n{ioEx.Message}", "Tile Save Error");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[ASYNC TILE SAVE ERROR] {ex.Message} while saving {path}");
                 if (!token.IsCancellationRequested)
                 {
-                    MessageBox.Show($"Failed to save tile:\n{path}\n{ex.Message}", "Tile Save Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    _ = DialogHelper.ShowMessage($"Failed to save tile:\n{path}\n{ex.Message}", "Tile Save Error");
                 }
             }
         }
