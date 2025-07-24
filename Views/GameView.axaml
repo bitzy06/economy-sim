@@ -1,24 +1,11 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="Economy_sim.GameView"
         Title="GameView"
-		WindowState="FullScreen"
-        Background="#2D2D30">
-
-	<Window.Styles>
-		<StyleInclude Source="/GlobalStyles.axaml"/>
-	</Window.Styles>
-
-	<Grid RowDefinitions="*" ColumnDefinitions="*">
-		<Image x:Name="MapImage"
-       Stretch="UniformToFill"
-       HorizontalAlignment="Stretch"
-       VerticalAlignment="Stretch" />
-	</Grid>
-
-	
-	
+     WindowState="FullScreen"
+        Background="#2D2D30"
+        Width="2560" Height="1440">
+	<Image x:Name="MapImage"
+		   Stretch="Fill"
+		   ClipToBounds="True"/>
 </Window>

@@ -1,13 +1,15 @@
-using System;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using SkiaSharp;
 using StrategyGame;
+using System;
+using System.IO;
 
 namespace Economy_sim
 {
@@ -15,84 +17,204 @@ namespace Economy_sim
     {
         private readonly MultiResolutionMapManager _mapManager;
         private float _currentZoom = 1.5f;
-        private SKPointI _viewOffset = SKPointI.Empty;
+        private SKPointI _viewOffset = new SKPointI(0, 0);
+
+        // This will store the size of the last render to prevent unnecessary updates.
+        private Size _lastRenderedSize = new Size(0, 0);
+
+        // Add constants to control zoom behavior
+        private const float ZoomIncrement = 0.2f;
+        private const float MinZoom = 0.5f;
+        private const float MaxZoom = 5.0f;
+
+        // Panning state tracking
+        private bool _isPanning = false;
+        private Point _lastPanPosition;
 
         public GameView()
         {
             InitializeComponent();
-
             _mapManager = new MultiResolutionMapManager(baseWidth: 256, baseHeight: 256);
 
-            // Kick off the first render once the control has a size.
-            bool firstRender = false;
-            async void TryInitialRender(object? s, EventArgs e)
-            {
-                if (firstRender)
-                    return;
+            // Use the 'Loaded' event, which fires once when the window is initialized and shown.
+            this.Loaded += OnLoaded;
 
-                if (MapImage.Bounds.Width > 0 && MapImage.Bounds.Height > 0)
-                {
-                    firstRender = true;
-                    MapImage.LayoutUpdated -= TryInitialRender;
-                    await RenderMapAsync();
-                }
-            }
+            // Add pointer wheel event handler
+            this.PointerWheelChanged += OnPointerWheelChanged;
 
-            Opened += TryInitialRender;
-            MapImage.LayoutUpdated += TryInitialRender;
-            MapImage.SizeChanged += TryInitialRender;
+            // Add pointer events for panning
+            this.PointerPressed += OnPointerPressed;
+            this.PointerMoved += OnPointerMoved;
+            this.PointerReleased += OnPointerReleased;
         }
 
-        private async Task RenderMapAsync()
+        private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            // 1) Measure the control
-            int w = (int)MapImage.Bounds.Width;
-            int h = (int)MapImage.Bounds.Height;
-            if (w < 1 || h < 1)
+            // Only start panning with primary button (usually left mouse button)
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                _isPanning = true;
+                _lastPanPosition = e.GetPosition(MapImage);
+
+                // Set the cursor to indicate grabbing/panning
+                this.Cursor = new Cursor(StandardCursorType.Hand);
+
+                e.Handled = true;
+            }
+        }
+
+        private void OnPointerMoved(object? sender, PointerEventArgs e)
+        {
+            if (_isPanning)
+            {
+                var currentPosition = e.GetPosition(MapImage);
+
+                // Calculate the distance moved
+                int deltaX = (int)(_lastPanPosition.X - currentPosition.X);
+                int deltaY = (int)(_lastPanPosition.Y - currentPosition.Y);
+
+                // Only update if the movement is significant
+                if (Math.Abs(deltaX) > 1 || Math.Abs(deltaY) > 1)
+                {
+                    // Update view offset based on the movement
+                    _viewOffset = new SKPointI(_viewOffset.X + deltaX, _viewOffset.Y + deltaY);
+
+                    // Update the last position
+                    _lastPanPosition = currentPosition;
+
+                    // Re-render the map
+                    RenderMap(this.ClientSize);
+                }
+
+                e.Handled = true;
+            }
+        }
+
+        private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (_isPanning && e.InitialPressMouseButton == MouseButton.Left)
+            {
+                _isPanning = false;
+
+                // Reset the cursor
+                this.Cursor = new Cursor(StandardCursorType.Arrow);
+
+                e.Handled = true;
+            }
+        }
+
+        private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+        {
+            // Determine zoom direction based on wheel delta
+            float zoomDelta = e.Delta.Y > 0 ? ZoomIncrement : -ZoomIncrement;
+
+            // Calculate new zoom level
+            float newZoom = _currentZoom + zoomDelta;
+
+            // Apply zoom limits
+            newZoom = Math.Clamp(newZoom, MinZoom, MaxZoom);
+
+            // Only update if zoom actually changed
+            if (Math.Abs(newZoom - _currentZoom) > 0.01f)
+            {
+                // Store cursor position for zooming toward cursor point
+                var position = e.GetPosition(MapImage);
+
+                // Calculate view offset adjustment to zoom toward cursor
+                int centerX = (int)position.X;
+                int centerY = (int)position.Y;
+
+                // Adjust view offset to keep the point under cursor fixed during zoom
+                float zoomFactor = newZoom / _currentZoom;
+                int newOffsetX = _viewOffset.X + (int)(centerX * (1 - zoomFactor));
+                int newOffsetY = _viewOffset.Y + (int)(centerY * (1 - zoomFactor));
+
+                // Update zoom and view offset
+                _currentZoom = newZoom;
+                _viewOffset = new SKPointI(newOffsetX, newOffsetY);
+
+                // Re-render the map with new zoom level
+                RenderMap(this.ClientSize);
+
+                // Mark the event as handled
+                e.Handled = true;
+            }
+        }
+
+        private void OnLoaded(object? sender, RoutedEventArgs e)
+        {
+            // Unsubscribe so this logic only runs once at startup.
+            this.Loaded -= OnLoaded;
+
+            // --- Here is your idea in action ---
+            if (Screens.Primary != null)
+            {
+                // 1. Get the primary screen's available "work area" size in raw pixels.
+                var pixelSize = Screens.Primary.WorkingArea.Size;
+                // 2. Get the screen's DPI scaling factor (e.g., 1.0 for 100%, 1.5 for 150%).
+                var scaling = Screens.Primary.Scaling;
+                // 3. Convert the raw pixel size to device-independent "logical" units.
+                var logicalSize = new Size(pixelSize.Width / scaling, pixelSize.Height / scaling);
+
+                // 4. Force the very first map render to use this exact screen size.
+                RenderMap(logicalSize);
+            }
+
+            // After the initial render, use the robust LayoutUpdated for any future resizes.
+            this.LayoutUpdated += OnLayoutUpdated;
+        }
+
+        private void OnLayoutUpdated(object? sender, EventArgs e)
+        {
+            // Only re-render if the window's client size has actually changed.
+            if (this.ClientSize.Width > 1 && this.ClientSize != _lastRenderedSize)
+            {
+                RenderMap(this.ClientSize);
+            }
+        }
+
+        // MODIFIED: RenderMap now takes the target size as a parameter.
+        private void RenderMap(Size mapSize)
+        {
+            // Store the size we're rendering at to prevent redundant updates.
+            _lastRenderedSize = mapSize;
+
+            if (mapSize.Width < 1 || mapSize.Height < 1)
                 return;
 
-            // 2) Compute world?coords area
             var viewArea = new SKRectI(
                 _viewOffset.X,
                 _viewOffset.Y,
-                _viewOffset.X + w,
-                _viewOffset.Y + h);
+                _viewOffset.X + (int)mapSize.Width,
+                _viewOffset.Y + (int)mapSize.Height
+            );
 
-            // 3) Ensure all nearby tiles exist (on disk/in memory)
+            SKBitmap skBitmap = _mapManager.AssembleView(
+                _currentZoom,
+                viewArea,
+                // The refresh callback for when tiles load asynchronously.
+                () => Dispatcher.UIThread.Post(() => { if (this.IsVisible) RenderMap(this.ClientSize); })
+            );
+
+            if (skBitmap == null || skBitmap.Width <= 1 || skBitmap.Height <= 1)
+            {
+                skBitmap?.Dispose();
+                return;
+            }
+
             try
             {
-                await _mapManager.PreloadTilesAsync(
-                    zoom: _currentZoom,
-                    view: viewArea,
-                    radius: 1,
-                    token: CancellationToken.None);
+                using var skImage = SKImage.FromBitmap(skBitmap);
+                using var stream = new MemoryStream();
+                skImage.Encode(SKEncodedImageFormat.Png, 100).SaveTo(stream);
+                stream.Position = 0;
+                var avaloniaBitmap = new Bitmap(stream);
+                this.MapImage.Source = avaloniaBitmap;
             }
-            catch (Exception ex)
+            finally
             {
-                // If generation blows up, at least we'll see why:
-                Console.WriteLine($"[RenderMap] PreloadTiles failed: {ex}");
+                skBitmap.Dispose();
             }
-
-            // 4) Stitch them together
-            using var skBmp = _mapManager.AssembleView(
-                zoom: _currentZoom,
-                viewArea: viewArea,
-                triggerRefresh: null);    // no extra refresh needed, we awaited preload
-
-            if (skBmp == null || skBmp.Width <= 1 || skBmp.Height <= 1)
-                return;
-
-            // 5) Encode to PNG bytes
-            using var skImg = SKImage.FromBitmap(skBmp);
-            using var data = skImg.Encode(SKEncodedImageFormat.Png, 100);
-            var pngBytes = data.ToArray();   // keep bytes alive
-
-            // 6) Dispatch to UI thread and assign
-            await Dispatcher.UIThread.InvokeAsync(() =>
-            {
-                using var ms = new MemoryStream(pngBytes);
-                MapImage.Source = new Bitmap(ms);
-            });
         }
     }
 }
