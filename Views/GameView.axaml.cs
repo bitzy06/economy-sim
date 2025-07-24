@@ -1,12 +1,13 @@
-using Avalonia; // <--- ADD THIS LINE
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Layout;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using SkiaSharp;
 using StrategyGame;
-using System;
-using System.IO;
 
 namespace Economy_sim
 {
@@ -14,7 +15,7 @@ namespace Economy_sim
     {
         private readonly MultiResolutionMapManager _mapManager;
         private float _currentZoom = 1.5f;
-        private SKPointI _viewOffset = new SKPointI(0, 0);
+        private SKPointI _viewOffset = SKPointI.Empty;
 
         public GameView()
         {
@@ -22,55 +23,62 @@ namespace Economy_sim
 
             _mapManager = new MultiResolutionMapManager(baseWidth: 256, baseHeight: 256);
 
-            this.Opened += (s, e) => RenderMap();
-
-            this.EffectiveViewportChanged += OnViewportChanged;
+            // Kick off the first render on open, attach, or resize:
+            Opened += async (_, __) => await RenderMapAsync();
+            MapImage.AttachedToVisualTree += async (_, __) => await RenderMapAsync();
+            MapImage.SizeChanged += async (_, __) => await RenderMapAsync();
         }
 
-        // This method's signature is now valid because 'EffectiveViewportChangedEventArgs' is recognized.
-        private void OnViewportChanged(object? sender, EffectiveViewportChangedEventArgs e)
+        private async Task RenderMapAsync()
         {
-            RenderMap();
-        }
-
-        private void RenderMap()
-        {
-            if (this.ClientSize.Width < 1 || this.ClientSize.Height < 1)
+            // 1) Measure the control
+            int w = (int)MapImage.Bounds.Width;
+            int h = (int)MapImage.Bounds.Height;
+            if (w < 1 || h < 1)
                 return;
 
+            // 2) Compute world?coords area
             var viewArea = new SKRectI(
                 _viewOffset.X,
                 _viewOffset.Y,
-                _viewOffset.X + (int)this.ClientSize.Width,
-                _viewOffset.Y + (int)this.ClientSize.Height
-            );
+                _viewOffset.X + w,
+                _viewOffset.Y + h);
 
-            SKBitmap skBitmap = _mapManager.AssembleView(
-                _currentZoom,
-                viewArea,
-                () => Dispatcher.UIThread.Post(RenderMap, DispatcherPriority.Background)
-            );
-
-            if (skBitmap == null || skBitmap.Width <= 1 || skBitmap.Height <= 1)
-            {
-                skBitmap?.Dispose();
-                return;
-            }
-
+            // 3) Ensure all nearby tiles exist (on disk/in memory)
             try
             {
-                using var skImage = SKImage.FromBitmap(skBitmap);
-                using var stream = new MemoryStream();
-                skImage.Encode(SKEncodedImageFormat.Png, 100).SaveTo(stream);
-                stream.Position = 0;
-
-                var avaloniaBitmap = new Bitmap(stream);
-                this.MapImage.Source = avaloniaBitmap;
+                await _mapManager.PreloadTilesAsync(
+                    zoom: _currentZoom,
+                    view: viewArea,
+                    radius: 1,
+                    token: CancellationToken.None);
             }
-            finally
+            catch (Exception ex)
             {
-                skBitmap.Dispose();
+                // If generation blows up, at least we’ll see why:
+                Console.WriteLine($"[RenderMap] PreloadTiles failed: {ex}");
             }
+
+            // 4) Stitch them together
+            using var skBmp = _mapManager.AssembleView(
+                zoom: _currentZoom,
+                viewArea: viewArea,
+                triggerRefresh: null);    // no extra refresh needed, we awaited preload
+
+            if (skBmp == null || skBmp.Width <= 1 || skBmp.Height <= 1)
+                return;
+
+            // 5) Encode to PNG bytes
+            using var skImg = SKImage.FromBitmap(skBmp);
+            using var data = skImg.Encode(SKEncodedImageFormat.Png, 100);
+            var pngBytes = data.ToArray();   // keep bytes alive
+
+            // 6) Dispatch to UI thread and assign
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                using var ms = new MemoryStream(pngBytes);
+                MapImage.Source = new Bitmap(ms);
+            });
         }
     }
 }

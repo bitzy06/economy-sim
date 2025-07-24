@@ -26,7 +26,14 @@ class Program
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+
+
+
+
 }
+
+
+
 static class GdalInit
 {
     static bool done;

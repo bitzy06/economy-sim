@@ -12,6 +12,13 @@
 		<StyleInclude Source="/GlobalStyles.axaml"/>
 	</Window.Styles>
 
-    <Image x:Name="MapImage" Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+	<Grid RowDefinitions="*" ColumnDefinitions="*">
+		<Image x:Name="MapImage"
+       Stretch="UniformToFill"
+       HorizontalAlignment="Stretch"
+       VerticalAlignment="Stretch" />
+	</Grid>
 
+	
+	
 </Window>
