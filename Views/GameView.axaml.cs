@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace Economy_sim
 {
-    public partial class MainWindow : Window
+    public partial class GameView : Window
     {
-        public MainWindow()
+        public GameView()
         {
             InitializeComponent();
         }

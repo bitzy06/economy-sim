@@ -9,7 +9,26 @@
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
   </PropertyGroup>
 
+
+
+	<ItemGroup>
+		<AvaloniaResource Include="Assets\**" />
+
+	</ItemGroup>
+
+
+
+	<ItemGroup>
+	  <AvaloniaXaml Remove="GlobalStyles.axaml" />
+	</ItemGroup>
+
+
+
+	<ItemGroup>
+	  <AvaloniaResource Include="GlobalStyles.axaml" />
+	</ItemGroup>
   <ItemGroup>
+    
     <PackageReference Include="Avalonia" Version="11.3.2" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.2" />
