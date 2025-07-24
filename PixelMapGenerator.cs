@@ -407,7 +407,8 @@ DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rg
             using (var reader = new NetTopologySuite.IO.ShapeFile.Extended.ShapeDataReader(
                 ShpPath, new NetTopologySuite.Index.Strtree.STRtree<NetTopologySuite.IO.Handlers.ShapeLocationInFileInfo>()))
             {
-                foreach (var feature in reader.ReadByMBRFilter(null))
+                var envelope = reader.ShapefileBounds;
+                foreach (var feature in reader.ReadByMBRFilter(envelope, false))
                 {
                     var geometry = feature.Geometry;
 
