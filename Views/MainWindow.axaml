@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="Economy_sim.MainWindow"
+        Title="Economy_sim"
+        WindowState="FullScreen"
+        Background="#2D2D30">
+
+	<Window.Styles>
+		<StyleInclude Source="/GlobalStyles.axaml"/>
+	</Window.Styles>
+
+	<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+		<TextBlock Text="CounterPoint: coldwar economy" FontSize="48" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,50"/>
+		<Button x:Name="NewGameButton" Content="New Game" HorizontalAlignment="Stretch" />
+		<Button x:Name="LoadGameButton" Content="Load Game" HorizontalAlignment="Stretch" />
+		<Button x:Name="OptionsButton" Content="Options" HorizontalAlignment="Stretch" />
+		<Button x:Name="ExitButton" Content="Exit" HorizontalAlignment="Stretch" />
+	</StackPanel>
+
+</Window>

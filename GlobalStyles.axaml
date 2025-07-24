@@ -1,0 +1,30 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+	<Style Selector="Button">
+		<Setter Property="Background" Value="#333333"/>
+		<Setter Property="Foreground" Value="#DDDDDD"/>
+		<Setter Property="BorderBrush" Value="#555555"/>
+		<Setter Property="BorderThickness" Value="1"/>
+		<Setter Property="CornerRadius" Value="0"/>
+		<Setter Property="FontSize" Value="16"/>
+		<Setter Property="Padding" Value="15,10"/>
+		<Setter Property="Width" Value="200"/>
+	</Style>
+	<Style Selector="TextBlock">
+		<Setter Property="Foreground" Value="#FFFF00"/>
+	</Style>
+	<Style Selector="Button:pointerover">
+		<Setter Property="Background" Value="#454545"/>
+		<Setter Property="BorderBrush" Value="#777777"/>
+	</Style>
+	<Style Selector="Button:pressed">
+		<Setter Property="Background" Value="#222222"/>
+	</Style>
+	<Style Selector="Button#ExitButton">
+		<Setter Property="Background" Value="#A93226"/>
+		<Setter Property="Foreground" Value="White"/>
+	</Style>
+	<Style Selector="Button#ExitButton:pointerover">
+		<Setter Property="Background" Value="#C0392B"/>
+	</Style>
+</Styles>
