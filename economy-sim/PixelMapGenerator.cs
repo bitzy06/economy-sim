@@ -10,9 +10,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using System; // Add this namespace for Random
-using System.Threading; // Ensure this namespace is included for ThreadLocal
-using NetTopologySuite.Index;
+
+
 
 namespace StrategyGame
 {
@@ -356,14 +355,14 @@ namespace StrategyGame
             return result;
         }
 
-
+ 
 
         /// <summary>
         /// Draw borders directly on an ImageSharp image when the map exceeds
         /// System.Drawing limits.
         /// </summary>
         public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>
-DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> baseImage, int[,] landMask)
+     DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> baseImage, int[,] landMask)
         {
             if (!System.IO.File.Exists(ShpPath))
                 throw new System.IO.FileNotFoundException("Missing shapefile", ShpPath);
@@ -375,25 +374,24 @@ DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rg
 
             SixLabors.ImageSharp.PixelFormats.Rgba32 borderColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(0, 0, 0, 255); // black
 
-            using (var reader = new NetTopologySuite.IO.ShapeFile.Extended.ShapeDataReader(
-                ShpPath, new NetTopologySuite.Index.Strtree.STRtree<NetTopologySuite.IO.Handlers.ShapeLocationInFileInfo>()))
-            {
-                foreach (var feature in reader.ReadByMBRFilter(null))
-                {
-                    var geometry = feature.Geometry;
+            var reader = new NetTopologySuite.IO.ShapefileDataReader(
+                ShpPath, NetTopologySuite.Geometries.GeometryFactory.Default);
 
-                    if (geometry is NetTopologySuite.Geometries.MultiPolygon multi)
+            while (reader.Read())
+            {
+                var geometry = reader.Geometry;
+
+                if (geometry is NetTopologySuite.Geometries.MultiPolygon multi)
+                {
+                    for (int i = 0; i < multi.NumGeometries; i++)
                     {
-                        for (int i = 0; i < multi.NumGeometries; i++)
-                        {
-                            var poly = (NetTopologySuite.Geometries.Polygon)multi.GetGeometryN(i);
-                            DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
-                        }
-                    }
-                    else if (geometry is NetTopologySuite.Geometries.Polygon poly)
-                    {
+                        var poly = (NetTopologySuite.Geometries.Polygon)multi.GetGeometryN(i);
                         DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
                     }
+                }
+                else if (geometry is NetTopologySuite.Geometries.Polygon poly)
+                {
+                    DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
                 }
             }
 

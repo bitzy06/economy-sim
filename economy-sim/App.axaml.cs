@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
-namespace Economy_sim
+namespace StrategyGame
 {
     public partial class App : Application
     {
