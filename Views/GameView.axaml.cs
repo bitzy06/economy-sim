@@ -23,10 +23,24 @@ namespace Economy_sim
 
             _mapManager = new MultiResolutionMapManager(baseWidth: 256, baseHeight: 256);
 
-            // Kick off the first render on open, attach, or resize:
-            Opened += async (_, __) => await RenderMapAsync();
-            MapImage.AttachedToVisualTree += async (_, __) => await RenderMapAsync();
-            MapImage.SizeChanged += async (_, __) => await RenderMapAsync();
+            // Kick off the first render once the control has a size.
+            bool firstRender = false;
+            async void TryInitialRender(object? s, EventArgs e)
+            {
+                if (firstRender)
+                    return;
+
+                if (MapImage.Bounds.Width > 0 && MapImage.Bounds.Height > 0)
+                {
+                    firstRender = true;
+                    MapImage.LayoutUpdated -= TryInitialRender;
+                    await RenderMapAsync();
+                }
+            }
+
+            Opened += TryInitialRender;
+            MapImage.LayoutUpdated += TryInitialRender;
+            MapImage.SizeChanged += TryInitialRender;
         }
 
         private async Task RenderMapAsync()
@@ -55,7 +69,7 @@ namespace Economy_sim
             }
             catch (Exception ex)
             {
-                // If generation blows up, at least we’ll see why:
+                // If generation blows up, at least we'll see why:
                 Console.WriteLine($"[RenderMap] PreloadTiles failed: {ex}");
             }
 
