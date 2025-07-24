@@ -12,6 +12,6 @@
 		<StyleInclude Source="/GlobalStyles.axaml"/>
 	</Window.Styles>
 
-	<Image x:Name="MapImage" Stretch="Uniform" />
+    <Image x:Name="MapImage" Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
 
 </Window>
