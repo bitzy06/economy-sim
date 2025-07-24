@@ -65,11 +65,13 @@ namespace Economy_sim
             int worldW = 256 * cellSize;
             int worldH = 256 * cellSize;
 
+            // start centered even when the map is smaller than the window
             _viewOffset = new SKPointI(
-                Math.Max(0, (worldW - cw) / 2),
-                Math.Max(0, (worldH - ch) / 2)
+                (worldW - cw) / 2,
+                (worldH - ch) / 2
             );
 
+            UpdateOffset(new SKPointI(0, 0));
             RenderMap();
         }
 
@@ -136,9 +138,14 @@ namespace Economy_sim
             int cw = (int)ClientSize.Width;
             int ch = (int)ClientSize.Height;
 
+            int minX = worldW <= cw ? -(cw - worldW) / 2 : 0;
+            int maxX = worldW <= cw ? minX : worldW - cw;
+            int minY = worldH <= ch ? -(ch - worldH) / 2 : 0;
+            int maxY = worldH <= ch ? minY : worldH - ch;
+
             _viewOffset = new SKPointI(
-                Math.Clamp(_viewOffset.X + delta.X, 0, Math.Max(0, worldW - cw)),
-                Math.Clamp(_viewOffset.Y + delta.Y, 0, Math.Max(0, worldH - ch))
+                Math.Clamp(_viewOffset.X + delta.X, minX, maxX),
+                Math.Clamp(_viewOffset.Y + delta.Y, minY, maxY)
             );
         }
 
