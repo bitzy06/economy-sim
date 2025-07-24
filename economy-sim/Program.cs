@@ -1,7 +1,8 @@
 using System;
 using Avalonia;
+using Avalonia.ReactiveUI;
 
-namespace Economy_sim
+namespace StrategyGame
 {
     internal class Program
     {
@@ -16,7 +17,7 @@ namespace Economy_sim
         public static AppBuilder BuildAvaloniaApp()
             => AppBuilder.Configure<App>()
                 .UsePlatformDetect()
-                .LogToTrace();
-               
+                .LogToTrace()
+                .UseReactiveUI();
     }
 }

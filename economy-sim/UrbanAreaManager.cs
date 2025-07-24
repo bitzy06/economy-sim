@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using System.IO;
-using System.Linq;
+
 namespace StrategyGame
 {
     public static class UrbanAreaManager
