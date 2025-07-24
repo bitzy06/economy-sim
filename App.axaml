@@ -3,6 +3,6 @@
             xmlns:fluent="clr-namespace:Avalonia.Themes.Fluent;assembly=Avalonia.Themes.Fluent"
             x:Class="StrategyGame.App">
     <Application.Styles>
-        <fluent:FluentTheme Mode="Light"/>
+        <fluent:FluentTheme/>
     </Application.Styles>
 </Application>
