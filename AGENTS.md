@@ -1,7 +1,7 @@
 # Agent Development Notes
 
-This repository contains a Windows Forms project written for .NET 8.0 as well as a few Python utilities.
-It is assumed contributors are developing on Windows with the .NET 8.0 SDK installed.
+This repository contains an Avalonia desktop project targeting .NET 8.0 along with a few Python utilities.
+It is assumed contributors have the .NET 8.0 SDK installed.
 
 ## Building the game
 
@@ -9,11 +9,12 @@ Run the following commands from the repository root:
 
 ```bash
 # restore NuGet packages and compile
- dotnet restore
- dotnet build "economy sim.sln" -v minimal
-```
+dotnet restore
+dotnet build -v minimal
 
-Use `dotnet run --project "economy sim.csproj"` to launch the game after building.
+# run the game
+dotnet run --project "economy sim.csproj"
+```
 
 ## Python scripts
 
@@ -29,6 +30,6 @@ avoid committing any data or log output under `data/` or `logs/`.
 
 ## Validation before committing
 
-1. If C# files were changed, run `dotnet build "economy sim.sln"` to ensure the project compiles.
+1. If C# files were changed, run `dotnet build` to ensure the project compiles.
 2. If Python files were changed, run `python -m py_compile <file>` for each modified script.
 3. Do not commit `world_setup.json`, generated files under `data/`, or contents of the `logs/` directory.

@@ -1,16 +1,23 @@
 using System;
-using System.Windows.Forms;
+using Avalonia;
+using Avalonia.ReactiveUI;
 
 namespace StrategyGame
 {
-    static class Program
+    internal class Program
     {
+        // Initialization code. Don't use any Avalonia, third-party APIs or any
+        // SynchronizationContext-reliant code before AppMain is called: things aren't initialized yet and stuff might break.
         [STAThread]
-        static void Main()
+        public static void Main(string[] args)
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new economy_sim.MainGame());
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
+
+        public static AppBuilder BuildAvaloniaApp()
+            => AppBuilder.Configure<App>()
+                .UsePlatformDetect()
+                .LogToTrace()
+                .UseReactiveUI();
     }
-} 
+}
