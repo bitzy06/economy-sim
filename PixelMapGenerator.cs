@@ -1,18 +1,19 @@
-﻿using MaxRev.Gdal.Core;
+﻿using Economy_sim;
+using MaxRev.Gdal.Core;
+using NetTopologySuite.Index;
 using OSGeo.GDAL;
 using OSGeo.OGR;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using System; // Add this namespace for Random
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
-using System.Threading.Tasks;
-using System; // Add this namespace for Random
 using System.Threading; // Ensure this namespace is included for ThreadLocal
-using NetTopologySuite.Index;
+using System.Threading.Tasks;
 
 namespace StrategyGame
 {
@@ -309,52 +310,80 @@ namespace StrategyGame
             return false;
         }
 
-        private static int[,] CreateCountryMaskTile(int fullWidth, int fullHeight,
-            int offsetX, int offsetY, int width, int height)
+        private static int[,] CreateCountryMaskTile(
+     int fullWidth, int fullHeight,
+     int offsetX, int offsetY,
+     int width, int height)
         {
+            // Make sure GDAL/OGR are configured once somewhere in your app
+            GdalInit.Ensure();   // remove if you call it earlier
+
+            // Clamp width/height so we never request negative or out-of-range tiles
+            int w = Math.Max(0, Math.Min(width, fullWidth - offsetX));
+            int h = Math.Max(0, Math.Min(height, fullHeight - offsetY));
+
+            if (w <= 0 || h <= 0)
+                return new int[0, 0]; // nothing to draw for this tile
+
             using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+
+            // Source raster size & geotransform
             double[] gt = new double[6];
             dem.GetGeoTransform(gt);
             int srcCols = dem.RasterXSize;
             int srcRows = dem.RasterYSize;
 
+            // How many DEM pixels per "game pixel"
             double scaleX = (double)srcCols / fullWidth;
             double scaleY = (double)srcRows / fullHeight;
 
+            // Geotransform for the sub-tile
             double[] newGt = new double[6];
-            newGt[0] = gt[0] + offsetX * scaleX * gt[1];
-            newGt[1] = gt[1] * scaleX;
+            newGt[0] = gt[0] + offsetX * scaleX * gt[1]; // top-left X
+            newGt[1] = gt[1] * scaleX;                   // pixel width
             newGt[2] = 0;
-            newGt[3] = gt[3] + offsetY * scaleY * gt[5];
+            newGt[3] = gt[3] + offsetY * scaleY * gt[5]; // top-left Y
             newGt[4] = 0;
-            newGt[5] = gt[5] * scaleY;
+            newGt[5] = gt[5] * scaleY;                   // pixel height (negative)
 
-            OSGeo.GDAL.Driver memDrv = Gdal.GetDriverByName("MEM");
-            using var maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
+            // Create an in-memory mask dataset
+            var memDrv = Gdal.GetDriverByName("MEM");
+            using var maskDs = memDrv.Create("", w, h, 1, DataType.GDT_Int32, null);
             maskDs.SetGeoTransform(newGt);
             maskDs.SetProjection(dem.GetProjection());
 
+            // Burn country IDs from the shapefile into the raster
             using DataSource ds = Ogr.Open(ShpPath, 0);
             Layer layer = ds.GetLayerByIndex(0);
 
-            Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
-                0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
+            // ATTRIBUTE=ISO_N3 (or whatever field holds your ID)
+            Gdal.RasterizeLayer(
+                maskDs,
+                1,
+                new[] { 1 },
+                layer,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                0,
+                null,
+                new[] { "ATTRIBUTE=ISO_N3" },
+                null,
+                "");
 
+            // Read band back to managed array
             Band band = maskDs.GetRasterBand(1);
-            int[] flat = new int[width * height];
-            band.ReadRaster(0, 0, width, height, flat, width, height, 0, 0);
+            int[] flat = new int[w * h];
+            band.ReadRaster(0, 0, w, h, flat, w, h, 0, 0);
 
-            int[,] result = new int[height, width];
-            for (int r = 0; r < height; r++)
+            int[,] result = new int[h, w];
+            for (int r = 0; r < h; r++)
             {
-                for (int c = 0; c < width; c++)
-                {
-                    result[r, c] = flat[r * width + c];
-                }
+                Buffer.BlockCopy(flat, r * w * sizeof(int), result, r * w * sizeof(int), w * sizeof(int));
             }
 
             return result;
         }
+
 
 
 
