@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using SkiaSharp;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -840,7 +841,8 @@ namespace StrategyGame
                 Directory.CreateDirectory(dir);
                 using var image = SKImage.FromBitmap(bmp);
                 using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-                data.SaveTo(path);
+                using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
+                data.SaveTo(fs);
             }
             catch (Exception ex)
             {
