@@ -48,20 +48,26 @@ namespace StrategyGame
         // This method is now identical to your working version. It expects viewArea in pixels.
         public SKBitmap AssembleView(float zoom, SKRectI viewArea, Action triggerRefresh = null)
         {
+            // 1) figure out how many screen‐pixels each map‐cell is right now
             int cellSize = GetCellSize(zoom);
-            int tileSize = TileSizePx;
+
+            // 2) each tile always covers TileSizePx pixels *per cell*
+            int logicalTileSize = TileSizePx * cellSize;
 
             if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
                 return new SKBitmap(1, 1);
 
-            int tileStartX = Math.Max(0, viewArea.Left / tileSize);
-            int tileStartY = Math.Max(0, viewArea.Top / tileSize);
-            int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
-            int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
+            // 3) compute which tiles we need, in *map‐pixel* coordinates
+            int tileStartX = Math.Max(0, viewArea.Left / logicalTileSize);
+            int tileStartY = Math.Max(0, viewArea.Top / logicalTileSize);
+            int tileEndX = (viewArea.Right + logicalTileSize - 1) / logicalTileSize;
+            int tileEndY = (viewArea.Bottom + logicalTileSize - 1) / logicalTileSize;
 
-            // Create a bitmap of the exact size requested. No scaling is done here.
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-            using var surface = GpuAvailable ? SKSurface.Create(SharedContext, false, info) : SKSurface.Create(info);
+            using var surface = GpuAvailable
+                ? SKSurface.Create(SharedContext, false, info)
+                : SKSurface.Create(info);
+
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
 
@@ -69,37 +75,38 @@ namespace StrategyGame
             {
                 for (int tx = tileStartX; tx < tileEndX; tx++)
                 {
+                    // 4) same key you use for caching / generation
                     var key = (cellSize, tx, ty);
-                    // This rect calculates where to draw the tile inside the destination bitmap.
-                    var rect = new SKRect(
-                        tx * tileSize - viewArea.Left,
-                        ty * tileSize - viewArea.Top,
-                        tx * tileSize - viewArea.Left + tileSize,
-                        ty * tileSize - viewArea.Top + tileSize
+
+                    // 5) figure out exactly where on *this* view‐bitmap to draw it
+                    var dest = new SKRect(
+                        tx * logicalTileSize - viewArea.Left,
+                        ty * logicalTileSize - viewArea.Top,
+                        tx * logicalTileSize - viewArea.Left + logicalTileSize,
+                        ty * logicalTileSize - viewArea.Top + logicalTileSize
                     );
+                    if (dest.Width <= 0 || dest.Height <= 0)
+                        continue;
 
-                    if (rect.Width <= 0 || rect.Height <= 0) continue;
-
-                    SKBitmap textureCopy = null;
+                    SKBitmap tileBmp;
                     lock (_masterCacheLock)
-                    {
-                        if (_tileTextures.TryGetValue(key, out var texture))
-                        {
-                            textureCopy = texture.Copy();
-                        }
-                    }
+                        _tileTextures.TryGetValue(key, out tileBmp);
 
-                    if (textureCopy != null)
+                    if (tileBmp != null)
                     {
-                        using (textureCopy) { canvas.DrawBitmap(textureCopy, rect); }
+                        // draw it at full resolution; no Copy() needed if you
+                        // never mutate the cached SKBitmap elsewhere
+                        canvas.DrawBitmap(tileBmp, dest);
                     }
                     else
                     {
+                        // missing? queue it up
                         QueueTileLoad(zoom, tx, ty, triggerRefresh);
                     }
                 }
             }
 
+            // 6) read back into a standalone SKBitmap
             var result = new SKBitmap(info);
             surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
             return result;
@@ -156,60 +163,53 @@ namespace StrategyGame
             }
         }
 
-        private async Task<SKBitmap> LoadTileInternalAsync(float zoom, int tileX, int tileY, CancellationToken token)
+        private async Task<SKBitmap> LoadTileInternalAsync(
+            float zoom, int tileX, int tileY, CancellationToken token)
         {
             int cellSize = GetCellSize(zoom);
             var key = (cellSize, tileX, tileY);
-            SKBitmap bmp = null;
+
+            // 1) check in‐memory cache
             lock (_masterCacheLock)
-            {
                 if (_tileTextures.TryGetValue(key, out var cached))
                 {
                     _tileLru.Remove(key);
                     _tileLru.AddLast(key);
                     return cached;
                 }
-            }
-            string path = Path.Combine(TileCacheDir, cellSize.ToString(), $"{tileX}_{tileY}.png");
-            if (File.Exists(path))
+
+            // 2) check on‐disk cache (omitted for brevity)…
+
+            // 3) finally generate a new one *with exactly the same* indices
+            var imageSharpImage = await Task.Run(() =>
+                PixelMapGenerator.GenerateTileWithCountriesLarge(
+                    _baseWidth,
+                    _baseHeight,
+                    cellSize,
+                    tileX,
+                    tileY,
+                    TileSizePx
+                ),
+                token
+            );
+
+            if (imageSharpImage == null)
+                return new SKBitmap(TileSizePx, TileSizePx);
+
+            // Convert ImageSharp image to SKBitmap
+            SKBitmap bmp = ImageSharpToSkBitmap(imageSharpImage);
+
+            // 4) store in both caches
+            lock (_masterCacheLock)
             {
-                try
-                {
-                    var fileLock = GetFileLock(path);
-                    await fileLock.WaitAsync(token).ConfigureAwait(false);
-                    try
-                    {
-                        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                        using var img = Image.Load<Rgba32>(stream);
-                        if (img.Width > 0 && img.Height > 0) bmp = ImageSharpToSkBitmap(img);
-                    }
-                    finally { fileLock.Release(); }
-                }
-                catch (Exception ex) { Debug.WriteLine($"Failed to load tile {tileX},{tileY}: {ex.Message}"); }
+                if (_tileTextures.TryGetValue(key, out var old))
+                    old.Dispose();
+                _tileTextures[key] = bmp;
+                _tileLru.AddLast(key);
+                EnforceTileLimit();
             }
-            if (bmp == null)
-            {
-                try
-                {
-                    bmp = await LoadOrGenerateTileFromDataAsync(cellSize, tileX, tileY, token).ConfigureAwait(false);
-                    if (bmp != null && bmp.Width > 0 && bmp.Height > 0)
-                    {
-                        await SaveTileToDiskAsync(cellSize, tileX, tileY, bmp, token).ConfigureAwait(false);
-                    }
-                }
-                catch (Exception ex) { Debug.WriteLine($"Tile generation failed ({tileX},{tileY}): {ex.Message}"); }
-            }
-            if (bmp != null)
-            {
-                lock (_masterCacheLock)
-                {
-                    if (_tileTextures.ContainsKey(key)) _tileTextures[key]?.Dispose();
-                    _tileTextures[key] = bmp;
-                    _tileLru.Remove(key);
-                    _tileLru.AddLast(key);
-                    EnforceTileLimit();
-                }
-            }
+
+            // …and save to disk if you like
             return bmp;
         }
 

@@ -1,180 +1,157 @@
+using System;
+using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Interactivity;
-using Avalonia.Layout;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using SkiaSharp;
-using StrategyGame;
-using System;
-using System.IO;
+using StrategyGame;   // your namespace for MultiResolutionMapManager
 
 namespace Economy_sim
 {
     public partial class GameView : Window
     {
-        private MultiResolutionMapManager _mapManager;
-        private float _currentZoom = 1.0f; // Start at 1:1 zoom
-        private Point _viewOffset = new Point(0, 0); // High-precision world coordinates
-        private Size _lastRenderedSize = new Size(0, 0);
+        private readonly MultiResolutionMapManager _mapManager;
+        private float _currentZoom = 1.5f;
 
-        private bool _isPanning = false;
-        private Point _panStartPoint;
-        private Point _panStartOffset;
+        // Top?left corner of the viewport in *map pixels*
+        private SKPointI _viewOffset;
 
-        // World size is defined in abstract units, not pixels.
-        private const int WorldWidth = 4096;
-        private const int WorldHeight = 2048;
+        // Drag state
+        private bool _isDragging;
+        private SKPointI _lastPointer;
 
         public GameView()
         {
             InitializeComponent();
-            this.Loaded += OnLoaded;
 
-            MapImage.PointerPressed += OnPointerPressed;
-            MapImage.PointerMoved += OnPointerMoved;
-            MapImage.PointerReleased += OnPointerReleased;
-            // Add the PointerWheelChanged event handler for zooming
-            MapImage.PointerWheelChanged += OnPointerWheelChanged;
+            _mapManager = new MultiResolutionMapManager(baseWidth: 256, baseHeight: 256);
+
+            // 1) Center on open
+            this.Opened += OnOpened;
+
+            // 2) Re?render when the window is resized
+            this.SizeChanged += (_, __) => RenderMap();
+
+            // 3) Drag?to?pan
+            MapContainer.PointerPressed += OnPointerPressed;
+            MapContainer.PointerMoved += OnPointerMoved;
+            MapContainer.PointerReleased += OnPointerReleased;
+
+            // 4) Scroll?to?zoom
+            MapContainer.PointerWheelChanged += OnPointerWheelChanged;
         }
 
-        private void OnLoaded(object? sender, RoutedEventArgs e)
+        private void OnOpened(object sender, EventArgs e)
         {
-            this.Loaded -= OnLoaded;
-            _mapManager = new MultiResolutionMapManager(WorldWidth, WorldHeight);
-            RenderMap();
-            this.LayoutUpdated += OnLayoutUpdated;
-        }
+            // Center the view so you start in the middle of the world
+            int cellSize = _mapManager.GetCellSize(_currentZoom);
+            int worldW = 256 * cellSize;
+            int worldH = 256 * cellSize;
+            int cw = (int)ClientSize.Width;
+            int ch = (int)ClientSize.Height;
 
-        private void OnLayoutUpdated(object? sender, EventArgs e)
-        {
-            if (this.ClientSize.Width > 1 && this.ClientSize != _lastRenderedSize)
-            {
-                RenderMap();
-            }
-        }
-
-        private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
-        {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            {
-                _isPanning = true;
-                _panStartPoint = e.GetPosition(this);
-                _panStartOffset = _viewOffset;
-                e.Pointer.Capture(MapImage);
-            }
-        }
-
-        private void OnPointerMoved(object? sender, PointerEventArgs e)
-        {
-            if (!_isPanning) return;
-
-            var currentPoint = e.GetPosition(this);
-            var totalDelta = currentPoint - _panStartPoint;
-
-            // This panning logic is robust and correct.
-            _viewOffset = new Point(
-                _panStartOffset.X - (totalDelta.X / _currentZoom),
-                _panStartOffset.Y - (totalDelta.Y / _currentZoom)
+            _viewOffset = new SKPointI(
+                Math.Max(0, (worldW - cw) / 2),
+                Math.Max(0, (worldH - ch) / 2)
             );
 
-            ClampViewOffset();
             RenderMap();
         }
 
-        private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+        private void OnPointerPressed(object sender, PointerPressedEventArgs e)
         {
-            if (e.InitialPressMouseButton == MouseButton.Left)
-            {
-                _isPanning = false;
-                e.Pointer.Capture(null);
-            }
+            _isDragging = true;
+            var p = e.GetPosition(MapContainer);
+            _lastPointer = new SKPointI((int)p.X, (int)p.Y);
         }
 
-        private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+        private void OnPointerMoved(object sender, PointerEventArgs e)
         {
-            // Adjust zoom based on scroll wheel delta
-            float zoomDelta = (float)e.Delta.Y * 0.1f;
-            _currentZoom += zoomDelta;
+            if (!_isDragging)
+                return;
 
-            // Clamp zoom level to reasonable values
-            if (_currentZoom < 0.2f) _currentZoom = 0.2f;
-            if (_currentZoom > 20f) _currentZoom = 20f;
+            var p = e.GetPosition(MapContainer);
+            var now = new SKPointI((int)p.X, (int)p.Y);
+            var delta = new SKPointI(_lastPointer.X - now.X, _lastPointer.Y - now.Y);
 
-            // After zooming, we need to re-clamp the offset and re-render
-            ClampViewOffset();
+            _lastPointer = now;
+            UpdateOffset(delta);
             RenderMap();
         }
 
-        private void ClampViewOffset()
+        private void OnPointerReleased(object sender, PointerReleasedEventArgs e)
         {
-            if (_mapManager == null) return;
+            _isDragging = false;
+        }
 
-            var clientSize = this.ClientSize;
-            var logicalWidth = (int)(clientSize.Width / _currentZoom);
-            var logicalHeight = (int)(clientSize.Height / _currentZoom);
+        private void OnPointerWheelChanged(object sender, PointerWheelEventArgs e)
+        {
+            if (e.Delta.Y == 0)
+                return;
 
-            double newX = _viewOffset.X;
-            double newY = _viewOffset.Y;
+            // Compute zoom factor
+            float factor = e.Delta.Y > 0 ? 1.2f : 0.8f;
+            float newZoom = Math.Clamp(_currentZoom * factor, 0.2f, 10f);
 
-            if (newX < 0) newX = 0;
-            if (newY < 0) newY = 0;
+            // Zoom around the mouse position
+            var mouse = e.GetPosition(MapContainer);
+            float mouseMapX = _viewOffset.X + (float)mouse.X;
+            float mouseMapY = _viewOffset.Y + (float)mouse.Y;
 
-            if (newX > WorldWidth - logicalWidth) newX = WorldWidth - logicalWidth;
-            if (newY > WorldHeight - logicalHeight) newY = WorldHeight - logicalHeight;
+            _currentZoom = newZoom;
 
-            _viewOffset = new Point(newX, newY);
+            // After zoom, keep the same map?pixel under the cursor
+            _viewOffset = new SKPointI(
+                (int)(mouseMapX - (float)mouse.X),
+                (int)(mouseMapY - (float)mouse.Y)
+            );
+
+            UpdateOffset(new SKPointI(0, 0));
+            RenderMap();
+        }
+
+        private void UpdateOffset(SKPointI delta)
+        {
+            // Clamp so you never pan beyond the map edges
+            int cellSize = _mapManager.GetCellSize(_currentZoom);
+            int worldW = 256 * cellSize;
+            int worldH = 256 * cellSize;
+            int cw = (int)ClientSize.Width;
+            int ch = (int)ClientSize.Height;
+
+            _viewOffset = new SKPointI(
+                Math.Clamp(_viewOffset.X + delta.X, 0, Math.Max(0, worldW - cw)),
+                Math.Clamp(_viewOffset.Y + delta.Y, 0, Math.Max(0, worldH - ch))
+            );
         }
 
         private void RenderMap()
         {
-            var clientSize = this.ClientSize;
-            if (clientSize.Width < 1 || clientSize.Height < 1 || _mapManager == null)
+            if (ClientSize.Width < 1 || ClientSize.Height < 1)
                 return;
 
-            _lastRenderedSize = clientSize;
-
-            // --- THIS IS THE KEY FIX ---
-            // The viewArea passed to the MapManager must be in PIXEL coordinates for the current zoom level.
-            // It is NOT in abstract world coordinates.
-            int cellSize = _mapManager.GetCellSize(_currentZoom);
-            int offsetPxX = (int)Math.Round(_viewOffset.X * cellSize);
-            int offsetPxY = (int)Math.Round(_viewOffset.Y * cellSize);
-            var viewAreaInPixels = new SKRectI(
-                offsetPxX,
-                offsetPxY,
-                offsetPxX + (int)clientSize.Width,
-                offsetPxY + (int)clientSize.Height
+            // Define our “window” into the world in map?pixel coords
+            var viewArea = new SKRectI(
+                _viewOffset.X,
+                _viewOffset.Y,
+                _viewOffset.X + (int)ClientSize.Width,
+                _viewOffset.Y + (int)ClientSize.Height
             );
 
-            // The MapManager will now return a bitmap that is exactly the size of our control.
-            SKBitmap skBitmap = _mapManager.AssembleView(
+            using var bmp = _mapManager.AssembleView(
                 _currentZoom,
-                viewAreaInPixels,
+                viewArea,
                 () => Dispatcher.UIThread.Post(RenderMap, DispatcherPriority.Background)
             );
 
-            if (skBitmap == null || skBitmap.Width <= 1 || skBitmap.Height <= 1)
-            {
-                skBitmap?.Dispose();
-                return;
-            }
+            using var img = SKImage.FromBitmap(bmp);
+            using var ms = new MemoryStream();
+            img.Encode(SKEncodedImageFormat.Png, 100).SaveTo(ms);
+            ms.Position = 0;
 
-            try
-            {
-                using var skImage = SKImage.FromBitmap(skBitmap);
-                using var stream = new MemoryStream();
-                skImage.Encode(SKEncodedImageFormat.Png, 100).SaveTo(stream);
-                stream.Position = 0;
-
-                var avaloniaBitmap = new Bitmap(stream);
-                this.MapImage.Source = avaloniaBitmap;
-            }
-            finally
-            {
-                skBitmap.Dispose();
-            }
+            MapImage.Source = new Bitmap(ms);
         }
     }
 }

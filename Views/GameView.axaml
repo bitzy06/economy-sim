@@ -5,7 +5,13 @@
      WindowState="FullScreen"
         Background="#2D2D30"
         Width="2560" Height="1440">
-	<Image x:Name="MapImage"
-		   Stretch="Fill"
-		   ClipToBounds="True"/>
+	<Border x:Name="MapContainer"
+		Background="Transparent"
+		HorizontalAlignment="Stretch"
+		VerticalAlignment="Stretch">
+		<Image x:Name="MapImage"
+			   Stretch="None"
+			   HorizontalAlignment="Left"
+			   VerticalAlignment="Top"/>
+	</Border>
 </Window>
