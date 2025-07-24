@@ -146,11 +146,11 @@ namespace Economy_sim
             // Unsubscribe so this logic only runs once at startup.
             this.Loaded -= OnLoaded;
 
-            // --- Here is your idea in action ---
+            // --- Initial render based on the primary screen's full size ---
             if (Screens.Primary != null)
             {
-                // 1. Get the primary screen's available "work area" size in raw pixels.
-                var pixelSize = Screens.Primary.WorkingArea.Size;
+                // 1. Get the primary screen's full pixel bounds (includes areas covered by the taskbar).
+                var pixelSize = Screens.Primary.Bounds.Size;
                 // 2. Get the screen's DPI scaling factor (e.g., 1.0 for 100%, 1.5 for 150%).
                 var scaling = Screens.Primary.Scaling;
                 // 3. Convert the raw pixel size to device-independent "logical" units.
