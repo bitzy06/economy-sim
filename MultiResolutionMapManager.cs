@@ -610,21 +610,6 @@ namespace StrategyGame
             // Convert the generated ImageSharp image to an SKBitmap
             SKBitmap bmp = ImageSharpToSkBitmap(imageSharpImage);
 
-            // OPTIONAL: This debug overlay will now draw coordinates on your REAL map,
-            // which will help you solve the original "jumbled map" issue.
-            using (var canvas = new SKCanvas(bmp))
-            {
-                using (var paint = new SKPaint())
-                {
-                    paint.TextSize = 32.0f;
-                    paint.IsAntialias = true;
-                    paint.Color = SKColors.Yellow;
-                    paint.Style = SKPaintStyle.Fill;
-                    string text = $"G({tileX}, {tileY})";
-                    canvas.DrawText(text, 20, 80, paint);
-                }
-            }
-
             return bmp;
         }
     }
