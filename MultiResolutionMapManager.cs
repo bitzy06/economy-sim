@@ -24,6 +24,7 @@ namespace StrategyGame
     /// </summary>
     public class MultiResolutionMapManager
     {
+
         public enum ZoomLevel { Global = 1, Continental, Country, State, City }
         private readonly HashSet<(int cellSize, int tileX, int tileY)> _tilesBeingLoaded = new();
         private readonly object _tileLoadLock = new();
@@ -271,7 +272,23 @@ namespace StrategyGame
                 }
             }
         }
+        private void QueueTileLoad(float zoom, int tx, int ty, Action triggerRefresh)
+        {
+            var key = (GetCellSize(zoom), tx, ty);
+            lock (_tileLoadLock)
+                if (!_tilesBeingLoaded.Add(key)) return;   // already loading
 
+            _ = Task.Run(async () =>
+            {
+                try { await GetTileAsync(zoom, tx, ty, CancellationToken.None); }
+                catch (Exception ex) { Debug.WriteLine(ex); }
+                finally
+                {
+                    lock (_tileLoadLock) _tilesBeingLoaded.Remove(key);
+                    triggerRefresh?.Invoke();
+                }
+            });
+        }
         public SKBitmap AssembleView(float zoom, SKRectI viewArea, Action triggerRefresh = null)
         {
             int cellSize = GetCellSize(zoom);
@@ -309,10 +326,13 @@ namespace StrategyGame
                     SKBitmap textureCopy = null;
                     lock (_masterCacheLock)
                     {
-                        if (_tileTextures.TryGetValue(key, out var texture))
+                        if (!_tileTextures.TryGetValue(key, out var tex))
                         {
-                            textureCopy = texture.Copy();
+                            QueueTileLoad(zoom, tx, ty, triggerRefresh);
+                            continue;
                         }
+                        canvas.DrawBitmap(tex, rect);
+
                     }
 
                     if (textureCopy != null)
