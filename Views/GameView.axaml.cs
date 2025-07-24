@@ -43,14 +43,27 @@ namespace Economy_sim
             MapContainer.PointerWheelChanged += OnPointerWheelChanged;
         }
 
-        private void OnOpened(object sender, EventArgs e)
+        private void OnOpened(object? sender, EventArgs e)
         {
-            // Center the view so you start in the middle of the world
+            // Choose an initial zoom so the world roughly fits the window
+            int cw = (int)ClientSize.Width;
+            int ch = (int)ClientSize.Height;
+
+            float zoom = _currentZoom;
+            for (float z = 1f; z <= 10f; z += 0.25f)
+            {
+                int cs = _mapManager.GetCellSize(z);
+                if (256 * cs >= cw && 256 * cs >= ch)
+                {
+                    zoom = z;
+                    break;
+                }
+            }
+
+            _currentZoom = zoom;
             int cellSize = _mapManager.GetCellSize(_currentZoom);
             int worldW = 256 * cellSize;
             int worldH = 256 * cellSize;
-            int cw = (int)ClientSize.Width;
-            int ch = (int)ClientSize.Height;
 
             _viewOffset = new SKPointI(
                 Math.Max(0, (worldW - cw) / 2),
@@ -86,7 +99,7 @@ namespace Economy_sim
             _isDragging = false;
         }
 
-        private void OnPointerWheelChanged(object sender, PointerWheelEventArgs e)
+        private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
             if (e.Delta.Y == 0)
                 return;
@@ -95,17 +108,19 @@ namespace Economy_sim
             float factor = e.Delta.Y > 0 ? 1.2f : 0.8f;
             float newZoom = Math.Clamp(_currentZoom * factor, 0.2f, 10f);
 
-            // Zoom around the mouse position
             var mouse = e.GetPosition(MapContainer);
-            float mouseMapX = _viewOffset.X + (float)mouse.X;
-            float mouseMapY = _viewOffset.Y + (float)mouse.Y;
+
+            float oldCell = _mapManager.GetCellSize(_currentZoom);
+            float newCell = _mapManager.GetCellSize(newZoom);
+
+            float worldX = (_viewOffset.X + (float)mouse.X) / oldCell;
+            float worldY = (_viewOffset.Y + (float)mouse.Y) / oldCell;
 
             _currentZoom = newZoom;
 
-            // After zoom, keep the same map?pixel under the cursor
             _viewOffset = new SKPointI(
-                (int)(mouseMapX - (float)mouse.X),
-                (int)(mouseMapY - (float)mouse.Y)
+                (int)(worldX * newCell - mouse.X),
+                (int)(worldY * newCell - mouse.Y)
             );
 
             UpdateOffset(new SKPointI(0, 0));
@@ -132,7 +147,7 @@ namespace Economy_sim
             if (ClientSize.Width < 1 || ClientSize.Height < 1)
                 return;
 
-            // Define our “window” into the world in map?pixel coords
+            // Define our â€œwindowâ€ into the world in map?pixel coords
             var viewArea = new SKRectI(
                 _viewOffset.X,
                 _viewOffset.Y,
