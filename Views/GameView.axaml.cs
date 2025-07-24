@@ -139,11 +139,13 @@ namespace Economy_sim
             // The viewArea passed to the MapManager must be in PIXEL coordinates for the current zoom level.
             // It is NOT in abstract world coordinates.
             int cellSize = _mapManager.GetCellSize(_currentZoom);
+            int offsetPxX = (int)Math.Round(_viewOffset.X * cellSize);
+            int offsetPxY = (int)Math.Round(_viewOffset.Y * cellSize);
             var viewAreaInPixels = new SKRectI(
-                (int)(_viewOffset.X * cellSize),
-                (int)(_viewOffset.Y * cellSize),
-                (int)(_viewOffset.X * cellSize + clientSize.Width),
-                (int)(_viewOffset.Y * cellSize + clientSize.Height)
+                offsetPxX,
+                offsetPxY,
+                offsetPxX + (int)clientSize.Width,
+                offsetPxY + (int)clientSize.Height
             );
 
             // The MapManager will now return a bitmap that is exactly the size of our control.
