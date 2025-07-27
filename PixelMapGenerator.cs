@@ -14,14 +14,12 @@ using System.IO;
 using System.Threading;
 using System.Threading; // Ensure this namespace is included for ThreadLocal
 using System.Threading.Tasks;
+using Nts = NetTopologySuite.Geometries;
 
 namespace StrategyGame
 {
-    /// <summary>
-    /// Provides helper methods for generating a pixel-art map based on the
-    /// ETOPO1 elevation data. The GeoTIFF is downloaded using the existing
-    /// Python script when not already present.
-    /// </summary>
+    // Removed duplicate GeoBounds struct definition - using the one from CoordinateTransform.cs
+
     public static class PixelMapGenerator
     {
         private static readonly object GdalConfigLock = new object();
@@ -251,13 +249,9 @@ namespace StrategyGame
                 var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
                 DrawBordersLarge(img, mask);
 
-                GeoBounds bounds = new GeoBounds
-                {
-                    MinLon = -180 + (double)offsetX / fullW * 360.0,
-                    MaxLon = -180 + (double)(offsetX + tileWidth) / fullW * 360.0,
-                    MaxLat = 90 - (double)offsetY / fullH * 180.0,
-                    MinLat = 90 - (double)(offsetY + tileHeight) / fullH * 180.0
-                };
+                // Use standardized coordinate transformation for consistent positioning
+                var bounds = CoordinateTransform.GetTileGeographicBounds(tileX, tileY, tileSizePx, fullW, fullH);
+                
                 var factory = NetTopologySuite.Geometries.GeometryFactory.Default;
                 var tilePoly = factory.CreatePolygon(new[]
                 {
@@ -638,7 +632,7 @@ DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rg
         private static void RenderPolygon(
             SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> img,
             NetTopologySuite.Geometries.Polygon poly,
-            GeoBounds bounds,
+            StrategyGame.GeoBounds bounds,
             int tileWidth,
             int tileHeight,
             SixLabors.ImageSharp.PixelFormats.Rgba32 color)
