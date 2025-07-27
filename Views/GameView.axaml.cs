@@ -313,19 +313,19 @@ namespace Economy_sim
             // Initialize sample game state for demonstration
             _playerRoleManager = new PlayerRoleManager();
             _currentCountry = new Country("United States");
-            
+
             // Add some sample states and cities for demonstration
             var california = new State("California");
             california.Cities.Add(new City("Los Angeles"));
             california.Cities.Add(new City("San Francisco"));
-            
-            var texas = new State("Texas");  
+
+            var texas = new State("Texas");
             texas.Cities.Add(new City("Houston"));
             texas.Cities.Add(new City("Dallas"));
-            
+
             _currentCountry.States.Add(california);
             _currentCountry.States.Add(texas);
-            
+
             // Set up player as Prime Minister by default
             _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
 
@@ -349,22 +349,22 @@ namespace Economy_sim
             // Get references to HUD elements and add event handlers
             if (this.FindControl<Button>("DiplomacyButton") is Button diplomacyBtn)
                 diplomacyBtn.Click += OnDiplomacyClicked;
-            
+
             if (this.FindControl<Button>("TradeButton") is Button tradeBtn)
                 tradeBtn.Click += OnTradeClicked;
-            
+
             if (this.FindControl<Button>("ConstructionButton") is Button constructionBtn)
                 constructionBtn.Click += OnConstructionClicked;
-            
+
             if (this.FindControl<Button>("RoleActionButton") is Button roleActionBtn)
                 roleActionBtn.Click += OnRoleActionClicked;
-            
+
             if (this.FindControl<Button>("EconomyViewButton") is Button economyBtn)
                 economyBtn.Click += OnEconomyViewClicked;
-            
+
             if (this.FindControl<Button>("StatsButton") is Button statsBtn)
                 statsBtn.Click += OnStatsClicked;
-            
+
             if (this.FindControl<Button>("MenuButton") is Button menuBtn)
                 menuBtn.Click += OnMenuClicked;
         }
@@ -384,7 +384,7 @@ namespace Economy_sim
                     string entityName = _playerRoleManager.CurrentRole switch
                     {
                         PlayerRoleType.PrimeMinister => _playerRoleManager.ControlledCountry?.Name ?? "N/A",
-                        PlayerRoleType.Governor => _playerRoleManager.ControlledState?.Name ?? "N/A", 
+                        PlayerRoleType.Governor => _playerRoleManager.ControlledState?.Name ?? "N/A",
                         PlayerRoleType.CEO => _playerRoleManager.ControlledCorporation?.Name ?? "N/A",
                         _ => "None"
                     };
@@ -428,7 +428,7 @@ namespace Economy_sim
                     roleBtn.Content = _playerRoleManager.CurrentRole switch
                     {
                         PlayerRoleType.PrimeMinister => "Set National Policy",
-                        PlayerRoleType.Governor => "Set State Policy", 
+                        PlayerRoleType.Governor => "Set State Policy",
                         PlayerRoleType.CEO => "Build Factory",
                         _ => "No Action"
                     };
@@ -465,7 +465,7 @@ namespace Economy_sim
         private void OnRoleActionClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine($"Role action clicked for {_playerRoleManager.CurrentRole}");
-            
+
             switch (_playerRoleManager.CurrentRole)
             {
                 case PlayerRoleType.PrimeMinister:
@@ -502,8 +502,14 @@ namespace Economy_sim
 
         private void OnMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Menu button clicked");
-            // TODO: Open game menu
+            Debug.WriteLine("Menu button clicked - returning to main menu");
+
+            // Create and show the main menu window
+            var mainWindow = new MainWindow();
+            mainWindow.Show();
+
+            // Close the current game window
+            this.Close();
         }
 
         #endregion
