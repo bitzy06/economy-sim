@@ -165,13 +165,15 @@ namespace StrategyGame
             
             try
             {
-                // Calculate tile bounds in pixel space
+                // Calculate tile bounds in pixel space using SCALED map dimensions
+                int scaledMapWidth = _baseWidth * cellSize;
+                int scaledMapHeight = _baseHeight * cellSize;
+                
                 int pixelX = tileX * TileSizePx;
                 int pixelY = tileY * TileSizePx;
                 
-                var mapSize = GetMapSize(0); // Base resolution
-                int tileWidth = Math.Min(TileSizePx, mapSize.Width - pixelX);
-                int tileHeight = Math.Min(TileSizePx, mapSize.Height - pixelY);
+                int tileWidth = Math.Min(TileSizePx, scaledMapWidth - pixelX);
+                int tileHeight = Math.Min(TileSizePx, scaledMapHeight - pixelY);
                 
                 if (tileWidth <= 0 || tileHeight <= 0)
                 {
@@ -179,7 +181,7 @@ namespace StrategyGame
                 }
                 
                 // Get or generate political mask for this tile
-                var tileMask = GetTileMask(pixelX, pixelY, tileWidth, tileHeight);
+                var tileMask = GetTileMask(cellSize, pixelX, pixelY, tileWidth, tileHeight);
                 if (tileMask == null)
                 {
                     return CreateUnavailablePlaceholder(tileWidth, tileHeight);
@@ -205,9 +207,9 @@ namespace StrategyGame
             }
         }
         
-        private int[,]? GetTileMask(int pixelX, int pixelY, int tileWidth, int tileHeight)
+        private int[,]? GetTileMask(int cellSize, int pixelX, int pixelY, int tileWidth, int tileHeight)
         {
-            string maskKey = $"mask_{pixelX}_{pixelY}_{tileWidth}_{tileHeight}_{_politicalMapDate:yyyyMMdd}";
+            string maskKey = $"mask_{cellSize}_{pixelX}_{pixelY}_{tileWidth}_{tileHeight}_{_politicalMapDate:yyyyMMdd}";
             
             if (_maskCache.TryGetValue(maskKey, out var cached))
             {
@@ -225,14 +227,22 @@ namespace StrategyGame
                     return null;
                 }
                 
-                // Use unified coordinate transformation with base dimensions
-                // The coordinate transform should work with logical map dimensions, not scaled pixel dimensions
+                // FIXED: Use scaled map dimensions like terrain system
+                // Calculate scaled dimensions using the current zoom level's cell size
+                int scaledMapWidth = _baseWidth * cellSize;
+                int scaledMapHeight = _baseHeight * cellSize;
+                
+                // Convert pixel coordinates to tile coordinates
+                int tileX = pixelX / TileSizePx;
+                int tileY = pixelY / TileSizePx;
+                
+                // Use unified coordinate transformation with SCALED dimensions (like terrain system)
                 var bounds = CoordinateTransform.GetTileGeographicBounds(
-                    pixelX / TileSizePx, 
-                    pixelY / TileSizePx, 
+                    tileX, 
+                    tileY, 
                     TileSizePx, 
-                    _baseWidth, 
-                    _baseHeight);
+                    scaledMapWidth, 
+                    scaledMapHeight);
                 
                 // Validate bounds
                 if (!CoordinateTransform.IsValidGeoBounds(bounds))
