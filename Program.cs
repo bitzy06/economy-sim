@@ -14,7 +14,6 @@ class Program
     [STAThread]
     public static void Main(string[] args)
     {
-
         GdalInit.Ensure();
         BuildAvaloniaApp()
         .StartWithClassicDesktopLifetime(args);

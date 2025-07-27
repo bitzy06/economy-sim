@@ -1,179 +1,310 @@
-using System;
-using System.IO;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using SkiaSharp;
-using StrategyGame;   // your namespace for MultiResolutionMapManager
+using StrategyGame; // Assuming MultiResolutionMapManager is in this namespace
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace Economy_sim
 {
     public partial class GameView : Window
     {
         private readonly MultiResolutionMapManager _mapManager;
-        private float _currentZoom = 1.5f;
 
-        // Top?left corner of the viewport in *map pixels*
-        private SKPointI _viewOffset;
+        // --- Ported from WinForms Logic ---
+        private int _currentZoomLevel = 1; // Integer-based zoom level
+        private SKPointI _viewOffset = SKPointI.Empty; // Integer-based view offset
+        private bool _isPanning = false;
+        private Point _panStartPoint;
+        private bool _isInitialized = false;
 
-        // Drag state
-        private bool _isDragging;
-        private SKPointI _lastPointer;
+        // --- Timer for smooth panning ---
+        private DispatcherTimer _mapUpdateTimer;
+        private bool _pendingMapUpdate = false;
+
+        // --- Thread-safe rendering flags ---
+        private readonly object _renderLock = new object();
+        private bool _renderInProgress = false;
+
 
         public GameView()
         {
             InitializeComponent();
 
-            _mapManager = new MultiResolutionMapManager(baseWidth: 256, baseHeight: 256);
+            // The baseWidth and baseHeight should correspond to the full, unscaled
+            // dimensions of your map source data in cells.
+            _mapManager = new MultiResolutionMapManager(baseWidth: 4096, baseHeight: 2048);
 
-            // 1) Center on open
-            this.Opened += OnOpened;
+            this.Loaded += OnWindowLoaded;
+            this.SizeChanged += OnSizeChanged;
 
-            // 2) Re?render when the window is resized
-            this.SizeChanged += (_, __) => RenderMap();
-
-            // 3) Drag?to?pan
-            MapContainer.PointerPressed += OnPointerPressed;
-            MapContainer.PointerMoved += OnPointerMoved;
-            MapContainer.PointerReleased += OnPointerReleased;
-
-            // 4) Scroll?to?zoom
-            MapContainer.PointerWheelChanged += OnPointerWheelChanged;
-        }
-
-        private void OnOpened(object? sender, EventArgs e)
-        {
-            // Choose an initial zoom so the world roughly fits the window
-            int cw = (int)ClientSize.Width;
-            int ch = (int)ClientSize.Height;
-
-            float zoom = _currentZoom;
-            for (float z = 1f; z <= 10f; z += 0.25f)
+            // Initialize the timer for handling map updates during panning
+            _mapUpdateTimer = new DispatcherTimer
             {
-                int cs = _mapManager.GetCellSize(z);
-                if (256 * cs >= cw && 256 * cs >= ch)
-                {
-                    zoom = z;
-                    break;
-                }
+                Interval = TimeSpan.FromMilliseconds(30) // Render at ~30fps during pan
+            };
+            _mapUpdateTimer.Tick += MapUpdateTimer_Tick;
+            _mapUpdateTimer.Start();
+        }
+
+        private void OnWindowLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("OnWindowLoaded called");
+
+            if (this.MapImage != null)
+            {
+                // Attach event handlers
+                this.MapImage.PointerPressed += OnPointerPressed;
+                this.MapImage.PointerMoved += OnPointerMoved;
+                this.MapImage.PointerReleased += OnPointerReleased;
+                this.MapImage.PointerWheelChanged += OnPointerWheelChanged;
+
+                _isInitialized = true;
+                Debug.WriteLine("Window loaded, triggering initial render");
+
+                QueueRender();
             }
-
-            _currentZoom = zoom;
-            int cellSize = _mapManager.GetCellSize(_currentZoom);
-            int worldW = 256 * cellSize;
-            int worldH = 256 * cellSize;
-
-            // start centered even when the map is smaller than the window
-            _viewOffset = new SKPointI(
-                (worldW - cw) / 2,
-                (worldH - ch) / 2
-            );
-
-            UpdateOffset(new SKPointI(0, 0));
-            RenderMap();
+            else
+            {
+                Debug.WriteLine("ERROR: MapImage is null after window loaded!");
+            }
         }
 
-        private void OnPointerPressed(object sender, PointerPressedEventArgs e)
+        private void OnSizeChanged(object? sender, SizeChangedEventArgs e)
         {
-            _isDragging = true;
-            var p = e.GetPosition(MapContainer);
-            _lastPointer = new SKPointI((int)p.X, (int)p.Y);
+            if (_isInitialized && this.MapImage != null)
+            {
+                Debug.WriteLine($"Size changed to {e.NewSize}, re-rendering");
+                QueueRender();
+            }
         }
 
-        private void OnPointerMoved(object sender, PointerEventArgs e)
+        /// <summary>
+        /// Timer tick handler to render the map if an update is pending (e.g., during a pan).
+        /// </summary>
+        private void MapUpdateTimer_Tick(object? sender, EventArgs e)
         {
-            if (!_isDragging)
-                return;
-
-            var p = e.GetPosition(MapContainer);
-            var now = new SKPointI((int)p.X, (int)p.Y);
-            var delta = new SKPointI(_lastPointer.X - now.X, _lastPointer.Y - now.Y);
-
-            _lastPointer = now;
-            UpdateOffset(delta);
-            RenderMap();
+            if (_pendingMapUpdate)
+            {
+                _pendingMapUpdate = false;
+                QueueRender();
+            }
         }
 
-        private void OnPointerReleased(object sender, PointerReleasedEventArgs e)
-        {
-            _isDragging = false;
-        }
+        #region Pointer Event Handlers
 
+        /// <summary>
+        /// Handles zooming the map using the mouse wheel, ported from WinForms logic.
+        /// </summary>
         private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
-            if (e.Delta.Y == 0)
-                return;
+            if (this.MapImage == null) return;
 
-            // Compute zoom factor
-            float factor = e.Delta.Y > 0 ? 1.2f : 0.8f;
-            float newZoom = Math.Clamp(_currentZoom * factor, 0.2f, 10f);
+            var mousePos = e.GetPosition(this.MapImage);
+            int oldZoomLevel = _currentZoomLevel;
 
-            var mouse = e.GetPosition(MapContainer);
+            // Update zoom level
+            _currentZoomLevel = Math.Clamp(_currentZoomLevel + Math.Sign(e.Delta.Y), 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
+            if (_currentZoomLevel == oldZoomLevel) return;
 
-            float oldCell = _mapManager.GetCellSize(_currentZoom);
-            float newCell = _mapManager.GetCellSize(newZoom);
+            // Get cell sizes for old and new zoom levels
+            int oldCellSize = GetCellSizeForZoom(oldZoomLevel);
+            int newCellSize = GetCellSizeForZoom(_currentZoomLevel);
 
-            float worldX = (_viewOffset.X + (float)mouse.X) / oldCell;
-            float worldY = (_viewOffset.Y + (float)mouse.Y) / oldCell;
+            // Calculate new view offset to keep mouse position stationary ("zoom to cursor")
+            int newOffsetX = (int)Math.Round((_viewOffset.X + mousePos.X) * (double)newCellSize / oldCellSize) - (int)mousePos.X;
+            int newOffsetY = (int)Math.Round((_viewOffset.Y + mousePos.Y) * (double)newCellSize / oldCellSize) - (int)mousePos.Y;
 
-            _currentZoom = newZoom;
+            _viewOffset = new SKPointI(newOffsetX, newOffsetY);
 
-            _viewOffset = new SKPointI(
-                (int)(worldX * newCell - mouse.X),
-                (int)(worldY * newCell - mouse.Y)
-            );
-
-            UpdateOffset(new SKPointI(0, 0));
-            RenderMap();
+            QueueRender();
+            e.Handled = true;
         }
 
-        private void UpdateOffset(SKPointI delta)
+        private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            // Clamp so you never pan beyond the map edges
-            int cellSize = _mapManager.GetCellSize(_currentZoom);
-            int worldW = 256 * cellSize;
-            int worldH = 256 * cellSize;
-            int cw = (int)ClientSize.Width;
-            int ch = (int)ClientSize.Height;
+            if (this.MapImage == null) return;
 
-            int minX = worldW <= cw ? -(cw - worldW) / 2 : 0;
-            int maxX = worldW <= cw ? minX : worldW - cw;
-            int minY = worldH <= ch ? -(ch - worldH) / 2 : 0;
-            int maxY = worldH <= ch ? minY : worldH - ch;
-
-            _viewOffset = new SKPointI(
-                Math.Clamp(_viewOffset.X + delta.X, minX, maxX),
-                Math.Clamp(_viewOffset.Y + delta.Y, minY, maxY)
-            );
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                _isPanning = true;
+                _panStartPoint = e.GetPosition(this.MapImage);
+                this.Cursor = new Cursor(StandardCursorType.Hand);
+            }
         }
 
-        private void RenderMap()
+        /// <summary>
+        /// Updates the map's view offset while panning but defers rendering to the timer.
+        /// </summary>
+        private void OnPointerMoved(object? sender, PointerEventArgs e)
         {
-            if (ClientSize.Width < 1 || ClientSize.Height < 1)
-                return;
+            if (this.MapImage == null || !_isPanning) return;
 
-            // Define our “window” into the world in map?pixel coords
+            var currentPoint = e.GetPosition(this.MapImage);
+            var delta = _panStartPoint - currentPoint;
+            _panStartPoint = currentPoint;
+
+            // Update view offset based on mouse movement
+            _viewOffset.X += (int)delta.X;
+            _viewOffset.Y += (int)delta.Y;
+
+            // Set a flag to render on the next timer tick instead of immediately
+            _pendingMapUpdate = true;
+        }
+
+        private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (e.InitialPressMouseButton == MouseButton.Left)
+            {
+                _isPanning = false;
+                this.Cursor = new Cursor(StandardCursorType.Arrow);
+            }
+        }
+
+        #endregion
+
+        #region Rendering Logic
+
+        /// <summary>
+        /// Queues a render operation, ensuring it runs on a background thread without blocking the UI.
+        /// </summary>
+        private void QueueRender()
+        {
+            lock (_renderLock)
+            {
+                if (_renderInProgress) return; // Don't start a new render if one is already running
+                _renderInProgress = true;
+            }
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var bitmap = RenderMap();
+                    if (bitmap != null)
+                    {
+                        await Dispatcher.UIThread.InvokeAsync(() =>
+                        {
+                            if (this.MapImage != null)
+                            {
+                                (this.MapImage.Source as IDisposable)?.Dispose();
+                                this.MapImage.Source = bitmap;
+                            }
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error in background render task: {ex}");
+                }
+                finally
+                {
+                    lock (_renderLock)
+                    {
+                        _renderInProgress = false;
+                    }
+                }
+            });
+        }
+
+        /// <summary>
+        /// Assembles and renders the current map view. This method is designed to be called from a background thread.
+        /// </summary>
+        private Bitmap? RenderMap()
+        {
+            var effectiveSize = GetEffectiveRenderSize();
+
+            if (!_isInitialized || effectiveSize.Width < 1 || effectiveSize.Height < 1 || _mapManager == null)
+            {
+                Debug.WriteLine($"RenderMap: Not ready - Init:{_isInitialized}, EffectiveSize: {effectiveSize}");
+                return null;
+            }
+
+            ClampViewOffset();
+
             var viewArea = new SKRectI(
                 _viewOffset.X,
                 _viewOffset.Y,
-                _viewOffset.X + (int)ClientSize.Width,
-                _viewOffset.Y + (int)ClientSize.Height
+                _viewOffset.X + (int)effectiveSize.Width,
+                _viewOffset.Y + (int)effectiveSize.Height
             );
 
-            using var bmp = _mapManager.AssembleView(
-                _currentZoom,
+            Debug.WriteLine($"RenderMap: ZoomLevel={_currentZoomLevel}, ViewArea={viewArea}, Offset={_viewOffset}");
+
+            // The callback will trigger a re-render when a new tile is loaded asynchronously.
+            using SKBitmap skBitmap = _mapManager.AssembleView(
+                _currentZoomLevel, // Use integer zoom level
                 viewArea,
-                () => Dispatcher.UIThread.Post(RenderMap, DispatcherPriority.Background)
+                () => Dispatcher.UIThread.Post(QueueRender, DispatcherPriority.Background)
             );
 
-            using var img = SKImage.FromBitmap(bmp);
-            using var ms = new MemoryStream();
-            img.Encode(SKEncodedImageFormat.Png, 100).SaveTo(ms);
-            ms.Position = 0;
+            if (skBitmap == null || skBitmap.Width <= 1 || skBitmap.Height <= 1)
+            {
+                Debug.WriteLine($"RenderMap: AssembleView returned null or tiny bitmap.");
+                return null;
+            }
 
-            MapImage.Source = new Bitmap(ms);
+            // Convert the SkiaSharp bitmap to an Avalonia bitmap
+            using var skImage = SKImage.FromBitmap(skBitmap);
+            using var stream = new MemoryStream();
+            skImage.Encode(SKEncodedImageFormat.Png, 100).SaveTo(stream);
+            stream.Position = 0;
+
+            return new Bitmap(stream);
         }
+
+        /// <summary>
+        /// Gets the rendering size of the map control.
+        /// </summary>
+        private Size GetEffectiveRenderSize()
+        {
+            if (this.MapImage?.Bounds.Width > 1 && this.MapImage?.Bounds.Height > 1)
+            {
+                return this.MapImage.Bounds.Size;
+            }
+            return this.ClientSize; // Fallback to window client size
+        }
+
+        /// <summary>
+        /// Ensures the view offset does not go beyond the map's boundaries.
+        /// </summary>
+        private void ClampViewOffset()
+        {
+            if (_mapManager == null) return;
+
+            var effectiveSize = GetEffectiveRenderSize();
+            if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
+
+            var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
+
+            // Clamp X offset
+            if (mapSize.Width < effectiveSize.Width)
+                _viewOffset.X = (mapSize.Width - (int)effectiveSize.Width) / 2; // Center
+            else
+                _viewOffset.X = Math.Clamp(_viewOffset.X, 0, mapSize.Width - (int)effectiveSize.Width);
+
+            // Clamp Y offset
+            if (mapSize.Height < effectiveSize.Height)
+                _viewOffset.Y = (mapSize.Height - (int)effectiveSize.Height) / 2; // Center
+            else
+                _viewOffset.Y = Math.Clamp(_viewOffset.Y, 0, mapSize.Height - (int)effectiveSize.Height);
+        }
+
+        /// <summary>
+        /// Gets the cell size for a given integer zoom level.
+        /// </summary>
+        private int GetCellSizeForZoom(int zoomLevel)
+        {
+            // `zoomLevel` is 1-based, array is 0-based
+            int index = Math.Clamp(zoomLevel - 1, 0, MultiResolutionMapManager.PixelsPerCellLevels.Length - 1);
+            return MultiResolutionMapManager.PixelsPerCellLevels[index];
+        }
+
+        #endregion
     }
 }
