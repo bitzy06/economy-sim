@@ -40,10 +40,10 @@ namespace StrategyGame
         // (e.g. "C:\\Users\\kayla\\Documents\\data").  This path is used directly
         // rather than falling back to the repository so the game always loads
         // external resources from that location.
+       
         private static readonly string DataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "data");
-
+             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+             "data", "terrain");
 
         private static readonly string RepoDataDir = Path.Combine(RepoRoot, "data");
 
@@ -374,8 +374,15 @@ namespace StrategyGame
      int offsetX, int offsetY,
      int width, int height)
         {
-            // Make sure GDAL/OGR are configured once somewhere in your app
-            GdalInit.Ensure();   // remove if you call it earlier
+            // Make sure GDAL/OGR are configured using the existing pattern
+            lock (GdalConfigLock)
+            {
+                if (!_gdalConfigured)
+                {
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
+                }
+            }
 
             // Clamp width/height so we never request negative or out-of-range tiles
             int w = Math.Max(0, Math.Min(width, fullWidth - offsetX));
@@ -384,67 +391,119 @@ namespace StrategyGame
             if (w <= 0 || h <= 0)
                 return new int[0, 0]; // nothing to draw for this tile
 
-            using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
-
-            // Source raster size & geotransform
-            double[] gt = new double[6];
-            dem.GetGeoTransform(gt);
-            int srcCols = dem.RasterXSize;
-            int srcRows = dem.RasterYSize;
-
-            // How many DEM pixels per "game pixel"
-            double scaleX = (double)srcCols / fullWidth;
-            double scaleY = (double)srcRows / fullHeight;
-
-            // Geotransform for the sub-tile
-            double[] newGt = new double[6];
-            newGt[0] = gt[0] + offsetX * scaleX * gt[1]; // top-left X
-            newGt[1] = gt[1] * scaleX;                   // pixel width
-            newGt[2] = 0;
-            newGt[3] = gt[3] + offsetY * scaleY * gt[5]; // top-left Y
-            newGt[4] = 0;
-            newGt[5] = gt[5] * scaleY;                   // pixel height (negative)
-
-            // Create an in-memory mask dataset
-            var memDrv = Gdal.GetDriverByName("MEM");
-            using var maskDs = memDrv.Create("", w, h, 1, DataType.GDT_Int32, null);
-            maskDs.SetGeoTransform(newGt);
-            maskDs.SetProjection(dem.GetProjection());
-
-            // Burn country IDs from the shapefile into the raster
-            using DataSource ds = Ogr.Open(ShpPath, 0);
-            Layer layer = ds.GetLayerByIndex(0);
-
-            // ATTRIBUTE=ISO_N3 (or whatever field holds your ID)
-            Gdal.RasterizeLayer(
-                maskDs,
-                1,
-                new[] { 1 },
-                layer,
-                IntPtr.Zero,
-                IntPtr.Zero,
-                0,
-                null,
-                new[] { "ATTRIBUTE=ISO_N3" },
-                null,
-                "");
-
-            // Read band back to managed array
-            Band band = maskDs.GetRasterBand(1);
-            int[] flat = new int[w * h];
-            band.ReadRaster(0, 0, w, h, flat, w, h, 0, 0);
-
-            int[,] result = new int[h, w];
-            for (int r = 0; r < h; r++)
+            // Check if required data files exist
+            if (!File.Exists(TerrainTifPath))
             {
-                Buffer.BlockCopy(flat, r * w * sizeof(int), result, r * w * sizeof(int), w * sizeof(int));
+                Console.WriteLine($"Terrain file not found: {TerrainTifPath}");
+                return new int[h, w]; // return empty mask (all water)
             }
 
-            return result;
+            if (!File.Exists(ShpPath))
+            {
+                Console.WriteLine($"Shapefile not found: {ShpPath}");
+                return new int[h, w]; // return empty mask (all water)
+            }
+
+            try
+            {
+                using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+                if (dem == null)
+                {
+                    Console.WriteLine($"Failed to open terrain file: {TerrainTifPath}");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                // Source raster size & geotransform
+                double[] gt = new double[6];
+                dem.GetGeoTransform(gt);
+                int srcCols = dem.RasterXSize;
+                int srcRows = dem.RasterYSize;
+
+                // How many DEM pixels per "game pixel"
+                double scaleX = (double)srcCols / fullWidth;
+                double scaleY = (double)srcRows / fullHeight;
+
+                // Geotransform for the sub-tile
+                double[] newGt = new double[6];
+                newGt[0] = gt[0] + offsetX * scaleX * gt[1]; // top-left X
+                newGt[1] = gt[1] * scaleX;                   // pixel width
+                newGt[2] = 0;
+                newGt[3] = gt[3] + offsetY * scaleY * gt[5]; // top-left Y
+                newGt[4] = 0;
+                newGt[5] = gt[5] * scaleY;                   // pixel height (negative)
+
+                // Create an in-memory mask dataset
+                var memDrv = Gdal.GetDriverByName("MEM");
+                if (memDrv == null)
+                {
+                    Console.WriteLine("Failed to get GDAL MEM driver");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                using var maskDs = memDrv.Create("", w, h, 1, DataType.GDT_Int32, null);
+                if (maskDs == null)
+                {
+                    Console.WriteLine("Failed to create in-memory dataset");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                maskDs.SetGeoTransform(newGt);
+                maskDs.SetProjection(dem.GetProjection());
+
+                // Burn country IDs from the shapefile into the raster
+                using DataSource ds = Ogr.Open(ShpPath, 0);
+                if (ds == null)
+                {
+                    Console.WriteLine($"Failed to open shapefile: {ShpPath}");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                Layer layer = ds.GetLayerByIndex(0);
+                if (layer == null)
+                {
+                    Console.WriteLine("Failed to get layer from shapefile");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                // ATTRIBUTE=ISO_N3 (or whatever field holds your ID)
+                Gdal.RasterizeLayer(
+                    maskDs,
+                    1,
+                    new[] { 1 },
+                    layer,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    0,
+                    null,
+                    new[] { "ATTRIBUTE=ISO_N3" },
+                    null,
+                    "");
+
+                // Read band back to managed array
+                Band band = maskDs.GetRasterBand(1);
+                if (band == null)
+                {
+                    Console.WriteLine("Failed to get raster band");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                int[] flat = new int[w * h];
+                band.ReadRaster(0, 0, w, h, flat, w, h, 0, 0);
+
+                int[,] result = new int[h, w];
+                for (int r = 0; r < h; r++)
+                {
+                    Buffer.BlockCopy(flat, r * w * sizeof(int), result, r * w * sizeof(int), w * sizeof(int));
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating country mask tile: {ex.Message}");
+                return new int[h, w]; // return empty mask (all water) on any error
+            }
         }
-
-
-
 
         /// <summary>
         /// Draw borders directly on an ImageSharp image when the map exceeds
