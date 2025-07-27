@@ -19,7 +19,7 @@ namespace Economy_sim
 
         // --- Optimized Rendering Fields ---
         private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
-        private int _currentZoomLevel = 1;
+        private int _currentZoomLevel = 3; // Start at a better zoom level to see more of the map
         private SKPointI _viewOffset = SKPointI.Empty;
         private bool _isPanning = false;
         private Point _panStartPoint;
@@ -730,8 +730,8 @@ namespace Economy_sim
         {
             Debug.WriteLine($"Map view type changed to: {viewType}");
             
-            // Center both map types at the same position to ensure alignment
-            CenterView();
+            // Do not recenter view when switching map types - maintain current position
+            // CenterView(); // Removed to prevent annoying recentering
             
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
             Dispatcher.UIThread.Post(QueueRender);
