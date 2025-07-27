@@ -273,7 +273,10 @@ namespace StrategyGame
             catch (Exception ex)
             {
                 // If data files are missing or there's any error, generate a fallback tile
-                Console.WriteLine($"Data files missing or error generating tile ({tileX}, {tileY}): {ex.Message}");
+                Console.WriteLine($"Using fallback tile generation for tile ({tileX}, {tileY}) - data files may be missing: {ex.Message}");
+                Console.WriteLine("To use real terrain data, place the following files in ~/Documents/data/:");
+                Console.WriteLine("  - NE1_HR_LC.tif (Natural Earth raster)");
+                Console.WriteLine("  - ne_10m_admin_0_countries.shp (Natural Earth country boundaries)");
                 return GenerateFallbackTile(tileWidth, tileHeight, tileX, tileY, cellSize);
             }
         }
