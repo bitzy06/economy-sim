@@ -53,7 +53,10 @@ namespace Economy_sim.Testing
                 // Test 8: Test coordinate transformation unification
                 TestCoordinateTransformUnification();
                 
-                // Test 9: Save color mapping
+                // Test 9: Run comprehensive coordinate validation
+                CoordinateValidation.ValidateCoordinateUnification();
+                
+                // Test 10: Save color mapping
                 politicalManager.SaveColorMapping();
                 Debug.WriteLine("✓ Color mapping saved successfully");
                 
