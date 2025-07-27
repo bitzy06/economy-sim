@@ -367,6 +367,41 @@ namespace Economy_sim
 
             if (this.FindControl<Button>("MenuButton") is Button menuBtn)
                 menuBtn.Click += OnMenuClicked;
+
+            // Setup close button handlers for popup menus
+            if (this.FindControl<Button>("DiplomacyCloseButton") is Button diplomacyCloseBtn)
+                diplomacyCloseBtn.Click += (s, e) => HideAllPopups();
+
+            if (this.FindControl<Button>("TradeCloseButton") is Button tradeCloseBtn)
+                tradeCloseBtn.Click += (s, e) => HideAllPopups();
+
+            if (this.FindControl<Button>("ConstructionCloseButton") is Button constructionCloseBtn)
+                constructionCloseBtn.Click += (s, e) => HideAllPopups();
+
+            if (this.FindControl<Button>("EconomyCloseButton") is Button economyCloseBtn)
+                economyCloseBtn.Click += (s, e) => HideAllPopups();
+
+            if (this.FindControl<Button>("StatsCloseButton") is Button statsCloseBtn)
+                statsCloseBtn.Click += (s, e) => HideAllPopups();
+
+            // Setup overlay click handlers to close popups when clicking outside
+            if (this.FindControl<Border>("DiplomacyMenuOverlay") is Border diplomacyOverlay)
+                diplomacyOverlay.PointerPressed += OnOverlayClicked;
+
+            if (this.FindControl<Border>("TradeMenuOverlay") is Border tradeOverlay)
+                tradeOverlay.PointerPressed += OnOverlayClicked;
+
+            if (this.FindControl<Border>("ConstructionMenuOverlay") is Border constructionOverlay)
+                constructionOverlay.PointerPressed += OnOverlayClicked;
+
+            if (this.FindControl<Border>("EconomyMenuOverlay") is Border economyOverlay)
+                economyOverlay.PointerPressed += OnOverlayClicked;
+
+            if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
+                statsOverlay.PointerPressed += OnOverlayClicked;
+
+            // Setup popup menu content
+            InitializePopupMenus();
         }
 
         private void UpdateHUDDisplay(object? sender, EventArgs? e)
@@ -442,24 +477,171 @@ namespace Economy_sim
 
         #endregion
 
+        #region Popup Menu Management
+
+        private void HideAllPopups()
+        {
+            if (this.FindControl<Border>("DiplomacyMenuOverlay") is Border diplomacyOverlay)
+                diplomacyOverlay.IsVisible = false;
+
+            if (this.FindControl<Border>("TradeMenuOverlay") is Border tradeOverlay)
+                tradeOverlay.IsVisible = false;
+
+            if (this.FindControl<Border>("ConstructionMenuOverlay") is Border constructionOverlay)
+                constructionOverlay.IsVisible = false;
+
+            if (this.FindControl<Border>("EconomyMenuOverlay") is Border economyOverlay)
+                economyOverlay.IsVisible = false;
+
+            if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
+                statsOverlay.IsVisible = false;
+        }
+
+        private void ShowPopup(string popupName)
+        {
+            HideAllPopups();
+            if (this.FindControl<Border>(popupName) is Border popup)
+            {
+                popup.IsVisible = true;
+            }
+        }
+
+        private void OnOverlayClicked(object? sender, PointerPressedEventArgs e)
+        {
+            // Only close if clicking directly on the overlay (not on the inner content)
+            if (sender == e.Source)
+            {
+                HideAllPopups();
+            }
+        }
+
+        private void InitializePopupMenus()
+        {
+            // Initialize Diplomacy menu content
+            if (this.FindControl<ListBox>("DiplomacyRelationsList") is ListBox diplomacyList)
+            {
+                var relations = new[]
+                {
+                    "🇬🇧 United Kingdom - Allied (+85)",
+                    "🇷🇺 Russia - Cold War (-45)",
+                    "🇨🇳 China - Neutral (0)",
+                    "🇫🇷 France - Friendly (+60)",
+                    "🇩🇪 Germany - Allied (+75)",
+                    "🇯🇵 Japan - Trade Partner (+40)"
+                };
+                foreach (var relation in relations)
+                {
+                    diplomacyList.Items.Add(relation);
+                }
+            }
+
+            // Initialize Trade menu content
+            if (this.FindControl<ListBox>("ExportsList") is ListBox exportsList)
+            {
+                var exports = new[]
+                {
+                    "💼 Manufactured Goods → UK ($2.5B)",
+                    "🌾 Agricultural Products → Japan ($1.8B)",
+                    "⚙️ Technology → Germany ($3.2B)",
+                    "🛢️ Oil Products → Various ($4.1B)"
+                };
+                foreach (var export in exports)
+                {
+                    exportsList.Items.Add(export);
+                }
+            }
+
+            if (this.FindControl<ListBox>("ImportsList") is ListBox importsList)
+            {
+                var imports = new[]
+                {
+                    "📱 Electronics ← China ($2.8B)",
+                    "☕ Coffee ← Brazil ($0.9B)",
+                    "💎 Rare Metals ← Africa ($1.5B)",
+                    "🏭 Machinery ← Germany ($2.2B)"
+                };
+                foreach (var import in imports)
+                {
+                    importsList.Items.Add(import);
+                }
+            }
+
+            // Initialize Construction menu content
+            if (this.FindControl<ListBox>("ActiveProjectsList") is ListBox projectsList)
+            {
+                var projects = new[]
+                {
+                    "🏭 Steel Factory - Los Angeles (Progress: 75%)",
+                    "🛣️ Interstate Highway - Texas (Progress: 45%)",
+                    "🌉 Golden Gate Bridge Maintenance (Progress: 20%)",
+                    "✈️ Airport Expansion - New York (Progress: 90%)"
+                };
+                foreach (var project in projects)
+                {
+                    projectsList.Items.Add(project);
+                }
+            }
+
+            // Initialize Economy menu content
+            if (this.FindControl<ListBox>("IndustriesList") is ListBox industriesList)
+            {
+                var industries = new[]
+                {
+                    "🏭 Manufacturing - Output: $850B (↗️ +2.8%)",
+                    "💻 Technology - Output: $620B (↗️ +8.1%)",
+                    "🌾 Agriculture - Output: $180B (↗️ +1.2%)",
+                    "⚡ Energy - Output: $290B (↗️ +3.5%)",
+                    "🏗️ Construction - Output: $240B (↗️ +4.2%)",
+                    "🚗 Automotive - Output: $320B (↗️ +1.8%)"
+                };
+                foreach (var industry in industries)
+                {
+                    industriesList.Items.Add(industry);
+                }
+            }
+
+            // Initialize Statistics menu content
+            if (this.FindControl<ListBox>("DetailedStatsList") is ListBox statsList)
+            {
+                var stats = new[]
+                {
+                    "👥 Total Cities: 125",
+                    "🏭 Active Factories: 2,847",
+                    "🛣️ Roads Built: 45,230 km",
+                    "🌉 Bridges: 8,954",
+                    "✈️ Airports: 342",
+                    "🏛️ Government Buildings: 1,205",
+                    "💰 Tax Revenue: $1.2T/year",
+                    "📈 Economic Growth: +3.2%",
+                    "🎯 Approval Rating: 67%"
+                };
+                foreach (var stat in stats)
+                {
+                    statsList.Items.Add(stat);
+                }
+            }
+        }
+
+        #endregion
+
         #region HUD Event Handlers
 
         private void OnDiplomacyClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Diplomacy button clicked");
-            // TODO: Open diplomacy window
+            Debug.WriteLine("Diplomacy button clicked - showing diplomacy menu");
+            ShowPopup("DiplomacyMenuOverlay");
         }
 
         private void OnTradeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Trade button clicked");
-            // TODO: Open trade window
+            Debug.WriteLine("Trade button clicked - showing trade menu");
+            ShowPopup("TradeMenuOverlay");
         }
 
         private void OnConstructionClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Construction button clicked");
-            // TODO: Open construction window
+            Debug.WriteLine("Construction button clicked - showing construction menu");
+            ShowPopup("ConstructionMenuOverlay");
         }
 
         private void OnRoleActionClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -490,14 +672,14 @@ namespace Economy_sim
 
         private void OnEconomyViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Economy view button clicked");
-            // TODO: Open economy statistics window
+            Debug.WriteLine("Economy view button clicked - showing economy menu");
+            ShowPopup("EconomyMenuOverlay");
         }
 
         private void OnStatsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Stats button clicked");
-            // TODO: Open general statistics window
+            Debug.WriteLine("Stats button clicked - showing statistics menu");
+            ShowPopup("StatsMenuOverlay");
         }
 
         private void OnMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
