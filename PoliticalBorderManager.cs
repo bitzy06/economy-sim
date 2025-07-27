@@ -146,23 +146,16 @@ namespace StrategyGame
             {
                 totalFeatures++;
                 
-                // Get start and end dates - be more flexible with missing data
+                // Get start and end dates with simpler fallback handling
                 double startYear = GetFieldAsDouble(feature, "GWSYEAR");
                 double endYear = GetFieldAsDouble(feature, "GWEYER");
                 
-                // Handle missing or invalid dates more gracefully
-                if (startYear <= 0)
-                {
-                    startYear = 1945; // Default start year if missing
-                }
-                if (endYear <= 0 || endYear < startYear)
-                {
-                    endYear = 2020; // Default end year if missing or invalid
-                }
+                // Handle missing dates more gracefully - use wider range for 1950s
+                if (startYear <= 0 || startYear > 2020) startYear = 1945;
+                if (endYear <= 0 || endYear < startYear) endYear = 2020;
                 
-                // Check if target date falls within the validity period
-                // Make the filter more inclusive for countries around 1950
-                if (targetYear >= startYear && targetYear <= endYear)
+                // More inclusive filtering for countries around target date
+                if (targetYear >= startYear - 5 && targetYear <= endYear + 5)
                 {
                     validFeatures++;
                     
@@ -173,53 +166,23 @@ namespace StrategyGame
                     Geometry geom = feature.GetGeometryRef();
                     newFeature.SetGeometry(geom);
                     
-                    // Copy fields
-                    for (int i = 0; i < layerDefn.GetFieldCount(); i++)
-                    {
-                        FieldDefn fieldDefn = layerDefn.GetFieldDefn(i);
-                        string fieldName = fieldDefn.GetName();
-                        
-                        if (feature.IsFieldSet(i))
-                        {
-                            switch (fieldDefn.GetFieldType())
-                            {
-                                case FieldType.OFTString:
-                                    newFeature.SetField(fieldName, feature.GetFieldAsString(i));
-                                    break;
-                                case FieldType.OFTInteger:
-                                    newFeature.SetField(fieldName, feature.GetFieldAsInteger(i));
-                                    break;
-                                case FieldType.OFTReal:
-                                    newFeature.SetField(fieldName, feature.GetFieldAsDouble(i));
-                                    break;
-                            }
-                        }
-                    }
+                    // Copy essential fields only for performance
+                    string countryName = GetFieldAsString(feature, "CNTRY_NAME") ?? $"Country_{countryCode}";
+                    string iso3Code = GetCountryCodeWithFallback(feature, countryCode);
                     
                     // Set raster code
                     newFeature.SetField("RASTER_CODE", countryCode);
                     
-                    // Store country info for color mapping - ensure every country gets a unique color
-                    string countryName = GetFieldAsString(feature, "CNTRY_NAME") ?? $"Country_{countryCode}";
-                    string iso3Code = GetCountryCodeWithFallback(feature, countryCode);
-                    
-                    // Ensure this country has a color assigned
+                    // Ensure this country has a color - simpler color generation
                     if (!_countryColors.ContainsKey(iso3Code))
                     {
-                        _countryColors[iso3Code] = GenerateDistinctColor(countryCode);
+                        _countryColors[iso3Code] = GenerateSimpleColor(countryCode);
                     }
-                    
-                    Debug.WriteLine($"Added country: {countryName} ({iso3Code}) with code {countryCode}, valid {startYear}-{endYear}");
                     
                     filteredLayer.CreateFeature(newFeature);
                     countryCode++;
                     
                     newFeature.Dispose();
-                }
-                else
-                {
-                    Debug.WriteLine($"Filtered out country: {GetFieldAsString(feature, "CNTRY_NAME") ?? "Unknown"}, " +
-                                  $"target: {targetYear:F1}, valid: {startYear:F1}-{endYear:F1}");
                 }
                 
                 feature.Dispose();
@@ -281,6 +244,15 @@ namespace StrategyGame
             return $"UNK{countryCode:D3}";
         }
         
+        private SKColor GenerateSimpleColor(int index)
+        {
+            // Faster, simpler color generation based on index
+            byte r = (byte)(100 + (index * 67) % 156);
+            byte g = (byte)(100 + (index * 113) % 156);
+            byte b = (byte)(100 + (index * 151) % 156);
+            return new SKColor(r, g, b, 255);
+        }
+        
         private SKColor GenerateRandomColor()
         {
             // Generate a reasonably bright, distinguishable color
@@ -288,37 +260,6 @@ namespace StrategyGame
             byte g = (byte)_random.Next(80, 255);
             byte b = (byte)_random.Next(80, 255);
             return new SKColor(r, g, b, 255);
-        }
-        
-        private SKColor GenerateDistinctColor(int index)
-        {
-            // Generate more distinct colors using HSV color space for better distribution
-            float hue = (index * 137.508f) % 360f; // Golden angle for good distribution
-            float saturation = 0.7f + (index % 3) * 0.1f; // Vary saturation slightly
-            float value = 0.8f + (index % 2) * 0.2f; // Vary brightness slightly
-            
-            return HSVToRGB(hue, saturation, value);
-        }
-        
-        private SKColor HSVToRGB(float h, float s, float v)
-        {
-            float c = v * s;
-            float x = c * (1 - Math.Abs((h / 60f) % 2 - 1));
-            float m = v - c;
-            
-            float r, g, b;
-            if (h < 60) { r = c; g = x; b = 0; }
-            else if (h < 120) { r = x; g = c; b = 0; }
-            else if (h < 180) { r = 0; g = c; b = x; }
-            else if (h < 240) { r = 0; g = x; b = c; }
-            else if (h < 300) { r = x; g = 0; b = c; }
-            else { r = c; g = 0; b = x; }
-            
-            return new SKColor(
-                (byte)Math.Round((r + m) * 255),
-                (byte)Math.Round((g + m) * 255),
-                (byte)Math.Round((b + m) * 255),
-                255);
         }
         
         private void LoadOrCreateColorMapping()
