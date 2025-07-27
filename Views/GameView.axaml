@@ -2,16 +2,221 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Economy_sim.GameView"
         Title="GameView"
-     WindowState="FullScreen"
+        WindowState="FullScreen"
         Background="#2D2D30"
         Width="2560" Height="1440">
-	<Border x:Name="MapContainer"
-		Background="Transparent"
-		HorizontalAlignment="Stretch"
-		VerticalAlignment="Stretch">
-		<Image x:Name="MapImage"
-			   Stretch="None"
-			   HorizontalAlignment="Left"
-			   VerticalAlignment="Top"/>
-	</Border>
+
+	<Window.Styles>
+		<StyleInclude Source="/GlobalStyles.axaml"/>
+	</Window.Styles>
+
+	<Grid>
+		<!-- Map Layer (Background) -->
+		<Border x:Name="MapContainer"
+			Background="Transparent"
+			HorizontalAlignment="Stretch"
+			VerticalAlignment="Stretch"
+			IsHitTestVisible="True">
+			<Image x:Name="MapImage"
+				   Stretch="None"
+				   HorizontalAlignment="Left"
+				   VerticalAlignment="Top"
+				   IsHitTestVisible="True"/>
+		</Border>
+
+		<!-- HUD Overlay Layers -->
+		<!-- Top HUD Bar -->
+		<Border Background="#AA000000"
+				Height="50"
+				VerticalAlignment="Top"
+				HorizontalAlignment="Stretch"
+				Margin="0"
+				IsHitTestVisible="False"
+				ZIndex="1000">
+			<StackPanel Orientation="Horizontal"
+						HorizontalAlignment="Stretch"
+						VerticalAlignment="Center"
+						Margin="10,0"
+						IsHitTestVisible="True">
+
+				<!-- Player Role Section -->
+				<Border Background="#222222"
+						CornerRadius="3"
+						Padding="12,6"
+						Margin="0,0,15,0"
+						BorderBrush="#555555"
+						BorderThickness="1">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock x:Name="PlayerRoleText"
+								   Text="Prime Minister"
+								   Foreground="#FFD700"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+						<TextBlock Text=" of "
+								   Foreground="#AAAAAA"
+								   FontSize="12"
+								   Margin="5,0,0,0"
+								   VerticalAlignment="Center"/>
+						<TextBlock x:Name="ControlledEntityText"
+								   Text="United States"
+								   Foreground="#FFFFFF"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Treasury Section -->
+				<Border Background="#1A4A1A"
+						CornerRadius="3"
+						Padding="12,6"
+						Margin="0,0,15,0"
+						BorderBrush="#2A6A2A"
+						BorderThickness="1">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="💰"
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,6,0"/>
+						<TextBlock x:Name="TreasuryText"
+								   Text="$1,000,000"
+								   Foreground="#90EE90"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Population Section -->
+				<Border Background="#1A1A4A"
+						CornerRadius="3"
+						Padding="12,6"
+						Margin="0,0,15,0"
+						BorderBrush="#2A2A6A"
+						BorderThickness="1">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="👥"
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,6,0"/>
+						<TextBlock x:Name="PopulationText"
+								   Text="10,000,000"
+								   Foreground="#ADD8E6"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Spacer -->
+				<Border HorizontalAlignment="Stretch"/>
+
+				<!-- Date/Time Section -->
+				<Border Background="#4A1A1A"
+						CornerRadius="3"
+						Padding="12,6"
+						BorderBrush="#6A2A2A"
+						BorderThickness="1">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="📅"
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,6,0"/>
+						<TextBlock x:Name="DateTimeText"
+								   Text="January 1950"
+								   Foreground="#F0E68C"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+		</Border>
+
+		<!-- Bottom HUD Bar -->
+		<Border Background="#AA000000"
+				Height="80"
+				VerticalAlignment="Bottom"
+				HorizontalAlignment="Stretch"
+				IsHitTestVisible="False"
+				ZIndex="1000">
+			<Grid Margin="10"
+				  IsHitTestVisible="True">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+
+				<!-- Left side buttons -->
+				<StackPanel Grid.Column="0"
+							Orientation="Horizontal"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Center"
+							Spacing="15"
+							IsHitTestVisible="True">
+					<!-- Main action buttons -->
+					<Button x:Name="DiplomacyButton"
+							Content="Diplomacy"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+					<Button x:Name="TradeButton"
+							Content="Trade"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+					<Button x:Name="ConstructionButton"
+							Content="Construction"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+
+					<!-- Role-specific action button -->
+					<Border Background="#3A3A5A"
+							CornerRadius="5"
+							Padding="15,10"
+							BorderBrush="#5A5A7A"
+							BorderThickness="2"
+							IsHitTestVisible="True">
+						<Button x:Name="RoleActionButton"
+								Content="Set Policy"
+								Width="160"
+								Height="40"
+								Background="#4A4A6A"
+								Foreground="#FFFFFF"
+								FontWeight="Bold"
+								FontSize="14"
+								IsHitTestVisible="True"/>
+					</Border>
+
+					<!-- View buttons -->
+					<Button x:Name="EconomyViewButton"
+							Content="Economy"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+					<Button x:Name="StatsButton"
+							Content="Statistics"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+				</StackPanel>
+
+				<!-- Right side menu button -->
+				<StackPanel Grid.Column="1"
+							Orientation="Horizontal"
+							HorizontalAlignment="Right"
+							VerticalAlignment="Center"
+							IsHitTestVisible="True">
+					<Button x:Name="MenuButton"
+							Content="Menu"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"
+							ZIndex="2000"/>
+				</StackPanel>
+			</Grid>
+		</Border>
+	</Grid>
 </Window>

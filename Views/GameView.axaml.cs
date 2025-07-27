@@ -45,6 +45,9 @@ namespace Economy_sim
             };
             _mapUpdateTimer.Tick += MapUpdateTimer_Tick;
             _mapUpdateTimer.Start();
+
+            // Initialize HUD after component initialization
+            InitializeHUD();
         }
 
         private void OnWindowLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -295,6 +298,218 @@ namespace Economy_sim
             _viewOffset.Y = mapSize.Height < effectiveSize.Height
                 ? (mapSize.Height - (int)effectiveSize.Height) / 2
                 : Math.Clamp(_viewOffset.Y, 0, mapSize.Height - (int)effectiveSize.Height);
+        }
+
+        #endregion
+
+        #region HUD Management
+
+        // Sample game state for HUD demonstration
+        private PlayerRoleManager _playerRoleManager;
+        private Country _currentCountry;
+
+        private void InitializeHUD()
+        {
+            // Initialize sample game state for demonstration
+            _playerRoleManager = new PlayerRoleManager();
+            _currentCountry = new Country("United States");
+
+            // Add some sample states and cities for demonstration
+            var california = new State("California");
+            california.Cities.Add(new City("Los Angeles"));
+            california.Cities.Add(new City("San Francisco"));
+
+            var texas = new State("Texas");
+            texas.Cities.Add(new City("Houston"));
+            texas.Cities.Add(new City("Dallas"));
+
+            _currentCountry.States.Add(california);
+            _currentCountry.States.Add(texas);
+
+            // Set up player as Prime Minister by default
+            _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
+
+            // Set up HUD update timer
+            var hudTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(1) // Update every second
+            };
+            hudTimer.Tick += UpdateHUDDisplay;
+            hudTimer.Start();
+
+            // Initialize HUD button event handlers
+            SetupHUDEventHandlers();
+
+            // Initial HUD update
+            UpdateHUDDisplay(null, null);
+        }
+
+        private void SetupHUDEventHandlers()
+        {
+            // Get references to HUD elements and add event handlers
+            if (this.FindControl<Button>("DiplomacyButton") is Button diplomacyBtn)
+                diplomacyBtn.Click += OnDiplomacyClicked;
+
+            if (this.FindControl<Button>("TradeButton") is Button tradeBtn)
+                tradeBtn.Click += OnTradeClicked;
+
+            if (this.FindControl<Button>("ConstructionButton") is Button constructionBtn)
+                constructionBtn.Click += OnConstructionClicked;
+
+            if (this.FindControl<Button>("RoleActionButton") is Button roleActionBtn)
+                roleActionBtn.Click += OnRoleActionClicked;
+
+            if (this.FindControl<Button>("EconomyViewButton") is Button economyBtn)
+                economyBtn.Click += OnEconomyViewClicked;
+
+            if (this.FindControl<Button>("StatsButton") is Button statsBtn)
+                statsBtn.Click += OnStatsClicked;
+
+            if (this.FindControl<Button>("MenuButton") is Button menuBtn)
+                menuBtn.Click += OnMenuClicked;
+        }
+
+        private void UpdateHUDDisplay(object? sender, EventArgs? e)
+        {
+            try
+            {
+                // Update player role and controlled entity
+                if (this.FindControl<TextBlock>("PlayerRoleText") is TextBlock roleText)
+                {
+                    roleText.Text = _playerRoleManager.CurrentRole.ToString().Replace("PrimeMinister", "Prime Minister");
+                }
+
+                if (this.FindControl<TextBlock>("ControlledEntityText") is TextBlock entityText)
+                {
+                    string entityName = _playerRoleManager.CurrentRole switch
+                    {
+                        PlayerRoleType.PrimeMinister => _playerRoleManager.ControlledCountry?.Name ?? "N/A",
+                        PlayerRoleType.Governor => _playerRoleManager.ControlledState?.Name ?? "N/A",
+                        PlayerRoleType.CEO => _playerRoleManager.ControlledCorporation?.Name ?? "N/A",
+                        _ => "None"
+                    };
+                    entityText.Text = entityName;
+                }
+
+                // Update treasury information
+                if (this.FindControl<TextBlock>("TreasuryText") is TextBlock treasuryText)
+                {
+                    double budget = _playerRoleManager.CurrentRole switch
+                    {
+                        PlayerRoleType.PrimeMinister => _playerRoleManager.ControlledCountry?.Budget ?? 0,
+                        PlayerRoleType.Governor => _playerRoleManager.ControlledState?.Budget ?? 0,
+                        PlayerRoleType.CEO => _playerRoleManager.ControlledCorporation?.Budget ?? 0,
+                        _ => 0
+                    };
+                    treasuryText.Text = $"${budget:N0}";
+                }
+
+                // Update population
+                if (this.FindControl<TextBlock>("PopulationText") is TextBlock popText)
+                {
+                    int population = _playerRoleManager.CurrentRole switch
+                    {
+                        PlayerRoleType.PrimeMinister => _playerRoleManager.ControlledCountry?.Population ?? 0,
+                        PlayerRoleType.Governor => _playerRoleManager.ControlledState?.Population ?? 0,
+                        _ => 0
+                    };
+                    popText.Text = $"{population:N0}";
+                }
+
+                // Update date/time (placeholder)
+                if (this.FindControl<TextBlock>("DateTimeText") is TextBlock dateText)
+                {
+                    dateText.Text = DateTime.Now.ToString("MMMM yyyy");
+                }
+
+                // Update role-specific action button
+                if (this.FindControl<Button>("RoleActionButton") is Button roleBtn)
+                {
+                    roleBtn.Content = _playerRoleManager.CurrentRole switch
+                    {
+                        PlayerRoleType.PrimeMinister => "Set National Policy",
+                        PlayerRoleType.Governor => "Set State Policy",
+                        PlayerRoleType.CEO => "Build Factory",
+                        _ => "No Action"
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error updating HUD: {ex.Message}");
+            }
+        }
+
+        #endregion
+
+        #region HUD Event Handlers
+
+        private void OnDiplomacyClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Diplomacy button clicked");
+            // TODO: Open diplomacy window
+        }
+
+        private void OnTradeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Trade button clicked");
+            // TODO: Open trade window
+        }
+
+        private void OnConstructionClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Construction button clicked");
+            // TODO: Open construction window
+        }
+
+        private void OnRoleActionClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine($"Role action clicked for {_playerRoleManager.CurrentRole}");
+
+            switch (_playerRoleManager.CurrentRole)
+            {
+                case PlayerRoleType.PrimeMinister:
+                    // Example: Set a national policy
+                    bool success = _playerRoleManager.SetNationalPolicy("TaxRate", "25%");
+                    Debug.WriteLine($"National policy set: {success}");
+                    break;
+                case PlayerRoleType.Governor:
+                    // Example: Set a state policy
+                    _playerRoleManager.SetStatePolicy("LocalTax", "5%");
+                    break;
+                case PlayerRoleType.CEO:
+                    // Example: Build a factory (need a city reference)
+                    if (_currentCountry.States.Count > 0 && _currentCountry.States[0].Cities.Count > 0)
+                    {
+                        var city = _currentCountry.States[0].Cities[0];
+                        _playerRoleManager.BuildFactoryAsCEO("Steel", city);
+                    }
+                    break;
+            }
+        }
+
+        private void OnEconomyViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Economy view button clicked");
+            // TODO: Open economy statistics window
+        }
+
+        private void OnStatsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Stats button clicked");
+            // TODO: Open general statistics window
+        }
+
+        private void OnMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Menu button clicked - returning to main menu");
+
+            // Create and show the main menu window
+            var mainWindow = new MainWindow();
+            mainWindow.Show();
+
+            // Close the current game window
+            this.Close();
         }
 
         #endregion
