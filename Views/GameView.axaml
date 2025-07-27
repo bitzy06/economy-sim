@@ -190,6 +190,33 @@
 								IsHitTestVisible="True"/>
 					</Border>
 
+					<!-- Map View Toggle buttons -->
+					<Border Background="#2A2A4A"
+							CornerRadius="5"
+							Padding="5"
+							Margin="0,0,15,0"
+							BorderBrush="#4A4A6A"
+							BorderThickness="2">
+						<StackPanel Orientation="Horizontal" Spacing="5">
+							<Button x:Name="TerrainViewButton"
+									Content="Terrain"
+									Width="80"
+									Height="40"
+									Background="#3A3A5A"
+									Foreground="White"
+									FontSize="12"
+									IsHitTestVisible="True"/>
+							<Button x:Name="PoliticalViewButton"
+									Content="Political"
+									Width="80"
+									Height="40"
+									Background="#5A3A3A"
+									Foreground="White"
+									FontSize="12"
+									IsHitTestVisible="True"/>
+						</StackPanel>
+					</Border>
+
 					<!-- View buttons -->
 					<Button x:Name="EconomyViewButton"
 							Content="Economy"

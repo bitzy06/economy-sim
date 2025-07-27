@@ -5,7 +5,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using SkiaSharp;
-using StrategyGame; // Assuming MultiResolutionMapManager is in this namespace
+using StrategyGame; // Assuming HybridMapManager is in this namespace
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -15,7 +15,7 @@ namespace Economy_sim
 {
     public partial class GameView : Window
     {
-        private readonly MultiResolutionMapManager _mapManager;
+        private readonly HybridMapManager _mapManager;
 
         // --- Optimized Rendering Fields ---
         private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
@@ -35,7 +35,7 @@ namespace Economy_sim
         public GameView()
         {
             InitializeComponent();
-            _mapManager = new MultiResolutionMapManager(baseWidth: 4096, baseHeight: 2048);
+            _mapManager = new HybridMapManager(baseWidth: 4096, baseHeight: 2048);
             this.Loaded += OnWindowLoaded;
             this.SizeChanged += OnSizeChanged;
 
@@ -48,6 +48,10 @@ namespace Economy_sim
 
             // Initialize HUD after component initialization
             InitializeHUD();
+
+            // Subscribe to map manager events
+            _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
+            UpdateMapViewButtons();
         }
 
         private void OnWindowLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -364,6 +368,13 @@ namespace Economy_sim
 
             if (this.FindControl<Button>("StatsButton") is Button statsBtn)
                 statsBtn.Click += OnStatsClicked;
+
+            // Map view toggle buttons
+            if (this.FindControl<Button>("TerrainViewButton") is Button terrainBtn)
+                terrainBtn.Click += OnTerrainViewClicked;
+
+            if (this.FindControl<Button>("PoliticalViewButton") is Button politicalBtn)
+                politicalBtn.Click += OnPoliticalViewClicked;
 
             if (this.FindControl<Button>("MenuButton") is Button menuBtn)
                 menuBtn.Click += OnMenuClicked;
@@ -692,6 +703,43 @@ namespace Economy_sim
 
             // Close the current game window
             this.Close();
+        }
+
+        private void OnTerrainViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Terrain view button clicked");
+            _mapManager.SetViewType(MapViewType.Terrain);
+            QueueRender();
+        }
+
+        private void OnPoliticalViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Political view button clicked");
+            _mapManager.SetViewType(MapViewType.Political);
+            QueueRender();
+        }
+
+        private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
+        {
+            Debug.WriteLine($"Map view type changed to: {viewType}");
+            Dispatcher.UIThread.Post(UpdateMapViewButtons);
+        }
+
+        private void UpdateMapViewButtons()
+        {
+            if (this.FindControl<Button>("TerrainViewButton") is Button terrainBtn)
+            {
+                terrainBtn.Background = _mapManager.CurrentViewType == MapViewType.Terrain 
+                    ? Avalonia.Media.Brushes.DarkBlue 
+                    : Avalonia.Media.Brushes.DarkSlateGray;
+            }
+
+            if (this.FindControl<Button>("PoliticalViewButton") is Button politicalBtn)
+            {
+                politicalBtn.Background = _mapManager.CurrentViewType == MapViewType.Political 
+                    ? Avalonia.Media.Brushes.DarkRed 
+                    : Avalonia.Media.Brushes.DarkSlateGray;
+            }
         }
 
         #endregion
