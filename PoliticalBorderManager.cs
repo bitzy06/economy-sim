@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Diagnostics;
 using OSGeo.GDAL;
 using OSGeo.OGR;
 using SkiaSharp;
@@ -113,6 +114,8 @@ namespace StrategyGame
             // CShapes uses decimal years (e.g., 1950.0 for Jan 1950)
             double targetYear = targetDate.Year + (targetDate.DayOfYear - 1) / (DateTime.IsLeapYear(targetDate.Year) ? 366.0 : 365.0);
             
+            Debug.WriteLine($"Filtering CShapes data for target year: {targetYear:F3}");
+            
             // Create a memory layer for filtered features
             OSGeo.OGR.Driver memDrvOgr = Ogr.GetDriverByName("Memory");
             DataSource memDs = memDrvOgr.CreateDataSource("temp", new string[0]);
@@ -136,16 +139,33 @@ namespace StrategyGame
             layer.ResetReading();
             Feature feature;
             int countryCode = 1; // Start from 1 (0 is typically nodata)
+            int totalFeatures = 0;
+            int validFeatures = 0;
             
             while ((feature = layer.GetNextFeature()) != null)
             {
-                // Get start and end dates
+                totalFeatures++;
+                
+                // Get start and end dates - be more flexible with missing data
                 double startYear = GetFieldAsDouble(feature, "GWSYEAR");
                 double endYear = GetFieldAsDouble(feature, "GWEYER");
                 
-                // Check if target date falls within the validity period
-                if (targetYear >= startYear && (endYear == -1 || targetYear <= endYear))
+                // Handle missing or invalid dates more gracefully
+                if (startYear <= 0)
                 {
+                    startYear = 1945; // Default start year if missing
+                }
+                if (endYear <= 0 || endYear < startYear)
+                {
+                    endYear = 2020; // Default end year if missing or invalid
+                }
+                
+                // Check if target date falls within the validity period
+                // Make the filter more inclusive for countries around 1950
+                if (targetYear >= startYear && targetYear <= endYear)
+                {
+                    validFeatures++;
+                    
                     // Create new feature for filtered layer
                     Feature newFeature = new Feature(filteredDefn);
                     
@@ -179,29 +199,44 @@ namespace StrategyGame
                     // Set raster code
                     newFeature.SetField("RASTER_CODE", countryCode);
                     
-                    // Store country info for color mapping
+                    // Store country info for color mapping - ensure every country gets a unique color
                     string countryName = GetFieldAsString(feature, "CNTRY_NAME") ?? $"Country_{countryCode}";
                     string iso3Code = GetCountryCodeWithFallback(feature, countryCode);
                     
+                    // Ensure this country has a color assigned
                     if (!_countryColors.ContainsKey(iso3Code))
                     {
-                        _countryColors[iso3Code] = GenerateRandomColor();
+                        _countryColors[iso3Code] = GenerateDistinctColor(countryCode);
                     }
+                    
+                    Debug.WriteLine($"Added country: {countryName} ({iso3Code}) with code {countryCode}, valid {startYear}-{endYear}");
                     
                     filteredLayer.CreateFeature(newFeature);
                     countryCode++;
                     
                     newFeature.Dispose();
                 }
+                else
+                {
+                    Debug.WriteLine($"Filtered out country: {GetFieldAsString(feature, "CNTRY_NAME") ?? "Unknown"}, " +
+                                  $"target: {targetYear:F1}, valid: {startYear:F1}-{endYear:F1}");
+                }
                 
                 feature.Dispose();
             }
             
+            Debug.WriteLine($"Date filtering results: {validFeatures}/{totalFeatures} features included for year {targetYear:F1}");
+            
             // Rasterize the filtered layer
             if (filteredLayer.GetFeatureCount(1) > 0)
             {
+                Debug.WriteLine($"Rasterizing {filteredLayer.GetFeatureCount(1)} countries...");
                 Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, filteredLayer, IntPtr.Zero, IntPtr.Zero,
                     0, null, new[] { "ATTRIBUTE=RASTER_CODE" }, null, "");
+            }
+            else
+            {
+                Debug.WriteLine("WARNING: No countries found for the target date after filtering!");
             }
             
             // Clean up
@@ -253,6 +288,37 @@ namespace StrategyGame
             byte g = (byte)_random.Next(80, 255);
             byte b = (byte)_random.Next(80, 255);
             return new SKColor(r, g, b, 255);
+        }
+        
+        private SKColor GenerateDistinctColor(int index)
+        {
+            // Generate more distinct colors using HSV color space for better distribution
+            float hue = (index * 137.508f) % 360f; // Golden angle for good distribution
+            float saturation = 0.7f + (index % 3) * 0.1f; // Vary saturation slightly
+            float value = 0.8f + (index % 2) * 0.2f; // Vary brightness slightly
+            
+            return HSVToRGB(hue, saturation, value);
+        }
+        
+        private SKColor HSVToRGB(float h, float s, float v)
+        {
+            float c = v * s;
+            float x = c * (1 - Math.Abs((h / 60f) % 2 - 1));
+            float m = v - c;
+            
+            float r, g, b;
+            if (h < 60) { r = c; g = x; b = 0; }
+            else if (h < 120) { r = x; g = c; b = 0; }
+            else if (h < 180) { r = 0; g = c; b = x; }
+            else if (h < 240) { r = 0; g = x; b = c; }
+            else if (h < 300) { r = x; g = 0; b = c; }
+            else { r = c; g = 0; b = x; }
+            
+            return new SKColor(
+                (byte)Math.Round((r + m) * 255),
+                (byte)Math.Round((g + m) * 255),
+                (byte)Math.Round((b + m) * 255),
+                255);
         }
         
         private void LoadOrCreateColorMapping()

@@ -224,35 +224,30 @@ namespace StrategyGame
                     return null;
                 }
                 
-                // Calculate geographic bounds for this tile
-                // Convert pixel coordinates to geographic coordinates (longitude/latitude)
-                double worldWidth = 360.0;  // Full longitude range
-                double worldHeight = 180.0; // Full latitude range
+                // Use unified coordinate transformation to calculate geographic bounds
+                var bounds = CoordinateTransform.GetTileGeographicBounds(
+                    pixelX / TileSizePx, 
+                    pixelY / TileSizePx, 
+                    TileSizePx, 
+                    _baseWidth, 
+                    _baseHeight);
                 
-                // Calculate tile bounds in geographic coordinates
-                double lonPerPixel = worldWidth / _baseWidth;
-                double latPerPixel = worldHeight / _baseHeight;
+                // Validate bounds
+                if (!CoordinateTransform.IsValidGeoBounds(bounds))
+                {
+                    Debug.WriteLine($"Invalid geographic bounds calculated: {bounds}");
+                    return null;
+                }
                 
-                double minLon = -180.0 + (pixelX * lonPerPixel);
-                double maxLon = -180.0 + ((pixelX + tileWidth) * lonPerPixel);
-                double maxLat = 90.0 - (pixelY * latPerPixel);
-                double minLat = 90.0 - ((pixelY + tileHeight) * latPerPixel);
+                Debug.WriteLine($"Tile bounds using unified transform: {bounds}");
                 
-                // Ensure bounds are within valid ranges
-                minLon = Math.Max(-180.0, Math.Min(180.0, minLon));
-                maxLon = Math.Max(-180.0, Math.Min(180.0, maxLon));
-                minLat = Math.Max(-90.0, Math.Min(90.0, minLat));
-                maxLat = Math.Max(-90.0, Math.Min(90.0, maxLat));
-                
-                Debug.WriteLine($"Tile bounds: Lon[{minLon:F2}, {maxLon:F2}], Lat[{minLat:F2}, {maxLat:F2}]");
-                
-                // Generate mask for just this tile area
+                // Generate mask for just this tile area using unified coordinate bounds
                 var mask = _politicalManager.CreatePoliticalMask(
                     cshapesPath, 
                     _politicalMapDate, 
                     tileWidth, 
                     tileHeight, 
-                    new double[] { minLon, minLat, maxLon, maxLat });
+                    new double[] { bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat });
                 
                 // Cache the mask if successful
                 if (mask != null && _maskCache.Count < MaxCacheSize * 2)

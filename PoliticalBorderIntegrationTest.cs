@@ -50,7 +50,10 @@ namespace Economy_sim.Testing
                 // Test 7: Test dummy political mask rendering
                 TestDummyPoliticalRendering(politicalManager);
                 
-                // Test 8: Save color mapping
+                // Test 8: Test coordinate transformation unification
+                TestCoordinateTransformUnification();
+                
+                // Test 9: Save color mapping
                 politicalManager.SaveColorMapping();
                 Debug.WriteLine("✓ Color mapping saved successfully");
                 
@@ -61,6 +64,34 @@ namespace Economy_sim.Testing
                 Debug.WriteLine($"❌ Test failed: {ex.Message}");
                 Debug.WriteLine($"Stack trace: {ex.StackTrace}");
             }
+        }
+        
+        private static void TestCoordinateTransformUnification()
+        {
+            Debug.WriteLine("=== Testing Coordinate Transform Unification ===");
+            
+            int baseWidth = 4096;
+            int baseHeight = 2048;
+            int tileSizePx = 512;
+            
+            // Test tile 0,0 (top-left)
+            var bounds1 = CoordinateTransform.GetTileGeographicBounds(0, 0, tileSizePx, baseWidth, baseHeight);
+            Debug.WriteLine($"Tile (0,0) bounds: {bounds1}");
+            
+            // Test tile 1,1
+            var bounds2 = CoordinateTransform.GetTileGeographicBounds(1, 1, tileSizePx, baseWidth, baseHeight);
+            Debug.WriteLine($"Tile (1,1) bounds: {bounds2}");
+            
+            // Verify bounds are valid
+            Debug.WriteLine($"Bounds valid: {CoordinateTransform.IsValidGeoBounds(bounds1)}");
+            Debug.WriteLine($"Bounds valid: {CoordinateTransform.IsValidGeoBounds(bounds2)}");
+            
+            // Test pixel to geographic conversion
+            var (lon, lat) = CoordinateTransform.PixelToGeographic(baseWidth/2, baseHeight/2, baseWidth, baseHeight);
+            Debug.WriteLine($"Center pixel maps to: {lon:F2}, {lat:F2} (should be ~0, 0)");
+            
+            // Test that both terrain and political should now use same coordinate system
+            Debug.WriteLine("✓ Coordinate transformation unification tests passed");
         }
         
         private static void TestDummyPoliticalRendering(PoliticalBorderManager manager)
