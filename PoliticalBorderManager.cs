@@ -18,6 +18,7 @@ namespace StrategyGame
         private static bool _gdalRegistered = false;
         
         private readonly Dictionary<string, SKColor> _countryColors = new();
+        private readonly Dictionary<int, string> _rasterCodeToCountryCode = new(); // Maps raster codes to country codes
         private readonly string _colorMappingPath;
         private readonly Random _random = new();
         
@@ -116,6 +117,9 @@ namespace StrategyGame
             
             Debug.WriteLine($"Filtering CShapes data for target year: {targetYear:F3}");
             
+            // Clear any existing raster code mappings for fresh generation
+            _rasterCodeToCountryCode.Clear();
+            
             // Create a memory layer for filtered features
             OSGeo.OGR.Driver memDrvOgr = Ogr.GetDriverByName("Memory");
             DataSource memDs = memDrvOgr.CreateDataSource("temp", new string[0]);
@@ -178,6 +182,9 @@ namespace StrategyGame
                     {
                         _countryColors[iso3Code] = GenerateSimpleColor(countryCode);
                     }
+                    
+                    // Map raster code to country code for color lookup during rendering
+                    _rasterCodeToCountryCode[countryCode] = iso3Code;
                     
                     filteredLayer.CreateFeature(newFeature);
                     countryCode++;
@@ -319,6 +326,15 @@ namespace StrategyGame
         public SKColor GetCountryColor(string countryCode)
         {
             return _countryColors.GetValueOrDefault(countryCode, SKColor.Parse("#808080")); // Gray default
+        }
+        
+        public SKColor GetCountryColorByRasterCode(int rasterCode)
+        {
+            if (_rasterCodeToCountryCode.TryGetValue(rasterCode, out string countryCode))
+            {
+                return GetCountryColor(countryCode);
+            }
+            return SKColor.Parse("#808080"); // Gray default
         }
         
         public Dictionary<string, SKColor> GetAllCountryColors()

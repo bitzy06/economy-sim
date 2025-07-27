@@ -355,9 +355,8 @@ namespace StrategyGame
                                 }
                                 else
                                 {
-                                    // Get country color - use the country ID directly as a string
-                                    // or create a mapping based on the sequence
-                                    var baseColor = _politicalManager.GetCountryColor(countryId.ToString());
+                                    // Get country color using the raster code mapping
+                                    var baseColor = _politicalManager.GetCountryColorByRasterCode(countryId);
                                     
                                     // Add slight random variation for visual interest
                                     int variation = rng.Next(-10, 11);
