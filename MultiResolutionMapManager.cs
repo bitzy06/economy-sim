@@ -74,19 +74,7 @@ namespace StrategyGame
         public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80, 160, 320, 640, 1280 };
         private static readonly Dictionary<string, SemaphoreSlim> _fileLocks = new();
         private static readonly object _fileLockDictLock = new();
-        private SKBitmap SafeLoadTile(string path)
-        {
-            var fileLock = GetFileLock(path);
-            fileLock.Wait();
-            try
-            {
-                // 1️⃣ copy the file into memory so the OS handle is released immediately
-                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                using var img = SixLabors.ImageSharp.Image.Load<Rgba32>(fs);
-                return ImageSharpToSkBitmap(img);
-            }
-            finally { fileLock.Release(); }
-        }
+        
         private static SemaphoreSlim GetFileLock(string path)
         {
             lock (_fileLockDictLock)
@@ -406,55 +394,7 @@ namespace StrategyGame
             return Path.Combine(tileFolder, $"{tileX}_{tileY}.png");
         }
 
-        private static void OverlayFeatures(SKBitmap bmp, ZoomLevel level)
-        {
-            using var canvas = new SKCanvas(bmp);
-            var paint = new SKPaint { IsAntialias = false, FilterQuality = SKFilterQuality.None };
-            Random rng = new Random(42);
-            switch (level)
-            {
-                case ZoomLevel.Country:
-                    for (int i = 0; i < 3; i++)
-                    {
-                        int size = bmp.Width / 15;
-                        int x = rng.Next(bmp.Width - size);
-                        int y = rng.Next(bmp.Height - size);
-                        paint.Color = SKColors.LightGray;
-                        paint.Style = SKPaintStyle.Fill;
-                        canvas.DrawOval(new SKRect(x, y, x + size, y + size), paint);
-                    }
-                    break;
-                case ZoomLevel.State:
-                    paint.Color = SKColors.Gray;
-                    paint.Style = SKPaintStyle.Stroke;
-                    paint.StrokeWidth = 2;
-                    canvas.DrawLine(0, bmp.Height / 3, bmp.Width, bmp.Height / 3, paint);
-                    canvas.DrawLine(bmp.Width / 2, 0, bmp.Width / 2, bmp.Height, paint);
-                    paint.Color = SKColors.DarkGray;
-                    paint.StrokeWidth = 1;
-                    canvas.DrawLine(0, bmp.Height * 2 / 3, bmp.Width, bmp.Height * 2 / 3, paint);
-                    break;
-                case ZoomLevel.City:
-                    paint.Style = SKPaintStyle.Fill;
-                    for (int i = 0; i < 20; i++)
-                    {
-                        int w = rng.Next(4, 8);
-                        int h = rng.Next(4, 8);
-                        int x = rng.Next(bmp.Width - w);
-                        int y = rng.Next(bmp.Height - h);
-                        paint.Color = SKColors.DarkSlateBlue;
-                        canvas.DrawRect(new SKRect(x, y, x + w, y + h), paint);
-                    }
-                    for (int i = 0; i < 10; i++)
-                    {
-                        int x = rng.Next(bmp.Width - 3);
-                        int y = rng.Next(bmp.Height - 2);
-                        paint.Color = SKColors.Red;
-                        canvas.DrawRect(new SKRect(x, y, x + 3, y + 2), paint);
-                    }
-                    break;
-            }
-        }
+       
 
         /// <summary>
         /// Safely converts an ImageSharp image to a new, independent SKBitmap by copying pixel data.
@@ -484,13 +424,7 @@ namespace StrategyGame
             return bmp;
         }
 
-        private static SKBitmap CreateWaterTile(int width, int height)
-        {
-            var bmp = new SKBitmap(width, height);
-            using var canvas = new SKCanvas(bmp);
-            canvas.Clear(SKColors.LightSkyBlue);
-            return bmp;
-        }
+       
 
         public async Task PreloadTilesAsync(int zoomLevel, SKRectI view, int radius = 1, CancellationToken token = default)
         {
@@ -584,26 +518,12 @@ namespace StrategyGame
                 return generated;
             }, token).ConfigureAwait(false);
 
-
             if (imageSharpImage == null)
             {
                 return new SKBitmap(TileSizePx, TileSizePx);
             }
 
             SKBitmap bmp = ImageSharpToSkBitmap(imageSharpImage);
-
-            using (var canvas = new SKCanvas(bmp))
-            {
-                using (var paint = new SKPaint())
-                {
-                    paint.TextSize = 32.0f;
-                    paint.IsAntialias = true;
-                    paint.Color = SKColors.Yellow;
-                    paint.Style = SKPaintStyle.Fill;
-                    string text = $"G({tileX}, {tileY})";
-                    canvas.DrawText(text, 20, 80, paint);
-                }
-            }
 
             return bmp;
         }
