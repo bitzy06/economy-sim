@@ -93,6 +93,10 @@ namespace Economy_sim
 
                 Debug.WriteLine($"Initial size detected via timer using ClientSize: {this.ClientSize}. Triggering render.");
                 UpdateBitmapSource(PixelSize.FromSize(this.ClientSize, 1.0));
+                
+                // Center the view to ensure both map types start at the same position
+                CenterView();
+                
                 QueueRender();
             }
         }
@@ -725,7 +729,28 @@ namespace Economy_sim
         private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
         {
             Debug.WriteLine($"Map view type changed to: {viewType}");
+            
+            // Center both map types at the same position to ensure alignment
+            CenterView();
+            
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
+            Dispatcher.UIThread.Post(QueueRender);
+        }
+        
+        private void CenterView()
+        {
+            if (_mapManager == null) return;
+            
+            var effectiveSize = GetEffectiveRenderSize();
+            if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
+            
+            var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
+            
+            // Center the view on the map
+            _viewOffset.X = Math.Max(0, (mapSize.Width - (int)effectiveSize.Width) / 2);
+            _viewOffset.Y = Math.Max(0, (mapSize.Height - (int)effectiveSize.Height) / 2);
+            
+            Debug.WriteLine($"Centered view at offset: {_viewOffset}, Map size: {mapSize}, View size: {effectiveSize}");
         }
 
         private void UpdateMapViewButtons()
