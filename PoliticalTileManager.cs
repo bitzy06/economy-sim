@@ -211,6 +211,7 @@ namespace StrategyGame
             
             if (_maskCache.TryGetValue(maskKey, out var cached))
             {
+                Debug.WriteLine($"Using cached political mask for tile ({pixelX}, {pixelY})");
                 return cached;
             }
             
@@ -224,7 +225,8 @@ namespace StrategyGame
                     return null;
                 }
                 
-                // Use unified coordinate transformation with base dimensions for consistency
+                // Use unified coordinate transformation with base dimensions
+                // The coordinate transform should work with logical map dimensions, not scaled pixel dimensions
                 var bounds = CoordinateTransform.GetTileGeographicBounds(
                     pixelX / TileSizePx, 
                     pixelY / TileSizePx, 
@@ -239,7 +241,7 @@ namespace StrategyGame
                     return null;
                 }
                 
-                Debug.WriteLine($"Tile bounds using unified transform: {bounds}");
+                Debug.WriteLine($"Generating political mask for tile ({pixelX}, {pixelY}) with bounds: {bounds}");
                 
                 // Generate mask for just this tile area using unified coordinate bounds
                 var mask = _politicalManager.CreatePoliticalMask(
@@ -248,6 +250,24 @@ namespace StrategyGame
                     tileWidth, 
                     tileHeight, 
                     new double[] { bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat });
+                
+                // Verify mask has data
+                bool hasData = false;
+                if (mask != null)
+                {
+                    for (int y = 0; y < mask.GetLength(0) && !hasData; y++)
+                    {
+                        for (int x = 0; x < mask.GetLength(1) && !hasData; x++)
+                        {
+                            if (mask[y, x] > 0)
+                            {
+                                hasData = true;
+                            }
+                        }
+                    }
+                }
+                
+                Debug.WriteLine($"Political mask generated for tile ({pixelX}, {pixelY}): {(hasData ? "HAS DATA" : "NO DATA")}");
                 
                 // Cache the mask if successful
                 if (mask != null && _maskCache.Count < MaxCacheSize * 2)
@@ -495,15 +515,17 @@ namespace StrategyGame
         
         private SKSizeI GetMapSize(int zoomLevel)
         {
-            // Use base dimensions for coordinate calculations (consistent with terrain system)
-            return new SKSizeI(_baseWidth, _baseHeight);
+            // Use the same map size calculation as the terrain manager for alignment
+            int cellSize = GetCellSizeForZoom(zoomLevel);
+            return new SKSizeI(_baseWidth * cellSize, _baseHeight * cellSize);
         }
         
         private int GetCellSizeForZoom(int zoomLevel)
         {
-            // Use simpler scaling approach that was working before
-            // This gives reasonable zoom levels: 1, 2, 4, 8, 16, 32...
-            return Math.Max(1, 1 << Math.Min(zoomLevel, 6));
+            // Use the same zoom level calculation as MultiResolutionMapManager for alignment
+            int index = zoomLevel - 1;
+            index = Math.Clamp(index, 0, MultiResolutionMapManager.PixelsPerCellLevels.Length - 1);
+            return MultiResolutionMapManager.PixelsPerCellLevels[index];
         }
         
         public void Dispose()
