@@ -2,6 +2,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Processing.Processors.Transforms;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,30 +13,101 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using DrawingPoint = SkiaSharp.SKPointI;
+using DrawingRectangle = SkiaSharp.SKRectI;
 
 namespace StrategyGame
 {
+    /// <summary>
+    /// Generates and stores maps for each zoom level at game start.
+    /// Maps are kept in memory so they can be cropped when rendering.
+    /// </summary>
     public class MultiResolutionMapManager
     {
+        public enum ZoomLevel { Global = 1, Continental, Country, State, City }
         private readonly HashSet<(int cellSize, int tileX, int tileY)> _tilesBeingLoaded = new();
         private readonly object _tileLoadLock = new();
+        private readonly SemaphoreSlim _preloadSemaphore = new(1, 1);
         private readonly Dictionary<(int cellSize, int tileX, int tileY), Task<SKBitmap>> _inFlightTasks = new();
         private readonly object _taskLock = new();
+        private Image<Rgba32> _largeBaseMap;
+
+        // Unified cache for tiles using _tileTextures as the single source of truth.
         private readonly Dictionary<(int cellSize, int x, int y), SKBitmap> _tileTextures = new();
+        // LRU order for tile cache entries
         private readonly LinkedList<(int cellSize, int x, int y)> _tileLru = new();
         private readonly object _masterCacheLock = new();
+
         public static readonly bool GpuAvailable;
         internal static readonly GRContext? SharedContext;
+
         static MultiResolutionMapManager()
         {
-            try { SharedContext = GRContext.CreateGl(); GpuAvailable = SharedContext != null; } catch { GpuAvailable = false; }
+            try
+            {
+                SharedContext = GRContext.CreateGl();
+                GpuAvailable = SharedContext != null;
+            }
+            catch
+            {
+                GpuAvailable = false;
+            }
         }
+
+        /// <summary>
+        /// Raised during tile cache generation. The first parameter is the
+        /// number of tiles processed so far and the second is the total tile
+        /// count.
+        /// </summary>
+        public event Action<int, int> TileGenerationProgress;
+
+        /// <summary>
+        /// Maximum number of tiles kept in the cache.
+        /// </summary>
         private const int TileCacheLimit = 1024;
+
+        /// <summary>
+        /// Size in pixels of each cached tile.
+        /// </summary>
         public const int TileSizePx = 512;
+
         public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80, 160, 320, 640, 1280 };
         private static readonly Dictionary<string, SemaphoreSlim> _fileLocks = new();
         private static readonly object _fileLockDictLock = new();
-        private static readonly string TileCacheDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "tile_cache");
+        private SKBitmap SafeLoadTile(string path)
+        {
+            var fileLock = GetFileLock(path);
+            fileLock.Wait();
+            try
+            {
+                // 1️⃣ copy the file into memory so the OS handle is released immediately
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                using var img = SixLabors.ImageSharp.Image.Load<Rgba32>(fs);
+                return ImageSharpToSkBitmap(img);
+            }
+            finally { fileLock.Release(); }
+        }
+        private static SemaphoreSlim GetFileLock(string path)
+        {
+            lock (_fileLockDictLock)
+            {
+                if (!_fileLocks.TryGetValue(path, out var sem))
+                {
+                    sem = new SemaphoreSlim(1, 1);
+                    _fileLocks[path] = sem;
+                }
+                return sem;
+            }
+        }
+
+        private static readonly string RepoRoot =
+            System.IO.Path.GetFullPath(System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
+
+        private static readonly string TileCacheDir = Path.Combine(
+             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+             "data", "tile_cache");
+
         private readonly int _baseWidth;
         private readonly int _baseHeight;
 
@@ -45,29 +117,181 @@ namespace StrategyGame
             _baseHeight = baseHeight;
         }
 
-        // This method is now identical to your working version. It expects viewArea in pixels.
-        public SKBitmap AssembleView(float zoom, SKRectI viewArea, Action triggerRefresh = null)
+        /// <summary>
+        /// Gets the cell size for a given integer zoom level.
+        /// </summary>
+        public int GetCellSizeForZoom(int zoomLevel)
         {
-            // 1) figure out how many screen‐pixels each map‐cell is right now
-            int cellSize = GetCellSize(zoom);
+            // `zoomLevel` is 1-based (e.g., 1, 2, 3...), but array indices are 0-based.
+            int index = zoomLevel - 1;
 
-            // 2) each tile always covers TileSizePx pixels *per cell*
-            int logicalTileSize = TileSizePx * cellSize;
+            // Clamp the index to ensure it's always within the valid bounds of the array.
+            index = Math.Clamp(index, 0, PixelsPerCellLevels.Length - 1);
+
+            return PixelsPerCellLevels[index];
+        }
+
+        /// <summary>
+        /// Gets the total map size in pixels for a given integer zoom level.
+        /// </summary>
+        public SKSizeI GetMapSize(int zoomLevel)
+        {
+            int cellSize = GetCellSizeForZoom(zoomLevel);
+            // _baseWidth and _baseHeight are the map dimensions in cells.
+            return new SKSizeI(_baseWidth * cellSize, _baseHeight * cellSize);
+        }
+
+        /// <summary>
+        /// Asynchronously gets a tile, loading it from cache, disk, or generating it if needed.
+        /// This method is now standardized to use integer-based zoom levels.
+        /// </summary>
+        public Task<SKBitmap> GetTileAsync(int zoomLevel, int tileX, int tileY, CancellationToken token)
+        {
+            int cellSize = GetCellSizeForZoom(zoomLevel);
+            var key = (cellSize, tileX, tileY);
+
+            lock (_taskLock)
+            {
+                if (_inFlightTasks.TryGetValue(key, out var existing))
+                    return existing;
+
+                var task = LoadTileInternalAsync(zoomLevel, tileX, tileY, token);
+                _inFlightTasks[key] = task;
+
+                // Ensure the task is removed from the in-flight dictionary upon completion.
+                task.ContinueWith(_ =>
+                {
+                    lock (_taskLock)
+                    {
+                        _inFlightTasks.Remove(key);
+                    }
+                }, TaskScheduler.Default);
+
+                return task;
+            }
+        }
+
+        private async Task<SKBitmap> LoadTileInternalAsync(int zoomLevel, int tileX, int tileY, CancellationToken token)
+        {
+            int cellSize = GetCellSizeForZoom(zoomLevel);
+            var key = (cellSize, tileX, tileY);
+            SKBitmap bmp = null;
+
+            // Try cache first (using the unified _tileTextures cache)
+            lock (_masterCacheLock)
+            {
+                if (_tileTextures.TryGetValue(key, out var cached))
+                {
+                    _tileLru.Remove(key);
+                    _tileLru.AddLast(key);
+                    return cached;
+                }
+            }
+
+            string dir = Path.Combine(TileCacheDir, cellSize.ToString());
+            string path = Path.Combine(dir, $"{tileX}_{tileY}.png");
+
+            if (File.Exists(path))
+            {
+                try
+                {
+                    var fileLock = GetFileLock(path);
+                    await fileLock.WaitAsync(token).ConfigureAwait(false);
+                    try
+                    {
+                        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                        using var img = SixLabors.ImageSharp.Image.Load<Rgba32>(stream);
+                        if (img.Width > 0 && img.Height > 0)
+                        {
+                            bmp = ImageSharpToSkBitmap(img);
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"Discarding corrupted tile at {path}");
+                            File.Delete(path);
+                        }
+                    }
+                    finally
+                    {
+                        fileLock.Release();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to load tile {tileX},{tileY} from disk: {ex.Message}");
+                    try { File.Delete(path); } catch { }
+                }
+            }
+
+            if (bmp == null)
+            {
+                try
+                {
+                    // This method correctly uses cellSize, which is derived from the correct zoomLevel.
+                    bmp = await LoadOrGenerateTileFromDataAsync(cellSize, tileX, tileY, token).ConfigureAwait(false);
+                    if (bmp != null && bmp.Width > 0 && bmp.Height > 0)
+                    {
+                        await SaveTileToDiskAsync(cellSize, tileX, tileY, bmp, token).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        bmp = null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Tile generation failed ({tileX},{tileY}): {ex.Message}");
+                }
+            }
+
+            if (bmp != null)
+            {
+                lock (_masterCacheLock)
+                {
+                    if (_tileTextures.ContainsKey(key))
+                    {
+                        _tileTextures[key]?.Dispose();
+                    }
+                    _tileTextures[key] = bmp;
+                    _tileLru.Remove(key);
+                    _tileLru.AddLast(key);
+                    EnforceTileLimit();
+                }
+            }
+            return bmp;
+        }
+
+        private void EnforceTileLimit()
+        {
+            // This method assumes a lock on _masterCacheLock is already held
+            while (_tileLru.Count > TileCacheLimit)
+            {
+                var oldest = _tileLru.First.Value;
+                _tileLru.RemoveFirst();
+
+                if (_tileTextures.Remove(oldest, out var bitmapToDispose))
+                {
+                    bitmapToDispose?.Dispose();
+                }
+            }
+        }
+
+        public SKBitmap AssembleView(int zoomLevel, SKRectI viewArea, Action triggerRefresh = null)
+        {
+            int cellSize = GetCellSizeForZoom(zoomLevel);
+            int tileSize = TileSizePx;
 
             if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
                 return new SKBitmap(1, 1);
 
-            // 3) compute which tiles we need, in *map‐pixel* coordinates
-            int tileStartX = Math.Max(0, viewArea.Left / logicalTileSize);
-            int tileStartY = Math.Max(0, viewArea.Top / logicalTileSize);
-            int tileEndX = (viewArea.Right + logicalTileSize - 1) / logicalTileSize;
-            int tileEndY = (viewArea.Bottom + logicalTileSize - 1) / logicalTileSize;
+            int tileStartX = Math.Max(0, viewArea.Left / tileSize);
+            int tileStartY = Math.Max(0, viewArea.Top / tileSize);
+            int tileEndX = (viewArea.Right + tileSize - 1) / tileSize;
+            int tileEndY = (viewArea.Bottom + tileSize - 1) / tileSize;
 
             var info = new SKImageInfo(viewArea.Width, viewArea.Height);
-            using var surface = GpuAvailable
-                ? SKSurface.Create(SharedContext, false, info)
-                : SKSurface.Create(info);
-
+            var context = GpuAvailable ? SharedContext : null;
+            using var surface = context != null ? SKSurface.Create(context, false, info) : SKSurface.Create(info);
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
 
@@ -75,204 +299,313 @@ namespace StrategyGame
             {
                 for (int tx = tileStartX; tx < tileEndX; tx++)
                 {
-                    // 4) same key you use for caching / generation
                     var key = (cellSize, tx, ty);
-
-                    // 5) figure out exactly where on *this* view‐bitmap to draw it
-                    var dest = new SKRect(
-                        tx * logicalTileSize - viewArea.Left,
-                        ty * logicalTileSize - viewArea.Top,
-                        tx * logicalTileSize - viewArea.Left + logicalTileSize,
-                        ty * logicalTileSize - viewArea.Top + logicalTileSize
+                    var rect = new SKRect(
+                        tx * tileSize - viewArea.Left,
+                        ty * tileSize - viewArea.Top,
+                        tx * tileSize - viewArea.Left + tileSize,
+                        ty * tileSize - viewArea.Top + tileSize
                     );
-                    if (dest.Width <= 0 || dest.Height <= 0)
+
+                    if (rect.Width <= 0 || rect.Height <= 0)
                         continue;
 
-                    SKBitmap tileBmp;
+                    SKBitmap textureCopy = null;
                     lock (_masterCacheLock)
-                        _tileTextures.TryGetValue(key, out tileBmp);
-
-                    if (tileBmp != null)
                     {
-                        // draw it at full resolution; no Copy() needed if you
-                        // never mutate the cached SKBitmap elsewhere
-                        canvas.DrawBitmap(tileBmp, dest);
+                        if (_tileTextures.TryGetValue(key, out var texture))
+                        {
+                            textureCopy = texture.Copy();
+                        }
+                    }
+
+                    if (textureCopy != null)
+                    {
+                        using (textureCopy)
+                        {
+                            canvas.DrawBitmap(textureCopy, rect);
+                        }
                     }
                     else
                     {
-                        // missing? queue it up
-                        QueueTileLoad(zoom, tx, ty, triggerRefresh);
+                        lock (_tileLoadLock)
+                        {
+                            if (!_tilesBeingLoaded.Contains(key))
+                            {
+                                _tilesBeingLoaded.Add(key);
+                                var ttx = tx;
+                                var tty = ty;
+                                var tileKey = key;
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        // CORRECTED: Pass the correct integer zoomLevel to the async loader.
+                                        await GetTileAsync(zoomLevel, ttx, tty, CancellationToken.None);
+                                        triggerRefresh?.Invoke();
+                                    }
+                                    finally
+                                    {
+                                        lock (_tileLoadLock)
+                                            _tilesBeingLoaded.Remove(tileKey);
+                                    }
+                                });
+                            }
+                        }
                     }
                 }
             }
 
-            // 6) read back into a standalone SKBitmap
             var result = new SKBitmap(info);
             surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
             return result;
         }
 
-        // This public version is needed by GameView
-        public int GetCellSize(float zoom)
+        public void PreloadVisibleTiles(int zoomLevel, DrawingRectangle viewRect)
         {
-            float[] anchors = Array.ConvertAll(PixelsPerCellLevels, x => (float)x);
-            float size;
-            if (zoom <= 1f)
-                size = anchors[0];
-            else if (zoom >= anchors.Length)
-                size = anchors[^1];
-            else
-            {
-                int lower = (int)Math.Floor(zoom) - 1;
-                float t = zoom - (lower + 1);
-                if (lower < 0) lower = 0;
-                if (lower >= anchors.Length - 1) return (int)Math.Round(anchors[^1]);
-                size = anchors[lower] + t * (anchors[lower + 1] - anchors[lower]);
-            }
-            return (int)Math.Max(1f, Math.Round(size));
-        }
+            int cellSize = GetCellSizeForZoom(zoomLevel);
+            int tileSize = TileSizePx;
+            var tiles = GetTilesForView(zoomLevel, viewRect);
 
-        private void QueueTileLoad(float zoom, int tx, int ty, Action triggerRefresh)
-        {
-            var key = (GetCellSize(zoom), tx, ty);
-            lock (_tileLoadLock)
-                if (!_tilesBeingLoaded.Add(key)) return;
-            _ = Task.Run(async () =>
+            foreach (var tileCoord in tiles)
             {
-                try { await GetTileAsync(zoom, tx, ty, CancellationToken.None); }
-                catch (Exception ex) { Debug.WriteLine(ex); }
-                finally
+                var coord = tileCoord; // prevent closure bug
+                string tilePath = GetTilePath(cellSize, coord.X, coord.Y);
+
+                if (!File.Exists(tilePath))
                 {
-                    lock (_tileLoadLock) _tilesBeingLoaded.Remove(key);
-                    triggerRefresh?.Invoke();
-                }
-            });
-        }
-
-        public Task<SKBitmap> GetTileAsync(float zoom, int tileX, int tileY, CancellationToken token)
-        {
-            int cellSize = GetCellSize(zoom);
-            var key = (cellSize, tileX, tileY);
-            lock (_taskLock)
-            {
-                if (_inFlightTasks.TryGetValue(key, out var existing)) return existing;
-                var task = LoadTileInternalAsync(zoom, tileX, tileY, token);
-                _inFlightTasks[key] = task;
-                task.ContinueWith(_ => { lock (_taskLock) { _inFlightTasks.Remove(key); } }, TaskScheduler.Default);
-                return task;
-            }
-        }
-
-        private async Task<SKBitmap> LoadTileInternalAsync(
-            float zoom, int tileX, int tileY, CancellationToken token)
-        {
-            int cellSize = GetCellSize(zoom);
-            var key = (cellSize, tileX, tileY);
-
-            // 1) check in‐memory cache
-            lock (_masterCacheLock)
-                if (_tileTextures.TryGetValue(key, out var cached))
-                {
-                    _tileLru.Remove(key);
-                    _tileLru.AddLast(key);
-                    return cached;
-                }
-
-            // 2) check on‐disk cache (omitted for brevity)…
-
-            // 3) finally generate a new one *with exactly the same* indices
-            var imageSharpImage = await Task.Run(() =>
-                PixelMapGenerator.GenerateTileWithCountriesLarge(
-                    _baseWidth,
-                    _baseHeight,
-                    cellSize,
-                    tileX,
-                    tileY,
-                    TileSizePx
-                ),
-                token
-            );
-
-            if (imageSharpImage == null)
-                return new SKBitmap(TileSizePx, TileSizePx);
-
-            // Convert ImageSharp image to SKBitmap
-            SKBitmap bmp = ImageSharpToSkBitmap(imageSharpImage);
-
-            // 4) store in both caches
-            lock (_masterCacheLock)
-            {
-                if (_tileTextures.TryGetValue(key, out var old))
-                    old.Dispose();
-                _tileTextures[key] = bmp;
-                _tileLru.AddLast(key);
-                EnforceTileLimit();
-            }
-
-            // …and save to disk if you like
-            return bmp;
-        }
-
-        private void EnforceTileLimit()
-        {
-            while (_tileLru.Count > TileCacheLimit)
-            {
-                var oldest = _tileLru.First.Value;
-                _tileLru.RemoveFirst();
-                if (_tileTextures.Remove(oldest, out var bitmapToDispose))
-                {
-                    bitmapToDispose?.Dispose();
+                    // CORRECTED: Pass the correct zoomLevel.
+                    _ = GetTileAsync(zoomLevel, coord.X, coord.Y, CancellationToken.None);
                 }
             }
         }
-        private static SemaphoreSlim GetFileLock(string path)
+        public int GetTileSizeForZoom(int zoomLevel) => 512;
+        private List<DrawingPoint> GetTilesForView(int zoomLevel, DrawingRectangle viewRect)
         {
-            lock (_fileLockDictLock)
+            int tileSize = GetTileSizeForZoom(zoomLevel);
+            int startX = viewRect.Left / tileSize;
+            int endX = (viewRect.Right + tileSize - 1) / tileSize;
+            int startY = viewRect.Top / tileSize;
+            int endY = (viewRect.Bottom + tileSize - 1) / tileSize;
+
+            List<DrawingPoint> tiles = new List<DrawingPoint>();
+
+            for (int x = startX; x < endX; x++)
             {
-                if (!_fileLocks.TryGetValue(path, out var sem)) { sem = new SemaphoreSlim(1, 1); _fileLocks[path] = sem; }
-                return sem;
+                for (int y = startY; y < endY; y++)
+                {
+                    tiles.Add(new DrawingPoint(x, y));
+                }
+            }
+
+            return tiles;
+        }
+        public string GetTilePath(int cellSize, int tileX, int tileY)
+        {
+            string tileFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "tile_cache", $"{cellSize}");
+            return Path.Combine(tileFolder, $"{tileX}_{tileY}.png");
+        }
+
+        private static void OverlayFeatures(SKBitmap bmp, ZoomLevel level)
+        {
+            using var canvas = new SKCanvas(bmp);
+            var paint = new SKPaint { IsAntialias = false, FilterQuality = SKFilterQuality.None };
+            Random rng = new Random(42);
+            switch (level)
+            {
+                case ZoomLevel.Country:
+                    for (int i = 0; i < 3; i++)
+                    {
+                        int size = bmp.Width / 15;
+                        int x = rng.Next(bmp.Width - size);
+                        int y = rng.Next(bmp.Height - size);
+                        paint.Color = SKColors.LightGray;
+                        paint.Style = SKPaintStyle.Fill;
+                        canvas.DrawOval(new SKRect(x, y, x + size, y + size), paint);
+                    }
+                    break;
+                case ZoomLevel.State:
+                    paint.Color = SKColors.Gray;
+                    paint.Style = SKPaintStyle.Stroke;
+                    paint.StrokeWidth = 2;
+                    canvas.DrawLine(0, bmp.Height / 3, bmp.Width, bmp.Height / 3, paint);
+                    canvas.DrawLine(bmp.Width / 2, 0, bmp.Width / 2, bmp.Height, paint);
+                    paint.Color = SKColors.DarkGray;
+                    paint.StrokeWidth = 1;
+                    canvas.DrawLine(0, bmp.Height * 2 / 3, bmp.Width, bmp.Height * 2 / 3, paint);
+                    break;
+                case ZoomLevel.City:
+                    paint.Style = SKPaintStyle.Fill;
+                    for (int i = 0; i < 20; i++)
+                    {
+                        int w = rng.Next(4, 8);
+                        int h = rng.Next(4, 8);
+                        int x = rng.Next(bmp.Width - w);
+                        int y = rng.Next(bmp.Height - h);
+                        paint.Color = SKColors.DarkSlateBlue;
+                        canvas.DrawRect(new SKRect(x, y, x + w, y + h), paint);
+                    }
+                    for (int i = 0; i < 10; i++)
+                    {
+                        int x = rng.Next(bmp.Width - 3);
+                        int y = rng.Next(bmp.Height - 2);
+                        paint.Color = SKColors.Red;
+                        canvas.DrawRect(new SKRect(x, y, x + 3, y + 2), paint);
+                    }
+                    break;
             }
         }
-        private sealed class ImagePixelOwner : IDisposable
-        {
-            public Image<Rgba32> Image { get; }
-            public MemoryHandle Handle { get; }
-            public ImagePixelOwner(Image<Rgba32> image) { Image = image; Handle = image.Frames.RootFrame.DangerousTryGetSinglePixelMemory(out var memory) ? memory.Pin() : throw new InvalidOperationException("Unable to pin pixel memory."); }
-            public void Dispose() { Handle.Dispose(); Image.Dispose(); }
-        }
+
+        /// <summary>
+        /// Safely converts an ImageSharp image to a new, independent SKBitmap by copying pixel data.
+        /// This avoids complex memory lifetime issues with InstallPixels.
+        /// </summary>
         private static unsafe SKBitmap ImageSharpToSkBitmap(Image<Rgba32> img)
         {
             var info = new SKImageInfo(img.Width, img.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
-            var owner = new ImagePixelOwner(img);
-            var bmp = new SKBitmap();
-            bmp.InstallPixels(info, (IntPtr)owner.Handle.Pointer, img.Width * Unsafe.SizeOf<Rgba32>(), (addr, ctx) => ((ImagePixelOwner)ctx!).Dispose(), owner);
+            var bmp = new SKBitmap(info);
+
+            if (img.Frames.RootFrame.DangerousTryGetSinglePixelMemory(out Memory<Rgba32> pixelMemory))
+            {
+                IntPtr destPtr = bmp.GetPixels();
+                var sourceBytes = MemoryMarshal.AsBytes(pixelMemory.Span);
+                var destSpan = new Span<byte>(destPtr.ToPointer(), sourceBytes.Length);
+                sourceBytes.CopyTo(destSpan);
+            }
+            else
+            {
+                Debug.WriteLine("CRITICAL: Could not get pixel memory from ImageSharp image.");
+                // Fill with a visible error color if pixel data is inaccessible
+                using (var canvas = new SKCanvas(bmp))
+                {
+                    canvas.Clear(SKColors.Magenta);
+                }
+            }
             return bmp;
         }
+
+        private static SKBitmap CreateWaterTile(int width, int height)
+        {
+            var bmp = new SKBitmap(width, height);
+            using var canvas = new SKCanvas(bmp);
+            canvas.Clear(SKColors.LightSkyBlue);
+            return bmp;
+        }
+
+        public async Task PreloadTilesAsync(int zoomLevel, SKRectI view, int radius = 1, CancellationToken token = default)
+        {
+            await _preloadSemaphore.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                var mapSize = GetMapSize(zoomLevel);
+                int firstTileX = Math.Max(0, view.Left / TileSizePx - radius);
+                int lastTileX = Math.Min((mapSize.Width - 1) / TileSizePx, (view.Right - 1) / TileSizePx + radius);
+                int firstTileY = Math.Max(0, view.Top / TileSizePx - radius);
+                int lastTileY = Math.Min((mapSize.Height - 1) / TileSizePx, (view.Bottom - 1) / TileSizePx + radius);
+
+                const int maxParallel = 4;
+                using var throttler = new SemaphoreSlim(maxParallel);
+                var tasks = new List<Task>();
+
+                for (int tx = firstTileX; tx <= lastTileX; tx++)
+                {
+                    for (int ty = firstTileY; ty <= lastTileY; ty++)
+                    {
+                        await throttler.WaitAsync(token).ConfigureAwait(false);
+                        var ttx = tx;
+                        var tty = ty;
+                        tasks.Add(Task.Run(async () =>
+                        {
+                            try
+                            {
+                                // CORRECTED: Pass the correct zoomLevel.
+                                await GetTileAsync(zoomLevel, ttx, tty, token).ConfigureAwait(false);
+                            }
+                            finally
+                            {
+                                throttler.Release();
+                            }
+                        }, token));
+                    }
+                }
+                await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+            finally
+            {
+                _preloadSemaphore.Release();
+            }
+        }
+
         private async Task SaveTileToDiskAsync(int cellSize, int tileX, int tileY, SKBitmap bmp, CancellationToken token)
         {
             string dir = Path.Combine(TileCacheDir, cellSize.ToString());
             string path = Path.Combine(dir, $"{tileX}_{tileY}.png");
+
             try
             {
                 Directory.CreateDirectory(dir);
+
                 var fileLock = GetFileLock(path);
                 await fileLock.WaitAsync(token).ConfigureAwait(false);
                 try
                 {
+                    if (File.Exists(path))
+                    {
+                        var fi = new FileInfo(path);
+                        if (fi.IsReadOnly)
+                            fi.IsReadOnly = false;
+                    }
+
                     using var image = SKImage.FromBitmap(bmp);
                     using var data = image.Encode(SKEncodedImageFormat.Png, 100);
                     await using var fs = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
                     data.SaveTo(fs);
                 }
-                finally { fileLock.Release(); }
+                finally
+                {
+                    fileLock.Release();
+                }
             }
-            catch (Exception ex) { Debug.WriteLine($"[ASYNC TILE SAVE ERROR] {ex.Message} while saving {path}"); }
+            catch (IOException ioEx)
+            {
+                Debug.WriteLine($"[FILE IN USE] {path} - {ioEx.Message}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ASYNC TILE SAVE ERROR] {ex.Message} while saving {path}");
+            }
         }
+
         private async Task<SKBitmap> LoadOrGenerateTileFromDataAsync(int cellSize, int tileX, int tileY, CancellationToken token)
         {
-            using var imageSharpImage = await Task.Run(() => PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY), token).ConfigureAwait(false);
-            if (imageSharpImage == null) return new SKBitmap(TileSizePx, TileSizePx);
-            return ImageSharpToSkBitmap(imageSharpImage);
+            using var imageSharpImage = await Task.Run(() =>
+            {
+                var generated = PixelMapGenerator.GenerateTileWithCountriesLarge(_baseWidth, _baseHeight, cellSize, tileX, tileY);
+                return generated;
+            }, token).ConfigureAwait(false);
+
+
+            if (imageSharpImage == null)
+            {
+                return new SKBitmap(TileSizePx, TileSizePx);
+            }
+
+            SKBitmap bmp = ImageSharpToSkBitmap(imageSharpImage);
+
+            using (var canvas = new SKCanvas(bmp))
+            {
+                using (var paint = new SKPaint())
+                {
+                    paint.TextSize = 32.0f;
+                    paint.IsAntialias = true;
+                    paint.Color = SKColors.Yellow;
+                    paint.Style = SKPaintStyle.Fill;
+                    string text = $"G({tileX}, {tileY})";
+                    canvas.DrawText(text, 20, 80, paint);
+                }
+            }
+
+            return bmp;
         }
     }
 }

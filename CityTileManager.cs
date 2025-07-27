@@ -275,7 +275,7 @@ namespace StrategyGame
             var canvas = surface.Canvas;
             canvas.Clear(SKColors.Transparent);
 
-            using (var baseMap = _mapManager.AssembleView(zoom, viewArea))
+            using (var baseMap = _mapManager.AssembleView((int)zoom, viewArea))
             {
                 if (baseMap != null)
                 {
