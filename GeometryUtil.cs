@@ -2,8 +2,6 @@ using Nts = NetTopologySuite.Geometries;
 
 namespace StrategyGame
 {
-    public struct GeoBounds { public double MinLon, MaxLon, MinLat, MaxLat; }
-
     public static class GeometryUtil
     {
         public static bool ClipLine(GeoBounds bounds, ref double x1, ref double y1, ref double x2, ref double y2)
