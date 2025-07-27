@@ -162,11 +162,17 @@ namespace Economy_sim
                 _viewOffset.Y + (int)ClientSize.Height
             );
 
+            Console.WriteLine($"enderMap: Zoom={_currentZoom}, ViewArea={{Left={viewArea.Left},Top={viewArea.Top},Width={viewArea.Width},Height={viewArea.Height}}}, Offset={{X={_viewOffset.X}, Y={_viewOffset.Y}}}");
+            Console.WriteLine($"RenderMap: CellSize for zoom {_currentZoom} = {_mapManager.GetCellSize(_currentZoom)}");
+
             using var bmp = _mapManager.AssembleView(
                 _currentZoom,
                 viewArea,
                 () => Dispatcher.UIThread.Post(RenderMap, DispatcherPriority.Background)
             );
+
+            Console.WriteLine($"RenderMap: Got bitmap {bmp.Width}x{bmp.Height}");
+            Console.WriteLine($"RenderMap: Bitmap has content: {!bmp.IsEmpty}");
 
             using var img = SKImage.FromBitmap(bmp);
             using var ms = new MemoryStream();
@@ -174,6 +180,7 @@ namespace Economy_sim
             ms.Position = 0;
 
             MapImage.Source = new Bitmap(ms);
+            Console.WriteLine("RenderMap: Successfully set new bitmap as image source");
         }
     }
 }
