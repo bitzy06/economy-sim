@@ -77,6 +77,8 @@ namespace StrategyGame
 
         private void LoadFromCacheOrGenerate(string cshapesPath)
         {
+            Debug.WriteLine($"Attempting to load cache from: {_cacheFilePath}");
+            
             // Try to load from cache first
             if (LoadFromCache())
             {
@@ -85,7 +87,7 @@ namespace StrategyGame
             }
 
             // Generate fresh data
-            Debug.WriteLine($"Generating fresh country data for year {_targetDate.Year}...");
+            Debug.WriteLine($"Cache not found or invalid, generating fresh country data for year {_targetDate.Year}...");
             GenerateCountryData(cshapesPath);
             SaveToCache();
         }
@@ -94,14 +96,23 @@ namespace StrategyGame
         {
             try
             {
+                Debug.WriteLine($"Checking for cache file at: {_cacheFilePath}");
+                
                 if (!File.Exists(_cacheFilePath))
+                {
+                    Debug.WriteLine("Cache file does not exist");
                     return false;
+                }
 
+                Debug.WriteLine("Cache file found, attempting to load...");
                 string json = File.ReadAllText(_cacheFilePath);
                 var cachedData = JsonSerializer.Deserialize<List<CachedCountryData>>(json);
 
-                if (cachedData == null)
+                if (cachedData == null || cachedData.Count == 0)
+                {
+                    Debug.WriteLine("Cache file is empty or invalid");
                     return false;
+                }
 
                 _rasterCodeToCountry.Clear();
                 _countryColors.Clear();
@@ -121,11 +132,13 @@ namespace StrategyGame
                     }
                 }
 
+                Debug.WriteLine($"Successfully loaded {cachedData.Count} countries from cache");
                 return true;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error loading cache: {ex.Message}");
+                Debug.WriteLine($"Error loading cache from {_cacheFilePath}: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 return false;
             }
         }
@@ -215,9 +228,13 @@ namespace StrategyGame
             {
                 // Ensure directory exists
                 string directory = Path.GetDirectoryName(_cacheFilePath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+                if (!string.IsNullOrEmpty(directory))
                 {
-                    Directory.CreateDirectory(directory);
+                    if (!Directory.Exists(directory))
+                    {
+                        Debug.WriteLine($"Creating cache directory: {directory}");
+                        Directory.CreateDirectory(directory);
+                    }
                 }
 
                 var cacheData = new List<CachedCountryData>(_rasterCodeToCountry.Values);
@@ -231,7 +248,8 @@ namespace StrategyGame
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error saving cache: {ex.Message}");
+                Debug.WriteLine($"Error saving cache to {_cacheFilePath}: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
             }
         }
 

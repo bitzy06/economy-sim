@@ -19,7 +19,7 @@ namespace Economy_sim
 
         // --- Optimized Rendering Fields ---
         private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
-        private int _currentZoomLevel = 3; // Start at a better zoom level to see more of the map
+        private int _currentZoomLevel = 1; // Start at the lowest zoom level so user doesn't have to zoom out
         private SKPointI _viewOffset = SKPointI.Empty;
         private bool _isPanning = false;
         private Point _panStartPoint;
