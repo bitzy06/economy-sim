@@ -241,33 +241,92 @@ namespace StrategyGame
             int offsetX = tileX * tileSizePx;
             int offsetY = tileY * tileSizePx;
 
-            int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, Math.Min(tileSizePx, fullW - offsetX), Math.Min(tileSizePx, fullH - offsetY));
-
-            var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
-
-            DrawBordersLarge(img, mask);
-
             int tileWidth = Math.Min(tileSizePx, fullW - offsetX);
             int tileHeight = Math.Min(tileSizePx, fullH - offsetY);
 
-            GeoBounds bounds = new GeoBounds
+            try
             {
-                MinLon = -180 + (double)offsetX / fullW * 360.0,
-                MaxLon = -180 + (double)(offsetX + tileWidth) / fullW * 360.0,
-                MaxLat = 90 - (double)offsetY / fullH * 180.0,
-                MinLat = 90 - (double)(offsetY + tileHeight) / fullH * 180.0
-            };
-            var factory = NetTopologySuite.Geometries.GeometryFactory.Default;
-            var tilePoly = factory.CreatePolygon(new[]
+                // Try to generate with real data
+                int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, tileWidth, tileHeight);
+                var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
+                DrawBordersLarge(img, mask);
+
+                GeoBounds bounds = new GeoBounds
+                {
+                    MinLon = -180 + (double)offsetX / fullW * 360.0,
+                    MaxLon = -180 + (double)(offsetX + tileWidth) / fullW * 360.0,
+                    MaxLat = 90 - (double)offsetY / fullH * 180.0,
+                    MinLat = 90 - (double)(offsetY + tileHeight) / fullH * 180.0
+                };
+                var factory = NetTopologySuite.Geometries.GeometryFactory.Default;
+                var tilePoly = factory.CreatePolygon(new[]
+                {
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat),
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MinLat),
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MaxLat),
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MaxLat),
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat)
+                });
+
+                return img;
+            }
+            catch (Exception ex)
             {
-                new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat),
-                new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MinLat),
-                new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MaxLat),
-                new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MaxLat),
-                new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat)
+                // If data files are missing or there's any error, generate a fallback tile
+                Console.WriteLine($"Using fallback tile generation for tile ({tileX}, {tileY}) - data files may be missing: {ex.Message}");
+                Console.WriteLine("To use real terrain data, place the following files in ~/Documents/data/:");
+                Console.WriteLine("  - NE1_HR_LC.tif (Natural Earth raster)");
+                Console.WriteLine("  - ne_10m_admin_0_countries.shp (Natural Earth country boundaries)");
+                return GenerateFallbackTile(tileWidth, tileHeight, tileX, tileY, cellSize);
+            }
+        }
+
+        /// <summary>
+        /// Generate a simple fallback tile when data files are missing
+        /// </summary>
+        private static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateFallbackTile(
+            int tileWidth, int tileHeight, int tileX, int tileY, int cellSize)
+        {
+            // Ensure positive dimensions
+            tileWidth = Math.Max(1, tileWidth);
+            tileHeight = Math.Max(1, tileHeight);
+            
+            var img = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(tileWidth, tileHeight);
+            
+            // Create a checkered pattern with different colors per tile for visual feedback
+            var color1 = new SixLabors.ImageSharp.PixelFormats.Rgba32(
+                (byte)(100 + (tileX * 30) % 155),
+                (byte)(100 + (tileY * 40) % 155), 
+                (byte)(100 + ((tileX + tileY) * 50) % 155), 
+                255);
+            var color2 = new SixLabors.ImageSharp.PixelFormats.Rgba32(
+                (byte)(50 + (tileX * 20) % 100),
+                (byte)(50 + (tileY * 25) % 100), 
+                (byte)(50 + ((tileX + tileY) * 35) % 100), 
+                255);
+
+            img.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < accessor.Height; y++)
+                {
+                    var row = accessor.GetRowSpan(y);
+                    for (int x = 0; x < row.Length; x++)
+                    {
+                        // Create a grid pattern based on cellSize
+                        bool isGridLine = (x % Math.Max(1, cellSize) < 2) || (y % Math.Max(1, cellSize) < 2);
+                        bool isCheckerboard = ((x / Math.Max(1, cellSize)) + (y / Math.Max(1, cellSize))) % 2 == 0;
+                        
+                        if (isGridLine)
+                        {
+                            row[x] = new SixLabors.ImageSharp.PixelFormats.Rgba32(255, 255, 255, 128); // Semi-transparent white grid
+                        }
+                        else
+                        {
+                            row[x] = isCheckerboard ? color1 : color2;
+                        }
+                    }
+                }
             });
-
-
 
             return img;
         }
