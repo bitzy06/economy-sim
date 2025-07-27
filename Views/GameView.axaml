@@ -2,16 +2,182 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Economy_sim.GameView"
         Title="GameView"
-     WindowState="FullScreen"
+        WindowState="FullScreen"
         Background="#2D2D30"
         Width="2560" Height="1440">
-	<Border x:Name="MapContainer"
-		Background="Transparent"
-		HorizontalAlignment="Stretch"
-		VerticalAlignment="Stretch">
-		<Image x:Name="MapImage"
-			   Stretch="None"
-			   HorizontalAlignment="Left"
-			   VerticalAlignment="Top"/>
-	</Border>
+
+	<Window.Styles>
+		<StyleInclude Source="/GlobalStyles.axaml"/>
+	</Window.Styles>
+
+	<Grid>
+		<!-- Map Layer (Background) -->
+		<Border x:Name="MapContainer"
+			Background="Transparent"
+			HorizontalAlignment="Stretch"
+			VerticalAlignment="Stretch">
+			<Image x:Name="MapImage"
+				   Stretch="None"
+				   HorizontalAlignment="Left"
+				   VerticalAlignment="Top"/>
+		</Border>
+
+		<!-- HUD Overlay Layers -->
+		<!-- Top HUD Bar -->
+		<Border Background="#AA000000"
+				Height="50"
+				VerticalAlignment="Top"
+				HorizontalAlignment="Stretch"
+				Margin="0">
+			<StackPanel Orientation="Horizontal" 
+						HorizontalAlignment="Stretch"
+						VerticalAlignment="Center"
+						Margin="10,0">
+				
+				<!-- Player Role Section -->
+				<Border Background="#333333" 
+						CornerRadius="3"
+						Padding="10,5"
+						Margin="0,0,15,0">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock x:Name="PlayerRoleText" 
+								   Text="Prime Minister" 
+								   Foreground="#FFFF00"
+								   FontWeight="Bold"
+								   VerticalAlignment="Center"/>
+						<TextBlock Text=" of " 
+								   Foreground="#CCCCCC"
+								   Margin="5,0,0,0"
+								   VerticalAlignment="Center"/>
+						<TextBlock x:Name="ControlledEntityText" 
+								   Text="United States" 
+								   Foreground="#FFFFFF"
+								   FontWeight="Bold"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Treasury Section -->
+				<Border Background="#333333" 
+						CornerRadius="3"
+						Padding="10,5"
+						Margin="0,0,15,0">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="💰" 
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,5,0"/>
+						<TextBlock x:Name="TreasuryText" 
+								   Text="$1,000,000" 
+								   Foreground="#00FF00"
+								   FontWeight="Bold"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Population Section -->
+				<Border Background="#333333" 
+						CornerRadius="3"
+						Padding="10,5"
+						Margin="0,0,15,0">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="👥" 
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,5,0"/>
+						<TextBlock x:Name="PopulationText" 
+								   Text="10,000,000" 
+								   Foreground="#FFFFFF"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Spacer -->
+				<Border HorizontalAlignment="Stretch"/>
+
+				<!-- Date/Time Section -->
+				<Border Background="#333333" 
+						CornerRadius="3"
+						Padding="10,5">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="📅" 
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,5,0"/>
+						<TextBlock x:Name="DateTimeText" 
+								   Text="January 1901" 
+								   Foreground="#FFFFFF"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+		</Border>
+
+		<!-- Bottom HUD Bar -->
+		<Border Background="#AA000000"
+				Height="80"
+				VerticalAlignment="Bottom"
+				HorizontalAlignment="Stretch">
+			<Grid Margin="10">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+					<ColumnDefinition Width="*"/>
+				</Grid.ColumnDefinitions>
+
+				<!-- Left Side Actions -->
+				<StackPanel Grid.Column="0" 
+							Orientation="Horizontal" 
+							HorizontalAlignment="Left"
+							VerticalAlignment="Center"
+							Spacing="10">
+					<Button x:Name="DiplomacyButton" 
+							Content="Diplomacy" 
+							Width="120"
+							Height="35"/>
+					<Button x:Name="TradeButton" 
+							Content="Trade" 
+							Width="120"
+							Height="35"/>
+					<Button x:Name="ConstructionButton" 
+							Content="Construction" 
+							Width="120"
+							Height="35"/>
+				</StackPanel>
+
+				<!-- Center Action (Role Specific) -->
+				<Border Grid.Column="1" 
+						Background="#444444"
+						CornerRadius="5"
+						Padding="15,10">
+					<Button x:Name="RoleActionButton" 
+							Content="Set Policy" 
+							Width="150"
+							Height="40"
+							Background="#5A5A5A"
+							FontWeight="Bold"/>
+				</Border>
+
+				<!-- Right Side Views -->
+				<StackPanel Grid.Column="2" 
+							Orientation="Horizontal" 
+							HorizontalAlignment="Right"
+							VerticalAlignment="Center"
+							Spacing="10">
+					<Button x:Name="EconomyViewButton" 
+							Content="Economy" 
+							Width="120"
+							Height="35"/>
+					<Button x:Name="StatsButton" 
+							Content="Statistics" 
+							Width="120"
+							Height="35"/>
+					<Button x:Name="MenuButton" 
+							Content="Menu" 
+							Width="120"
+							Height="35"/>
+				</StackPanel>
+			</Grid>
+		</Border>
+	</Grid>
 </Window>
