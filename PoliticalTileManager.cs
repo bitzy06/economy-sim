@@ -495,14 +495,16 @@ namespace StrategyGame
         
         private SKSizeI GetMapSize(int zoomLevel)
         {
-            // This should match the terrain manager's map size calculation
-            return new SKSizeI(_baseWidth, _baseHeight);
+            int cellSize = GetCellSizeForZoom(zoomLevel);
+            return new SKSizeI(_baseWidth * cellSize, _baseHeight * cellSize);
         }
         
         private int GetCellSizeForZoom(int zoomLevel)
         {
-            // This should match the terrain manager's cell size calculation
-            return Math.Max(1, 1 << zoomLevel);
+            // Use the same zoom level calculation as MultiResolutionMapManager
+            int index = zoomLevel - 1;
+            index = Math.Clamp(index, 0, MultiResolutionMapManager.PixelsPerCellLevels.Length - 1);
+            return MultiResolutionMapManager.PixelsPerCellLevels[index];
         }
         
         public void Dispose()
