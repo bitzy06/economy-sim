@@ -136,60 +136,107 @@ namespace StrategyGame
             
             FeatureDefn filteredDefn = filteredLayer.GetLayerDefn();
             
-            // Filter features using cached country data
+            // Create a reverse lookup from country codes to raster codes for efficiency
+            var countryCodeToRasterCode = new Dictionary<string, int>();
+            var countryNameToRasterCode = new Dictionary<string, int>();
+            
+            foreach (var kvp in countryData)
+            {
+                var cachedCountry = kvp.Value;
+                countryCodeToRasterCode[cachedCountry.CountryCode] = cachedCountry.RasterCode;
+                if (!string.IsNullOrEmpty(cachedCountry.CountryName))
+                {
+                    countryNameToRasterCode[cachedCountry.CountryName] = cachedCountry.RasterCode;
+                }
+            }
+            
+            Debug.WriteLine($"Created lookup tables: {countryCodeToRasterCode.Count} codes, {countryNameToRasterCode.Count} names");
+            
+            // Filter features using cached country data with more flexible matching
             layer.ResetReading();
             Feature feature;
             int addedFeatures = 0;
+            int totalFeatures = 0;
             
             while ((feature = layer.GetNextFeature()) != null)
             {
+                totalFeatures++;
+                
                 // Get country information for matching with cached data
                 string countryName = GetFieldAsString(feature, "CNTRY_NAME");
                 string iso3Code = GetCountryCodeWithFallback(feature, 0);
                 double startYear = GetFieldAsDouble(feature, "GWSYEAR");
                 double endYear = GetFieldAsDouble(feature, "GWEYER");
                 
-                // Find matching cached country data
-                foreach (var kvp in countryData)
+                // Handle missing dates - use reasonable defaults for 1950
+                if (startYear <= 0 || startYear > 2020) startYear = 1900;
+                if (endYear <= 0 || endYear < startYear) endYear = 2000;
+                
+                // Check if this feature should be included for 1950 (±0.5 years tolerance)
+                double targetYear = 1950.0;
+                bool inTimeRange = (targetYear >= startYear - 0.5 && targetYear <= endYear + 0.5);
+                
+                if (!inTimeRange)
                 {
-                    var cachedCountry = kvp.Value;
-                    
-                    // Match by country code or name, and verify year range matches cached data
-                    bool isMatch = (cachedCountry.CountryCode == iso3Code || 
-                                   cachedCountry.CountryName == countryName) &&
-                                   Math.Abs(cachedCountry.StartYear - startYear) < 1.0 &&
-                                   Math.Abs(cachedCountry.EndYear - endYear) < 1.0;
-                    
-                    if (isMatch)
+                    feature.Dispose();
+                    continue;
+                }
+                
+                // Try to find matching raster code
+                int rasterCode = -1;
+                
+                // First try exact country code match
+                if (!string.IsNullOrEmpty(iso3Code) && countryCodeToRasterCode.TryGetValue(iso3Code, out rasterCode))
+                {
+                    // Found exact match by country code
+                }
+                // Then try exact country name match  
+                else if (!string.IsNullOrEmpty(countryName) && countryNameToRasterCode.TryGetValue(countryName, out rasterCode))
+                {
+                    // Found exact match by country name
+                }
+                // Try partial name matching as fallback
+                else if (!string.IsNullOrEmpty(countryName))
+                {
+                    foreach (var kvp in countryNameToRasterCode)
                     {
-                        // Create new feature for filtered layer
-                        Feature newFeature = new Feature(filteredDefn);
-                        
-                        // Copy geometry
-                        Geometry geom = feature.GetGeometryRef();
-                        newFeature.SetGeometry(geom);
-                        
-                        // Set raster code from cached data
-                        newFeature.SetField("RASTER_CODE", cachedCountry.RasterCode);
-                        
-                        filteredLayer.CreateFeature(newFeature);
-                        addedFeatures++;
-                        
-                        newFeature.Dispose();
-                        break; // Found match, no need to continue searching
+                        if (kvp.Key.Contains(countryName) || countryName.Contains(kvp.Key))
+                        {
+                            rasterCode = kvp.Value;
+                            break;
+                        }
                     }
+                }
+                
+                if (rasterCode > 0)
+                {
+                    // Create new feature for filtered layer
+                    Feature newFeature = new Feature(filteredDefn);
+                    
+                    // Copy geometry
+                    Geometry geom = feature.GetGeometryRef();
+                    newFeature.SetGeometry(geom);
+                    
+                    // Set raster code from cached data
+                    newFeature.SetField("RASTER_CODE", rasterCode);
+                    
+                    filteredLayer.CreateFeature(newFeature);
+                    addedFeatures++;
+                    
+                    newFeature.Dispose();
                 }
                 
                 feature.Dispose();
             }
             
-            Debug.WriteLine($"Added {addedFeatures} features from cached data for rasterization");
+            Debug.WriteLine($"Added {addedFeatures} features from {totalFeatures} total features for rasterization");
             
             // Rasterize the filtered layer
             if (filteredLayer.GetFeatureCount(1) > 0)
             {
                 Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, filteredLayer, IntPtr.Zero, IntPtr.Zero,
                     0, null, new[] { "ATTRIBUTE=RASTER_CODE" }, null, "");
+                Debug.WriteLine($"Rasterized {filteredLayer.GetFeatureCount(1)} features successfully");
             }
             else
             {
