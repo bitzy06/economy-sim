@@ -10,7 +10,7 @@ using SkiaSharp;
 namespace StrategyGame
 {
     /// <summary>
-    /// High-performance tile-based political map manager inspired by PixelMapGenerator optimizations
+    /// High-performance tile-based political map manager with spatial indexing optimizations
     /// </summary>
     public class PoliticalTileManager : IDisposable
     {
@@ -19,9 +19,15 @@ namespace StrategyGame
         private readonly int _baseHeight;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
         
-        // Performance optimizations inspired by PixelMapGenerator
+        // Performance optimizations with spatial indexing
         private const int TileSizePx = 512;
-        private const int MaxCacheSize = 50; // Increased cache size for better performance
+        private const int MaxCacheSize = 100; // Increased cache size for better performance
+        
+        // Spatial index for fast country lookup
+        private readonly PoliticalSpatialIndex _spatialIndex;
+        private readonly OptimizedPoliticalMaskGenerator _maskGenerator;
+        private bool _spatialIndexBuilt = false;
+        private readonly object _indexLock = new object();
         
         // LRU Cache with proper eviction
         private readonly ConcurrentDictionary<string, CacheEntry> _tileCache = new();
@@ -48,6 +54,10 @@ namespace StrategyGame
             _politicalManager = politicalManager;
             _baseWidth = baseWidth;
             _baseHeight = baseHeight;
+            
+            // Initialize spatial optimization components
+            _spatialIndex = new PoliticalSpatialIndex();
+            _maskGenerator = new OptimizedPoliticalMaskGenerator(_spatialIndex);
         }
         
         public void SetPoliticalMapDate(DateTime date)
@@ -56,6 +66,12 @@ namespace StrategyGame
             {
                 _politicalMapDate = date;
                 ClearCacheForDateChange();
+                
+                // Mark spatial index as needing rebuild for new date
+                lock (_indexLock)
+                {
+                    _spatialIndexBuilt = false;
+                }
             }
         }
         
@@ -219,80 +235,67 @@ namespace StrategyGame
             
             try
             {
-                // Find CShapes file
-                string? cshapesPath = FindCShapesFile();
-                if (string.IsNullOrEmpty(cshapesPath))
+                // Ensure spatial index is built
+                EnsureSpatialIndexBuilt();
+                
+                // Use optimized mask generation with spatial indexing
+                var mask = _maskGenerator.GenerateOptimizedMask(
+                    cellSize, pixelX, pixelY, tileWidth, tileHeight, _baseWidth, _baseHeight);
+                
+                if (mask == null)
                 {
-                    Debug.WriteLine("CShapes file not found for tile mask generation");
+                    Debug.WriteLine($"Failed to generate optimized mask for tile ({pixelX}, {pixelY})");
                     return null;
                 }
-                
-                // FIXED: Use scaled map dimensions like terrain system
-                // Calculate scaled dimensions using the current zoom level's cell size
-                int scaledMapWidth = _baseWidth * cellSize;
-                int scaledMapHeight = _baseHeight * cellSize;
-                
-                // Convert pixel coordinates to tile coordinates
-                int tileX = pixelX / TileSizePx;
-                int tileY = pixelY / TileSizePx;
-                
-                // Use unified coordinate transformation with SCALED dimensions (like terrain system)
-                var bounds = CoordinateTransform.GetTileGeographicBounds(
-                    tileX, 
-                    tileY, 
-                    TileSizePx, 
-                    scaledMapWidth, 
-                    scaledMapHeight);
-                
-                // Validate bounds
-                if (!CoordinateTransform.IsValidGeoBounds(bounds))
-                {
-                    Debug.WriteLine($"Invalid geographic bounds calculated: {bounds}");
-                    return null;
-                }
-                
-                Debug.WriteLine($"Generating political mask for tile ({pixelX}, {pixelY}) with bounds: {bounds}");
-                
-                // Generate mask for just this tile area using unified coordinate bounds
-                var mask = _politicalManager.CreatePoliticalMask(
-                    cshapesPath, 
-                    _politicalMapDate, 
-                    tileWidth, 
-                    tileHeight, 
-                    new double[] { bounds.MinLon, bounds.MinLat, bounds.MaxLon, bounds.MaxLat });
                 
                 // Verify mask has data
                 bool hasData = false;
-                if (mask != null)
+                for (int y = 0; y < mask.GetLength(0) && !hasData; y++)
                 {
-                    for (int y = 0; y < mask.GetLength(0) && !hasData; y++)
+                    for (int x = 0; x < mask.GetLength(1) && !hasData; x++)
                     {
-                        for (int x = 0; x < mask.GetLength(1) && !hasData; x++)
+                        if (mask[y, x] > 0)
                         {
-                            if (mask[y, x] > 0)
-                            {
-                                hasData = true;
-                            }
+                            hasData = true;
                         }
                     }
                 }
                 
-                Debug.WriteLine($"Political mask generated for tile ({pixelX}, {pixelY}): {(hasData ? "HAS DATA" : "NO DATA")}");
+                Debug.WriteLine($"Optimized political mask generated for tile ({pixelX}, {pixelY}): {(hasData ? "HAS DATA" : "NO DATA")}");
                 
                 // Cache the mask if successful
-                if (mask != null && _maskCache.Count < MaxCacheSize * 2)
+                if (mask != null && _maskCache.Count < MaxCacheSize * 3)
                 {
                     _maskCache.TryAdd(maskKey, mask);
-                    Debug.WriteLine($"Cached political mask for tile ({pixelX}, {pixelY})");
+                    Debug.WriteLine($"Cached optimized political mask for tile ({pixelX}, {pixelY})");
                 }
                 
                 return mask;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error generating tile mask: {ex.Message}");
+                Debug.WriteLine($"Error generating optimized tile mask: {ex.Message}");
                 Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 return null;
+            }
+        }
+        
+        private void EnsureSpatialIndexBuilt()
+        {
+            lock (_indexLock)
+            {
+                if (_spatialIndexBuilt) return;
+                
+                string? cshapesPath = FindCShapesFile();
+                if (string.IsNullOrEmpty(cshapesPath))
+                {
+                    throw new ApplicationException("CShapes file not found for spatial index generation");
+                }
+                
+                Debug.WriteLine("Building spatial index for optimized political rendering...");
+                _spatialIndex.BuildIndex(cshapesPath, _politicalMapDate);
+                _spatialIndexBuilt = true;
+                Debug.WriteLine($"Spatial index built with {_spatialIndex.CountryCount} countries");
             }
         }
         
@@ -334,7 +337,7 @@ namespace StrategyGame
                     var pixelPtr = (uint*)bitmap.GetPixels().ToPointer();
                     int stride = bitmap.RowBytes / 4;
                     
-                    // Parallel processing inspired by PixelMapGenerator
+                    // Parallel processing for optimal performance
                     Parallel.For(0, height, y =>
                     {
                         var rng = ThreadLocalRandom.Value;
@@ -355,11 +358,22 @@ namespace StrategyGame
                                 }
                                 else
                                 {
-                                    // Get country color using the raster code mapping
-                                    var baseColor = _politicalManager.GetCountryColorByRasterCode(countryId);
+                                    // Get country color - try spatial index first for performance
+                                    SKColor baseColor;
+                                    var indexedCountry = _spatialIndex.GetCountryByRasterCode(countryId);
+                                    if (indexedCountry != null)
+                                    {
+                                        // Use consistent color generation based on country code
+                                        baseColor = GenerateConsistentColor(indexedCountry.CountryCode);
+                                    }
+                                    else
+                                    {
+                                        // Fallback to political manager
+                                        baseColor = _politicalManager.GetCountryColorByRasterCode(countryId);
+                                    }
                                     
-                                    // Add slight random variation for visual interest
-                                    int variation = rng.Next(-10, 11);
+                                    // Add slight random variation for visual interest (reduced for performance)
+                                    int variation = rng.Next(-5, 6); // Smaller variation for speed
                                     byte r = (byte)Math.Clamp(baseColor.Red + variation, 0, 255);
                                     byte g = (byte)Math.Clamp(baseColor.Green + variation, 0, 255);
                                     byte b = (byte)Math.Clamp(baseColor.Blue + variation, 0, 255);
@@ -386,6 +400,16 @@ namespace StrategyGame
                 Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 return null;
             }
+        }
+        
+        private SKColor GenerateConsistentColor(string countryCode)
+        {
+            // Generate consistent colors based on country code hash for performance
+            int hash = countryCode.GetHashCode();
+            byte r = (byte)(100 + Math.Abs(hash % 156));
+            byte g = (byte)(100 + Math.Abs((hash >> 8) % 156));
+            byte b = (byte)(100 + Math.Abs((hash >> 16) % 156));
+            return new SKColor(r, g, b, 255);
         }
         
         private void CacheTile(string cacheKey, SKBitmap bitmap)
@@ -439,6 +463,13 @@ namespace StrategyGame
                 }
                 _tileCache.Clear();
                 _maskCache.Clear();
+            }
+            
+            // Clear spatial index as well since it's date-specific
+            lock (_indexLock)
+            {
+                _spatialIndex.Dispose();
+                _spatialIndexBuilt = false;
             }
         }
         
@@ -541,6 +572,8 @@ namespace StrategyGame
         {
             ClearCacheForDateChange();
             ThreadLocalRandom.Dispose();
+            _maskGenerator?.Dispose();
+            _spatialIndex?.Dispose();
         }
     }
 }
