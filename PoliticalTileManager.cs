@@ -224,7 +224,7 @@ namespace StrategyGame
                     return null;
                 }
                 
-                // Use unified coordinate transformation to calculate geographic bounds
+                // Use unified coordinate transformation with base dimensions for consistency
                 var bounds = CoordinateTransform.GetTileGeographicBounds(
                     pixelX / TileSizePx, 
                     pixelY / TileSizePx, 
@@ -495,16 +495,15 @@ namespace StrategyGame
         
         private SKSizeI GetMapSize(int zoomLevel)
         {
-            int cellSize = GetCellSizeForZoom(zoomLevel);
-            return new SKSizeI(_baseWidth * cellSize, _baseHeight * cellSize);
+            // Use base dimensions for coordinate calculations (consistent with terrain system)
+            return new SKSizeI(_baseWidth, _baseHeight);
         }
         
         private int GetCellSizeForZoom(int zoomLevel)
         {
-            // Use the same zoom level calculation as MultiResolutionMapManager
-            int index = zoomLevel - 1;
-            index = Math.Clamp(index, 0, MultiResolutionMapManager.PixelsPerCellLevels.Length - 1);
-            return MultiResolutionMapManager.PixelsPerCellLevels[index];
+            // Use simpler scaling approach that was working before
+            // This gives reasonable zoom levels: 1, 2, 4, 8, 16, 32...
+            return Math.Max(1, 1 << Math.Min(zoomLevel, 6));
         }
         
         public void Dispose()
