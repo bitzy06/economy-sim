@@ -1,30 +1,169 @@
-<Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-	<Style Selector="Button">
-		<Setter Property="Background" Value="#333333"/>
-		<Setter Property="Foreground" Value="#DDDDDD"/>
-		<Setter Property="BorderBrush" Value="#555555"/>
-		<Setter Property="BorderThickness" Value="1"/>
-		<Setter Property="CornerRadius" Value="0"/>
-		<Setter Property="FontSize" Value="16"/>
-		<Setter Property="Padding" Value="15,10"/>
-		<Setter Property="Width" Value="200"/>
-	</Style>
+<?xml version="1.0" encoding="utf-8"?>
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+	<!-- Global Cold War Theme -->
+
+	<Styles.Resources>
+		<!-- Base Colors -->
+		<Color x:Key="ColdWarRed">#AA0000</Color>
+		<Color x:Key="ColdWarBlue">#1E3A5F</Color>
+		<Color x:Key="ColdWarOlive">#6B8E23</Color>
+		<Color x:Key="ColdWarGray">#4B4B4B</Color>
+		<Color x:Key="ColdWarBeige">#E3E3E3</Color>
+
+		<!-- Solid Brushes -->
+		<SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource ColdWarBeige}"/>
+		<SolidColorBrush x:Key="PanelBrush" Color="{StaticResource ColdWarGray}"/>
+		<SolidColorBrush x:Key="AccentBrush" Color="{StaticResource ColdWarRed}"/>
+		<SolidColorBrush x:Key="AccentSecondaryBrush" Color="{StaticResource ColdWarBlue}"/>
+		<SolidColorBrush x:Key="TextBrush" Color="Black"/>
+
+		<!-- Texture Overlay -->
+		<DrawingBrush x:Key="TextureBrush" Stretch="Fill" TileMode="Tile">
+			<DrawingBrush.Drawing>
+				<DrawingGroup>
+					<GeometryDrawing Brush="#10FFFFFF">
+						<GeometryDrawing.Geometry>
+							<RectangleGeometry Rect="0,0,16,16"/>
+						</GeometryDrawing.Geometry>
+					</GeometryDrawing>
+				</DrawingGroup>
+			</DrawingBrush.Drawing>
+		</DrawingBrush>
+
+		<!-- Test Gradient for Window Background -->
+		<LinearGradientBrush x:Key="WindowGradientBrush" StartPoint="0,0" EndPoint="1,1">
+			<GradientStop Color="Blue" Offset="0"/>
+			<GradientStop Color="Black" Offset="1"/>
+		</LinearGradientBrush>
+	</Styles.Resources>
+
+	<!-- TextBlock Style -->
 	<Style Selector="TextBlock">
-		<Setter Property="Foreground" Value="#FFFF00"/>
+		<Setter Property="FontFamily" Value="Oswald, Roboto Condensed, Arial"/>
+		<Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
 	</Style>
-	<Style Selector="Button:pointerover">
-		<Setter Property="Background" Value="#454545"/>
-		<Setter Property="BorderBrush" Value="#777777"/>
+
+	<!-- Heading Styles with Bebas Neue -->
+	<Style Selector="TextBlock.heading">
+		<Setter Property="FontFamily" Value="avares://Economy sim/Assets/BebasNeue-Regular.ttf#Bebas Neue, Oswald, Roboto Condensed, Arial"/>
+		<Setter Property="FontSize" Value="64"/>
+		<Setter Property="FontWeight" Value="Bold"/>
+		<Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
 	</Style>
-	<Style Selector="Button:pressed">
-		<Setter Property="Background" Value="#222222"/>
+
+	<Style Selector="TextBlock.heading-large">
+		<Setter Property="FontFamily" Value="avares://Economy sim/Assets/BebasNeue-Regular.ttf#Bebas Neue, Oswald, Roboto Condensed, Arial"/>
+		<Setter Property="FontSize" Value="80"/>
+		<Setter Property="FontWeight" Value="Bold"/>
+		<Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
 	</Style>
-	<Style Selector="Button#ExitButton">
-		<Setter Property="Background" Value="#A93226"/>
+
+	<Style Selector="TextBlock.heading-medium">
+		<Setter Property="FontFamily" Value="avares://Economy sim/Assets/BebasNeue-Regular.ttf#Bebas Neue, Oswald, Roboto Condensed, Arial"/>
+		<Setter Property="FontSize" Value="56"/>
+		<Setter Property="FontWeight" Value="Bold"/>
+		<Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+	</Style>
+
+	<!-- Outline effect styles for text - Made smaller -->
+	<Style Selector="TextBlock.heading-large-outline">
+		<Setter Property="FontFamily" Value="avares://Economy sim/Assets/BebasNeue-Regular.ttf#Bebas Neue, Oswald, Roboto Condensed, Arial"/>
+		<Setter Property="FontSize" Value="64"/>
+		<Setter Property="FontWeight" Value="Bold"/>
+		<Setter Property="Foreground" Value="Black"/>
+		<Setter Property="RenderTransform">
+			<Setter.Value>
+				<TransformGroup>
+					<TranslateTransform X="-2" Y="-2"/>
+				</TransformGroup>
+			</Setter.Value>
+		</Setter>
+	</Style>
+
+	<Style Selector="TextBlock.heading-large-white">
+		<Setter Property="FontFamily" Value="avares://Economy sim/Assets/BebasNeue-Regular.ttf#Bebas Neue, Oswald, Roboto Condensed, Arial"/>
+		<Setter Property="FontSize" Value="64"/>
+		<Setter Property="FontWeight" Value="Bold"/>
 		<Setter Property="Foreground" Value="White"/>
 	</Style>
-	<Style Selector="Button#ExitButton:pointerover">
-		<Setter Property="Background" Value="#C0392B"/>
+
+	<!-- Override Fluent theme button styles with more specific selectors -->
+	<Style Selector="Button">
+		<Setter Property="Background" Value="{StaticResource PanelBrush}"/>
+		<Setter Property="Foreground" Value="White"/>
+		<Setter Property="FontWeight" Value="Bold"/>
+		<Setter Property="CornerRadius" Value="0"/>
+		<Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+		<Setter Property="BorderThickness" Value="2"/>
+		<Setter Property="Padding" Value="8,4"/>
+	</Style>
+
+	<!-- Override all fluent button states -->
+	<Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+		<Setter Property="Opacity" Value="1"/>
+	</Style>
+
+	<Style Selector="Button:pressed /template/ ContentPresenter#PART_ContentPresenter">
+		<Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+		<Setter Property="Opacity" Value="1"/>
+	</Style>
+
+	<!-- Menu Button Style with complete template override -->
+	<Style Selector="Button.menu-button">
+		<Setter Property="Background" Value="{StaticResource PanelBrush}"/>
+		<Setter Property="Foreground" Value="White"/>
+		<Setter Property="FontWeight" Value="Bold"/>
+		<Setter Property="CornerRadius" Value="0"/>
+		<Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+		<Setter Property="BorderThickness" Value="2"/>
+		<Setter Property="Padding" Value="12,6"/>
+		<Setter Property="MinWidth" Value="180"/>
+		<Setter Property="FontSize" Value="14"/>
+		<Setter Property="Template">
+			<ControlTemplate>
+				<Border Name="PART_Border"
+				        Background="{TemplateBinding Background}"
+				        BorderBrush="{TemplateBinding BorderBrush}"
+				        BorderThickness="{TemplateBinding BorderThickness}"
+				        CornerRadius="{TemplateBinding CornerRadius}"
+				        Padding="{TemplateBinding Padding}">
+					<ContentPresenter Name="PART_ContentPresenter"
+					                  Content="{TemplateBinding Content}"
+					                  ContentTemplate="{TemplateBinding ContentTemplate}"
+					                  Foreground="{TemplateBinding Foreground}"
+					                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+					                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+				</Border>
+			</ControlTemplate>
+		</Setter>
+	</Style>
+
+	<Style Selector="Button.menu-button:pointerover /template/ Border#PART_Border">
+		<Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+	</Style>
+
+	<Style Selector="Button.menu-button:pressed /template/ Border#PART_Border">
+		<Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+	</Style>
+
+	<!-- Panel Style -->
+	<Style Selector="Border.coldwar-panel">
+		<Setter Property="Background">
+			<Setter.Value>
+				<VisualBrush Stretch="Uniform">
+					<VisualBrush.Visual>
+						<Grid>
+							<Border Background="{StaticResource PanelBrush}"/>
+							<Border Background="{StaticResource TextureBrush}" Opacity="0.15"/>
+						</Grid>
+					</VisualBrush.Visual>
+				</VisualBrush>
+			</Setter.Value>
+		</Setter>
+		<Setter Property="CornerRadius" Value="0"/>
+		<Setter Property="BorderBrush" Value="{StaticResource AccentSecondaryBrush}"/>
+		<Setter Property="BorderThickness" Value="3"/>
+		<Setter Property="Padding" Value="12"/>
 	</Style>
 </Styles>
