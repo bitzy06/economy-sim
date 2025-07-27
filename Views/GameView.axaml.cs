@@ -52,6 +52,9 @@ namespace Economy_sim
             // Subscribe to map manager events
             _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
             UpdateMapViewButtons();
+            
+            // Run basic integration test for political borders (commented out for production)
+            // Economy_sim.Testing.PoliticalBorderIntegrationTest.RunBasicTests();
         }
 
         private void OnWindowLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
