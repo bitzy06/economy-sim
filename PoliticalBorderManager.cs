@@ -54,6 +54,7 @@ namespace StrategyGame
             lock (GdalLock)
             {
                 // Default to global bounds if not specified
+
                 bounds ??= new[] { -180.0, -90.0, 180.0, 90.0 };
                 
                 // Open the CShapes shapefile
@@ -179,8 +180,8 @@ namespace StrategyGame
                     newFeature.SetField("RASTER_CODE", countryCode);
                     
                     // Store country info for color mapping
-                    string countryName = feature.GetFieldAsString("CNTRY_NAME") ?? $"Country_{countryCode}";
-                    string iso3Code = feature.GetFieldAsString("ISO1AL3") ?? $"UNK{countryCode:D3}";
+                    string countryName = GetFieldAsString(feature, "CNTRY_NAME") ?? $"Country_{countryCode}";
+                    string iso3Code = GetCountryCodeWithFallback(feature, countryCode);
                     
                     if (!_countryColors.ContainsKey(iso3Code))
                     {
@@ -215,6 +216,34 @@ namespace StrategyGame
                 return feature.GetFieldAsDouble(fieldIndex);
             }
             return -1; // Default for missing fields
+        }
+        
+        private string GetFieldAsString(Feature feature, string fieldName)
+        {
+            int fieldIndex = feature.GetFieldIndex(fieldName);
+            if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
+            {
+                return feature.GetFieldAsString(fieldIndex);
+            }
+            return null; // Default for missing fields
+        }
+        
+        private string GetCountryCodeWithFallback(Feature feature, int countryCode)
+        {
+            // Try different possible field names for country code in order of preference
+            string[] possibleFields = { "ISO1AL3", "COWCODE", "GWCODE", "ISO", "CNTRY_NAME" };
+            
+            foreach (string fieldName in possibleFields)
+            {
+                string value = GetFieldAsString(feature, fieldName);
+                if (!string.IsNullOrEmpty(value))
+                {
+                    return value;
+                }
+            }
+            
+            // If no field is found, generate a fallback code
+            return $"UNK{countryCode:D3}";
         }
         
         private SKColor GenerateRandomColor()
