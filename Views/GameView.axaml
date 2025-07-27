@@ -136,11 +136,11 @@
 
 		<!-- Bottom HUD Bar -->
 		<Border Background="#AA000000"
-				Height="80"
-				VerticalAlignment="Bottom"
-				HorizontalAlignment="Stretch"
-				IsHitTestVisible="False"
-				ZIndex="1000">
+        Height="50"
+        VerticalAlignment="Bottom"
+        HorizontalAlignment="Stretch"
+        Margin="0"
+        ZIndex="1000">
 			<Grid Margin="10"
 				  IsHitTestVisible="True">
 				<Grid.ColumnDefinitions>
