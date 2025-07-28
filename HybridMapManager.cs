@@ -198,36 +198,39 @@ namespace StrategyGame
         {
             Debug.WriteLine($"GetCountryAtGeoCoordinate: Checking coordinates - Longitude:{longitude:F2}, Latitude:{latitude:F2}");
             
-            // Expanded geographic bounds for testing - cover more area
-            // North America (expanded bounds)
-            if (longitude >= -180 && longitude <= -30 && latitude >= 10 && latitude <= 80)
+            // More accurate geographic bounds for sample countries
+            
+            // United States (continental US approximate bounds)
+            if (longitude >= -125 && longitude <= -65 && latitude >= 24 && latitude <= 49)
             {
-                Debug.WriteLine("GetCountryAtGeoCoordinate: Position is in North America region (expanded)");
-                
-                if (latitude >= 46) // Rough Canada border (lowered)
-                {
-                    var canada = _sampleCountries.Find(c => c.Name == "Canada");
-                    Debug.WriteLine($"GetCountryAtGeoCoordinate: Latitude >= 46, returning Canada: {canada?.Name ?? "null"}");
-                    return canada;
-                }
-                else if (latitude >= 22) // Rough US border (lowered)
-                {
-                    var usa = _sampleCountries.Find(c => c.Name == "United States");
-                    Debug.WriteLine($"GetCountryAtGeoCoordinate: Latitude >= 22, returning USA: {usa?.Name ?? "null"}");
-                    return usa;
-                }
-                else
-                {
-                    var mexico = _sampleCountries.Find(c => c.Name == "Mexico");
-                    Debug.WriteLine($"GetCountryAtGeoCoordinate: Latitude < 22, returning Mexico: {mexico?.Name ?? "null"}");
-                    return mexico;
-                }
+                Debug.WriteLine("GetCountryAtGeoCoordinate: Position is in United States region");
+                var usa = _sampleCountries.Find(c => c.Name == "United States");
+                Debug.WriteLine($"GetCountryAtGeoCoordinate: Returning USA: {usa?.Name ?? "null"}");
+                return usa;
             }
             
-            // Europe and UK (expanded bounds)
-            if (longitude >= -15 && longitude <= 30 && latitude >= 35 && latitude <= 70)
+            // Canada (approximate bounds)
+            if (longitude >= -140 && longitude <= -50 && latitude >= 49 && latitude <= 80)
             {
-                Debug.WriteLine("GetCountryAtGeoCoordinate: Position is in Europe region (expanded)");
+                Debug.WriteLine("GetCountryAtGeoCoordinate: Position is in Canada region");
+                var canada = _sampleCountries.Find(c => c.Name == "Canada");
+                Debug.WriteLine($"GetCountryAtGeoCoordinate: Returning Canada: {canada?.Name ?? "null"}");
+                return canada;
+            }
+            
+            // Mexico (approximate bounds)  
+            if (longitude >= -118 && longitude <= -86 && latitude >= 14 && latitude <= 32)
+            {
+                Debug.WriteLine("GetCountryAtGeoCoordinate: Position is in Mexico region");
+                var mexico = _sampleCountries.Find(c => c.Name == "Mexico");
+                Debug.WriteLine($"GetCountryAtGeoCoordinate: Returning Mexico: {mexico?.Name ?? "null"}");
+                return mexico;
+            }
+            
+            // United Kingdom (approximate bounds)
+            if (longitude >= -8 && longitude <= 2 && latitude >= 50 && latitude <= 60)
+            {
+                Debug.WriteLine("GetCountryAtGeoCoordinate: Position is in United Kingdom region");
                 var uk = _sampleCountries.Find(c => c.Name == "United Kingdom");
                 Debug.WriteLine($"GetCountryAtGeoCoordinate: Returning UK: {uk?.Name ?? "null"}");
                 return uk;
@@ -235,13 +238,7 @@ namespace StrategyGame
             
             Debug.WriteLine("GetCountryAtGeoCoordinate: No country found for these coordinates");
             
-            // For debugging - if we're anywhere on the map, let's return USA as a fallback
-            if (longitude >= -180 && longitude <= 180 && latitude >= -90 && latitude <= 90)
-            {
-                Debug.WriteLine("GetCountryAtGeoCoordinate: DEBUG - Returning USA as fallback for any valid coordinate");
-                return _sampleCountries.Find(c => c.Name == "United States");
-            }
-            
+            // No fallback - return null if no country matches
             return null;
         }
 

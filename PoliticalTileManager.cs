@@ -618,48 +618,96 @@ namespace StrategyGame
         /// </summary>
         private void DrawCountryBoundaryHighlight(SKCanvas canvas, SKPaint paint, string countryName, SKRectI viewArea)
         {
-            // This is a very basic placeholder implementation
-            // In reality, you'd need to convert actual country boundaries to screen coordinates
+            // Enhanced highlighting with more visible borders
+            paint.StrokeWidth = 4.0f; // Thicker border
+            paint.Color = SKColors.Yellow; // More visible color
+            paint.PathEffect = SKPathEffect.CreateDash(new float[] { 10, 5 }, 0); // Dashed line for better visibility
             
-            // For demonstration purposes, let's draw some basic shapes for known countries
+            Debug.WriteLine($"DrawCountryBoundaryHighlight: Drawing highlight for {countryName} in area {viewArea}");
+            
+            // Create more prominent highlighting that covers the entire visible area
             switch (countryName)
             {
                 case "United States":
-                    // Draw a rough outline representing the US continental boundary
-                    var usPoints = new SKPoint[]
-                    {
-                        new SKPoint(viewArea.Width * 0.2f, viewArea.Height * 0.6f),
-                        new SKPoint(viewArea.Width * 0.8f, viewArea.Height * 0.6f),
-                        new SKPoint(viewArea.Width * 0.8f, viewArea.Height * 0.8f),
-                        new SKPoint(viewArea.Width * 0.2f, viewArea.Height * 0.8f)
-                    };
-                    canvas.DrawPoints(SKPointMode.Polygon, usPoints, paint);
+                    // Draw a prominent border around the entire view area for US
+                    var usRect = new SKRect(10, 10, viewArea.Width - 10, viewArea.Height - 10);
+                    canvas.DrawRect(usRect, paint);
+                    
+                    // Add corner indicators
+                    DrawCornerIndicators(canvas, paint, usRect, "USA");
                     break;
                     
                 case "Canada":
-                    // Draw a rough outline representing Canada
-                    var canadaPoints = new SKPoint[]
-                    {
-                        new SKPoint(viewArea.Width * 0.1f, viewArea.Height * 0.2f),
-                        new SKPoint(viewArea.Width * 0.9f, viewArea.Height * 0.2f),
-                        new SKPoint(viewArea.Width * 0.9f, viewArea.Height * 0.5f),
-                        new SKPoint(viewArea.Width * 0.1f, viewArea.Height * 0.5f)
-                    };
-                    canvas.DrawPoints(SKPointMode.Polygon, canadaPoints, paint);
+                    // Draw a prominent border for Canada
+                    var canadaRect = new SKRect(15, 15, viewArea.Width - 15, viewArea.Height - 15);
+                    canvas.DrawRect(canadaRect, paint);
+                    
+                    // Add corner indicators
+                    DrawCornerIndicators(canvas, paint, canadaRect, "CAN");
+                    break;
+                    
+                case "Mexico":
+                    // Draw a prominent border for Mexico
+                    var mexicoRect = new SKRect(20, 20, viewArea.Width - 20, viewArea.Height - 20);
+                    canvas.DrawRect(mexicoRect, paint);
+                    
+                    // Add corner indicators
+                    DrawCornerIndicators(canvas, paint, mexicoRect, "MEX");
+                    break;
+                    
+                case "United Kingdom":
+                    // Draw a prominent border for UK
+                    var ukRect = new SKRect(25, 25, viewArea.Width - 25, viewArea.Height - 25);
+                    canvas.DrawRect(ukRect, paint);
+                    
+                    // Add corner indicators
+                    DrawCornerIndicators(canvas, paint, ukRect, "UK");
                     break;
                     
                 default:
-                    // For other countries, draw a simple rectangle as placeholder
-                    var rect = new SKRect(
-                        viewArea.Width * 0.3f, 
-                        viewArea.Height * 0.3f, 
-                        viewArea.Width * 0.7f, 
-                        viewArea.Height * 0.7f);
-                    canvas.DrawRect(rect, paint);
+                    Debug.WriteLine($"DrawCountryBoundaryHighlight: No highlight pattern defined for {countryName}");
+                    // Draw a generic highlight
+                    var genericRect = new SKRect(30, 30, viewArea.Width - 30, viewArea.Height - 30);
+                    canvas.DrawRect(genericRect, paint);
                     break;
             }
+        }
+        
+        /// <summary>
+        /// Draws corner indicators to make the country selection more visible
+        /// </summary>
+        private void DrawCornerIndicators(SKCanvas canvas, SKPaint paint, SKRect rect, string countryCode)
+        {
+            using var textPaint = new SKPaint
+            {
+                Color = SKColors.Yellow,
+                TextSize = 24,
+                IsAntialias = true,
+                FakeBoldText = true
+            };
             
-            Debug.WriteLine($"Drew highlight for {countryName}");
+            // Draw country code at top-left corner
+            canvas.DrawText($"SELECTED: {countryCode}", rect.Left + 10, rect.Top + 30, textPaint);
+            
+            // Draw selection indicators at corners
+            float cornerSize = 20;
+            paint.PathEffect = null; // Remove dash for corner indicators
+            
+            // Top-left corner
+            canvas.DrawLine(rect.Left, rect.Top, rect.Left + cornerSize, rect.Top, paint);
+            canvas.DrawLine(rect.Left, rect.Top, rect.Left, rect.Top + cornerSize, paint);
+            
+            // Top-right corner  
+            canvas.DrawLine(rect.Right, rect.Top, rect.Right - cornerSize, rect.Top, paint);
+            canvas.DrawLine(rect.Right, rect.Top, rect.Right, rect.Top + cornerSize, paint);
+            
+            // Bottom-left corner
+            canvas.DrawLine(rect.Left, rect.Bottom, rect.Left + cornerSize, rect.Bottom, paint);
+            canvas.DrawLine(rect.Left, rect.Bottom, rect.Left, rect.Bottom - cornerSize, paint);
+            
+            // Bottom-right corner
+            canvas.DrawLine(rect.Right, rect.Bottom, rect.Right - cornerSize, rect.Bottom, paint);
+            canvas.DrawLine(rect.Right, rect.Bottom, rect.Right, rect.Bottom - cornerSize, paint);
         }
         
         public void Dispose()

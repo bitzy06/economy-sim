@@ -35,6 +35,11 @@ namespace Economy_sim
         // Country selection functionality
         private Country? _selectedCountry;
         private Point _lastMousePosition;
+        
+        // Click vs drag detection
+        private Point _mouseDownPoint;
+        private bool _hasMouseMoved;
+        private const double ClickTolerance = 5.0; // Pixels
 
 
         public GameView()
@@ -165,19 +170,14 @@ namespace Economy_sim
                 
                 Debug.WriteLine($"OnPointerPressed: Mouse click at ({currentPoint.X:F0}, {currentPoint.Y:F0})");
                 Debug.WriteLine($"OnPointerPressed: Current view type: {_mapManager.CurrentViewType}");
-                Debug.WriteLine($"OnPointerPressed: _isPanning: {_isPanning}");
                 
-                // Check for country selection in political view
-                if (_mapManager.CurrentViewType == MapViewType.Political && !_isPanning)
-                {
-                    Debug.WriteLine("OnPointerPressed: Calling HandleCountryClick");
-                    HandleCountryClick(currentPoint);
-                }
-                else
-                {
-                    Debug.WriteLine($"OnPointerPressed: NOT calling HandleCountryClick - ViewType: {_mapManager.CurrentViewType}, _isPanning: {_isPanning}");
-                }
-
+                // Store the initial click point for click vs drag detection
+                _mouseDownPoint = currentPoint;
+                _hasMouseMoved = false;
+                
+                // Don't handle country selection here - wait for OnPointerReleased to distinguish click from drag
+                // This prevents triggering map re-rendering during potential drag operations
+                
                 _isPanning = true;
                 _panStartPoint = currentPoint;
                 this.Cursor = new Cursor(StandardCursorType.Hand);
@@ -189,7 +189,18 @@ namespace Economy_sim
             var currentPoint = e.GetPosition(this.MapImage);
             _lastMousePosition = currentPoint;
 
-            if (_isPanning)
+            // Track if the mouse has moved significantly from the initial click point
+            if (!_hasMouseMoved)
+            {
+                var distance = Math.Sqrt(Math.Pow(currentPoint.X - _mouseDownPoint.X, 2) + Math.Pow(currentPoint.Y - _mouseDownPoint.Y, 2));
+                if (distance > ClickTolerance)
+                {
+                    _hasMouseMoved = true;
+                    Debug.WriteLine($"OnPointerMoved: Mouse movement detected ({distance:F1} pixels) - this is a drag operation");
+                }
+            }
+
+            if (_isPanning && _hasMouseMoved)
             {
                 var delta = _panStartPoint - currentPoint;
                 _panStartPoint = currentPoint;
@@ -205,7 +216,25 @@ namespace Economy_sim
         {
             if (e.InitialPressMouseButton == MouseButton.Left)
             {
+                Debug.WriteLine($"OnPointerReleased: _hasMouseMoved: {_hasMouseMoved}, View type: {_mapManager.CurrentViewType}");
+                
+                // Only handle country selection if this was a click (not a drag) and we're in political view
+                if (!_hasMouseMoved && _mapManager.CurrentViewType == MapViewType.Political)
+                {
+                    Debug.WriteLine("OnPointerReleased: Handling country click (pure click, no drag)");
+                    HandleCountryClick(_mouseDownPoint);
+                }
+                else if (_hasMouseMoved)
+                {
+                    Debug.WriteLine("OnPointerReleased: Was a drag operation - no country selection");
+                }
+                else
+                {
+                    Debug.WriteLine($"OnPointerReleased: Not in political view - current view: {_mapManager.CurrentViewType}");
+                }
+                
                 _isPanning = false;
+                _hasMouseMoved = false;
                 this.Cursor = new Cursor(StandardCursorType.Arrow);
             }
         }
