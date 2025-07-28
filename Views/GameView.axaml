@@ -613,5 +613,12 @@
 				</Grid>
 			</Border>
 		</Border>
+
+		<!-- Country Hover Popup -->
+		<Canvas x:Name="CountryHoverCanvas" 
+				ZIndex="15000" 
+				IsHitTestVisible="False">
+			<!-- The popup content will be added programmatically -->
+		</Canvas>
 	</Grid>
 </Window>

@@ -87,6 +87,100 @@ namespace StrategyGame
             return _terrainManager.GetCellSizeForZoom(zoomLevel);
         }
 
+        /// <summary>
+        /// Gets country information at the specified screen coordinates when in political view
+        /// </summary>
+        /// <param name="screenX">Screen X coordinate</param>
+        /// <param name="screenY">Screen Y coordinate</param>
+        /// <param name="zoomLevel">Current zoom level</param>
+        /// <param name="viewOffset">Current view offset</param>
+        /// <returns>Country information if found, null otherwise</returns>
+        public Country? GetCountryAtScreenCoordinate(int screenX, int screenY, int zoomLevel, SKPointI viewOffset)
+        {
+            if (_currentViewType != MapViewType.Political)
+                return null;
+
+            // Convert screen coordinates to world coordinates
+            int worldX = screenX + viewOffset.X;
+            int worldY = screenY + viewOffset.Y;
+            
+            // Convert world coordinates to geographic coordinates
+            var mapSize = GetMapSize(zoomLevel);
+            double geoX = (double)worldX / mapSize.Width * 360.0 - 180.0; // Longitude
+            double geoY = 90.0 - (double)worldY / mapSize.Height * 180.0; // Latitude
+            
+            // Get country at this geographic coordinate
+            return GetCountryAtGeoCoordinate(geoX, geoY);
+        }
+
+        /// <summary>
+        /// Gets country information at the specified geographic coordinates
+        /// </summary>
+        /// <param name="longitude">Longitude in degrees</param>
+        /// <param name="latitude">Latitude in degrees</param>
+        /// <returns>Country information if found, null otherwise</returns>
+        private Country? GetCountryAtGeoCoordinate(double longitude, double latitude)
+        {
+            // For now, return a mock country based on rough geographic regions
+            // This is a simplified implementation - in a real system you'd query the actual political data
+            
+            // Sample countries with rough geographic bounds for demonstration
+            var countries = new List<Country>();
+            
+            // Create some sample countries if not already created
+            if (countries.Count == 0)
+            {
+                var usa = new Country("United States");
+                usa.Population = 328000000;
+                usa.Budget = 4000000000000; // 4 trillion
+                usa.AddResource("Oil", 500000);
+                usa.AddResource("Coal", 750000);
+                usa.AddResource("Technology", 1000000);
+                
+                var canada = new Country("Canada");
+                canada.Population = 38000000;
+                canada.Budget = 600000000000; // 600 billion
+                canada.AddResource("Oil", 300000);
+                canada.AddResource("Lumber", 800000);
+                canada.AddResource("Minerals", 400000);
+                
+                var mexico = new Country("Mexico");
+                mexico.Population = 128000000;
+                mexico.Budget = 300000000000; // 300 billion
+                mexico.AddResource("Oil", 200000);
+                mexico.AddResource("Agriculture", 350000);
+                
+                var uk = new Country("United Kingdom");
+                uk.Population = 67000000;
+                uk.Budget = 800000000000; // 800 billion
+                uk.AddResource("Financial Services", 500000);
+                uk.AddResource("Technology", 300000);
+                
+                countries.AddRange(new[] { usa, canada, mexico, uk });
+            }
+
+            // Simple geographic bounds checking for demonstration
+            // North America
+            if (longitude >= -168 && longitude <= -52 && latitude >= 14 && latitude <= 72)
+            {
+                if (latitude >= 49) // Rough Canada border
+                    return countries.Find(c => c.Name == "Canada");
+                else if (latitude >= 25.8) // Rough US border
+                    return countries.Find(c => c.Name == "United States");
+                else
+                    return countries.Find(c => c.Name == "Mexico");
+            }
+            
+            // UK and Europe
+            if (longitude >= -10 && longitude <= 2 && latitude >= 50 && latitude <= 60)
+            {
+                return countries.Find(c => c.Name == "United Kingdom");
+            }
+            
+            // Default fallback
+            return null;
+        }
+
         public void Dispose()
         {
             _politicalTileManager?.Dispose();

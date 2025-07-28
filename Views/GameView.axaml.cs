@@ -31,6 +31,12 @@ namespace Economy_sim
         private readonly object _renderLock = new object();
         private bool _renderInProgress = false;
 
+        // Country hover popup functionality
+        private CountryHoverPopup _countryHoverPopup;
+        private DispatcherTimer _hoverDelayTimer;
+        private Point _lastMousePosition;
+        private const int HoverDelayMs = 500; // Delay before showing popup
+
 
         public GameView()
         {
@@ -48,6 +54,9 @@ namespace Economy_sim
 
             // Initialize HUD after component initialization
             InitializeHUD();
+
+            // Initialize country hover popup
+            InitializeCountryHoverPopup();
 
             // Subscribe to map manager events
             _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
@@ -156,21 +165,37 @@ namespace Economy_sim
                 _isPanning = true;
                 _panStartPoint = e.GetPosition(this.MapImage);
                 this.Cursor = new Cursor(StandardCursorType.Hand);
+                
+                // Hide popup when starting to pan
+                _countryHoverPopup?.Hide();
+                _hoverDelayTimer?.Stop();
             }
         }
 
         private void OnPointerMoved(object? sender, PointerEventArgs e)
         {
-            if (!_isPanning) return;
-
             var currentPoint = e.GetPosition(this.MapImage);
-            var delta = _panStartPoint - currentPoint;
-            _panStartPoint = currentPoint;
+            _lastMousePosition = currentPoint;
 
-            _viewOffset.X += (int)delta.X;
-            _viewOffset.Y += (int)delta.Y;
+            if (!_isPanning)
+            {
+                // Handle country hover detection for political view
+                HandleCountryHover(currentPoint);
+            }
+            else
+            {
+                // Hide popup during panning
+                _countryHoverPopup?.Hide();
+                _hoverDelayTimer?.Stop();
 
-            _pendingMapUpdate = true;
+                var delta = _panStartPoint - currentPoint;
+                _panStartPoint = currentPoint;
+
+                _viewOffset.X += (int)delta.X;
+                _viewOffset.Y += (int)delta.Y;
+
+                _pendingMapUpdate = true;
+            }
         }
 
         private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -179,6 +204,14 @@ namespace Economy_sim
             {
                 _isPanning = false;
                 this.Cursor = new Cursor(StandardCursorType.Arrow);
+                
+                // Resume hover detection after panning ends
+                if (_mapManager.CurrentViewType == MapViewType.Political)
+                {
+                    var currentPoint = e.GetPosition(this.MapImage);
+                    _lastMousePosition = currentPoint;
+                    HandleCountryHover(currentPoint);
+                }
             }
         }
 
@@ -495,6 +528,72 @@ namespace Economy_sim
 
         #endregion
 
+        #region Country Hover Popup Management
+
+        private void InitializeCountryHoverPopup()
+        {
+            _countryHoverPopup = new CountryHoverPopup();
+            
+            // Add the popup to the canvas
+            if (this.FindControl<Canvas>("CountryHoverCanvas") is Canvas canvas)
+            {
+                canvas.Children.Add(_countryHoverPopup.PopupControl);
+            }
+
+            // Initialize hover delay timer
+            _hoverDelayTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(HoverDelayMs)
+            };
+            _hoverDelayTimer.Tick += OnHoverDelayTimerTick;
+        }
+
+        private void HandleCountryHover(Point mousePosition)
+        {
+            // Only show country hover in political view
+            if (_mapManager.CurrentViewType != MapViewType.Political)
+            {
+                _countryHoverPopup?.Hide();
+                _hoverDelayTimer?.Stop();
+                return;
+            }
+
+            // Reset the hover timer
+            _hoverDelayTimer?.Stop();
+            _hoverDelayTimer?.Start();
+        }
+
+        private void OnHoverDelayTimerTick(object? sender, EventArgs e)
+        {
+            _hoverDelayTimer?.Stop();
+
+            try
+            {
+                // Get country at current mouse position
+                var country = _mapManager.GetCountryAtScreenCoordinate(
+                    (int)_lastMousePosition.X, 
+                    (int)_lastMousePosition.Y, 
+                    _currentZoomLevel, 
+                    _viewOffset);
+
+                if (country != null)
+                {
+                    _countryHoverPopup?.ShowCountryInfo(country, _lastMousePosition);
+                }
+                else
+                {
+                    _countryHoverPopup?.Hide();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in country hover detection: {ex.Message}");
+                _countryHoverPopup?.Hide();
+            }
+        }
+
+        #endregion
+
         #region Popup Menu Management
 
         private void HideAllPopups()
@@ -729,6 +828,13 @@ namespace Economy_sim
         private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
         {
             Debug.WriteLine($"Map view type changed to: {viewType}");
+            
+            // Hide country hover popup when switching away from political view
+            if (viewType != MapViewType.Political)
+            {
+                _countryHoverPopup?.Hide();
+                _hoverDelayTimer?.Stop();
+            }
             
             // Do not recenter view when switching map types - maintain current position
             // CenterView(); // Removed to prevent annoying recentering
