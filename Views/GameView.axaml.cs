@@ -543,6 +543,14 @@ namespace Economy_sim
                 Debug.WriteLine($"HandleCountryClick: Zoom level {_currentZoomLevel}, View offset ({_viewOffset.X}, {_viewOffset.Y})");
                 Debug.WriteLine($"HandleCountryClick: Current view type {_mapManager.CurrentViewType}");
                 
+                // Debug: Print effective render size and map image bounds
+                var effectiveSize = GetEffectiveRenderSize();
+                Debug.WriteLine($"HandleCountryClick: Effective render size: {effectiveSize.Width}x{effectiveSize.Height}");
+                if (this.MapImage != null)
+                {
+                    Debug.WriteLine($"HandleCountryClick: MapImage bounds: {this.MapImage.Bounds}");
+                }
+                
                 // Get country at clicked position
                 var country = _mapManager.GetCountryAtScreenCoordinate(
                     (int)mousePosition.X, 

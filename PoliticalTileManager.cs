@@ -77,6 +77,11 @@ namespace StrategyGame
         
         public SKBitmap? AssembleView(int zoomLevel, SKRectI viewArea, Action? onTileReady = null)
         {
+            return AssembleViewWithHighlighting(zoomLevel, viewArea, null, onTileReady);
+        }
+        
+        public SKBitmap? AssembleViewWithHighlighting(int zoomLevel, SKRectI viewArea, Country? highlightedCountry, Action? onTileReady = null)
+        {
             var sw = Stopwatch.StartNew();
             
             try
@@ -126,6 +131,12 @@ namespace StrategyGame
                 // Create result bitmap
                 var result = new SKBitmap(info);
                 surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
+                
+                // Add highlighting if a country is selected
+                if (highlightedCountry != null)
+                {
+                    DrawCountryHighlight(result, viewArea, highlightedCountry);
+                }
                 
                 Debug.WriteLine($"Political view assembled in {sw.ElapsedMilliseconds}ms");
                 return result;
@@ -571,6 +582,84 @@ namespace StrategyGame
             int index = zoomLevel - 1;
             index = Math.Clamp(index, 0, MultiResolutionMapManager.PixelsPerCellLevels.Length - 1);
             return MultiResolutionMapManager.PixelsPerCellLevels[index];
+        }
+        
+        /// <summary>
+        /// Draws a white highlight border around the specified country
+        /// </summary>
+        private void DrawCountryHighlight(SKBitmap bitmap, SKRectI viewArea, Country highlightedCountry)
+        {
+            try
+            {
+                using var canvas = new SKCanvas(bitmap);
+                using var paint = new SKPaint
+                {
+                    Color = SKColors.White,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = 3.0f,
+                    IsAntialias = true
+                };
+                
+                Debug.WriteLine($"DrawCountryHighlight: Highlighting {highlightedCountry.Name}");
+                
+                // For now, draw a simple highlight around country regions
+                // This is a placeholder implementation - in a real system you'd use the actual country boundaries
+                DrawCountryBoundaryHighlight(canvas, paint, highlightedCountry.Name, viewArea);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error drawing country highlight: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Placeholder method to draw country boundary highlights
+        /// In a real implementation, this would use actual geographic boundary data
+        /// </summary>
+        private void DrawCountryBoundaryHighlight(SKCanvas canvas, SKPaint paint, string countryName, SKRectI viewArea)
+        {
+            // This is a very basic placeholder implementation
+            // In reality, you'd need to convert actual country boundaries to screen coordinates
+            
+            // For demonstration purposes, let's draw some basic shapes for known countries
+            switch (countryName)
+            {
+                case "United States":
+                    // Draw a rough outline representing the US continental boundary
+                    var usPoints = new SKPoint[]
+                    {
+                        new SKPoint(viewArea.Width * 0.2f, viewArea.Height * 0.6f),
+                        new SKPoint(viewArea.Width * 0.8f, viewArea.Height * 0.6f),
+                        new SKPoint(viewArea.Width * 0.8f, viewArea.Height * 0.8f),
+                        new SKPoint(viewArea.Width * 0.2f, viewArea.Height * 0.8f)
+                    };
+                    canvas.DrawPoints(SKPointMode.Polygon, usPoints, paint);
+                    break;
+                    
+                case "Canada":
+                    // Draw a rough outline representing Canada
+                    var canadaPoints = new SKPoint[]
+                    {
+                        new SKPoint(viewArea.Width * 0.1f, viewArea.Height * 0.2f),
+                        new SKPoint(viewArea.Width * 0.9f, viewArea.Height * 0.2f),
+                        new SKPoint(viewArea.Width * 0.9f, viewArea.Height * 0.5f),
+                        new SKPoint(viewArea.Width * 0.1f, viewArea.Height * 0.5f)
+                    };
+                    canvas.DrawPoints(SKPointMode.Polygon, canadaPoints, paint);
+                    break;
+                    
+                default:
+                    // For other countries, draw a simple rectangle as placeholder
+                    var rect = new SKRect(
+                        viewArea.Width * 0.3f, 
+                        viewArea.Height * 0.3f, 
+                        viewArea.Width * 0.7f, 
+                        viewArea.Height * 0.7f);
+                    canvas.DrawRect(rect, paint);
+                    break;
+            }
+            
+            Debug.WriteLine($"Drew highlight for {countryName}");
         }
         
         public void Dispose()
