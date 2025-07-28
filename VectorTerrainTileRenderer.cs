@@ -128,19 +128,13 @@ namespace StrategyGame
             try
             {
                 // Calculate tile bounds in pixel space
-                int scaledMapWidth = _baseWidth * cellSize;
-                int scaledMapHeight = _baseHeight * cellSize;
-                
                 int pixelX = tileX * TileSizePx;
                 int pixelY = tileY * TileSizePx;
                 
-                int tileWidth = Math.Min(TileSizePx, scaledMapWidth - pixelX);
-                int tileHeight = Math.Min(TileSizePx, scaledMapHeight - pixelY);
-                
-                if (tileWidth <= 0 || tileHeight <= 0)
-                {
-                    return null;
-                }
+                // Tiles are always full size (512x512) - no bounds checking needed
+                // The original system generates tiles on demand for any coordinates
+                int tileWidth = TileSizePx;
+                int tileHeight = TileSizePx;
                 
                 var vectorTile = new VectorTile
                 {

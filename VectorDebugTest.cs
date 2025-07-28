@@ -53,34 +53,35 @@ namespace StrategyGame
                     return;
                 }
                 
-                // Step 4: Test vector tile generation
-                Console.WriteLine("Testing vector tile generation...");
+                // Step 4: Test vector tile generation with GUI coordinates
+                Console.WriteLine("Testing vector tile generation with GUI coordinates...");
                 try 
                 {
-                    // Use coordinates that are definitely within a 1024x1024 map
-                    // Tile (0,0) should be at (0,0) and tile (1,0) should be at (512, 0)
-                    var terrainTile = terrainRenderer.GetVectorTileForTesting(0, 0, 1);
-                    Console.WriteLine($"Terrain tile (0,0) result: {(terrainTile != null ? "SUCCESS" : "NULL")}");
+                    // Test with coordinates from the user's debug log
+                    // ViewArea={Left=5175,Top=2004,Width=2560,Height=1440}
+                    // This should map to tiles around (10, 3)
+                    var terrainTile = terrainRenderer.GetVectorTileForTesting(10, 3, 1);
+                    Console.WriteLine($"Terrain tile (10,3) result: {(terrainTile != null ? "SUCCESS" : "NULL")}");
                     if (terrainTile != null)
                     {
                         Console.WriteLine($"  Features count: {terrainTile.Features.Count}");
                         Console.WriteLine($"  Tile coordinates: ({terrainTile.TileX}, {terrainTile.TileY})");
                     }
                     
-                    var terrainTile2 = terrainRenderer.GetVectorTileForTesting(1, 0, 1);
-                    Console.WriteLine($"Terrain tile (1,0) result: {(terrainTile2 != null ? "SUCCESS" : "NULL")}");
-                    if (terrainTile2 != null)
-                    {
-                        Console.WriteLine($"  Features count: {terrainTile2.Features.Count}");
-                        Console.WriteLine($"  Tile coordinates: ({terrainTile2.TileX}, {terrainTile2.TileY})");
-                    }
-                    
-                    var politicalTile = politicalRenderer.GetVectorTileForTesting(0, 0, 1);
-                    Console.WriteLine($"Political tile (0,0) result: {(politicalTile != null ? "SUCCESS" : "NULL")}");
+                    var politicalTile = politicalRenderer.GetVectorTileForTesting(10, 3, 1);
+                    Console.WriteLine($"Political tile (10,3) result: {(politicalTile != null ? "SUCCESS" : "NULL")}");
                     if (politicalTile != null)
                     {
                         Console.WriteLine($"  Features count: {politicalTile.Features.Count}");
                         Console.WriteLine($"  Tile coordinates: ({politicalTile.TileX}, {politicalTile.TileY})");
+                    }
+                    
+                    // Test another tile from that range
+                    var terrainTile2 = terrainRenderer.GetVectorTileForTesting(15, 5, 1);
+                    Console.WriteLine($"Terrain tile (15,5) result: {(terrainTile2 != null ? "SUCCESS" : "NULL")}");
+                    if (terrainTile2 != null)
+                    {
+                        Console.WriteLine($"  Features count: {terrainTile2.Features.Count}");
                     }
                 }
                 catch (Exception ex)

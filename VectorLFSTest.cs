@@ -50,14 +50,14 @@ namespace StrategyGame
                 // Initialize terrain renderer
                 var terrainRenderer = new VectorTerrainTileRenderer(1024, 1024);
                 
-                // Test multiple tile coordinates to get varied terrain
+                // Test terrain rendering with LFS data using coordinates from GUI debug log
                 var testCoordinates = new[]
                 {
-                    (10, 5),   // Europe/Africa
-                    (15, 8),   // North America
-                    (20, 12),  // Asia
-                    (5, 10),   // Atlantic Ocean
-                    (25, 15)   // Pacific
+                    (10, 3),   // From GUI debug: ViewArea={Left=5175,Top=2004...} -> tile (10,3)
+                    (11, 4),   // Adjacent tiles
+                    (9, 3),    
+                    (10, 4),   
+                    (15, 5),   // Further out
                 };
                 
                 int tileIndex = 0;
@@ -121,14 +121,14 @@ namespace StrategyGame
                 var politicalManager = new PoliticalBorderManager();
                 var politicalRenderer = new VectorPoliticalTileRenderer(politicalManager, 1024, 1024);
                 
-                // Test multiple tile coordinates for different regions
+                // Test multiple tile coordinates for GUI coordinate range
                 var testCoordinates = new[]
                 {
-                    (10, 5),   // Europe/Africa
-                    (15, 8),   // North America
-                    (20, 12),  // Asia
-                    (8, 6),    // Atlantic with borders
-                    (22, 10)   // Asia-Pacific
+                    (10, 3),   // From GUI debug: ViewArea={Left=5175,Top=2004...} -> tile (10,3)
+                    (11, 4),   // Adjacent tiles
+                    (9, 3),    
+                    (10, 4),   
+                    (15, 5),   // Further out
                 };
                 
                 foreach (var (tileX, tileY) in testCoordinates)
@@ -196,9 +196,9 @@ namespace StrategyGame
                 {
                     var stopwatch = Stopwatch.StartNew();
                     
-                    // Generate same tile multiple times to test caching
-                    var terrainTile = terrainRenderer.GetVectorTileForTesting(10, 5, 1);
-                    var politicalTile = politicalRenderer.GetVectorTileForTesting(10, 5, 1);
+                    // Generate same tile multiple times to test caching - use GUI coordinates
+                    var terrainTile = terrainRenderer.GetVectorTileForTesting(10, 3, 1);
+                    var politicalTile = politicalRenderer.GetVectorTileForTesting(10, 3, 1);
                     
                     // Render combined view
                     using var bitmap = new SKBitmap(512, 512);
