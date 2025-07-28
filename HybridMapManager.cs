@@ -12,7 +12,7 @@ namespace StrategyGame
     /// <summary>
     /// Manages both terrain and political map layers with memory-efficient rendering
     /// </summary>
-    public class HybridMapManager
+    public class HybridMapManager : IMapManager
     {
         private readonly MultiResolutionMapManager _terrainManager;
         private readonly PoliticalBorderManager _politicalManager;

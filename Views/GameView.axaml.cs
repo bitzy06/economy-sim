@@ -16,6 +16,11 @@ namespace Economy_sim
     public partial class GameView : Window
     {
         private readonly HybridMapManager _mapManager;
+        private readonly VectorHybridMapManager _vectorMapManager;
+        
+        // Configuration for rendering mode
+        private bool _useVectorRendering = true; // Enable vector rendering by default
+        private IMapManager _activeMapManager;
 
         // --- Optimized Rendering Fields ---
         private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
@@ -35,7 +40,14 @@ namespace Economy_sim
         public GameView()
         {
             InitializeComponent();
+            
+            // Initialize both map managers
             _mapManager = new HybridMapManager(baseWidth: 4096, baseHeight: 2048);
+            _vectorMapManager = new VectorHybridMapManager(baseWidth: 4096, baseHeight: 2048);
+            
+            // Set active map manager based on configuration
+            _activeMapManager = _useVectorRendering ? _vectorMapManager : _mapManager;
+            
             this.Loaded += OnWindowLoaded;
             this.SizeChanged += OnSizeChanged;
 
@@ -50,11 +62,16 @@ namespace Economy_sim
             InitializeHUD();
 
             // Subscribe to map manager events
-            _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
+            _activeMapManager.ViewTypeChanged += OnMapViewTypeChanged;
             UpdateMapViewButtons();
             
-            // Run basic integration test for political borders (commented out for production)
-            // Economy_sim.Testing.PoliticalBorderIntegrationTest.RunBasicTests();
+            // Demonstrate vector customization capabilities if using vector rendering
+            if (_useVectorRendering && _vectorMapManager != null)
+            {
+                _vectorMapManager.DemonstrateCustomization();
+            }
+            
+            Debug.WriteLine($"GameView initialized with {(_useVectorRendering ? "vector" : "raster")} rendering");
         }
 
         private void OnWindowLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -137,8 +154,8 @@ namespace Economy_sim
             _currentZoomLevel = Math.Clamp(_currentZoomLevel + Math.Sign(e.Delta.Y), 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
             if (_currentZoomLevel == oldZoomLevel) return;
 
-            int oldCellSize = _mapManager.GetCellSizeForZoom(oldZoomLevel);
-            int newCellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
+            int oldCellSize = _activeMapManager.GetCellSizeForZoom(oldZoomLevel);
+            int newCellSize = _activeMapManager.GetCellSizeForZoom(_currentZoomLevel);
 
             int newOffsetX = (int)Math.Round((_viewOffset.X + mousePos.X) * (double)newCellSize / oldCellSize) - (int)mousePos.X;
             int newOffsetY = (int)Math.Round((_viewOffset.Y + mousePos.Y) * (double)newCellSize / oldCellSize) - (int)mousePos.Y;
@@ -263,7 +280,7 @@ namespace Economy_sim
         private SKBitmap RenderMapOnWorkerThread()
         {
             var effectiveSize = GetEffectiveRenderSize();
-            if (!_isInitialized || effectiveSize.Width < 1 || effectiveSize.Height < 1 || _mapManager == null)
+            if (!_isInitialized || effectiveSize.Width < 1 || effectiveSize.Height < 1 || _activeMapManager == null)
             {
                 return null;
             }
@@ -279,7 +296,7 @@ namespace Economy_sim
 
             Debug.WriteLine($"RenderMap: ZoomLevel={_currentZoomLevel}, ViewArea={viewArea}, Offset={_viewOffset}");
 
-            return _mapManager.AssembleView(
+            return _activeMapManager.AssembleView(
                 _currentZoomLevel,
                 viewArea,
                 () => Dispatcher.UIThread.Post(QueueRender, DispatcherPriority.Background)
@@ -297,10 +314,10 @@ namespace Economy_sim
 
         private void ClampViewOffset()
         {
-            if (_mapManager == null) return;
+            if (_activeMapManager == null) return;
             var effectiveSize = GetEffectiveRenderSize();
             if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
-            var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
+            var mapSize = _activeMapManager.GetMapSize(_currentZoomLevel);
 
             _viewOffset.X = mapSize.Width < effectiveSize.Width
                 ? (mapSize.Width - (int)effectiveSize.Width) / 2
@@ -715,14 +732,14 @@ namespace Economy_sim
         private void OnTerrainViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Terrain view button clicked");
-            _mapManager.SetViewType(MapViewType.Terrain);
+            _activeMapManager.SetViewType(MapViewType.Terrain);
             QueueRender();
         }
 
         private void OnPoliticalViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Political view button clicked");
-            _mapManager.SetViewType(MapViewType.Political);
+            _activeMapManager.SetViewType(MapViewType.Political);
             QueueRender();
         }
 
@@ -739,12 +756,12 @@ namespace Economy_sim
         
         private void CenterView()
         {
-            if (_mapManager == null) return;
+            if (_activeMapManager == null) return;
             
             var effectiveSize = GetEffectiveRenderSize();
             if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
             
-            var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
+            var mapSize = _activeMapManager.GetMapSize(_currentZoomLevel);
             
             // Center the view on the map
             _viewOffset.X = Math.Max(0, (mapSize.Width - (int)effectiveSize.Width) / 2);
@@ -757,14 +774,14 @@ namespace Economy_sim
         {
             if (this.FindControl<Button>("TerrainViewButton") is Button terrainBtn)
             {
-                terrainBtn.Background = _mapManager.CurrentViewType == MapViewType.Terrain 
+                terrainBtn.Background = _activeMapManager.CurrentViewType == MapViewType.Terrain 
                     ? Avalonia.Media.Brushes.DarkBlue 
                     : Avalonia.Media.Brushes.DarkSlateGray;
             }
 
             if (this.FindControl<Button>("PoliticalViewButton") is Button politicalBtn)
             {
-                politicalBtn.Background = _mapManager.CurrentViewType == MapViewType.Political 
+                politicalBtn.Background = _activeMapManager.CurrentViewType == MapViewType.Political 
                     ? Avalonia.Media.Brushes.DarkRed 
                     : Avalonia.Media.Brushes.DarkSlateGray;
             }
