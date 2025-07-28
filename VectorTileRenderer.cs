@@ -119,6 +119,11 @@ namespace StrategyGame
                     var canvas = surface.Canvas;
                     canvas.Clear(GetBackgroundColor());
                     
+                    int tilesRendered = 0;
+                    int tilesRequested = (tileEndY - tileStartY) * (tileEndX - tileStartX);
+                    
+                    Debug.WriteLine($"Rendering {tilesRequested} tiles from ({tileStartX},{tileStartY}) to ({tileEndX},{tileEndY})");
+                    
                     // Render tiles
                     for (int ty = tileStartY; ty < tileEndY; ty++)
                     {
@@ -131,14 +136,34 @@ namespace StrategyGame
                             if (vectorTile != null)
                             {
                                 RenderVectorTile(canvas, vectorTile, destX, destY, cellSize);
+                                tilesRendered++;
                             }
                             else
                             {
+                                // Draw a placeholder so we can see that the tile area exists
+                                using var placeholderPaint = new SKPaint
+                                {
+                                    Color = new SKColor(255, 200, 200, 100), // Light red transparent
+                                    Style = SKPaintStyle.Fill
+                                };
+                                canvas.DrawRect(destX, destY, TileSizePx, TileSizePx, placeholderPaint);
+                                
                                 // Trigger async loading for next frame
                                 _ = GetVectorTileAsync(cellSize, tx, ty, onTileReady);
                             }
                         }
                     }
+                    
+                    Debug.WriteLine($"Rendered {tilesRendered}/{tilesRequested} tiles immediately");
+                    
+                    // Draw debug border around the entire view area
+                    using var debugPaint = new SKPaint
+                    {
+                        Color = SKColors.Yellow,
+                        Style = SKPaintStyle.Stroke,
+                        StrokeWidth = 2
+                    };
+                    canvas.DrawRect(0, 0, viewArea.Width - 1, viewArea.Height - 1, debugPaint);
                     
                     // Create result bitmap
                     var result = new SKBitmap(info);
@@ -166,7 +191,26 @@ namespace StrategyGame
                 return cached;
             }
             
-            return null;
+            // For the center tiles of the view, generate synchronously to avoid blank screen
+            // This ensures the user sees something immediately rather than waiting for async loading
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                var vectorTile = LoadVectorDataForTile(cellSize, tileX, tileY).GetAwaiter().GetResult();
+                
+                if (vectorTile != null)
+                {
+                    CacheVectorTile(cacheKey, vectorTile);
+                    Debug.WriteLine($"Synchronously generated tile ({tileX}, {tileY}) in {sw.ElapsedMilliseconds}ms");
+                }
+                
+                return vectorTile;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error synchronously generating tile ({tileX}, {tileY}): {ex.Message}");
+                return null;
+            }
         }
         
         protected async Task<VectorTile?> GetVectorTileAsync(int cellSize, int tileX, int tileY, Action? onComplete = null)

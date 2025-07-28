@@ -40,6 +40,18 @@ class Program
                 StrategyGame.Testing.SimpleVectorTest.RunTest();
                 return;
             }
+            else if (args[0] == "diagnose")
+            {
+                Console.WriteLine("Running vector rendering diagnostics...");
+                VectorRenderingDiagnostics.RunFullDiagnostics();
+                return;
+            }
+            else if (args[0] == "fix-test")
+            {
+                Console.WriteLine("Testing rendering fixes...");
+                RenderingFixTest.TestRenderingFix();
+                return;
+            }
         }
         
         try

@@ -253,24 +253,75 @@ namespace Economy_sim
 
                     if (skBitmap != null)
                     {
+                        Debug.WriteLine($"Rendered bitmap: {skBitmap.Width}x{skBitmap.Height}, ColorType: {skBitmap.ColorType}");
+                        
                         // Dispatch the pixel copy to the UI thread without blocking the background thread.
                         await Dispatcher.UIThread.InvokeAsync(() =>
                         {
-                            if (_writeableBitmap != null && _writeableBitmap.PixelSize.Width == skBitmap.Width && _writeableBitmap.PixelSize.Height == skBitmap.Height)
+                            try
                             {
-                                using (var frameBuffer = _writeableBitmap.Lock())
+                                if (_writeableBitmap != null)
                                 {
-                                    var size = frameBuffer.RowBytes * frameBuffer.Size.Height;
-                                    unsafe
+                                    Debug.WriteLine($"WritableBitmap: {_writeableBitmap.PixelSize.Width}x{_writeableBitmap.PixelSize.Height}");
+                                    
+                                    // Check size compatibility
+                                    if (_writeableBitmap.PixelSize.Width == skBitmap.Width && _writeableBitmap.PixelSize.Height == skBitmap.Height)
                                     {
-                                        Buffer.MemoryCopy(skBitmap.GetPixels().ToPointer(), frameBuffer.Address.ToPointer(), size, size);
+                                        // Ensure pixel formats are compatible
+                                        if (skBitmap.ColorType != SKColorType.Bgra8888)
+                                        {
+                                            Debug.WriteLine($"Converting from {skBitmap.ColorType} to Bgra8888");
+                                            using var convertedBitmap = new SKBitmap(skBitmap.Width, skBitmap.Height, SKColorType.Bgra8888, SKAlphaType.Unpremul);
+                                            using var canvas = new SKCanvas(convertedBitmap);
+                                            canvas.DrawBitmap(skBitmap, 0, 0);
+                                            
+                                            CopyBitmapToWriteableBitmap(convertedBitmap, _writeableBitmap);
+                                        }
+                                        else
+                                        {
+                                            CopyBitmapToWriteableBitmap(skBitmap, _writeableBitmap);
+                                        }
+                                        
+                                        // Force UI update
+                                        MapImage?.InvalidateVisual();
+                                        Debug.WriteLine("Bitmap copied and UI invalidated");
+                                    }
+                                    else
+                                    {
+                                        Debug.WriteLine($"Size mismatch: WritableBitmap {_writeableBitmap.PixelSize} vs SKBitmap {skBitmap.Width}x{skBitmap.Height}");
+                                        
+                                        // Recreate the WritableBitmap with correct size
+                                        var newSize = new PixelSize(skBitmap.Width, skBitmap.Height);
+                                        UpdateBitmapSource(newSize);
+                                        
+                                        // Try again with new size
+                                        if (_writeableBitmap != null && _writeableBitmap.PixelSize.Width == skBitmap.Width && _writeableBitmap.PixelSize.Height == skBitmap.Height)
+                                        {
+                                            CopyBitmapToWriteableBitmap(skBitmap, _writeableBitmap);
+                                            MapImage?.InvalidateVisual();
+                                            Debug.WriteLine("Recreated WritableBitmap and copied successfully");
+                                        }
                                     }
                                 }
-                                // Explicitly tell the UI to redraw the updated area.
-                                MapImage.InvalidateVisual();
+                                else
+                                {
+                                    Debug.WriteLine("WritableBitmap is null");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"Error updating UI with rendered bitmap: {ex.Message}");
                             }
                         });
                     }
+                    else
+                    {
+                        Debug.WriteLine("RenderMapOnWorkerThread returned null bitmap");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error in background rendering: {ex.Message}");
                 }
                 finally
                 {
@@ -282,12 +333,33 @@ namespace Economy_sim
                 }
             });
         }
+        
+        private void CopyBitmapToWriteableBitmap(SKBitmap skBitmap, WriteableBitmap writeableBitmap)
+        {
+            using (var frameBuffer = writeableBitmap.Lock())
+            {
+                var size = frameBuffer.RowBytes * frameBuffer.Size.Height;
+                var skSize = skBitmap.RowBytes * skBitmap.Height;
+                
+                Debug.WriteLine($"Copying {skSize} bytes to frame buffer of {size} bytes");
+                Debug.WriteLine($"SKBitmap: {skBitmap.Width}x{skBitmap.Height}, RowBytes: {skBitmap.RowBytes}");
+                Debug.WriteLine($"FrameBuffer: {frameBuffer.Size.Width}x{frameBuffer.Size.Height}, RowBytes: {frameBuffer.RowBytes}");
+                
+                unsafe
+                {
+                    // Use the smaller of the two sizes to prevent buffer overflow
+                    var copySize = Math.Min(size, skSize);
+                    Buffer.MemoryCopy(skBitmap.GetPixels().ToPointer(), frameBuffer.Address.ToPointer(), copySize, copySize);
+                }
+            }
+        }
 
         private SKBitmap RenderMapOnWorkerThread()
         {
             var effectiveSize = GetEffectiveRenderSize();
             if (!_isInitialized || effectiveSize.Width < 1 || effectiveSize.Height < 1 || _activeMapManager == null)
             {
+                Debug.WriteLine($"Skipping render: initialized={_isInitialized}, size={effectiveSize}, manager={_activeMapManager != null}");
                 return null;
             }
 
@@ -302,11 +374,30 @@ namespace Economy_sim
 
             Debug.WriteLine($"RenderMap: ZoomLevel={_currentZoomLevel}, ViewArea={viewArea}, Offset={_viewOffset}");
 
-            return _activeMapManager.AssembleView(
+            var result = _activeMapManager.AssembleView(
                 _currentZoomLevel,
                 viewArea,
                 () => Dispatcher.UIThread.Post(QueueRender, DispatcherPriority.Background)
             );
+            
+            if (result != null)
+            {
+                Debug.WriteLine($"AssembleView returned bitmap: {result.Width}x{result.Height}, bytes per pixel: {result.BytesPerPixel}");
+                
+                // Sample a few pixels to verify the bitmap has content
+                if (result.Width > 100 && result.Height > 100)
+                {
+                    var pixel1 = result.GetPixel(50, 50);
+                    var pixel2 = result.GetPixel(result.Width - 50, result.Height - 50);
+                    Debug.WriteLine($"Sample pixels: ({50},{50})={pixel1}, ({result.Width-50},{result.Height-50})={pixel2}");
+                }
+            }
+            else
+            {
+                Debug.WriteLine("AssembleView returned null bitmap");
+            }
+
+            return result;
         }
 
         private Size GetEffectiveRenderSize()
