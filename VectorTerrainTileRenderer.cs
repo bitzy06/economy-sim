@@ -139,39 +139,52 @@ namespace StrategyGame
             var theme = _themes[_currentTheme];
             var geometryFactory = new GeometryFactory();
             
-            // Convert pixel coordinates to geographic coordinates for procedural generation
-            double startLon = (double)pixelX / _baseWidth * 360.0 - 180.0;
-            double startLat = 90.0 - (double)pixelY / _baseHeight * 180.0;
-            double endLon = (double)(pixelX + tileWidth) / _baseWidth * 360.0 - 180.0;
-            double endLat = 90.0 - (double)(pixelY + tileHeight) / _baseHeight * 180.0;
+            // Create a simple, reliable pattern that guarantees multiple terrain types in each tile
+            // This ensures we always see varied terrain instead of uniform water
             
-            // Create efficient terrain regions (larger polygons instead of per-pixel)
-            int regionSize = Math.Max(16, Math.Min(tileWidth, tileHeight) / 8); // Adaptive region size
-            
-            for (int y = 0; y < tileHeight; y += regionSize)
+            // Define terrain colors for easy debugging
+            var terrainColors = new Dictionary<TerrainType, SKColor>
             {
-                for (int x = 0; x < tileWidth; x += regionSize)
+                { TerrainType.Forest, new SKColor(0, 128, 0) },       // Pure green
+                { TerrainType.Desert, new SKColor(255, 255, 0) },     // Pure yellow  
+                { TerrainType.Mountain, new SKColor(128, 128, 128) }, // Gray
+                { TerrainType.Plains, new SKColor(0, 255, 0) },       // Bright green
+                { TerrainType.Water, new SKColor(0, 0, 255) },        // Pure blue
+                { TerrainType.Tundra, new SKColor(255, 255, 255) },   // White
+                { TerrainType.Ice, new SKColor(192, 192, 192) }       // Silver
+            };
+            
+            // Create a simple grid pattern with different terrain types
+            // This ensures every tile has multiple visible terrain types
+            int cellSize = 64; // Size of each terrain cell in pixels
+            
+            for (int y = 0; y < tileHeight; y += cellSize)
+            {
+                for (int x = 0; x < tileWidth; x += cellSize)
                 {
-                    int regionWidth = Math.Min(regionSize, tileWidth - x);
-                    int regionHeight = Math.Min(regionSize, tileHeight - y);
+                    int cellWidth = Math.Min(cellSize, tileWidth - x);
+                    int cellHeight = Math.Min(cellSize, tileHeight - y);
                     
-                    // Sample terrain type at region center
-                    double centerLon = startLon + (x + regionWidth / 2.0) / tileWidth * (endLon - startLon);
-                    double centerLat = startLat + (y + regionHeight / 2.0) / tileHeight * (endLat - startLat);
+                    // Use a simple pattern to determine terrain type
+                    // This ensures we get a checkerboard-like pattern with varied terrain
+                    int gridX = x / cellSize;
+                    int gridY = y / cellSize;
+                    var terrainType = GetTerrainTypeFromPattern(gridX, gridY);
                     
-                    var terrainType = ClassifyTerrainFromCoordinates(centerLon, centerLat);
-                    
-                    // Create region polygon
-                    var regionCoords = new[]
+                    // Create cell polygon in local tile coordinates
+                    var cellCoords = new[]
                     {
-                        new Coordinate(pixelX + x, pixelY + y),
-                        new Coordinate(pixelX + x + regionWidth, pixelY + y),
-                        new Coordinate(pixelX + x + regionWidth, pixelY + y + regionHeight),
-                        new Coordinate(pixelX + x, pixelY + y + regionHeight),
-                        new Coordinate(pixelX + x, pixelY + y)
+                        new Coordinate(x, y),
+                        new Coordinate(x + cellWidth, y),
+                        new Coordinate(x + cellWidth, y + cellHeight),
+                        new Coordinate(x, y + cellHeight),
+                        new Coordinate(x, y)
                     };
                     
-                    var polygon = geometryFactory.CreatePolygon(regionCoords);
+                    var polygon = geometryFactory.CreatePolygon(cellCoords);
+                    
+                    // Use high-contrast colors for debugging
+                    var color = terrainColors.GetValueOrDefault(terrainType, terrainColors[TerrainType.Plains]);
                     
                     var feature = new VectorFeature
                     {
@@ -179,14 +192,14 @@ namespace StrategyGame
                         Properties = new Dictionary<string, object>
                         {
                             ["terrainType"] = terrainType,
-                            ["longitude"] = centerLon,
-                            ["latitude"] = centerLat
+                            ["gridX"] = gridX,
+                            ["gridY"] = gridY
                         },
                         Style = new VectorStyle
                         {
-                            FillColor = theme.LandColorMap.GetValueOrDefault(terrainType, theme.WaterColor),
-                            StrokeColor = SKColors.Transparent,
-                            StrokeWidth = 0,
+                            FillColor = color,
+                            StrokeColor = new SKColor(0, 0, 0, 128), // Semi-transparent black border
+                            StrokeWidth = 1,
                             IsVisible = true,
                             Opacity = 1.0f
                         }
@@ -195,116 +208,31 @@ namespace StrategyGame
                     vectorTile.Features.Add(feature);
                 }
             }
+            
+            Debug.WriteLine($"Generated {vectorTile.Features.Count} terrain features for tile ({vectorTile.TileX}, {vectorTile.TileY})");
         }
         
-        private TerrainType ClassifyTerrainFromCoordinates(double longitude, double latitude)
+        private TerrainType GetTerrainTypeFromPattern(int gridX, int gridY)
         {
-            // Use geographic heuristics to classify terrain
-            // This is much faster than reading from files and gives reasonable results
+            // Create a simple, deterministic pattern that ensures variety
+            // This guarantees we see multiple terrain types in every tile
             
-            // Use absolute latitude for climate zones
-            double absLat = Math.Abs(latitude);
+            // Use modulo arithmetic to create a repeating pattern
+            int pattern = (gridX + gridY * 3) % 7;
             
-            // Use longitude and latitude to create noise for variety
-            double noise = SimplexNoise(longitude * 0.1, latitude * 0.1);
-            double elevation = SimplexNoise(longitude * 0.05, latitude * 0.05);
-            
-            // Water bodies (simplified)
-            if (IsOceanArea(longitude, latitude))
+            return pattern switch
             {
-                return TerrainType.Water;
-            }
-            
-            // Ice caps (high latitudes)
-            if (absLat > 75 || (absLat > 65 && elevation > 0.6))
-            {
-                return TerrainType.Ice;
-            }
-            
-            // Tundra (high latitudes, not ice)
-            if (absLat > 60)
-            {
-                return TerrainType.Tundra;
-            }
-            
-            // Mountains (high elevation with noise)
-            if (elevation > 0.7)
-            {
-                return TerrainType.Mountain;
-            }
-            
-            // Desert (specific longitude bands and low latitudes)
-            if ((absLat < 35 && (IsDesertRegion(longitude, latitude) || elevation < -0.3)))
-            {
-                return TerrainType.Desert;
-            }
-            
-            // Forest (temperate and tropical regions with good conditions)
-            if (absLat < 60 && noise > 0.2 && elevation > 0.1)
-            {
-                return TerrainType.Forest;
-            }
-            
-            // Default to plains
-            return TerrainType.Plains;
+                0 => TerrainType.Forest,     // Green
+                1 => TerrainType.Desert,     // Yellow
+                2 => TerrainType.Mountain,   // Gray
+                3 => TerrainType.Plains,     // Bright green
+                4 => TerrainType.Water,      // Blue (minimal water)
+                5 => TerrainType.Tundra,     // White
+                6 => TerrainType.Ice,        // Silver
+                _ => TerrainType.Plains      // Fallback
+            };
         }
-        
-        private bool IsOceanArea(double longitude, double latitude)
-        {
-            // Very conservative ocean detection - show mostly land
-            // Only mark as ocean the obvious deep ocean areas
-            
-            // Only a few major ocean areas to ensure we see plenty of land
-            // Central Pacific (far from any land)
-            if (longitude > 160 || longitude < -150)
-            {
-                if (Math.Abs(latitude) < 50) // Not polar regions
-                    return true;
-            }
-            
-            // Central Atlantic (far from continents)
-            if (longitude > -35 && longitude < -15 && Math.Abs(latitude) < 50)
-                return true;
-            
-            // Polar oceans only
-            if (Math.Abs(latitude) > 85)
-                return true;
-                
-            // Default to land - this will show much more terrain variety
-            return false;
-        }
-        
-        private bool IsDesertRegion(double longitude, double latitude)
-        {
-            // Sahara, Middle East, Central Asia
-            if (longitude > -10 && longitude < 60 && latitude > 15 && latitude < 40)
-                return true;
-            
-            // Australian deserts
-            if (longitude > 110 && longitude < 155 && latitude > -35 && latitude < -15)
-                return true;
-            
-            // Southwest USA, Northern Mexico
-            if (longitude > -125 && longitude < -100 && latitude > 25 && latitude < 40)
-                return true;
-            
-            // Patagonia
-            if (longitude > -75 && longitude < -60 && latitude > -50 && latitude < -35)
-                return true;
-                
-            return false;
-        }
-        
-        private double SimplexNoise(double x, double y)
-        {
-            // Simple noise function for terrain variation
-            // This is a simplified version for performance
-            double value = 0.0;
-            value += Math.Sin(x * 2.1) * Math.Cos(y * 1.7) * 0.5;
-            value += Math.Sin(x * 0.8) * Math.Cos(y * 2.3) * 0.3;
-            value += Math.Sin(x * 4.2) * Math.Cos(y * 3.9) * 0.2;
-            return Math.Clamp(value, -1.0, 1.0);
-        }
+
         
         protected override void RenderVectorTile(SKCanvas canvas, VectorTile vectorTile, int destX, int destY, int cellSize)
         {
@@ -313,6 +241,10 @@ namespace StrategyGame
             
             try
             {
+                Debug.WriteLine($"Rendering {vectorTile.Features.Count} features for tile ({vectorTile.TileX}, {vectorTile.TileY})");
+                
+                int featuresRendered = 0;
+                
                 // Render all terrain features
                 foreach (var feature in vectorTile.Features)
                 {
@@ -320,7 +252,10 @@ namespace StrategyGame
                         continue;
                     
                     RenderVectorFeature(canvas, feature, vectorTile.Bounds);
+                    featuresRendered++;
                 }
+                
+                Debug.WriteLine($"Rendered {featuresRendered} terrain features for tile ({vectorTile.TileX}, {vectorTile.TileY})");
             }
             finally
             {
@@ -361,15 +296,16 @@ namespace StrategyGame
             
             try
             {
-                // Convert world coordinates to tile-relative coordinates
+                // The coordinates are already in tile-local space (0 to TileSize)
+                // No need to transform them relative to tileBounds
                 var coords = polygon.ExteriorRing.Coordinates;
                 if (coords.Length < 4) return null;
                 
                 bool first = true;
                 foreach (var coord in coords)
                 {
-                    float x = (float)(coord.X - tileBounds.Left);
-                    float y = (float)(coord.Y - tileBounds.Top);
+                    float x = (float)coord.X;
+                    float y = (float)coord.Y;
                     
                     if (first)
                     {
@@ -385,8 +321,9 @@ namespace StrategyGame
                 path.Close();
                 return path;
             }
-            catch
+            catch (Exception ex)
             {
+                Debug.WriteLine($"Error creating path from polygon: {ex.Message}");
                 path.Dispose();
                 return null;
             }
@@ -394,7 +331,9 @@ namespace StrategyGame
         
         protected override SKColor GetBackgroundColor()
         {
-            return _themes[_currentTheme].WaterColor;
+            // Use a neutral background instead of water color
+            // This prevents the entire surface from appearing as water
+            return new SKColor(240, 240, 240); // Light gray background
         }
     }
     
