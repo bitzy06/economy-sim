@@ -3,19 +3,47 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using System.IO;
 using SkiaSharp;
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
+using MaxRev.Gdal.Core;
+using OSGeo.GDAL;
 
 namespace StrategyGame
 {
     /// <summary>
     /// Vector-based terrain tile renderer with GPU acceleration and customizable styling
+    /// Uses real GDAL terrain data from Natural Earth raster files
     /// </summary>
     public class VectorTerrainTileRenderer : VectorTileRenderer
     {
         // Terrain styling themes
         private readonly Dictionary<string, TerrainTheme> _themes = new();
         private string _currentTheme = "Default";
+        
+        // GDAL configuration
+        private static readonly object GdalConfigLock = new object();
+        private static bool _gdalConfigured = false;
+        
+        // Data file paths (following existing pattern from PixelMapGenerator)
+        private static readonly string RepoRoot =
+            Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
+        private static readonly string RepoDataDir = Path.Combine(RepoRoot, "data");
+        
+        private static string GetDataFile(string name)
+        {
+            string repoPath = Path.Combine(RepoDataDir, name);
+            if (File.Exists(repoPath))
+                return repoPath;
+
+            var matches = Directory.GetFiles(RepoDataDir, name, SearchOption.AllDirectories);
+            if (matches.Length > 0)
+                return matches[0];
+                
+            throw new FileNotFoundException($"Data file not found: {name}");
+        }
+        
+        private static readonly string TerrainTifPath = GetDataFile("NE1_HR_LC.tif");
         
         public VectorTerrainTileRenderer(int baseWidth, int baseHeight) : base(baseWidth, baseHeight)
         {
@@ -136,27 +164,213 @@ namespace StrategyGame
         
         private void GenerateProceduralTerrain(VectorTile vectorTile, int pixelX, int pixelY, int tileWidth, int tileHeight)
         {
+            try
+            {
+                // Use real GDAL terrain data instead of procedural generation
+                GenerateRealTerrainData(vectorTile, pixelX, pixelY, tileWidth, tileHeight);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to load real terrain data: {ex.Message}. Using fallback pattern.");
+                // Fallback to simple pattern if real data fails
+                GenerateFallbackTerrain(vectorTile, pixelX, pixelY, tileWidth, tileHeight);
+            }
+        }
+        
+        private void GenerateRealTerrainData(VectorTile vectorTile, int pixelX, int pixelY, int tileWidth, int tileHeight)
+        {
+            // Configure GDAL
+            lock (GdalConfigLock)
+            {
+                if (!_gdalConfigured)
+                {
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
+                }
+            }
+            
             var theme = _themes[_currentTheme];
-            var geometryFactory = new GeometryFactory();
+            var geometryFactory = new Nts.GeometryFactory();
+            
+            // Open the terrain GeoTIFF
+            using var ds = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+            if (ds == null)
+                throw new FileNotFoundException("Missing terrain GeoTIFF", TerrainTifPath);
+
+            int srcW = ds.RasterXSize;
+            int srcH = ds.RasterYSize;
+            
+            // Calculate scaling from world coordinates to raster coordinates
+            int mapWidthPx = _baseWidth;
+            int mapHeightPx = _baseHeight;
+            
+            double scaleX = (double)srcW / mapWidthPx;
+            double scaleY = (double)srcH / mapHeightPx;
+            
+            // Calculate the region to read from the raster
+            int srcX = (int)Math.Floor(pixelX * scaleX);
+            int srcY = (int)Math.Floor(pixelY * scaleY);
+            int readW = (int)Math.Ceiling(tileWidth * scaleX);
+            int readH = (int)Math.Ceiling(tileHeight * scaleY);
+            
+            // Clamp to raster bounds
+            srcX = Math.Max(0, Math.Min(srcX, srcW - 1));
+            srcY = Math.Max(0, Math.Min(srcY, srcH - 1));
+            readW = Math.Min(readW, srcW - srcX);
+            readH = Math.Min(readH, srcH - srcY);
+            
+            if (readW <= 0 || readH <= 0)
+            {
+                GenerateFallbackTerrain(vectorTile, pixelX, pixelY, tileWidth, tileHeight);
+                return;
+            }
+            
+            // Read RGB data from the raster
+            byte[] r = new byte[readW * readH];
+            byte[] g = new byte[readW * readH];
+            byte[] b = new byte[readW * readH];
+            
+            ds.GetRasterBand(1).ReadRaster(srcX, srcY, readW, readH, r, readW, readH, 0, 0);
+            ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, readW, readH, 0, 0);
+            ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, readW, readH, 0, 0);
+            
+            // Create vector regions from the raster data
+            // Group similar colored regions together to create vector polygons
+            var regions = CreateTerrainRegions(r, g, b, readW, readH, tileWidth, tileHeight);
+            
+            foreach (var region in regions)
+            {
+                var feature = new VectorFeature
+                {
+                    Geometry = region.Geometry,
+                    Properties = new Dictionary<string, object>
+                    {
+                        ["terrainType"] = region.TerrainType,
+                        ["color"] = region.Color.ToString()
+                    },
+                    Style = new VectorStyle
+                    {
+                        FillColor = region.Color,
+                        StrokeColor = region.Color,
+                        StrokeWidth = 0.5f,
+                        Opacity = 1.0f
+                    }
+                };
+                
+                vectorTile.Features.Add(feature);
+            }
+        }
+        
+        private List<TerrainRegion> CreateTerrainRegions(byte[] r, byte[] g, byte[] b, int dataWidth, int dataHeight, int tileWidth, int tileHeight)
+        {
+            var regions = new List<TerrainRegion>();
+            var geometryFactory = new Nts.GeometryFactory();
+            
+            // Create regions by sampling the raster data at regular intervals
+            // This gives us vector-like regions while preserving the terrain patterns
+            int regionSize = 32; // Size of each region in pixels
+            
+            for (int y = 0; y < tileHeight; y += regionSize)
+            {
+                for (int x = 0; x < tileWidth; x += regionSize)
+                {
+                    int regionWidth = Math.Min(regionSize, tileWidth - x);
+                    int regionHeight = Math.Min(regionSize, tileHeight - y);
+                    
+                    // Sample the center of this region from the raster data
+                    int centerX = x + regionWidth / 2;
+                    int centerY = y + regionHeight / 2;
+                    
+                    // Convert to raster coordinates
+                    int rasterX = (int)((double)centerX / tileWidth * dataWidth);
+                    int rasterY = (int)((double)centerY / tileHeight * dataHeight);
+                    
+                    if (rasterX >= 0 && rasterX < dataWidth && rasterY >= 0 && rasterY < dataHeight)
+                    {
+                        int idx = rasterY * dataWidth + rasterX;
+                        var color = new SKColor(r[idx], g[idx], b[idx]);
+                        var terrainType = ClassifyTerrainFromColor(color);
+                        
+                        // Create polygon for this region
+                        var coords = new[]
+                        {
+                            new Nts.Coordinate(x, y),
+                            new Nts.Coordinate(x + regionWidth, y),
+                            new Nts.Coordinate(x + regionWidth, y + regionHeight),
+                            new Nts.Coordinate(x, y + regionHeight),
+                            new Nts.Coordinate(x, y)
+                        };
+                        
+                        var polygon = geometryFactory.CreatePolygon(coords);
+                        
+                        regions.Add(new TerrainRegion
+                        {
+                            Geometry = polygon,
+                            TerrainType = terrainType,
+                            Color = color
+                        });
+                    }
+                }
+            }
+            
+            return regions;
+        }
+        
+        private TerrainType ClassifyTerrainFromColor(SKColor color)
+        {
+            // Classify terrain based on Natural Earth color schemes
+            // This is a simplified classification - could be enhanced with more sophisticated logic
+            
+            var r = color.Red;
+            var g = color.Green;
+            var b = color.Blue;
+            
+            // Water/Ocean (blue-ish)
+            if (b > r && b > g && b > 150)
+                return TerrainType.Water;
+                
+            // Ice/Snow (very light, high in all channels)
+            if (r > 200 && g > 200 && b > 200)
+                return TerrainType.Ice;
+                
+            // Desert (yellowish, sandy)
+            if (r > g && r > 150 && g > 100 && b < 100)
+                return TerrainType.Desert;
+                
+            // Forest (green-ish)
+            if (g > r && g > b && g > 80)
+                return TerrainType.Forest;
+                
+            // Mountains (gray-ish)
+            if (Math.Abs(r - g) < 30 && Math.Abs(r - b) < 30 && r < 150)
+                return TerrainType.Mountain;
+                
+            // Tundra (light gray/blue)
+            if (b > 100 && g > 100 && r > 100 && Math.Max(Math.Max(r, g), b) < 200)
+                return TerrainType.Tundra;
+                
+            // Default to plains
+            return TerrainType.Plains;
+        }
+        
+        private void GenerateFallbackTerrain(VectorTile vectorTile, int pixelX, int pixelY, int tileWidth, int tileHeight)
+        {
+            var theme = _themes[_currentTheme];
+            var geometryFactory = new Nts.GeometryFactory();
             
             // Create a simple, reliable pattern that guarantees multiple terrain types in each tile
-            // This ensures we always see varied terrain instead of uniform water
-            
-            // Define terrain colors for easy debugging
             var terrainColors = new Dictionary<TerrainType, SKColor>
             {
-                { TerrainType.Forest, new SKColor(0, 128, 0) },       // Pure green
-                { TerrainType.Desert, new SKColor(255, 255, 0) },     // Pure yellow  
+                { TerrainType.Forest, new SKColor(0, 128, 0) },       // Green
+                { TerrainType.Desert, new SKColor(255, 255, 0) },     // Yellow  
                 { TerrainType.Mountain, new SKColor(128, 128, 128) }, // Gray
                 { TerrainType.Plains, new SKColor(0, 255, 0) },       // Bright green
-                { TerrainType.Water, new SKColor(0, 0, 255) },        // Pure blue
+                { TerrainType.Water, new SKColor(0, 0, 255) },        // Blue
                 { TerrainType.Tundra, new SKColor(255, 255, 255) },   // White
                 { TerrainType.Ice, new SKColor(192, 192, 192) }       // Silver
             };
             
-            // Create a simple grid pattern with different terrain types
-            // This ensures every tile has multiple visible terrain types
-            int cellSize = 64; // Size of each terrain cell in pixels
+            int cellSize = 64;
             
             for (int y = 0; y < tileHeight; y += cellSize)
             {
@@ -165,25 +379,20 @@ namespace StrategyGame
                     int cellWidth = Math.Min(cellSize, tileWidth - x);
                     int cellHeight = Math.Min(cellSize, tileHeight - y);
                     
-                    // Use a simple pattern to determine terrain type
-                    // This ensures we get a checkerboard-like pattern with varied terrain
                     int gridX = x / cellSize;
                     int gridY = y / cellSize;
                     var terrainType = GetTerrainTypeFromPattern(gridX, gridY);
                     
-                    // Create cell polygon in local tile coordinates
                     var cellCoords = new[]
                     {
-                        new Coordinate(x, y),
-                        new Coordinate(x + cellWidth, y),
-                        new Coordinate(x + cellWidth, y + cellHeight),
-                        new Coordinate(x, y + cellHeight),
-                        new Coordinate(x, y)
+                        new Nts.Coordinate(x, y),
+                        new Nts.Coordinate(x + cellWidth, y),
+                        new Nts.Coordinate(x + cellWidth, y + cellHeight),
+                        new Nts.Coordinate(x, y + cellHeight),
+                        new Nts.Coordinate(x, y)
                     };
                     
                     var polygon = geometryFactory.CreatePolygon(cellCoords);
-                    
-                    // Use high-contrast colors for debugging
                     var color = terrainColors.GetValueOrDefault(terrainType, terrainColors[TerrainType.Plains]);
                     
                     var feature = new VectorFeature
@@ -198,9 +407,8 @@ namespace StrategyGame
                         Style = new VectorStyle
                         {
                             FillColor = color,
-                            StrokeColor = new SKColor(0, 0, 0, 128), // Semi-transparent black border
-                            StrokeWidth = 1,
-                            IsVisible = true,
+                            StrokeColor = color,
+                            StrokeWidth = 0.5f,
                             Opacity = 1.0f
                         }
                     };
@@ -208,28 +416,30 @@ namespace StrategyGame
                     vectorTile.Features.Add(feature);
                 }
             }
-            
-            Debug.WriteLine($"Generated {vectorTile.Features.Count} terrain features for tile ({vectorTile.TileX}, {vectorTile.TileY})");
+        }
+        
+        private class TerrainRegion
+        {
+            public Nts.Polygon Geometry { get; set; } = null!;
+            public TerrainType TerrainType { get; set; }
+            public SKColor Color { get; set; }
         }
         
         private TerrainType GetTerrainTypeFromPattern(int gridX, int gridY)
         {
             // Create a simple, deterministic pattern that ensures variety
-            // This guarantees we see multiple terrain types in every tile
-            
-            // Use modulo arithmetic to create a repeating pattern
             int pattern = (gridX + gridY * 3) % 7;
             
             return pattern switch
             {
-                0 => TerrainType.Forest,     // Green
-                1 => TerrainType.Desert,     // Yellow
-                2 => TerrainType.Mountain,   // Gray
-                3 => TerrainType.Plains,     // Bright green
-                4 => TerrainType.Water,      // Blue (minimal water)
-                5 => TerrainType.Tundra,     // White
-                6 => TerrainType.Ice,        // Silver
-                _ => TerrainType.Plains      // Fallback
+                0 => TerrainType.Forest,
+                1 => TerrainType.Desert,
+                2 => TerrainType.Mountain,
+                3 => TerrainType.Plains,
+                4 => TerrainType.Water,
+                5 => TerrainType.Tundra,
+                6 => TerrainType.Ice,
+                _ => TerrainType.Plains
             };
         }
 
@@ -265,7 +475,7 @@ namespace StrategyGame
         
         private void RenderVectorFeature(SKCanvas canvas, VectorFeature feature, SKRect tileBounds)
         {
-            if (feature.Geometry is Polygon polygon)
+            if (feature.Geometry is Nts.Polygon polygon)
             {
                 var path = CreatePathFromPolygon(polygon, tileBounds);
                 if (path != null)
@@ -290,7 +500,7 @@ namespace StrategyGame
             }
         }
         
-        private SKPath? CreatePathFromPolygon(Polygon polygon, SKRect tileBounds)
+        private SKPath? CreatePathFromPolygon(Nts.Polygon polygon, SKRect tileBounds)
         {
             var path = new SKPath();
             

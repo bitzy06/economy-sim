@@ -52,6 +52,12 @@ class Program
                 RenderingFixTest.TestRenderingFix();
                 return;
             }
+            else if (args[0] == "data-test")
+            {
+                Console.WriteLine("Running vector data integration test...");
+                VectorDataTest.RunDataIntegrationTest();
+                return;
+            }
             else if (args[0] == "debug-terrain")
             {
                 Console.WriteLine("Running terrain debug test...");

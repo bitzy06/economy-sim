@@ -3,13 +3,18 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
+using System.IO;
 using SkiaSharp;
-using NetTopologySuite.Geometries;
+using Nts = NetTopologySuite.Geometries;
+using NetTopologySuite.IO;
+using OSGeo.OGR;
+using MaxRev.Gdal.Core;
 
 namespace StrategyGame
 {
     /// <summary>
     /// Vector-based political tile renderer with GPU acceleration and customizable styling
+    /// Uses real shapefile data for country boundaries
     /// </summary>
     public class VectorPoliticalTileRenderer : VectorTileRenderer
     {
@@ -19,6 +24,31 @@ namespace StrategyGame
         private readonly Dictionary<string, PoliticalTheme> _themes = new();
         private string _currentTheme = "Default";
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
+        
+        // GDAL configuration
+        private static readonly object GdalConfigLock = new object();
+        private static bool _gdalConfigured = false;
+        
+        // Data file paths
+        private static readonly string RepoRoot =
+            Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
+        private static readonly string RepoDataDir = Path.Combine(RepoRoot, "data");
+        
+        private static string GetDataFile(string name)
+        {
+            string repoPath = Path.Combine(RepoDataDir, name);
+            if (File.Exists(repoPath))
+                return repoPath;
+
+            var matches = Directory.GetFiles(RepoDataDir, name, SearchOption.AllDirectories);
+            if (matches.Length > 0)
+                return matches[0];
+                
+            throw new FileNotFoundException($"Data file not found: {name}");
+        }
+        
+        private static readonly string CountryShapePath = GetDataFile("ne_10m_admin_0_countries.shp");
+        private static readonly string CShapesPath = GetDataFile("CShapes-2.0.shp");
         
         public VectorPoliticalTileRenderer(PoliticalBorderManager politicalManager, int baseWidth, int baseHeight) 
             : base(baseWidth, baseHeight)
@@ -146,8 +176,8 @@ namespace StrategyGame
                     Bounds = new SKRect(pixelX, pixelY, pixelX + tileWidth, pixelY + tileHeight)
                 };
                 
-                // Generate simple procedural political boundaries
-                GenerateProceduralCountries(vectorTile, pixelX, pixelY, tileWidth, tileHeight);
+                // Load real political boundaries from shapefiles
+                GenerateRealPoliticalBoundaries(vectorTile, pixelX, pixelY, tileWidth, tileHeight);
                 
                 return vectorTile;
             }
@@ -158,16 +188,199 @@ namespace StrategyGame
             }
         }
         
-        private void GenerateProceduralCountries(VectorTile vectorTile, int pixelX, int pixelY, int tileWidth, int tileHeight)
+        private void GenerateRealPoliticalBoundaries(VectorTile vectorTile, int pixelX, int pixelY, int tileWidth, int tileHeight)
+        {
+            try
+            {
+                // Use real shapefile data
+                LoadCountryBoundariesFromShapefile(vectorTile, pixelX, pixelY, tileWidth, tileHeight);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to load real political data: {ex.Message}. Using fallback pattern.");
+                // Fallback to simple pattern if real data fails
+                GenerateFallbackCountries(vectorTile, pixelX, pixelY, tileWidth, tileHeight);
+            }
+        }
+        
+        private void LoadCountryBoundariesFromShapefile(VectorTile vectorTile, int pixelX, int pixelY, int tileWidth, int tileHeight)
+        {
+            // Configure GDAL
+            lock (GdalConfigLock)
+            {
+                if (!_gdalConfigured)
+                {
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
+                }
+            }
+            
+            var theme = _themes[_currentTheme];
+            
+            // Calculate geographic bounds for this tile
+            var geoBounds = CoordinateTransform.GetTileGeographicBounds(
+                vectorTile.TileX, vectorTile.TileY, TileSizePx, _baseWidth, _baseHeight);
+            
+            // Use the NTS shapefile reader for better integration
+            var factory = new Nts.GeometryFactory();
+            var shapefileReader = new ShapefileDataReader(CountryShapePath, factory);
+            
+            int countryIndex = 0;
+            var countryColors = GenerateDistinctCountryColors();
+            
+            while (shapefileReader.Read())
+            {
+                var geometry = shapefileReader.Geometry;
+                var attributes = shapefileReader.DbaseHeader;
+                
+                if (geometry != null)
+                {
+                    // Check if this country intersects with our tile bounds
+                    var tileBounds = factory.CreatePolygon(new[]
+                    {
+                        new Nts.Coordinate(geoBounds.MinLon, geoBounds.MinLat),
+                        new Nts.Coordinate(geoBounds.MaxLon, geoBounds.MinLat),
+                        new Nts.Coordinate(geoBounds.MaxLon, geoBounds.MaxLat),
+                        new Nts.Coordinate(geoBounds.MinLon, geoBounds.MaxLat),
+                        new Nts.Coordinate(geoBounds.MinLon, geoBounds.MinLat)
+                    });
+                    
+                    if (geometry.Intersects(tileBounds))
+                    {
+                        // Clip the country geometry to our tile bounds
+                        var clippedGeometry = geometry.Intersection(tileBounds);
+                        
+                        if (clippedGeometry != null && !clippedGeometry.IsEmpty)
+                        {
+                            // Convert from geographic coordinates to tile pixel coordinates
+                            var localGeometry = TransformToTileCoordinates(clippedGeometry, geoBounds, tileWidth, tileHeight);
+                            
+                            if (localGeometry != null)
+                            {
+                                // Get country name and color
+                                string countryName = "Unknown";
+                                try
+                                {
+                                    // Try to get country name from shapefile attributes
+                                    for (int i = 0; i < shapefileReader.DbaseHeader.NumFields; i++)
+                                    {
+                                        var fieldName = shapefileReader.DbaseHeader.Fields[i].Name;
+                                        if (fieldName.Equals("NAME", StringComparison.OrdinalIgnoreCase) ||
+                                            fieldName.Equals("ADMIN", StringComparison.OrdinalIgnoreCase) ||
+                                            fieldName.Equals("NAME_EN", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            var value = shapefileReader.GetValue(i);
+                                            if (value != null)
+                                                countryName = value.ToString() ?? "Unknown";
+                                            break;
+                                        }
+                                    }
+                                }
+                                catch
+                                {
+                                    countryName = $"Country_{countryIndex}";
+                                }
+                                
+                                var color = countryColors.GetValueOrDefault(countryName, countryColors["UNK"]);
+                                
+                                // Handle multi-polygon countries
+                                if (localGeometry is Nts.MultiPolygon multiPoly)
+                                {
+                                    for (int i = 0; i < multiPoly.NumGeometries; i++)
+                                    {
+                                        if (multiPoly.GetGeometryN(i) is Nts.Polygon poly)
+                                            CreateCountryFeature(vectorTile, poly, countryName, color, theme);
+                                    }
+                                }
+                                else if (localGeometry is Nts.Polygon polygon)
+                                {
+                                    CreateCountryFeature(vectorTile, polygon, countryName, color, theme);
+                                }
+                                
+                                countryIndex++;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            shapefileReader.Close();
+            
+            Debug.WriteLine($"Loaded {vectorTile.Features.Count} country boundaries from shapefile for tile ({vectorTile.TileX}, {vectorTile.TileY})");
+        }
+        
+        private Nts.Geometry? TransformToTileCoordinates(Nts.Geometry geoGeometry, GeoBounds geoBounds, int tileWidth, int tileHeight)
+        {
+            var factory = new Nts.GeometryFactory();
+            
+            // Transform function from geographic to tile pixel coordinates
+            Nts.Coordinate TransformCoordinate(Nts.Coordinate geoCoord)
+            {
+                double x = (geoCoord.X - geoBounds.MinLon) / (geoBounds.MaxLon - geoBounds.MinLon) * tileWidth;
+                double y = (geoBounds.MaxLat - geoCoord.Y) / (geoBounds.MaxLat - geoBounds.MinLat) * tileHeight;
+                return new Nts.Coordinate(x, y);
+            }
+            
+            if (geoGeometry is Nts.Polygon polygon)
+            {
+                var exteriorCoords = polygon.ExteriorRing.Coordinates.Select(TransformCoordinate).ToArray();
+                var exteriorRing = factory.CreateLinearRing(exteriorCoords);
+                
+                var holes = new Nts.LinearRing[polygon.NumInteriorRings];
+                for (int i = 0; i < polygon.NumInteriorRings; i++)
+                {
+                    var holeCoords = polygon.GetInteriorRingN(i).Coordinates.Select(TransformCoordinate).ToArray();
+                    holes[i] = factory.CreateLinearRing(holeCoords);
+                }
+                
+                return factory.CreatePolygon(exteriorRing, holes);
+            }
+            else if (geoGeometry is Nts.MultiPolygon multiPolygon)
+            {
+                var polygons = new Nts.Polygon[multiPolygon.NumGeometries];
+                for (int i = 0; i < multiPolygon.NumGeometries; i++)
+                {
+                    var transformedPoly = TransformToTileCoordinates(multiPolygon.GetGeometryN(i), geoBounds, tileWidth, tileHeight);
+                    if (transformedPoly is Nts.Polygon poly)
+                        polygons[i] = poly;
+                }
+                
+                return factory.CreateMultiPolygon(polygons.Where(p => p != null).ToArray());
+            }
+            
+            return null;
+        }
+        
+        private void CreateCountryFeature(VectorTile vectorTile, Nts.Polygon polygon, string countryName, SKColor color, PoliticalTheme theme)
+        {
+            var feature = new VectorFeature
+            {
+                Geometry = polygon,
+                Properties = new Dictionary<string, object>
+                {
+                    ["countryName"] = countryName,
+                    ["color"] = color.ToString()
+                },
+                Style = new VectorStyle
+                {
+                    FillColor = color,
+                    StrokeColor = theme.BorderColor,
+                    StrokeWidth = theme.BorderWidth,
+                    Opacity = 0.7f
+                }
+            };
+            
+            vectorTile.Features.Add(feature);
+        }
+        
+        private void GenerateFallbackCountries(VectorTile vectorTile, int pixelX, int pixelY, int tileWidth, int tileHeight)
         {
             var theme = _themes[_currentTheme];
-            var geometryFactory = new GeometryFactory();
+            var geometryFactory = new Nts.GeometryFactory();
             
             // Create a simple grid pattern with different countries
-            // This ensures every tile has visible political boundaries
-            int cellSize = 128; // Size of each country cell in pixels
+            int cellSize = 128;
             
-            // Define country colors for easy debugging
             var countryColors = new SKColor[]
             {
                 new SKColor(255, 0, 0),     // Red
@@ -187,48 +400,43 @@ namespace StrategyGame
                     int cellWidth = Math.Min(cellSize, tileWidth - x);
                     int cellHeight = Math.Min(cellSize, tileHeight - y);
                     
-                    // Use a simple pattern to determine country
                     int gridX = x / cellSize;
                     int gridY = y / cellSize;
-                    int countryIndex = (gridX + gridY * 2) % countryColors.Length;
+                    int countryIndex = (gridX + gridY * 2) % 8;  // Use 8 predefined colors
                     
-                    // Create country polygon in local tile coordinates
                     var countryCoords = new[]
                     {
-                        new Coordinate(x, y),
-                        new Coordinate(x + cellWidth, y),
-                        new Coordinate(x + cellWidth, y + cellHeight),
-                        new Coordinate(x, y + cellHeight),
-                        new Coordinate(x, y)
+                        new Nts.Coordinate(x, y),
+                        new Nts.Coordinate(x + cellWidth, y),
+                        new Nts.Coordinate(x + cellWidth, y + cellHeight),
+                        new Nts.Coordinate(x, y + cellHeight),
+                        new Nts.Coordinate(x, y)
                     };
                     
                     var polygon = geometryFactory.CreatePolygon(countryCoords);
+                    var color = countryColors[countryIndex];
                     
                     var feature = new VectorFeature
                     {
                         Geometry = polygon,
                         Properties = new Dictionary<string, object>
                         {
-                            ["countryCode"] = $"C{countryIndex:D2}",
-                            ["countryName"] = $"Country {countryIndex + 1}",
+                            ["countryName"] = $"Country_{countryIndex}",
                             ["gridX"] = gridX,
                             ["gridY"] = gridY
                         },
                         Style = new VectorStyle
                         {
-                            FillColor = countryColors[countryIndex],
-                            StrokeColor = new SKColor(0, 0, 0, 255), // Black border
-                            StrokeWidth = 2,
-                            IsVisible = true,
-                            Opacity = 0.8f
+                            FillColor = color,
+                            StrokeColor = new SKColor(0, 0, 0),
+                            StrokeWidth = 2.0f,
+                            Opacity = 0.7f
                         }
                     };
                     
                     vectorTile.Features.Add(feature);
                 }
             }
-            
-            Debug.WriteLine($"Generated {vectorTile.Features.Count} country features for political tile ({vectorTile.TileX}, {vectorTile.TileY})");
         }
         
         protected override void RenderVectorTile(SKCanvas canvas, VectorTile vectorTile, int destX, int destY, int cellSize)
@@ -276,7 +484,7 @@ namespace StrategyGame
         
         private void RenderCountryFill(SKCanvas canvas, VectorFeature feature, SKRect tileBounds)
         {
-            if (feature.Geometry is Polygon polygon)
+            if (feature.Geometry is Nts.Polygon polygon)
             {
                 var path = CreatePathFromGeometry(polygon, tileBounds);
                 if (path != null)
@@ -298,7 +506,7 @@ namespace StrategyGame
             if (feature.Style.StrokeWidth <= 0 || feature.Style.StrokeColor.Alpha == 0)
                 return;
             
-            if (feature.Geometry is Polygon polygon)
+            if (feature.Geometry is Nts.Polygon polygon)
             {
                 var path = CreatePathFromGeometry(polygon, tileBounds);
                 if (path != null)
@@ -312,7 +520,7 @@ namespace StrategyGame
             }
         }
         
-        private SKPath? CreatePathFromGeometry(Polygon polygon, SKRect tileBounds)
+        private SKPath? CreatePathFromGeometry(Nts.Polygon polygon, SKRect tileBounds)
         {
             var path = new SKPath();
             
