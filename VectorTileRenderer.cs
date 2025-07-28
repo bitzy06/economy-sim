@@ -34,14 +34,21 @@ namespace StrategyGame
         {
             try
             {
+                // Test SkiaSharp basic functionality first
+                using var testBitmap = new SKBitmap(1, 1);
+                using var testCanvas = new SKCanvas(testBitmap);
+                testCanvas.Clear(SKColors.White);
+                
+                // Only try GPU if basic SkiaSharp works
                 _grContext = GRContext.CreateGl();
                 _gpuAvailable = _grContext != null;
-                Debug.WriteLine($"GPU acceleration available: {_gpuAvailable}");
+                Debug.WriteLine($"SkiaSharp initialization successful. GPU acceleration available: {_gpuAvailable}");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"GPU initialization failed: {ex.Message}");
+                Debug.WriteLine($"SkiaSharp/GPU initialization failed: {ex.Message}");
                 _gpuAvailable = false;
+                _grContext = null;
             }
         }
         
@@ -74,24 +81,37 @@ namespace StrategyGame
                 int tileEndY = (viewArea.Bottom + TileSizePx - 1) / TileSizePx;
                 
                 // Create surface with GPU acceleration if available
-                SKSurface surface;
+                SKSurface? surface = null;
                 var info = new SKImageInfo(viewArea.Width, viewArea.Height);
                 
-                if (_gpuAvailable && _grContext != null)
+                try
                 {
-                    surface = SKSurface.Create(_grContext, false, info);
-                    Debug.WriteLine("Using GPU-accelerated surface");
+                    if (_gpuAvailable && _grContext != null)
+                    {
+                        surface = SKSurface.Create(_grContext, false, info);
+                        if (surface != null)
+                        {
+                            Debug.WriteLine("Using GPU-accelerated surface");
+                        }
+                    }
+                    
+                    // Fallback to CPU surface if GPU fails or unavailable
+                    if (surface == null)
+                    {
+                        surface = SKSurface.Create(info);
+                        Debug.WriteLine("Using CPU surface");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    surface = SKSurface.Create(info);
-                    Debug.WriteLine("Using CPU surface");
+                    Debug.WriteLine($"Failed to create SkiaSharp surface: {ex.Message}");
+                    surface = null;
                 }
                 
                 if (surface == null)
                 {
-                    Debug.WriteLine("Failed to create rendering surface");
-                    return null;
+                    Debug.WriteLine("Creating fallback error bitmap due to SkiaSharp failure");
+                    return CreateSkiaSharpErrorFallback(viewArea.Width, viewArea.Height);
                 }
                 
                 using (surface)
@@ -246,26 +266,85 @@ namespace StrategyGame
         
         protected SKBitmap CreateErrorPlaceholder(int width, int height)
         {
-            var bitmap = new SKBitmap(width, height);
-            using var canvas = new SKCanvas(bitmap);
-            
-            canvas.Clear(new SKColor(240, 220, 220, 255)); // Light red background
-            
-            using var paint = new SKPaint
+            try
             {
-                Color = new SKColor(180, 60, 60, 255),
-                TextSize = Math.Min(width, height) / 15f,
-                IsAntialias = true,
-                TextAlign = SKTextAlign.Center
-            };
-            
-            string message = "Vector data error";
-            float x = width / 2f;
-            float y = height / 2f;
-            
-            canvas.DrawText(message, x, y, paint);
-            
-            return bitmap;
+                var bitmap = new SKBitmap(width, height);
+                using var canvas = new SKCanvas(bitmap);
+                
+                canvas.Clear(new SKColor(240, 220, 220, 255)); // Light red background
+                
+                using var paint = new SKPaint
+                {
+                    Color = new SKColor(180, 60, 60, 255),
+                    TextSize = Math.Min(width, height) / 15f,
+                    IsAntialias = true,
+                    TextAlign = SKTextAlign.Center
+                };
+                
+                string message = "Vector data error";
+                float x = width / 2f;
+                float y = height / 2f;
+                
+                canvas.DrawText(message, x, y, paint);
+                
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to create error placeholder: {ex.Message}");
+                return CreateSimpleFallback(width, height);
+            }
+        }
+        
+        protected SKBitmap CreateSkiaSharpErrorFallback(int width, int height)
+        {
+            try
+            {
+                // Try creating a basic bitmap to indicate SkiaSharp failure
+                var bitmap = new SKBitmap(width, height);
+                using var canvas = new SKCanvas(bitmap);
+                
+                // Use a bright color to indicate the graphics system failure
+                canvas.Clear(new SKColor(255, 100, 100, 255)); // Bright red
+                
+                using var paint = new SKPaint
+                {
+                    Color = SKColors.White,
+                    TextSize = Math.Min(width, height) / 10f,
+                    IsAntialias = true,
+                    TextAlign = SKTextAlign.Center
+                };
+                
+                string message = "SkiaSharp initialization failed";
+                float x = width / 2f;
+                float y = height / 2f;
+                
+                canvas.DrawText(message, x, y, paint);
+                
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Complete SkiaSharp failure: {ex.Message}");
+                return CreateSimpleFallback(width, height);
+            }
+        }
+        
+        protected SKBitmap CreateSimpleFallback(int width, int height)
+        {
+            try
+            {
+                // Most basic fallback - just create an empty bitmap
+                var bitmap = new SKBitmap(width, height);
+                // Don't even try to draw on it if SkiaSharp is broken
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Even simple bitmap creation failed: {ex.Message}");
+                // Return null to indicate complete failure
+                return null!;
+            }
         }
         
         // Abstract methods to be implemented by derived classes

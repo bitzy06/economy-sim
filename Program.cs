@@ -4,6 +4,8 @@ using MaxRev.Gdal.Core;
 using OSGeo.GDAL;
 using OSGeo.OGR;
 using System;
+using StrategyGame;
+using StrategyGame.Testing;
 
 
 namespace Economy_sim;
@@ -14,18 +16,45 @@ class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // Check if running in test mode
-        if (args.Length > 0 && args[0] == "test")
+        // Check for test mode arguments
+        if (args.Length > 0)
         {
-            Console.WriteLine("Running in test mode...");
-            StrategyGame.Testing.SimpleVectorTest.RunTest();
-            return;
+            if (args[0] == "test")
+            {
+                Console.WriteLine("Running in test mode...");
+                Console.WriteLine("=== VECTOR GRAPHICS CONVERSION TEST ===");
+                VectorGraphicsDemo.RunDemonstration();
+                VectorLogicTest.RunLogicTest();
+                Console.WriteLine("All tests completed successfully!");
+                return;
+            }
+            else if (args[0] == "render-test")
+            {
+                Console.WriteLine("Running vector rendering tests...");
+                VectorRenderingTest.TestVectorRendering();
+                return;
+            }
+            else if (args[0] == "simple-test")
+            {
+                Console.WriteLine("Running simple test mode...");
+                StrategyGame.Testing.SimpleVectorTest.RunTest();
+                return;
+            }
         }
         
-        // Normal GUI application startup
-        GdalInit.Ensure();
-        BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+        try
+        {
+            // Normal GUI application startup
+            GdalInit.Ensure();
+            BuildAvaloniaApp()
+            .StartWithClassicDesktopLifetime(args);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to start UI application: {ex.Message}");
+            Console.WriteLine("This may be expected in a headless environment.");
+            Console.WriteLine("Use 'dotnet run test', 'dotnet run render-test', or 'dotnet run simple-test' for headless testing.");
+        }
     }
 
     // Avalonia configuration, don't remove; also used by visual designer.
