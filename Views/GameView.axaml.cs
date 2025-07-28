@@ -9,6 +9,7 @@ using StrategyGame; // Assuming HybridMapManager is in this namespace
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Economy_sim
@@ -31,11 +32,9 @@ namespace Economy_sim
         private readonly object _renderLock = new object();
         private bool _renderInProgress = false;
 
-        // Country hover popup functionality
-        private CountryHoverPopup _countryHoverPopup;
-        private DispatcherTimer _hoverDelayTimer;
+        // Country selection functionality
+        private Country? _selectedCountry;
         private Point _lastMousePosition;
-        private const int HoverDelayMs = 500; // Delay before showing popup
 
 
         public GameView()
@@ -55,8 +54,8 @@ namespace Economy_sim
             // Initialize HUD after component initialization
             InitializeHUD();
 
-            // Initialize country hover popup
-            InitializeCountryHoverPopup();
+            // Initialize country selection functionality
+            InitializeCountrySelection();
 
             // Subscribe to map manager events
             _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
@@ -162,13 +161,17 @@ namespace Economy_sim
         {
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             {
-                _isPanning = true;
-                _panStartPoint = e.GetPosition(this.MapImage);
-                this.Cursor = new Cursor(StandardCursorType.Hand);
+                var currentPoint = e.GetPosition(this.MapImage);
                 
-                // Hide popup when starting to pan
-                _countryHoverPopup?.Hide();
-                _hoverDelayTimer?.Stop();
+                // Check for country selection in political view
+                if (_mapManager.CurrentViewType == MapViewType.Political && !_isPanning)
+                {
+                    HandleCountryClick(currentPoint);
+                }
+
+                _isPanning = true;
+                _panStartPoint = currentPoint;
+                this.Cursor = new Cursor(StandardCursorType.Hand);
             }
         }
 
@@ -177,17 +180,8 @@ namespace Economy_sim
             var currentPoint = e.GetPosition(this.MapImage);
             _lastMousePosition = currentPoint;
 
-            if (!_isPanning)
+            if (_isPanning)
             {
-                // Handle country hover detection for political view
-                HandleCountryHover(currentPoint);
-            }
-            else
-            {
-                // Hide popup during panning
-                _countryHoverPopup?.Hide();
-                _hoverDelayTimer?.Stop();
-
                 var delta = _panStartPoint - currentPoint;
                 _panStartPoint = currentPoint;
 
@@ -204,14 +198,6 @@ namespace Economy_sim
             {
                 _isPanning = false;
                 this.Cursor = new Cursor(StandardCursorType.Arrow);
-                
-                // Resume hover detection after panning ends
-                if (_mapManager.CurrentViewType == MapViewType.Political)
-                {
-                    var currentPoint = e.GetPosition(this.MapImage);
-                    _lastMousePosition = currentPoint;
-                    HandleCountryHover(currentPoint);
-                }
             }
         }
 
@@ -451,6 +437,9 @@ namespace Economy_sim
             if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
                 statsOverlay.PointerPressed += OnOverlayClicked;
 
+            if (this.FindControl<Border>("CountryInfoMenuOverlay") is Border countryInfoOverlay)
+                countryInfoOverlay.PointerPressed += OnOverlayClicked;
+
             // Setup popup menu content
             InitializePopupMenus();
         }
@@ -528,68 +517,180 @@ namespace Economy_sim
 
         #endregion
 
-        #region Country Hover Popup Management
+        #region Country Selection Management
 
-        private void InitializeCountryHoverPopup()
+        private void InitializeCountrySelection()
         {
-            _countryHoverPopup = new CountryHoverPopup();
-            
-            // Add the popup to the canvas
-            if (this.FindControl<Canvas>("CountryHoverCanvas") is Canvas canvas)
-            {
-                canvas.Children.Add(_countryHoverPopup.PopupControl);
-            }
-
-            // Initialize hover delay timer
-            _hoverDelayTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(HoverDelayMs)
-            };
-            _hoverDelayTimer.Tick += OnHoverDelayTimerTick;
+            // Setup close button handler for country info menu
+            if (this.FindControl<Button>("CountryInfoCloseButton") is Button closeBtn)
+                closeBtn.Click += (s, e) => HideAllPopups();
         }
 
-        private void HandleCountryHover(Point mousePosition)
+        private void HandleCountryClick(Point mousePosition)
         {
-            // Only show country hover in political view
-            if (_mapManager.CurrentViewType != MapViewType.Political)
-            {
-                _countryHoverPopup?.Hide();
-                _hoverDelayTimer?.Stop();
-                return;
-            }
-
-            // Reset the hover timer
-            _hoverDelayTimer?.Stop();
-            _hoverDelayTimer?.Start();
-        }
-
-        private void OnHoverDelayTimerTick(object? sender, EventArgs e)
-        {
-            _hoverDelayTimer?.Stop();
-
             try
             {
-                // Get country at current mouse position
+                // Get country at clicked position
                 var country = _mapManager.GetCountryAtScreenCoordinate(
-                    (int)_lastMousePosition.X, 
-                    (int)_lastMousePosition.Y, 
+                    (int)mousePosition.X, 
+                    (int)mousePosition.Y, 
                     _currentZoomLevel, 
                     _viewOffset);
 
                 if (country != null)
                 {
-                    _countryHoverPopup?.ShowCountryInfo(country, _lastMousePosition);
-                }
-                else
-                {
-                    _countryHoverPopup?.Hide();
+                    _selectedCountry = country;
+                    
+                    // Set highlighting for visual feedback
+                    _mapManager.SetHighlightedCountry(country);
+                    
+                    ShowCountryInfoMenu(country);
+                    
+                    // Refresh the map to show highlighting
+                    QueueRender();
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error in country hover detection: {ex.Message}");
-                _countryHoverPopup?.Hide();
+                Debug.WriteLine($"Error in country click detection: {ex.Message}");
             }
+        }
+
+        private void ShowCountryInfoMenu(Country country)
+        {
+            // Update country information title with selection indicator
+            if (this.FindControl<TextBlock>("CountryInfoTitle") is TextBlock titleText)
+            {
+                titleText.Text = $"🗺️ {country.Name} (Selected)";
+            }
+
+            // Update country overview
+            if (this.FindControl<TextBlock>("CountryPopulationText") is TextBlock popText)
+            {
+                popText.Text = $"{country.Population:N0}";
+            }
+
+            if (this.FindControl<TextBlock>("CountryPopulationGrowth") is TextBlock growthText)
+            {
+                growthText.Text = "Growth: +1.2%"; // Placeholder
+            }
+
+            if (this.FindControl<TextBlock>("CountryBudgetText") is TextBlock budgetText)
+            {
+                budgetText.Text = $"${country.Budget:N0}";
+            }
+
+            if (this.FindControl<TextBlock>("CountryRelationsText") is TextBlock relationsText)
+            {
+                relationsText.Text = "Neutral"; // Placeholder
+            }
+
+            // Update resources list
+            if (this.FindControl<ListBox>("CountryResourcesList") is ListBox resourcesList)
+            {
+                resourcesList.Items.Clear();
+                if (country.Resources.Any())
+                {
+                    foreach (var resource in country.Resources)
+                    {
+                        resourcesList.Items.Add($"🏭 {resource.Key}: {resource.Value:N0}");
+                    }
+                }
+                else
+                {
+                    resourcesList.Items.Add("No resource data available");
+                }
+            }
+
+            // Update additional information
+            if (this.FindControl<TextBlock>("CountryCapitalText") is TextBlock capitalText)
+            {
+                capitalText.Text = $"Capital: {GetCountryCapital(country.Name)}";
+            }
+
+            if (this.FindControl<TextBlock>("CountryAreaText") is TextBlock areaText)
+            {
+                areaText.Text = $"Area: {GetCountryArea(country.Name)}";
+            }
+
+            if (this.FindControl<TextBlock>("CountryLanguageText") is TextBlock languageText)
+            {
+                languageText.Text = $"Language: {GetCountryLanguage(country.Name)}";
+            }
+
+            if (this.FindControl<TextBlock>("CountryGovernmentText") is TextBlock govText)
+            {
+                govText.Text = $"Government: {GetCountryGovernment(country.Name)}";
+            }
+
+            if (this.FindControl<TextBlock>("CountryFoundedText") is TextBlock foundedText)
+            {
+                foundedText.Text = $"Founded: {GetCountryFounded(country.Name)}";
+            }
+
+            // Show the country info menu
+            ShowPopup("CountryInfoMenuOverlay");
+        }
+
+        // Helper methods for country information
+        private string GetCountryCapital(string countryName)
+        {
+            return countryName switch
+            {
+                "United States" => "Washington, D.C.",
+                "Canada" => "Ottawa",
+                "Mexico" => "Mexico City",
+                "United Kingdom" => "London",
+                _ => "Unknown"
+            };
+        }
+
+        private string GetCountryArea(string countryName)
+        {
+            return countryName switch
+            {
+                "United States" => "9.8 million km²",
+                "Canada" => "10.0 million km²",
+                "Mexico" => "2.0 million km²",
+                "United Kingdom" => "243,610 km²",
+                _ => "Unknown"
+            };
+        }
+
+        private string GetCountryLanguage(string countryName)
+        {
+            return countryName switch
+            {
+                "United States" => "English",
+                "Canada" => "English, French",
+                "Mexico" => "Spanish",
+                "United Kingdom" => "English",
+                _ => "Unknown"
+            };
+        }
+
+        private string GetCountryGovernment(string countryName)
+        {
+            return countryName switch
+            {
+                "United States" => "Federal Republic",
+                "Canada" => "Federal Parliamentary Democracy",
+                "Mexico" => "Federal Republic",
+                "United Kingdom" => "Constitutional Monarchy",
+                _ => "Unknown"
+            };
+        }
+
+        private string GetCountryFounded(string countryName)
+        {
+            return countryName switch
+            {
+                "United States" => "1776",
+                "Canada" => "1867",
+                "Mexico" => "1810",
+                "United Kingdom" => "1707",
+                _ => "Unknown"
+            };
         }
 
         #endregion
@@ -612,6 +713,15 @@ namespace Economy_sim
 
             if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
                 statsOverlay.IsVisible = false;
+
+            if (this.FindControl<Border>("CountryInfoMenuOverlay") is Border countryOverlay)
+            {
+                countryOverlay.IsVisible = false;
+                
+                // Clear country highlighting when menu is closed
+                _mapManager.SetHighlightedCountry(null);
+                QueueRender();
+            }
         }
 
         private void ShowPopup(string popupName)
@@ -829,11 +939,13 @@ namespace Economy_sim
         {
             Debug.WriteLine($"Map view type changed to: {viewType}");
             
-            // Hide country hover popup when switching away from political view
+            // Hide country info menu and clear highlighting when switching away from political view
             if (viewType != MapViewType.Political)
             {
-                _countryHoverPopup?.Hide();
-                _hoverDelayTimer?.Stop();
+                if (this.FindControl<Border>("CountryInfoMenuOverlay") is Border countryOverlay)
+                    countryOverlay.IsVisible = false;
+                
+                _mapManager.SetHighlightedCountry(null);
             }
             
             // Do not recenter view when switching map types - maintain current position

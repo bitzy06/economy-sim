@@ -453,6 +453,11 @@ namespace StrategyGame
             }
         }
         
+        public void InvalidateCache()
+        {
+            ClearCacheForDateChange();
+        }
+        
         private void ClearCacheForDateChange()
         {
             lock (_cacheLock)

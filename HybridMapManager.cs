@@ -113,6 +113,31 @@ namespace StrategyGame
             return GetCountryAtGeoCoordinate(geoX, geoY);
         }
 
+        // Country highlighting functionality
+        private Country? _highlightedCountry;
+        
+        /// <summary>
+        /// Sets the country to highlight with a white border
+        /// </summary>
+        /// <param name="country">Country to highlight, or null to clear highlighting</param>
+        public void SetHighlightedCountry(Country? country)
+        {
+            if (_highlightedCountry != country)
+            {
+                _highlightedCountry = country;
+                
+                // Force refresh of political tiles to show highlighting
+                if (_currentViewType == MapViewType.Political)
+                {
+                    _politicalTileManager.InvalidateCache();
+                }
+            }
+        }
+        
+        /// <summary>
+        /// Gets the currently highlighted country
+        /// </summary>
+        public Country? HighlightedCountry => _highlightedCountry;
         /// <summary>
         /// Gets country information at the specified geographic coordinates
         /// </summary>
