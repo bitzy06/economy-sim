@@ -58,6 +58,12 @@ class Program
                 VectorDataTest.RunDataIntegrationTest();
                 return;
             }
+            else if (args[0] == "debug-data")
+            {
+                Console.WriteLine("Running vector data debug...");
+                VectorDebugger.DebugDataIntegration();
+                return;
+            }
             else if (args[0] == "debug-terrain")
             {
                 Console.WriteLine("Running terrain debug test...");
