@@ -544,6 +544,9 @@ namespace Economy_sim
                     // Set highlighting for visual feedback
                     _mapManager.SetHighlightedCountry(country);
                     
+                    // Show selection indicator on map
+                    ShowCountrySelectionIndicator(country.Name, mousePosition);
+                    
                     ShowCountryInfoMenu(country);
                     
                     // Refresh the map to show highlighting
@@ -681,6 +684,29 @@ namespace Economy_sim
             };
         }
 
+        private void ShowCountrySelectionIndicator(string countryName, Point position)
+        {
+            if (this.FindControl<Border>("CountrySelectionIndicator") is Border indicator &&
+                this.FindControl<TextBlock>("CountrySelectionText") is TextBlock text)
+            {
+                text.Text = $"{countryName} Selected";
+                
+                // Position the indicator near the click point but offset to avoid overlap
+                Canvas.SetLeft(indicator, position.X + 10);
+                Canvas.SetTop(indicator, position.Y - 30);
+                
+                indicator.IsVisible = true;
+            }
+        }
+
+        private void HideCountrySelectionIndicator()
+        {
+            if (this.FindControl<Border>("CountrySelectionIndicator") is Border indicator)
+            {
+                indicator.IsVisible = false;
+            }
+        }
+
         private string GetCountryFounded(string countryName)
         {
             return countryName switch
@@ -718,8 +744,9 @@ namespace Economy_sim
             {
                 countryOverlay.IsVisible = false;
                 
-                // Clear country highlighting when menu is closed
+                // Clear country highlighting and selection indicator when menu is closed
                 _mapManager.SetHighlightedCountry(null);
+                HideCountrySelectionIndicator();
                 QueueRender();
             }
         }
@@ -939,12 +966,13 @@ namespace Economy_sim
         {
             Debug.WriteLine($"Map view type changed to: {viewType}");
             
-            // Hide country info menu and clear highlighting when switching away from political view
+            // Hide country info menu, selection indicator, and clear highlighting when switching away from political view
             if (viewType != MapViewType.Political)
             {
                 if (this.FindControl<Border>("CountryInfoMenuOverlay") is Border countryOverlay)
                     countryOverlay.IsVisible = false;
                 
+                HideCountrySelectionIndicator();
                 _mapManager.SetHighlightedCountry(null);
             }
             

@@ -727,5 +727,29 @@
 				</Grid>
 			</Border>
 		</Border>
+
+		<!-- Country Selection Indicator -->
+		<Canvas x:Name="CountrySelectionCanvas" 
+				ZIndex="15000" 
+				IsHitTestVisible="False">
+			<Border x:Name="CountrySelectionIndicator"
+					Background="#AA000000"
+					BorderBrush="White"
+					BorderThickness="2"
+					CornerRadius="15"
+					Padding="10,5"
+					IsVisible="False">
+				<StackPanel Orientation="Horizontal">
+					<TextBlock Text="📍" FontSize="16" Foreground="White" VerticalAlignment="Center"/>
+					<TextBlock x:Name="CountrySelectionText" 
+							   Text="Country Selected" 
+							   Foreground="White" 
+							   FontWeight="Bold"
+							   FontSize="12"
+							   VerticalAlignment="Center"
+							   Margin="5,0,0,0"/>
+				</StackPanel>
+			</Border>
+		</Canvas>
 	</Grid>
 </Window>
