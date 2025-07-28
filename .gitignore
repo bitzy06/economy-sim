@@ -4,7 +4,6 @@
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
 # Data files and logs (as per AGENTS.md)
-data/
 logs/
 world_setup.json
 
