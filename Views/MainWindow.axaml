@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="Economy_sim.MainWindow"
+        Title="Economy_sim"
+        WindowState="FullScreen">
+
+	<Window.Resources>
+		<!-- Replace the gradient with an ImageBrush -->
+		<ImageBrush x:Key="MainMenuBackgroundBrush"
+		           Source="avares://Economy sim/Assets/main menu.png"
+		           Stretch="UniformToFill"/>
+	</Window.Resources>
+
+	<Window.Styles>
+		<StyleInclude Source="/GlobalStyles.axaml"/>
+	</Window.Styles>
+
+	<!-- Viewbox will scale the content uniformly based on design dimensions -->
+	<Viewbox Stretch="Uniform">
+		<Grid Width="800" Height="450" Background="{StaticResource MainMenuBackgroundBrush}">
+			<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+				<!-- Text with outline effect using layered TextBlocks -->
+				<Grid HorizontalAlignment="Center" Margin="0,0,0,40">
+					<!-- Black outline layer (back) -->
+					<TextBlock Text="CounterPoint: coldwar economy" Classes="heading-large-outline"
+					          HorizontalAlignment="Center" />
+					<!-- White text layer (front) -->
+					<TextBlock Text="CounterPoint: coldwar economy" Classes="heading-large-white"
+					          HorizontalAlignment="Center" />
+				</Grid>
+				<Button x:Name="NewGameButton" Content="New Game" Classes="menu-button" HorizontalAlignment="Center" />
+				<Button x:Name="LoadGameButton" Content="Load Game" Classes="menu-button" HorizontalAlignment="Center" />
+				<Button x:Name="OptionsButton" Content="Options" Classes="menu-button" HorizontalAlignment="Center" />
+				<Button x:Name="ExitButton" Content="Exit" Classes="menu-button" HorizontalAlignment="Center" />
+			</StackPanel>
+		</Grid>
+	</Viewbox>
+
+</Window>

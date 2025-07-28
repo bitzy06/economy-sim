@@ -1,0 +1,53 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+
+
+	<ItemGroup>
+		<AvaloniaResource Include="Assets\**" />
+
+	</ItemGroup>
+
+
+
+	<ItemGroup>
+	  <AvaloniaXaml Remove="GlobalStyles.axaml" />
+	</ItemGroup>
+
+
+
+	<ItemGroup>
+	  <AvaloniaResource Include="GlobalStyles.axaml" />
+	</ItemGroup>
+  <ItemGroup>
+    
+    <PackageReference Include="Avalonia" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.2" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.2" />
+    <!--Condition below is needed to remove Avalonia.Diagnostics package from build output in Release configuration.-->
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.2">
+      <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
+      <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="MaxRev.Gdal.Core" Version="3.11.1.337" />
+    <PackageReference Include="MaxRev.Gdal.Universal" Version="3.11.1.337" />
+    <PackageReference Include="MaxRev.Gdal.WindowsRuntime.Minimal" Version="3.11.1.337" />
+    <PackageReference Include="MessageBox.Avalonia" Version="3.2.0" />
+    <PackageReference Include="NetTopologySuite" Version="2.6.0" />
+    <PackageReference Include="NetTopologySuite.IO.ShapeFile" Version="2.1.0" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.10" />
+    <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.6" />
+    <PackageReference Include="SkiaSharp" Version="3.119.0" />
+  </ItemGroup>
+</Project>

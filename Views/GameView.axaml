@@ -1,0 +1,617 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Economy_sim.GameView"
+        Title="GameView"
+        WindowState="FullScreen"
+        Background="#2D2D30"
+        Width="2560" Height="1440">
+
+	<Window.Styles>
+		<StyleInclude Source="/GlobalStyles.axaml"/>
+	</Window.Styles>
+
+	<Grid>
+		<!-- Map Layer (Background) -->
+		<Border x:Name="MapContainer"
+			Background="Transparent"
+			HorizontalAlignment="Stretch"
+			VerticalAlignment="Stretch"
+			IsHitTestVisible="True">
+			<Image x:Name="MapImage"
+				   Stretch="None"
+				   HorizontalAlignment="Left"
+				   VerticalAlignment="Top"
+				   IsHitTestVisible="True"/>
+		</Border>
+
+		<!-- HUD Overlay Layers -->
+		<!-- Top HUD Bar -->
+		<Border Background="#AA000000"
+				Height="50"
+				VerticalAlignment="Top"
+				HorizontalAlignment="Stretch"
+				Margin="0"
+				IsHitTestVisible="False"
+				ZIndex="1000">
+			<StackPanel Orientation="Horizontal"
+						HorizontalAlignment="Stretch"
+						VerticalAlignment="Center"
+						Margin="10,0"
+						IsHitTestVisible="True">
+
+				<!-- Player Role Section -->
+				<Border Background="#222222"
+						CornerRadius="3"
+						Padding="12,6"
+						Margin="0,0,15,0"
+						BorderBrush="#555555"
+						BorderThickness="1">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock x:Name="PlayerRoleText"
+								   Text="Prime Minister"
+								   Foreground="#FFD700"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+						<TextBlock Text=" of "
+								   Foreground="#AAAAAA"
+								   FontSize="12"
+								   Margin="5,0,0,0"
+								   VerticalAlignment="Center"/>
+						<TextBlock x:Name="ControlledEntityText"
+								   Text="United States"
+								   Foreground="#FFFFFF"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Treasury Section -->
+				<Border Background="#1A4A1A"
+						CornerRadius="3"
+						Padding="12,6"
+						Margin="0,0,15,0"
+						BorderBrush="#2A6A2A"
+						BorderThickness="1">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="💰"
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,6,0"/>
+						<TextBlock x:Name="TreasuryText"
+								   Text="$1,000,000"
+								   Foreground="#90EE90"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Population Section -->
+				<Border Background="#1A1A4A"
+						CornerRadius="3"
+						Padding="12,6"
+						Margin="0,0,15,0"
+						BorderBrush="#2A2A6A"
+						BorderThickness="1">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="👥"
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,6,0"/>
+						<TextBlock x:Name="PopulationText"
+								   Text="10,000,000"
+								   Foreground="#ADD8E6"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+
+				<!-- Spacer -->
+				<Border HorizontalAlignment="Stretch"/>
+
+				<!-- Date/Time Section -->
+				<Border Background="#4A1A1A"
+						CornerRadius="3"
+						Padding="12,6"
+						BorderBrush="#6A2A2A"
+						BorderThickness="1">
+					<StackPanel Orientation="Horizontal">
+						<TextBlock Text="📅"
+								   FontSize="16"
+								   VerticalAlignment="Center"
+								   Margin="0,0,6,0"/>
+						<TextBlock x:Name="DateTimeText"
+								   Text="January 1950"
+								   Foreground="#F0E68C"
+								   FontWeight="Bold"
+								   FontSize="14"
+								   VerticalAlignment="Center"/>
+					</StackPanel>
+				</Border>
+			</StackPanel>
+		</Border>
+
+		<!-- Right Side Button Panel -->
+		<StackPanel Orientation="Vertical"
+					HorizontalAlignment="Right"
+					VerticalAlignment="Center"
+					Margin="10"
+					Spacing="5"
+					ZIndex="1000"
+					IsHitTestVisible="True">
+			<Button x:Name="PoliticalViewButton"
+					Content="Political"
+					Width="130"
+					Height="50"
+					IsHitTestVisible="True"/>
+			<Button x:Name="TerrainViewButton"
+					Content="Terrain"
+					Width="130"
+					Height="50"
+					IsHitTestVisible="True"/>
+			<Button x:Name="PlaceHolder1Button"
+					Content="Place Holder"
+					Width="130"
+					Height="50"
+					IsHitTestVisible="True"/>
+			<Button x:Name="PlaceHolder2Button"
+					Content="Place Holder"
+					Width="130"
+					Height="50"
+					IsHitTestVisible="True"/>
+		</StackPanel>
+
+		<!-- Bottom HUD Bar -->
+		<Border Background="#AA000000"
+        Height="50"
+        VerticalAlignment="Bottom"
+        HorizontalAlignment="Stretch"
+        Margin="0"
+        ZIndex="1000">
+			<Grid Margin="10"
+				  IsHitTestVisible="True">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+
+				<!-- Left side buttons -->
+				<StackPanel Grid.Column="0"
+							Orientation="Horizontal"
+							HorizontalAlignment="Left"
+							VerticalAlignment="Center"
+							Spacing="15"
+							IsHitTestVisible="True">
+					<!-- Main action buttons -->
+					<Button x:Name="DiplomacyButton"
+							Content="Diplomacy"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+					<Button x:Name="TradeButton"
+							Content="Trade"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+					<Button x:Name="ConstructionButton"
+							Content="Construction"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+
+					<!-- Role-specific action button -->
+					<Border Background="#3A3A5A"
+							CornerRadius="5"
+							Padding="15,10"
+							BorderBrush="#5A5A7A"
+							BorderThickness="2"
+							IsHitTestVisible="True">
+						<Button x:Name="RoleActionButton"
+								Content="Set Policy"
+								Width="160"
+								Height="40"
+								Background="#4A4A6A"
+								Foreground="#FFFFFF"
+								FontWeight="Bold"
+								FontSize="14"
+								IsHitTestVisible="True"/>
+					</Border>
+
+					
+
+					<!-- View buttons -->
+					<Button x:Name="EconomyViewButton"
+							Content="Economy"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+					<Button x:Name="StatsButton"
+							Content="Statistics"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"/>
+				</StackPanel>
+
+				<!-- Right side menu button -->
+				<StackPanel Grid.Column="1"
+							Orientation="Horizontal"
+							HorizontalAlignment="Right"
+							VerticalAlignment="Center"
+							IsHitTestVisible="True">
+					<Button x:Name="MenuButton"
+							Content="Menu"
+							Width="130"
+							Height="50"
+							IsHitTestVisible="True"
+							ZIndex="2000"/>
+				</StackPanel>
+			</Grid>
+		</Border>
+
+		<!-- Popup Menu Overlays -->
+		<!-- Diplomacy Menu Popup -->
+		<Border x:Name="DiplomacyMenuOverlay"
+				Background="#E6000000"
+				IsVisible="False"
+				ZIndex="5000"
+				IsHitTestVisible="True">
+			<Border Background="#2D2D30"
+					BorderBrush="#555555"
+					BorderThickness="2"
+					CornerRadius="5"
+					Width="600"
+					Height="400"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center">
+				<Grid Margin="15">
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+
+					<!-- Header -->
+					<Grid Grid.Row="0" Margin="0,0,0,15">
+						<TextBlock Text="Diplomatic Relations"
+								   FontSize="24"
+								   FontWeight="Bold"
+								   Foreground="#FFD700"
+								   HorizontalAlignment="Left"/>
+						<Button x:Name="DiplomacyCloseButton"
+								Content="✕"
+								Width="30"
+								Height="30"
+								HorizontalAlignment="Right"
+								Background="#555555"
+								Foreground="White"/>
+					</Grid>
+
+					<!-- Content -->
+					<ScrollViewer Grid.Row="1">
+						<StackPanel Spacing="10">
+							<TextBlock Text="Relations with other countries:" Foreground="#DDDDDD" FontWeight="Bold"/>
+							<ListBox x:Name="DiplomacyRelationsList"
+									 Background="#1A1A1A"
+									 BorderBrush="#444444"
+									 Height="200">
+							</ListBox>
+
+							<TextBlock Text="Diplomatic Actions:" Foreground="#DDDDDD" FontWeight="Bold" Margin="0,20,0,5"/>
+							<StackPanel Orientation="Horizontal" Spacing="10">
+								<Button x:Name="ProposeTreatyButton" Content="Propose Treaty" Width="150"/>
+								<Button x:Name="DeclareWarButton" Content="Declare War" Width="150" Background="#A93226"/>
+								<Button x:Name="SendDiplomatButton" Content="Send Diplomat" Width="150"/>
+							</StackPanel>
+						</StackPanel>
+					</ScrollViewer>
+				</Grid>
+			</Border>
+		</Border>
+
+		<!-- Trade Menu Popup -->
+		<Border x:Name="TradeMenuOverlay"
+				Background="#E6000000"
+				IsVisible="False"
+				ZIndex="5000"
+				IsHitTestVisible="True">
+			<Border Background="#2D2D30"
+					BorderBrush="#555555"
+					BorderThickness="2"
+					CornerRadius="5"
+					Width="650"
+					Height="450"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center">
+				<Grid Margin="15">
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+
+					<!-- Header -->
+					<Grid Grid.Row="0" Margin="0,0,0,15">
+						<TextBlock Text="Trade Management"
+								   FontSize="24"
+								   FontWeight="Bold"
+								   Foreground="#FFD700"
+								   HorizontalAlignment="Left"/>
+						<Button x:Name="TradeCloseButton"
+								Content="✕"
+								Width="30"
+								Height="30"
+								HorizontalAlignment="Right"
+								Background="#555555"
+								Foreground="White"/>
+					</Grid>
+
+					<!-- Content -->
+					<Grid Grid.Row="1">
+						<Grid.ColumnDefinitions>
+							<ColumnDefinition Width="*"/>
+							<ColumnDefinition Width="*"/>
+						</Grid.ColumnDefinitions>
+
+						<!-- Exports -->
+						<StackPanel Grid.Column="0" Margin="0,0,10,0">
+							<TextBlock Text="Exports" Foreground="#90EE90" FontWeight="Bold" FontSize="16"/>
+							<ListBox x:Name="ExportsList"
+									 Background="#1A1A1A"
+									 BorderBrush="#444444"
+									 Height="150"
+									 Margin="0,5,0,10">
+							</ListBox>
+							<Button x:Name="CreateExportButton" Content="Create Export Deal" Width="180"/>
+						</StackPanel>
+
+						<!-- Imports -->
+						<StackPanel Grid.Column="1" Margin="10,0,0,0">
+							<TextBlock Text="Imports" Foreground="#FFB6C1" FontWeight="Bold" FontSize="16"/>
+							<ListBox x:Name="ImportsList"
+									 Background="#1A1A1A"
+									 BorderBrush="#444444"
+									 Height="150"
+									 Margin="0,5,0,10">
+							</ListBox>
+							<Button x:Name="CreateImportButton" Content="Create Import Deal" Width="180"/>
+						</StackPanel>
+					</Grid>
+				</Grid>
+			</Border>
+		</Border>
+
+		<!-- Construction Menu Popup -->
+		<Border x:Name="ConstructionMenuOverlay"
+				Background="#E6000000"
+				IsVisible="False"
+				ZIndex="5000"
+				IsHitTestVisible="True">
+			<Border Background="#2D2D30"
+					BorderBrush="#555555"
+					BorderThickness="2"
+					CornerRadius="5"
+					Width="700"
+					Height="500"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center">
+				<Grid Margin="15">
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+
+					<!-- Header -->
+					<Grid Grid.Row="0" Margin="0,0,0,15">
+						<TextBlock Text="Construction Projects"
+								   FontSize="24"
+								   FontWeight="Bold"
+								   Foreground="#FFD700"
+								   HorizontalAlignment="Left"/>
+						<Button x:Name="ConstructionCloseButton"
+								Content="✕"
+								Width="30"
+								Height="30"
+								HorizontalAlignment="Right"
+								Background="#555555"
+								Foreground="White"/>
+					</Grid>
+
+					<!-- Content -->
+					<Grid Grid.Row="1">
+						<Grid.ColumnDefinitions>
+							<ColumnDefinition Width="2*"/>
+							<ColumnDefinition Width="*"/>
+						</Grid.ColumnDefinitions>
+
+						<!-- Project List -->
+						<StackPanel Grid.Column="0" Margin="0,0,15,0">
+							<TextBlock Text="Active Projects" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16"/>
+							<ListBox x:Name="ActiveProjectsList"
+									 Background="#1A1A1A"
+									 BorderBrush="#444444"
+									 Height="250"
+									 Margin="0,5,0,0">
+							</ListBox>
+						</StackPanel>
+
+						<!-- Project Actions -->
+						<StackPanel Grid.Column="1" Spacing="15">
+							<TextBlock Text="New Projects" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16"/>
+							<Button x:Name="BuildFactoryButton" Content="Build Factory" Width="160"/>
+							<Button x:Name="BuildRoadButton" Content="Build Road" Width="160"/>
+							<Button x:Name="BuildBridgeButton" Content="Build Bridge" Width="160"/>
+							<Button x:Name="BuildPortButton" Content="Build Port" Width="160"/>
+							<Button x:Name="BuildAirportButton" Content="Build Airport" Width="160"/>
+
+							<TextBlock Text="Project Info" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16" Margin="0,20,0,0"/>
+							<TextBlock x:Name="ProjectInfoText"
+									   Text="Select a project to view details"
+									   Foreground="#AAAAAA"
+									   TextWrapping="Wrap"
+									   Width="160"/>
+						</StackPanel>
+					</Grid>
+				</Grid>
+			</Border>
+		</Border>
+
+		<!-- Economy Menu Popup -->
+		<Border x:Name="EconomyMenuOverlay"
+				Background="#E6000000"
+				IsVisible="False"
+				ZIndex="5000"
+				IsHitTestVisible="True">
+			<Border Background="#2D2D30"
+					BorderBrush="#555555"
+					BorderThickness="2"
+					CornerRadius="5"
+					Width="750"
+					Height="550"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center">
+				<Grid Margin="15">
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+
+					<!-- Header -->
+					<Grid Grid.Row="0" Margin="0,0,0,15">
+						<TextBlock Text="Economic Overview"
+								   FontSize="24"
+								   FontWeight="Bold"
+								   Foreground="#FFD700"
+								   HorizontalAlignment="Left"/>
+						<Button x:Name="EconomyCloseButton"
+								Content="✕"
+								Width="30"
+								Height="30"
+								HorizontalAlignment="Right"
+								Background="#555555"
+								Foreground="White"/>
+					</Grid>
+
+					<!-- Content -->
+					<Grid Grid.Row="1">
+						<Grid.RowDefinitions>
+							<RowDefinition Height="Auto"/>
+							<RowDefinition Height="*"/>
+						</Grid.RowDefinitions>
+
+						<!-- Economic Indicators -->
+						<Grid Grid.Row="0" Margin="0,0,0,20">
+							<Grid.ColumnDefinitions>
+								<ColumnDefinition Width="*"/>
+								<ColumnDefinition Width="*"/>
+								<ColumnDefinition Width="*"/>
+							</Grid.ColumnDefinitions>
+
+							<Border Grid.Column="0" Background="#1A4A1A" Padding="15" Margin="0,0,5,0" CornerRadius="3">
+								<StackPanel>
+									<TextBlock Text="GDP" Foreground="#90EE90" FontWeight="Bold" FontSize="14"/>
+									<TextBlock x:Name="GDPText" Text="$2.5T" Foreground="White" FontSize="20" FontWeight="Bold"/>
+									<TextBlock Text="Growth: +3.2%" Foreground="#90EE90" FontSize="12"/>
+								</StackPanel>
+							</Border>
+
+							<Border Grid.Column="1" Background="#4A1A1A" Padding="15" Margin="5,0" CornerRadius="3">
+								<StackPanel>
+									<TextBlock Text="Unemployment" Foreground="#F0E68C" FontWeight="Bold" FontSize="14"/>
+									<TextBlock x:Name="UnemploymentText" Text="4.2%" Foreground="White" FontSize="20" FontWeight="Bold"/>
+									<TextBlock Text="Change: -0.3%" Foreground="#90EE90" FontSize="12"/>
+								</StackPanel>
+							</Border>
+
+							<Border Grid.Column="2" Background="#1A1A4A" Padding="15" Margin="5,0,0,0" CornerRadius="3">
+								<StackPanel>
+									<TextBlock Text="Inflation" Foreground="#ADD8E6" FontWeight="Bold" FontSize="14"/>
+									<TextBlock x:Name="InflationText" Text="2.1%" Foreground="White" FontSize="20" FontWeight="Bold"/>
+									<TextBlock Text="Target: 2.0%" Foreground="#AAAAAA" FontSize="12"/>
+								</StackPanel>
+							</Border>
+						</Grid>
+
+						<!-- Economic Details -->
+						<StackPanel Grid.Row="1" Spacing="10">
+							<TextBlock Text="Industries" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16"/>
+							<ListBox x:Name="IndustriesList"
+									 Background="#1A1A1A"
+									 BorderBrush="#444444"
+									 Height="200">
+							</ListBox>
+						</StackPanel>
+					</Grid>
+				</Grid>
+			</Border>
+		</Border>
+
+		<!-- Statistics Menu Popup -->
+		<Border x:Name="StatsMenuOverlay"
+				Background="#E6000000"
+				IsVisible="False"
+				ZIndex="5000"
+				IsHitTestVisible="True">
+			<Border Background="#2D2D30"
+					BorderBrush="#555555"
+					BorderThickness="2"
+					CornerRadius="5"
+					Width="600"
+					Height="450"
+					HorizontalAlignment="Center"
+					VerticalAlignment="Center">
+				<Grid Margin="15">
+					<Grid.RowDefinitions>
+						<RowDefinition Height="Auto"/>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+
+					<!-- Header -->
+					<Grid Grid.Row="0" Margin="0,0,0,15">
+						<TextBlock Text="Game Statistics"
+								   FontSize="24"
+								   FontWeight="Bold"
+								   Foreground="#FFD700"
+								   HorizontalAlignment="Left"/>
+						<Button x:Name="StatsCloseButton"
+								Content="✕"
+								Width="30"
+								Height="30"
+								HorizontalAlignment="Right"
+								Background="#555555"
+								Foreground="White"/>
+					</Grid>
+
+					<!-- Content -->
+					<StackPanel Grid.Row="1" Spacing="15">
+						<!-- Population Stats -->
+						<Border Background="#1A1A4A" Padding="15" CornerRadius="3">
+							<Grid>
+								<Grid.ColumnDefinitions>
+									<ColumnDefinition Width="*"/>
+									<ColumnDefinition Width="*"/>
+								</Grid.ColumnDefinitions>
+								<StackPanel Grid.Column="0">
+									<TextBlock Text="Total Population" Foreground="#ADD8E6" FontWeight="Bold"/>
+									<TextBlock x:Name="TotalPopulationText" Text="328,000,000" Foreground="White" FontSize="18"/>
+								</StackPanel>
+								<StackPanel Grid.Column="1">
+									<TextBlock Text="Population Growth" Foreground="#ADD8E6" FontWeight="Bold"/>
+									<TextBlock x:Name="PopGrowthText" Text="+0.7%" Foreground="#90EE90" FontSize="18"/>
+								</StackPanel>
+							</Grid>
+						</Border>
+
+						<!-- Detailed Stats -->
+						<TextBlock Text="Detailed Statistics" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16"/>
+						<ListBox x:Name="DetailedStatsList"
+								 Background="#1A1A1A"
+								 BorderBrush="#444444"
+								 Height="250">
+						</ListBox>
+					</StackPanel>
+				</Grid>
+			</Border>
+		</Border>
+	</Grid>
+</Window>

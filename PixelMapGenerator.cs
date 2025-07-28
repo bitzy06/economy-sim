@@ -1,25 +1,25 @@
-﻿using MaxRev.Gdal.Core;
+﻿using Economy_sim;
+using MaxRev.Gdal.Core;
+using NetTopologySuite.Index;
 using OSGeo.GDAL;
 using OSGeo.OGR;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Advanced;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using System; // Add this namespace for Random
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
+using System.Threading; // Ensure this namespace is included for ThreadLocal
 using System.Threading.Tasks;
-
-
+using Nts = NetTopologySuite.Geometries;
 
 namespace StrategyGame
 {
-    /// <summary>
-    /// Provides helper methods for generating a pixel-art map based on the
-    /// ETOPO1 elevation data. The GeoTIFF is downloaded using the existing
-    /// Python script when not already present.
-    /// </summary>
+    // Removed duplicate GeoBounds struct definition - using the one from CoordinateTransform.cs
+
     public static class PixelMapGenerator
     {
         private static readonly object GdalConfigLock = new object();
@@ -38,10 +38,10 @@ namespace StrategyGame
         // (e.g. "C:\\Users\\kayla\\Documents\\data").  This path is used directly
         // rather than falling back to the repository so the game always loads
         // external resources from that location.
+       
         private static readonly string DataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "data");
-
+             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+             "data", "terrain");
 
         private static readonly string RepoDataDir = Path.Combine(RepoRoot, "data");
 
@@ -53,6 +53,7 @@ namespace StrategyGame
             Path.Combine(RepoRoot, "DataFileNames");
 
         private static readonly Dictionary<string, string> DataFiles = LoadDataFiles();
+
 
         // System.Drawing fails with "Parameter is not valid" when width or height
         // exceed approximately 32k pixels.  Clamp generated bitmap dimensions to
@@ -109,6 +110,8 @@ namespace StrategyGame
         // Terrain map used for pixel-art generation.
         private static readonly string TerrainTifPath =
             GetDataFile("NE1_HR_LC.tif");
+
+        // Urban texture is no longer used; procedural generation handles urban areas.
 
 
         /// <summary>
@@ -224,6 +227,7 @@ namespace StrategyGame
             return dest;
         }
 
+
         /// <summary>
         /// Generate a terrain tile and overlay country borders.
         /// </summary>
@@ -235,11 +239,88 @@ namespace StrategyGame
             int offsetX = tileX * tileSizePx;
             int offsetY = tileY * tileSizePx;
 
-            int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, Math.Min(tileSizePx, fullW - offsetX), Math.Min(tileSizePx, fullH - offsetY));
+            int tileWidth = Math.Min(tileSizePx, fullW - offsetX);
+            int tileHeight = Math.Min(tileSizePx, fullH - offsetY);
 
-            var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
+            try
+            {
+                // Try to generate with real data
+                int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, tileWidth, tileHeight);
+                var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
+                DrawBordersLarge(img, mask);
 
-            DrawBordersLarge(img, mask);
+                // Use standardized coordinate transformation for consistent positioning
+                var bounds = CoordinateTransform.GetTileGeographicBounds(tileX, tileY, tileSizePx, fullW, fullH);
+                
+                var factory = NetTopologySuite.Geometries.GeometryFactory.Default;
+                var tilePoly = factory.CreatePolygon(new[]
+                {
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat),
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MinLat),
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MaxLat),
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MaxLat),
+                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat)
+                });
+
+                return img;
+            }
+            catch (Exception ex)
+            {
+                // If data files are missing or there's any error, generate a fallback tile
+                Console.WriteLine($"Using fallback tile generation for tile ({tileX}, {tileY}) - data files may be missing: {ex.Message}");
+                Console.WriteLine("To use real terrain data, place the following files in ~/Documents/data/:");
+                Console.WriteLine("  - NE1_HR_LC.tif (Natural Earth raster)");
+                Console.WriteLine("  - ne_10m_admin_0_countries.shp (Natural Earth country boundaries)");
+                return GenerateFallbackTile(tileWidth, tileHeight, tileX, tileY, cellSize);
+            }
+        }
+
+        /// <summary>
+        /// Generate a simple fallback tile when data files are missing
+        /// </summary>
+        private static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateFallbackTile(
+            int tileWidth, int tileHeight, int tileX, int tileY, int cellSize)
+        {
+            // Ensure positive dimensions
+            tileWidth = Math.Max(1, tileWidth);
+            tileHeight = Math.Max(1, tileHeight);
+            
+            var img = new SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(tileWidth, tileHeight);
+            
+            // Create a checkered pattern with different colors per tile for visual feedback
+            var color1 = new SixLabors.ImageSharp.PixelFormats.Rgba32(
+                (byte)(100 + (tileX * 30) % 155),
+                (byte)(100 + (tileY * 40) % 155), 
+                (byte)(100 + ((tileX + tileY) * 50) % 155), 
+                255);
+            var color2 = new SixLabors.ImageSharp.PixelFormats.Rgba32(
+                (byte)(50 + (tileX * 20) % 100),
+                (byte)(50 + (tileY * 25) % 100), 
+                (byte)(50 + ((tileX + tileY) * 35) % 100), 
+                255);
+
+            img.ProcessPixelRows(accessor =>
+            {
+                for (int y = 0; y < accessor.Height; y++)
+                {
+                    var row = accessor.GetRowSpan(y);
+                    for (int x = 0; x < row.Length; x++)
+                    {
+                        // Create a grid pattern based on cellSize
+                        bool isGridLine = (x % Math.Max(1, cellSize) < 2) || (y % Math.Max(1, cellSize) < 2);
+                        bool isCheckerboard = ((x / Math.Max(1, cellSize)) + (y / Math.Max(1, cellSize))) % 2 == 0;
+                        
+                        if (isGridLine)
+                        {
+                            row[x] = new SixLabors.ImageSharp.PixelFormats.Rgba32(255, 255, 255, 128); // Semi-transparent white grid
+                        }
+                        else
+                        {
+                            row[x] = isCheckerboard ? color1 : color2;
+                        }
+                    }
+                }
+            });
 
             return img;
         }
@@ -282,61 +363,148 @@ namespace StrategyGame
             return false;
         }
 
-        private static int[,] CreateCountryMaskTile(int fullWidth, int fullHeight,
-            int offsetX, int offsetY, int width, int height)
+        private static int[,] CreateCountryMaskTile(
+     int fullWidth, int fullHeight,
+     int offsetX, int offsetY,
+     int width, int height)
         {
-            using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
-            double[] gt = new double[6];
-            dem.GetGeoTransform(gt);
-            int srcCols = dem.RasterXSize;
-            int srcRows = dem.RasterYSize;
-
-            double scaleX = (double)srcCols / fullWidth;
-            double scaleY = (double)srcRows / fullHeight;
-
-            double[] newGt = new double[6];
-            newGt[0] = gt[0] + offsetX * scaleX * gt[1];
-            newGt[1] = gt[1] * scaleX;
-            newGt[2] = 0;
-            newGt[3] = gt[3] + offsetY * scaleY * gt[5];
-            newGt[4] = 0;
-            newGt[5] = gt[5] * scaleY;
-
-            OSGeo.GDAL.Driver memDrv = Gdal.GetDriverByName("MEM");
-            using var maskDs = memDrv.Create("", width, height, 1, DataType.GDT_Int32, null);
-            maskDs.SetGeoTransform(newGt);
-            maskDs.SetProjection(dem.GetProjection());
-
-            using DataSource ds = Ogr.Open(ShpPath, 0);
-            Layer layer = ds.GetLayerByIndex(0);
-
-            Gdal.RasterizeLayer(maskDs, 1, new[] { 1 }, layer, IntPtr.Zero, IntPtr.Zero,
-                0, null, new[] { "ATTRIBUTE=ISO_N3" }, null, "");
-
-            Band band = maskDs.GetRasterBand(1);
-            int[] flat = new int[width * height];
-            band.ReadRaster(0, 0, width, height, flat, width, height, 0, 0);
-
-            int[,] result = new int[height, width];
-            for (int r = 0; r < height; r++)
+            // Make sure GDAL/OGR are configured using the existing pattern
+            lock (GdalConfigLock)
             {
-                for (int c = 0; c < width; c++)
+                if (!_gdalConfigured)
                 {
-                    result[r, c] = flat[r * width + c];
+                    GdalBase.ConfigureAll();
+                    _gdalConfigured = true;
                 }
             }
 
-            return result;
-        }
+            // Clamp width/height so we never request negative or out-of-range tiles
+            int w = Math.Max(0, Math.Min(width, fullWidth - offsetX));
+            int h = Math.Max(0, Math.Min(height, fullHeight - offsetY));
 
- 
+            if (w <= 0 || h <= 0)
+                return new int[0, 0]; // nothing to draw for this tile
+
+            // Check if required data files exist
+            if (!File.Exists(TerrainTifPath))
+            {
+                Console.WriteLine($"Terrain file not found: {TerrainTifPath}");
+                return new int[h, w]; // return empty mask (all water)
+            }
+
+            if (!File.Exists(ShpPath))
+            {
+                Console.WriteLine($"Shapefile not found: {ShpPath}");
+                return new int[h, w]; // return empty mask (all water)
+            }
+
+            try
+            {
+                using var dem = Gdal.Open(TerrainTifPath, Access.GA_ReadOnly);
+                if (dem == null)
+                {
+                    Console.WriteLine($"Failed to open terrain file: {TerrainTifPath}");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                // Source raster size & geotransform
+                double[] gt = new double[6];
+                dem.GetGeoTransform(gt);
+                int srcCols = dem.RasterXSize;
+                int srcRows = dem.RasterYSize;
+
+                // How many DEM pixels per "game pixel"
+                double scaleX = (double)srcCols / fullWidth;
+                double scaleY = (double)srcRows / fullHeight;
+
+                // Geotransform for the sub-tile
+                double[] newGt = new double[6];
+                newGt[0] = gt[0] + offsetX * scaleX * gt[1]; // top-left X
+                newGt[1] = gt[1] * scaleX;                   // pixel width
+                newGt[2] = 0;
+                newGt[3] = gt[3] + offsetY * scaleY * gt[5]; // top-left Y
+                newGt[4] = 0;
+                newGt[5] = gt[5] * scaleY;                   // pixel height (negative)
+
+                // Create an in-memory mask dataset
+                var memDrv = Gdal.GetDriverByName("MEM");
+                if (memDrv == null)
+                {
+                    Console.WriteLine("Failed to get GDAL MEM driver");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                using var maskDs = memDrv.Create("", w, h, 1, DataType.GDT_Int32, null);
+                if (maskDs == null)
+                {
+                    Console.WriteLine("Failed to create in-memory dataset");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                maskDs.SetGeoTransform(newGt);
+                maskDs.SetProjection(dem.GetProjection());
+
+                // Burn country IDs from the shapefile into the raster
+                using DataSource ds = Ogr.Open(ShpPath, 0);
+                if (ds == null)
+                {
+                    Console.WriteLine($"Failed to open shapefile: {ShpPath}");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                Layer layer = ds.GetLayerByIndex(0);
+                if (layer == null)
+                {
+                    Console.WriteLine("Failed to get layer from shapefile");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                // ATTRIBUTE=ISO_N3 (or whatever field holds your ID)
+                Gdal.RasterizeLayer(
+                    maskDs,
+                    1,
+                    new[] { 1 },
+                    layer,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    0,
+                    null,
+                    new[] { "ATTRIBUTE=ISO_N3" },
+                    null,
+                    "");
+
+                // Read band back to managed array
+                Band band = maskDs.GetRasterBand(1);
+                if (band == null)
+                {
+                    Console.WriteLine("Failed to get raster band");
+                    return new int[h, w]; // return empty mask (all water)
+                }
+
+                int[] flat = new int[w * h];
+                band.ReadRaster(0, 0, w, h, flat, w, h, 0, 0);
+
+                int[,] result = new int[h, w];
+                for (int r = 0; r < h; r++)
+                {
+                    Buffer.BlockCopy(flat, r * w * sizeof(int), result, r * w * sizeof(int), w * sizeof(int));
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating country mask tile: {ex.Message}");
+                return new int[h, w]; // return empty mask (all water) on any error
+            }
+        }
 
         /// <summary>
         /// Draw borders directly on an ImageSharp image when the map exceeds
         /// System.Drawing limits.
         /// </summary>
         public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>
-     DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> baseImage, int[,] landMask)
+DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> baseImage, int[,] landMask)
         {
             if (!System.IO.File.Exists(ShpPath))
                 throw new System.IO.FileNotFoundException("Missing shapefile", ShpPath);
@@ -348,24 +516,26 @@ namespace StrategyGame
 
             SixLabors.ImageSharp.PixelFormats.Rgba32 borderColor = new SixLabors.ImageSharp.PixelFormats.Rgba32(0, 0, 0, 255); // black
 
-            var reader = new NetTopologySuite.IO.ShapefileDataReader(
-                ShpPath, NetTopologySuite.Geometries.GeometryFactory.Default);
-
-            while (reader.Read())
+            using (var reader = new NetTopologySuite.IO.ShapeFile.Extended.ShapeDataReader(
+                ShpPath, new NetTopologySuite.Index.Strtree.STRtree<NetTopologySuite.IO.Handlers.ShapeLocationInFileInfo>()))
             {
-                var geometry = reader.Geometry;
-
-                if (geometry is NetTopologySuite.Geometries.MultiPolygon multi)
+                var envelope = reader.ShapefileBounds;
+                foreach (var feature in reader.ReadByMBRFilter(envelope, false))
                 {
-                    for (int i = 0; i < multi.NumGeometries; i++)
+                    var geometry = feature.Geometry;
+
+                    if (geometry is NetTopologySuite.Geometries.MultiPolygon multi)
                     {
-                        var poly = (NetTopologySuite.Geometries.Polygon)multi.GetGeometryN(i);
+                        for (int i = 0; i < multi.NumGeometries; i++)
+                        {
+                            var poly = (NetTopologySuite.Geometries.Polygon)multi.GetGeometryN(i);
+                            DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
+                        }
+                    }
+                    else if (geometry is NetTopologySuite.Geometries.Polygon poly)
+                    {
                         DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
                     }
-                }
-                else if (geometry is NetTopologySuite.Geometries.Polygon poly)
-                {
-                    DrawPolygonOutline(result, poly, widthPx, heightPx, borderColor);
                 }
             }
 
@@ -413,6 +583,69 @@ namespace StrategyGame
                 if (e2 >= dy) { err += dy; x0 += sx; }
                 if (e2 <= dx) { err += dx; y0 += sy; }
             }
+        }
+
+        private static void FillPolygon(
+            SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> img,
+            List<(int X, int Y)> points,
+            SixLabors.ImageSharp.PixelFormats.Rgba32 color)
+        {
+            if (points.Count < 3) return;
+            int minY = int.MaxValue, maxY = int.MinValue;
+            foreach (var p in points)
+            {
+                if (p.Y < minY) minY = p.Y;
+                if (p.Y > maxY) maxY = p.Y;
+            }
+            for (int y = minY; y <= maxY; y++)
+            {
+                List<int> nodeX = new();
+                for (int i = 0, j = points.Count - 1; i < points.Count; j = i++)
+                {
+                    var pi = points[i];
+                    var pj = points[j];
+                    if ((pi.Y < y && pj.Y >= y) || (pj.Y < y && pi.Y >= y))
+                    {
+                        int x = (int)(pi.X + (double)(y - pi.Y) / (pj.Y - pi.Y) * (pj.X - pi.X));
+                        nodeX.Add(x);
+                    }
+                }
+                nodeX.Sort();
+                for (int k = 0; k < nodeX.Count - 1; k += 2)
+                {
+                    int start = nodeX[k];
+                    int end = nodeX[k + 1];
+                    for (int x = start; x <= end; x++)
+                    {
+                        if (x < 0 || x >= img.Width || y < 0 || y >= img.Height) continue;
+                        var basePix = img[x, y];
+                        float a = color.A / 255f;
+                        byte r = (byte)(basePix.R * (1 - a) + color.R * a);
+                        byte g = (byte)(basePix.G * (1 - a) + color.G * a);
+                        byte b = (byte)(basePix.B * (1 - a) + color.B * a);
+                        img[x, y] = new Rgba32(r, g, b, 255);
+                    }
+                }
+            }
+        }
+
+        private static void RenderPolygon(
+            SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> img,
+            NetTopologySuite.Geometries.Polygon poly,
+            StrategyGame.GeoBounds bounds,
+            int tileWidth,
+            int tileHeight,
+            SixLabors.ImageSharp.PixelFormats.Rgba32 color)
+        {
+            var coords = poly.ExteriorRing.Coordinates;
+            var pts = new List<(int X, int Y)>(coords.Length);
+            foreach (var c in coords)
+            {
+                int px = (int)((c.X - bounds.MinLon) / (bounds.MaxLon - bounds.MinLon) * tileWidth);
+                int py = (int)((bounds.MaxLat - c.Y) / (bounds.MaxLat - bounds.MinLat) * tileHeight);
+                pts.Add((px, py));
+            }
+            FillPolygon(img, pts, color);
         }
 
         /// <summary>
