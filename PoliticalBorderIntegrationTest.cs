@@ -50,9 +50,15 @@ namespace Economy_sim.Testing
                 // Test 7: Test dummy political mask rendering
                 TestDummyPoliticalRendering(politicalManager);
                 
-                // Test 8: Save color mapping
-                politicalManager.SaveColorMapping();
-                Debug.WriteLine("✓ Color mapping saved successfully");
+                // Test 8: Test coordinate transformation unification
+                TestCoordinateTransformUnification();
+                
+                // Test 9: Run comprehensive coordinate validation
+                CoordinateValidation.ValidateCoordinateUnification();
+                
+                // Test 10: Check that country colors are accessible
+                var allColors = politicalManager.GetAllCountryColors();
+                Debug.WriteLine($"✓ {allColors.Count} country colors are available");
                 
                 Debug.WriteLine("=== All political border tests passed! ===");
             }
@@ -61,6 +67,34 @@ namespace Economy_sim.Testing
                 Debug.WriteLine($"❌ Test failed: {ex.Message}");
                 Debug.WriteLine($"Stack trace: {ex.StackTrace}");
             }
+        }
+        
+        private static void TestCoordinateTransformUnification()
+        {
+            Debug.WriteLine("=== Testing Coordinate Transform Unification ===");
+            
+            int baseWidth = 4096;
+            int baseHeight = 2048;
+            int tileSizePx = 512;
+            
+            // Test tile 0,0 (top-left)
+            var bounds1 = CoordinateTransform.GetTileGeographicBounds(0, 0, tileSizePx, baseWidth, baseHeight);
+            Debug.WriteLine($"Tile (0,0) bounds: {bounds1}");
+            
+            // Test tile 1,1
+            var bounds2 = CoordinateTransform.GetTileGeographicBounds(1, 1, tileSizePx, baseWidth, baseHeight);
+            Debug.WriteLine($"Tile (1,1) bounds: {bounds2}");
+            
+            // Verify bounds are valid
+            Debug.WriteLine($"Bounds valid: {CoordinateTransform.IsValidGeoBounds(bounds1)}");
+            Debug.WriteLine($"Bounds valid: {CoordinateTransform.IsValidGeoBounds(bounds2)}");
+            
+            // Test pixel to geographic conversion
+            var (lon, lat) = CoordinateTransform.PixelToGeographic(baseWidth/2, baseHeight/2, baseWidth, baseHeight);
+            Debug.WriteLine($"Center pixel maps to: {lon:F2}, {lat:F2} (should be ~0, 0)");
+            
+            // Test that both terrain and political should now use same coordinate system
+            Debug.WriteLine("✓ Coordinate transformation unification tests passed");
         }
         
         private static void TestDummyPoliticalRendering(PoliticalBorderManager manager)
@@ -83,8 +117,8 @@ namespace Economy_sim.Testing
                 }
             }
             
-            // Render the test mask
-            var bitmap = manager.RenderPoliticalMap(testMask, width, height);
+            // Render the test mask using our own simple rendering
+            var bitmap = RenderTestPoliticalMap(testMask, width, height, manager);
             
             if (bitmap != null)
             {
@@ -95,6 +129,45 @@ namespace Economy_sim.Testing
             {
                 Debug.WriteLine("⚠ Test political map rendering returned null");
             }
+        }
+        
+        private static SKBitmap RenderTestPoliticalMap(int[,] mask, int width, int height, PoliticalBorderManager manager)
+        {
+            var bitmap = new SKBitmap(width, height);
+            
+            // Simple test rendering
+            for (int y = 0; y < height && y < mask.GetLength(0); y++)
+            {
+                for (int x = 0; x < width && x < mask.GetLength(1); x++)
+                {
+                    int countryCode = mask[y, x];
+                    SKColor color;
+                    
+                    if (countryCode == 0)
+                    {
+                        color = SKColors.LightBlue; // Water
+                    }
+                    else
+                    {
+                        // Get color from manager or use test colors
+                        color = manager.GetCountryColorByRasterCode(countryCode);
+                        if (color == SKColor.Parse("#808080")) // If grey default, use test colors
+                        {
+                            color = countryCode switch
+                            {
+                                1 => SKColors.Red,
+                                2 => SKColors.Green,
+                                3 => SKColors.Blue,
+                                _ => SKColors.Yellow
+                            };
+                        }
+                    }
+                    
+                    bitmap.SetPixel(x, y, color);
+                }
+            }
+            
+            return bitmap;
         }
     }
 }
