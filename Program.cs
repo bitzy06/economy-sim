@@ -52,6 +52,25 @@ class Program
                 RenderingFixTest.TestRenderingFix();
                 return;
             }
+            else if (args[0] == "debug-terrain")
+            {
+                Console.WriteLine("Running terrain debug test...");
+                try
+                {
+                    // Initialize GDAL for vector graphics system
+                    GdalInit.Ensure();
+                    Console.WriteLine("GDAL initialized successfully.");
+                    
+                    QuickVectorTest.TestTerrainClassification();
+                    Console.WriteLine("Terrain debug test completed.");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in terrain debug test: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                }
+                return;
+            }
         }
         
         try

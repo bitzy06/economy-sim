@@ -251,23 +251,26 @@ namespace StrategyGame
         
         private bool IsOceanArea(double longitude, double latitude)
         {
-            // Simplified ocean detection based on major ocean areas
-            // Pacific Ocean
-            if ((longitude < -120 || longitude > 120) && Math.Abs(latitude) < 65)
+            // Very conservative ocean detection - show mostly land
+            // Only mark as ocean the obvious deep ocean areas
+            
+            // Only a few major ocean areas to ensure we see plenty of land
+            // Central Pacific (far from any land)
+            if (longitude > 160 || longitude < -150)
+            {
+                if (Math.Abs(latitude) < 50) // Not polar regions
+                    return true;
+            }
+            
+            // Central Atlantic (far from continents)
+            if (longitude > -35 && longitude < -15 && Math.Abs(latitude) < 50)
                 return true;
             
-            // Atlantic Ocean (between Americas and Europe/Africa)
-            if (longitude > -80 && longitude < -10 && Math.Abs(latitude) < 65)
-                return true;
-            
-            // Indian Ocean
-            if (longitude > 30 && longitude < 120 && latitude < 30 && latitude > -50)
-                return true;
-            
-            // Arctic Ocean
-            if (Math.Abs(latitude) > 75)
+            // Polar oceans only
+            if (Math.Abs(latitude) > 85)
                 return true;
                 
+            // Default to land - this will show much more terrain variety
             return false;
         }
         
