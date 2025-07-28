@@ -69,6 +69,12 @@ namespace Economy_sim
             if (_useVectorRendering && _vectorMapManager != null)
             {
                 _vectorMapManager.DemonstrateCustomization();
+                
+                // Run the full vector graphics demonstration
+                VectorGraphicsDemo.RunDemonstration();
+                VectorGraphicsDemo.SimulatePerformanceComparison();
+                VectorGraphicsDemo.DemonstrateExtensibility();
+                VectorGraphicsDemo.CreateExampleScreenshots();
             }
             
             Debug.WriteLine($"GameView initialized with {(_useVectorRendering ? "vector" : "raster")} rendering");
