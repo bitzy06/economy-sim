@@ -14,6 +14,15 @@ class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // Check if running in test mode
+        if (args.Length > 0 && args[0] == "test")
+        {
+            Console.WriteLine("Running in test mode...");
+            StrategyGame.Testing.SimpleVectorTest.RunTest();
+            return;
+        }
+        
+        // Normal GUI application startup
         GdalInit.Ensure();
         BuildAvaloniaApp()
         .StartWithClassicDesktopLifetime(args);

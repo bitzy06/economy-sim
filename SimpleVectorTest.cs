@@ -8,7 +8,7 @@ namespace StrategyGame.Testing
     /// </summary>
     public class SimpleVectorTest
     {
-        public static void Main()
+        public static void RunTest()
         {
             Console.WriteLine("=== VECTOR GRAPHICS CONVERSION TEST ===");
             
@@ -16,6 +16,10 @@ namespace StrategyGame.Testing
             {
                 // Test the vector graphics demonstration
                 VectorTestRunner.RunTest();
+                
+                Console.WriteLine();
+                Console.WriteLine("Running vector logic tests...");
+                VectorLogicTest.RunLogicTest();
                 
                 Console.WriteLine();
                 Console.WriteLine("All tests completed successfully!");

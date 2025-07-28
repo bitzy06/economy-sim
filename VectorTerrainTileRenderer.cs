@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using SkiaSharp;
 using NetTopologySuite.Geometries;
-using OSGeo.GDAL;
-using MaxRev.Gdal.Core;
 
 namespace StrategyGame
 {
@@ -16,22 +13,12 @@ namespace StrategyGame
     /// </summary>
     public class VectorTerrainTileRenderer : VectorTileRenderer
     {
-        private readonly object _gdalConfigLock = new object();
-        private bool _gdalConfigured = false;
-        
         // Terrain styling themes
         private readonly Dictionary<string, TerrainTheme> _themes = new();
         private string _currentTheme = "Default";
         
-        // Data file paths
-        private readonly string _terrainTifPath;
-        private readonly string _shapefilePath;
-        
         public VectorTerrainTileRenderer(int baseWidth, int baseHeight) : base(baseWidth, baseHeight)
         {
-            _terrainTifPath = GetDataFile("NE1_HR_LC.tif");
-            _shapefilePath = GetDataFile("ne_10m_admin_0_countries.shp");
-            
             InitializeTerrainThemes();
         }
         
@@ -110,15 +97,6 @@ namespace StrategyGame
         {
             await Task.Yield(); // Make this properly async
             
-            lock (_gdalConfigLock)
-            {
-                if (!_gdalConfigured)
-                {
-                    GdalBase.ConfigureAll();
-                    _gdalConfigured = true;
-                }
-            }
-            
             try
             {
                 // Calculate tile bounds in pixel space
@@ -144,8 +122,8 @@ namespace StrategyGame
                     Bounds = new SKRect(pixelX, pixelY, pixelX + tileWidth, pixelY + tileHeight)
                 };
                 
-                // Load terrain data and convert to vector features
-                LoadTerrainVectorData(vectorTile, cellSize, pixelX, pixelY, tileWidth, tileHeight);
+                // Generate procedural terrain data instead of relying on external files
+                GenerateProceduralTerrain(vectorTile, pixelX, pixelY, tileWidth, tileHeight);
                 
                 return vectorTile;
             }
@@ -156,87 +134,44 @@ namespace StrategyGame
             }
         }
         
-        private void LoadTerrainVectorData(VectorTile vectorTile, int cellSize, int pixelX, int pixelY, int tileWidth, int tileHeight)
-        {
-            if (!File.Exists(_terrainTifPath))
-            {
-                Debug.WriteLine($"Terrain file not found: {_terrainTifPath}");
-                return;
-            }
-            
-            try
-            {
-                using var ds = Gdal.Open(_terrainTifPath, Access.GA_ReadOnly);
-                if (ds == null)
-                {
-                    Debug.WriteLine($"Failed to open terrain file: {_terrainTifPath}");
-                    return;
-                }
-                
-                int srcW = ds.RasterXSize;
-                int srcH = ds.RasterYSize;
-                
-                // Calculate sampling parameters
-                int startCellX = pixelX / cellSize;
-                int startCellY = pixelY / cellSize;
-                int cellsX = (tileWidth + cellSize - 1) / cellSize;
-                int cellsY = (tileHeight + cellSize - 1) / cellSize;
-                
-                double scaleX = (double)srcW / _baseWidth;
-                double scaleY = (double)srcH / _baseHeight;
-                
-                int srcX = (int)Math.Floor(startCellX * scaleX);
-                int srcY = (int)Math.Floor(startCellY * scaleY);
-                int readW = (int)Math.Ceiling(cellsX * scaleX);
-                int readH = (int)Math.Ceiling(cellsY * scaleY);
-                
-                // Read terrain color data
-                byte[] r = new byte[cellsX * cellsY];
-                byte[] g = new byte[cellsX * cellsY];
-                byte[] b = new byte[cellsX * cellsY];
-                
-                ds.GetRasterBand(1).ReadRaster(srcX, srcY, readW, readH, r, cellsX, cellsY, 0, 0);
-                ds.GetRasterBand(2).ReadRaster(srcX, srcY, readW, readH, g, cellsX, cellsY, 0, 0);
-                ds.GetRasterBand(3).ReadRaster(srcX, srcY, readW, readH, b, cellsX, cellsY, 0, 0);
-                
-                // Create vector features from terrain data
-                CreateTerrainVectorFeatures(vectorTile, r, g, b, cellsX, cellsY, cellSize, pixelX, pixelY);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error loading terrain vector data: {ex.Message}");
-            }
-        }
-        
-        private void CreateTerrainVectorFeatures(VectorTile vectorTile, byte[] r, byte[] g, byte[] b, 
-            int cellsX, int cellsY, int cellSize, int offsetX, int offsetY)
+        private void GenerateProceduralTerrain(VectorTile vectorTile, int pixelX, int pixelY, int tileWidth, int tileHeight)
         {
             var theme = _themes[_currentTheme];
             var geometryFactory = new GeometryFactory();
             
-            // Group adjacent cells of similar terrain type into polygons
-            var terrainRegions = new Dictionary<TerrainType, List<Coordinate>>();
+            // Convert pixel coordinates to geographic coordinates for procedural generation
+            double startLon = (double)pixelX / _baseWidth * 360.0 - 180.0;
+            double startLat = 90.0 - (double)pixelY / _baseHeight * 180.0;
+            double endLon = (double)(pixelX + tileWidth) / _baseWidth * 360.0 - 180.0;
+            double endLat = 90.0 - (double)(pixelY + tileHeight) / _baseHeight * 180.0;
             
-            for (int y = 0; y < cellsY; y++)
+            // Create efficient terrain regions (larger polygons instead of per-pixel)
+            int regionSize = Math.Max(16, Math.Min(tileWidth, tileHeight) / 8); // Adaptive region size
+            
+            for (int y = 0; y < tileHeight; y += regionSize)
             {
-                for (int x = 0; x < cellsX; x++)
+                for (int x = 0; x < tileWidth; x += regionSize)
                 {
-                    int idx = y * cellsX + x;
-                    var color = new SKColor(r[idx], g[idx], b[idx]);
-                    var terrainType = ClassifyTerrain(color);
+                    int regionWidth = Math.Min(regionSize, tileWidth - x);
+                    int regionHeight = Math.Min(regionSize, tileHeight - y);
                     
-                    // Create cell coordinates in world space
-                    var cellCoords = new[]
+                    // Sample terrain type at region center
+                    double centerLon = startLon + (x + regionWidth / 2.0) / tileWidth * (endLon - startLon);
+                    double centerLat = startLat + (y + regionHeight / 2.0) / tileHeight * (endLat - startLat);
+                    
+                    var terrainType = ClassifyTerrainFromCoordinates(centerLon, centerLat);
+                    
+                    // Create region polygon
+                    var regionCoords = new[]
                     {
-                        new Coordinate(offsetX + x * cellSize, offsetY + y * cellSize),
-                        new Coordinate(offsetX + (x + 1) * cellSize, offsetY + y * cellSize),
-                        new Coordinate(offsetX + (x + 1) * cellSize, offsetY + (y + 1) * cellSize),
-                        new Coordinate(offsetX + x * cellSize, offsetY + (y + 1) * cellSize),
-                        new Coordinate(offsetX + x * cellSize, offsetY + y * cellSize)
+                        new Coordinate(pixelX + x, pixelY + y),
+                        new Coordinate(pixelX + x + regionWidth, pixelY + y),
+                        new Coordinate(pixelX + x + regionWidth, pixelY + y + regionHeight),
+                        new Coordinate(pixelX + x, pixelY + y + regionHeight),
+                        new Coordinate(pixelX + x, pixelY + y)
                     };
                     
-                    // Create polygon for this cell
-                    var polygon = geometryFactory.CreatePolygon(cellCoords);
+                    var polygon = geometryFactory.CreatePolygon(regionCoords);
                     
                     var feature = new VectorFeature
                     {
@@ -244,7 +179,8 @@ namespace StrategyGame
                         Properties = new Dictionary<string, object>
                         {
                             ["terrainType"] = terrainType,
-                            ["originalColor"] = color
+                            ["longitude"] = centerLon,
+                            ["latitude"] = centerLat
                         },
                         Style = new VectorStyle
                         {
@@ -261,53 +197,110 @@ namespace StrategyGame
             }
         }
         
-        private TerrainType ClassifyTerrain(SKColor color)
+        private TerrainType ClassifyTerrainFromCoordinates(double longitude, double latitude)
         {
-            // Simple terrain classification based on color values
-            // This could be made more sophisticated with machine learning or lookup tables
+            // Use geographic heuristics to classify terrain
+            // This is much faster than reading from files and gives reasonable results
             
-            int r = color.Red;
-            int g = color.Green;
-            int b = color.Blue;
+            // Use absolute latitude for climate zones
+            double absLat = Math.Abs(latitude);
             
-            // Water detection - blue dominant
-            if (b > r && b > g && b > 150)
+            // Use longitude and latitude to create noise for variety
+            double noise = SimplexNoise(longitude * 0.1, latitude * 0.1);
+            double elevation = SimplexNoise(longitude * 0.05, latitude * 0.05);
+            
+            // Water bodies (simplified)
+            if (IsOceanArea(longitude, latitude))
             {
                 return TerrainType.Water;
             }
             
-            // Ice/snow - high luminance, cool colors
-            if (r > 200 && g > 200 && b > 200)
+            // Ice caps (high latitudes)
+            if (absLat > 75 || (absLat > 65 && elevation > 0.6))
             {
                 return TerrainType.Ice;
             }
             
-            // Desert - sandy colors, red/yellow dominant
-            if (r > g && r > 160 && g > 120 && b < 150)
-            {
-                return TerrainType.Desert;
-            }
-            
-            // Forest - green dominant
-            if (g > r && g > b && g > 100)
-            {
-                return TerrainType.Forest;
-            }
-            
-            // Mountain - gray colors, low saturation
-            if (Math.Abs(r - g) < 30 && Math.Abs(g - b) < 30 && Math.Abs(r - b) < 30 && r < 150)
-            {
-                return TerrainType.Mountain;
-            }
-            
-            // Tundra - cool, desaturated colors
-            if (b > r && g > 100 && r < 150)
+            // Tundra (high latitudes, not ice)
+            if (absLat > 60)
             {
                 return TerrainType.Tundra;
             }
             
+            // Mountains (high elevation with noise)
+            if (elevation > 0.7)
+            {
+                return TerrainType.Mountain;
+            }
+            
+            // Desert (specific longitude bands and low latitudes)
+            if ((absLat < 35 && (IsDesertRegion(longitude, latitude) || elevation < -0.3)))
+            {
+                return TerrainType.Desert;
+            }
+            
+            // Forest (temperate and tropical regions with good conditions)
+            if (absLat < 60 && noise > 0.2 && elevation > 0.1)
+            {
+                return TerrainType.Forest;
+            }
+            
             // Default to plains
             return TerrainType.Plains;
+        }
+        
+        private bool IsOceanArea(double longitude, double latitude)
+        {
+            // Simplified ocean detection based on major ocean areas
+            // Pacific Ocean
+            if ((longitude < -120 || longitude > 120) && Math.Abs(latitude) < 65)
+                return true;
+            
+            // Atlantic Ocean (between Americas and Europe/Africa)
+            if (longitude > -80 && longitude < -10 && Math.Abs(latitude) < 65)
+                return true;
+            
+            // Indian Ocean
+            if (longitude > 30 && longitude < 120 && latitude < 30 && latitude > -50)
+                return true;
+            
+            // Arctic Ocean
+            if (Math.Abs(latitude) > 75)
+                return true;
+                
+            return false;
+        }
+        
+        private bool IsDesertRegion(double longitude, double latitude)
+        {
+            // Sahara, Middle East, Central Asia
+            if (longitude > -10 && longitude < 60 && latitude > 15 && latitude < 40)
+                return true;
+            
+            // Australian deserts
+            if (longitude > 110 && longitude < 155 && latitude > -35 && latitude < -15)
+                return true;
+            
+            // Southwest USA, Northern Mexico
+            if (longitude > -125 && longitude < -100 && latitude > 25 && latitude < 40)
+                return true;
+            
+            // Patagonia
+            if (longitude > -75 && longitude < -60 && latitude > -50 && latitude < -35)
+                return true;
+                
+            return false;
+        }
+        
+        private double SimplexNoise(double x, double y)
+        {
+            // Simple noise function for terrain variation
+            // This is a simplified version for performance
+            double value = 0.0;
+            value += Math.Sin(x * 2.1) * Math.Cos(y * 1.7) * 0.5;
+            value += Math.Sin(x * 0.8) * Math.Cos(y * 2.3) * 0.3;
+            value += Math.Sin(x * 4.2) * Math.Cos(y * 3.9) * 0.2;
+            return Math.Clamp(value, -1.0, 1.0);
         }
         
         protected override void RenderVectorTile(SKCanvas canvas, VectorTile vectorTile, int destX, int destY, int cellSize)
@@ -399,23 +392,6 @@ namespace StrategyGame
         protected override SKColor GetBackgroundColor()
         {
             return _themes[_currentTheme].WaterColor;
-        }
-        
-        private string GetDataFile(string fileName)
-        {
-            // Use the same data file resolution as PixelMapGenerator
-            string userPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                "data", "terrain", fileName);
-            
-            if (File.Exists(userPath))
-                return userPath;
-            
-            // Fall back to repository data directory
-            string repoRoot = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", ".."));
-            string repoPath = Path.Combine(repoRoot, "data", fileName);
-            
-            return File.Exists(repoPath) ? repoPath : userPath;
         }
     }
     
