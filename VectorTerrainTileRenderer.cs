@@ -158,6 +158,8 @@ namespace StrategyGame
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error loading vector data for terrain tile ({tileX}, {tileY}): {ex.Message}");
+                Console.WriteLine($"ERROR: Terrain tile ({tileX}, {tileY}) failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 return null;
             }
         }

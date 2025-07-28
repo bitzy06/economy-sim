@@ -83,6 +83,35 @@ class Program
                 }
                 return;
             }
+            else if (args[0] == "lfs-test")
+            {
+                Console.WriteLine("Running LFS data test with image output...");
+                try
+                {
+                    GdalInit.Ensure();
+                    VectorLFSTest.RunLFSDataTest();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in LFS test: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                }
+                return;
+            }
+            else if (args[0] == "debug-vector")
+            {
+                Console.WriteLine("Running vector debug test...");
+                try
+                {
+                    VectorDebugTest.RunDebugTest();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in vector debug test: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                }
+                return;
+            }
         }
         
         try

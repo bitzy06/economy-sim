@@ -184,6 +184,8 @@ namespace StrategyGame
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error loading vector data for political tile ({tileX}, {tileY}): {ex.Message}");
+                Console.WriteLine($"ERROR: Political tile ({tileX}, {tileY}) failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 return null;
             }
         }

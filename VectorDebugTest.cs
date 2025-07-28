@@ -1,194 +1,105 @@
 using System;
 using System.Diagnostics;
-using SkiaSharp;
-using StrategyGame;
+using System.IO;
+using MaxRev.Gdal.Core;
+using OSGeo.GDAL;
 
-namespace Economy_sim
+namespace StrategyGame
 {
+    /// <summary>
+    /// Simple debug test to understand vector rendering issues
+    /// </summary>
     public static class VectorDebugTest
     {
-        public static void TestTerrainGeneration()
+        public static void RunDebugTest()
         {
-            Console.WriteLine("=== Vector Terrain Debug Test ===");
-            Debug.WriteLine("=== Vector Terrain Debug Test ===");
+            Console.WriteLine("=== Vector Debug Test ===");
             
-            var vectorManager = new VectorHybridMapManager(baseWidth: 4096, baseHeight: 2048);
-            
-            // Test a single tile generation
-            var viewArea = new SKRectI(2048, 1024, 2048 + 512, 1024 + 512); // Center tile
-            
-            Debug.WriteLine($"Testing terrain generation for center tile at {viewArea}");
-            
-            var result = vectorManager.AssembleView(1, viewArea);
-            
-            if (result != null)
+            try
             {
-                Debug.WriteLine($"Generated bitmap: {result.Width}x{result.Height}");
+                // Step 1: Initialize GDAL
+                Console.WriteLine("Initializing GDAL...");
+                Economy_sim.GdalInit.Ensure();
+                Console.WriteLine("GDAL initialized successfully");
                 
-                // Sample pixels to see what colors we get
-                var colors = new System.Collections.Generic.HashSet<SKColor>();
-                for (int y = 50; y < result.Height - 50; y += 50)
+                // Step 2: Test terrain renderer creation
+                Console.WriteLine("Creating terrain renderer...");
+                VectorTerrainTileRenderer? terrainRenderer = null;
+                try 
                 {
-                    for (int x = 50; x < result.Width - 50; x += 50)
-                    {
-                        var pixel = result.GetPixel(x, y);
-                        colors.Add(pixel);
-                    }
-                }
-                
-                Debug.WriteLine($"Found {colors.Count} unique colors:");
-                foreach (var color in colors)
-                {
-                    Debug.WriteLine($"  Color: #{color.Red:X2}{color.Green:X2}{color.Blue:X2}{color.Alpha:X2}");
-                }
-                
-                // Test specific coordinates
-                TestTerrainClassification();
-            }
-            else
-            {
-                Debug.WriteLine("AssembleView returned null bitmap");
-            }
-        }
-        
-        private static void TestTerrainClassification()
-        {
-            Debug.WriteLine("=== Testing terrain classification for specific coordinates ===");
-            
-            var renderer = new VectorTerrainTileRenderer(4096, 2048);
-            
-            // Test coordinates around the world
-            var testCoords = new[]
-            {
-                (-74.0, 40.7),    // New York (should be land)
-                (2.3, 48.9),      // Paris (should be land)
-                (139.7, 35.7),    // Tokyo (should be land)
-                (-180.0, 0.0),    // Pacific Ocean (should be water)
-                (0.0, 0.0),       // Atlantic Ocean (should be water)
-                (120.0, 0.0),     // Pacific Ocean (should be water)
-                (-100.0, 40.0),   // Central USA (should be land - plains)
-                (20.0, 65.0),     // Northern Europe (should be land - tundra)
-                (30.0, 25.0),     // Sahara (should be desert)
-                (-122.4, 37.8),   // San Francisco (should be land)
-            };
-            
-            foreach (var (lon, lat) in testCoords)
-            {
-                try
-                {
-                    // We need to access the private method, so we'll create a test version
-                    var isOcean = TestIsOceanArea(lon, lat);
-                    var terrain = TestClassifyTerrain(lon, lat);
-                    Debug.WriteLine($"Coord ({lon:F1}, {lat:F1}): Ocean={isOcean}, Terrain={terrain}");
+                    terrainRenderer = new VectorTerrainTileRenderer(1024, 1024);
+                    Console.WriteLine("Terrain renderer created successfully");
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Error testing coord ({lon:F1}, {lat:F1}): {ex.Message}");
+                    Console.WriteLine($"Failed to create terrain renderer: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                    return;
                 }
-            }
-        }
-        
-        // Duplicate the logic from VectorTerrainTileRenderer to test it directly
-        private static bool TestIsOceanArea(double longitude, double latitude)
-        {
-            // Simplified ocean detection based on major ocean areas
-            // Pacific Ocean
-            if ((longitude < -120 || longitude > 120) && Math.Abs(latitude) < 65)
-                return true;
-            
-            // Atlantic Ocean (between Americas and Europe/Africa)
-            if (longitude > -80 && longitude < -10 && Math.Abs(latitude) < 65)
-                return true;
-            
-            // Indian Ocean
-            if (longitude > 30 && longitude < 120 && latitude < 30 && latitude > -50)
-                return true;
-            
-            // Arctic Ocean
-            if (Math.Abs(latitude) > 75)
-                return true;
                 
-            return false;
-        }
-        
-        private static string TestClassifyTerrain(double longitude, double latitude)
-        {
-            // Use absolute latitude for climate zones
-            double absLat = Math.Abs(latitude);
-            
-            // Use longitude and latitude to create noise for variety
-            double noise = SimplexNoise(longitude * 0.1, latitude * 0.1);
-            double elevation = SimplexNoise(longitude * 0.05, latitude * 0.05);
-            
-            // Water bodies (simplified)
-            if (TestIsOceanArea(longitude, latitude))
-            {
-                return "Water";
-            }
-            
-            // Ice caps (high latitudes)
-            if (absLat > 75 || (absLat > 65 && elevation > 0.6))
-            {
-                return "Ice";
-            }
-            
-            // Tundra (high latitudes, not ice)
-            if (absLat > 60)
-            {
-                return "Tundra";
-            }
-            
-            // Mountains (high elevation with noise)
-            if (elevation > 0.7)
-            {
-                return "Mountain";
-            }
-            
-            // Desert (specific longitude bands and low latitudes)
-            if ((absLat < 35 && (TestIsDesertRegion(longitude, latitude) || elevation < -0.3)))
-            {
-                return "Desert";
-            }
-            
-            // Forest (temperate and tropical regions with good conditions)
-            if (absLat < 60 && noise > 0.2 && elevation > 0.1)
-            {
-                return "Forest";
-            }
-            
-            // Default to plains
-            return "Plains";
-        }
-        
-        private static bool TestIsDesertRegion(double longitude, double latitude)
-        {
-            // Sahara, Middle East, Central Asia
-            if (longitude > -10 && longitude < 60 && latitude > 15 && latitude < 40)
-                return true;
-            
-            // Australian deserts
-            if (longitude > 110 && longitude < 155 && latitude > -35 && latitude < -15)
-                return true;
-            
-            // Southwest USA, Northern Mexico
-            if (longitude > -125 && longitude < -100 && latitude > 25 && latitude < 40)
-                return true;
-            
-            // Patagonia
-            if (longitude > -75 && longitude < -60 && latitude > -50 && latitude < -35)
-                return true;
+                // Step 3: Test political renderer creation
+                Console.WriteLine("Creating political renderer...");
+                VectorPoliticalTileRenderer? politicalRenderer = null;
+                try 
+                {
+                    var politicalManager = new PoliticalBorderManager();
+                    politicalRenderer = new VectorPoliticalTileRenderer(politicalManager, 1024, 1024);
+                    Console.WriteLine("Political renderer created successfully");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to create political renderer: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                    return;
+                }
                 
-            return false;
-        }
-        
-        private static double SimplexNoise(double x, double y)
-        {
-            // Simple noise function for terrain variation
-            double value = 0.0;
-            value += Math.Sin(x * 2.1) * Math.Cos(y * 1.7) * 0.5;
-            value += Math.Sin(x * 0.8) * Math.Cos(y * 2.3) * 0.3;
-            value += Math.Sin(x * 4.2) * Math.Cos(y * 3.9) * 0.2;
-            return Math.Clamp(value, -1.0, 1.0);
+                // Step 4: Test vector tile generation
+                Console.WriteLine("Testing vector tile generation...");
+                try 
+                {
+                    // Use coordinates that are definitely within a 1024x1024 map
+                    // Tile (0,0) should be at (0,0) and tile (1,0) should be at (512, 0)
+                    var terrainTile = terrainRenderer.GetVectorTileForTesting(0, 0, 1);
+                    Console.WriteLine($"Terrain tile (0,0) result: {(terrainTile != null ? "SUCCESS" : "NULL")}");
+                    if (terrainTile != null)
+                    {
+                        Console.WriteLine($"  Features count: {terrainTile.Features.Count}");
+                        Console.WriteLine($"  Tile coordinates: ({terrainTile.TileX}, {terrainTile.TileY})");
+                    }
+                    
+                    var terrainTile2 = terrainRenderer.GetVectorTileForTesting(1, 0, 1);
+                    Console.WriteLine($"Terrain tile (1,0) result: {(terrainTile2 != null ? "SUCCESS" : "NULL")}");
+                    if (terrainTile2 != null)
+                    {
+                        Console.WriteLine($"  Features count: {terrainTile2.Features.Count}");
+                        Console.WriteLine($"  Tile coordinates: ({terrainTile2.TileX}, {terrainTile2.TileY})");
+                    }
+                    
+                    var politicalTile = politicalRenderer.GetVectorTileForTesting(0, 0, 1);
+                    Console.WriteLine($"Political tile (0,0) result: {(politicalTile != null ? "SUCCESS" : "NULL")}");
+                    if (politicalTile != null)
+                    {
+                        Console.WriteLine($"  Features count: {politicalTile.Features.Count}");
+                        Console.WriteLine($"  Tile coordinates: ({politicalTile.TileX}, {politicalTile.TileY})");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Vector tile generation failed: {ex.Message}");
+                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                }
+                
+                // Clean up
+                terrainRenderer?.Dispose();
+                politicalRenderer?.Dispose();
+                
+                Console.WriteLine("=== Debug Test Complete ===");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Debug test failed: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            }
         }
     }
 }

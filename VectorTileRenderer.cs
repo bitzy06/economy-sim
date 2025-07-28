@@ -396,6 +396,11 @@ namespace StrategyGame
         protected abstract void RenderVectorTile(SKCanvas canvas, VectorTile vectorTile, int destX, int destY, int cellSize);
         protected abstract SKColor GetBackgroundColor();
         
+        // Public methods for testing
+        public VectorTile? GetVectorTileForTesting(int tileX, int tileY, int cellSize) => GetVectorTileSync(cellSize, tileX, tileY);
+        public void RenderVectorTileForTesting(VectorTile vectorTile, SKCanvas canvas, int width, int height) => 
+            RenderVectorTile(canvas, vectorTile, 0, 0, 1);
+        
         public virtual void Dispose()
         {
             lock (_cacheLock)
