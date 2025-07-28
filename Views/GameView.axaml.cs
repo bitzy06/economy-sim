@@ -163,10 +163,19 @@ namespace Economy_sim
             {
                 var currentPoint = e.GetPosition(this.MapImage);
                 
+                Debug.WriteLine($"OnPointerPressed: Mouse click at ({currentPoint.X:F0}, {currentPoint.Y:F0})");
+                Debug.WriteLine($"OnPointerPressed: Current view type: {_mapManager.CurrentViewType}");
+                Debug.WriteLine($"OnPointerPressed: _isPanning: {_isPanning}");
+                
                 // Check for country selection in political view
                 if (_mapManager.CurrentViewType == MapViewType.Political && !_isPanning)
                 {
+                    Debug.WriteLine("OnPointerPressed: Calling HandleCountryClick");
                     HandleCountryClick(currentPoint);
+                }
+                else
+                {
+                    Debug.WriteLine($"OnPointerPressed: NOT calling HandleCountryClick - ViewType: {_mapManager.CurrentViewType}, _isPanning: {_isPanning}");
                 }
 
                 _isPanning = true;
@@ -530,6 +539,10 @@ namespace Economy_sim
         {
             try
             {
+                Debug.WriteLine($"HandleCountryClick: Mouse position ({mousePosition.X:F0}, {mousePosition.Y:F0})");
+                Debug.WriteLine($"HandleCountryClick: Zoom level {_currentZoomLevel}, View offset ({_viewOffset.X}, {_viewOffset.Y})");
+                Debug.WriteLine($"HandleCountryClick: Current view type {_mapManager.CurrentViewType}");
+                
                 // Get country at clicked position
                 var country = _mapManager.GetCountryAtScreenCoordinate(
                     (int)mousePosition.X, 
@@ -537,9 +550,13 @@ namespace Economy_sim
                     _currentZoomLevel, 
                     _viewOffset);
 
+                Debug.WriteLine($"HandleCountryClick: Found country: {country?.Name ?? "null"}");
+
                 if (country != null)
                 {
                     _selectedCountry = country;
+                    
+                    Debug.WriteLine($"HandleCountryClick: Setting highlighted country to {country.Name}");
                     
                     // Set highlighting for visual feedback
                     _mapManager.SetHighlightedCountry(country);
@@ -552,10 +569,15 @@ namespace Economy_sim
                     // Refresh the map to show highlighting
                     QueueRender();
                 }
+                else
+                {
+                    Debug.WriteLine("HandleCountryClick: No country found at clicked position");
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error in country click detection: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
             }
         }
 
