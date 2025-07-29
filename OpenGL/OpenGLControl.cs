@@ -12,6 +12,24 @@ using System.Diagnostics;
 namespace Economy_sim.OpenGL
 {
     /// <summary>
+    /// Bridge class to make Avalonia's GlInterface work with OpenTK's binding system
+    /// </summary>
+    internal class AvaloniaOpenTKBindingContext : OpenTK.IBindingsContext
+    {
+        private readonly GlInterface _gl;
+
+        public AvaloniaOpenTKBindingContext(GlInterface gl)
+        {
+            _gl = gl ?? throw new ArgumentNullException(nameof(gl));
+        }
+
+        public IntPtr GetProcAddress(string procName)
+        {
+            return _gl.GetProcAddress(procName);
+        }
+    }
+
+    /// <summary>
     /// OpenGL control that can be embedded in Avalonia UI for map rendering
     /// </summary>
     public class OpenGLControl : OpenGlControlBase
@@ -61,6 +79,9 @@ namespace Economy_sim.OpenGL
             
             try
             {
+                // Initialize OpenTK bindings using the current context
+                OpenTK.Graphics.OpenGL4.GL.LoadBindings(new AvaloniaOpenTKBindingContext(gl));
+                
                 // Initialize OpenGL settings
                 GL.Enable(EnableCap.Blend);
                 GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
