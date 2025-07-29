@@ -1,0 +1,4378 @@
+[
+  {
+    "CountryCode": "2",
+    "CountryName": "United States of America",
+    "RasterCode": 1,
+    "ColorHex": "#A7D5FB",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "3",
+    "CountryName": "Alaska",
+    "RasterCode": 2,
+    "ColorHex": "#EAAAF6",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "4",
+    "CountryName": "Hawaii",
+    "RasterCode": 3,
+    "ColorHex": "#917FF1",
+    "StartYear": 1898,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "6",
+    "CountryName": "Puerto Rico",
+    "RasterCode": 4,
+    "ColorHex": "#D4F0EC",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "6",
+    "CountryName": "Puerto Rico",
+    "RasterCode": 5,
+    "ColorHex": "#7BC5E7",
+    "StartYear": 1898,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "20",
+    "CountryName": "Canada",
+    "RasterCode": 6,
+    "ColorHex": "#BE9AE2",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "20",
+    "CountryName": "Canada",
+    "RasterCode": 7,
+    "ColorHex": "#656FDD",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "21",
+    "CountryName": "Newfoundland",
+    "RasterCode": 8,
+    "ColorHex": "#A8E0D8",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "31",
+    "CountryName": "Bahamas",
+    "RasterCode": 9,
+    "ColorHex": "#EBB5D3",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "40",
+    "CountryName": "Cuba",
+    "RasterCode": 10,
+    "ColorHex": "#928ACE",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "40",
+    "CountryName": "Cuba",
+    "RasterCode": 11,
+    "ColorHex": "#D5FBC9",
+    "StartYear": 1898,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "40",
+    "CountryName": "Cuba",
+    "RasterCode": 12,
+    "ColorHex": "#7CD0C4",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "41",
+    "CountryName": "Haiti",
+    "RasterCode": 13,
+    "ColorHex": "#BFA5BF",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "41",
+    "CountryName": "Haiti",
+    "RasterCode": 14,
+    "ColorHex": "#667ABA",
+    "StartYear": 1915,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "41",
+    "CountryName": "Haiti",
+    "RasterCode": 15,
+    "ColorHex": "#A9EBB5",
+    "StartYear": 1934,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "42",
+    "CountryName": "Dominican Republic",
+    "RasterCode": 16,
+    "ColorHex": "#ECC0B0",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "51",
+    "CountryName": "Jamaica",
+    "RasterCode": 17,
+    "ColorHex": "#9395AB",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "52",
+    "CountryName": "Trinidad and Tobago",
+    "RasterCode": 18,
+    "ColorHex": "#D66AA6",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "53",
+    "CountryName": "Barbados",
+    "RasterCode": 19,
+    "ColorHex": "#7DDBA1",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "65",
+    "CountryName": "Guadeloupe",
+    "RasterCode": 20,
+    "ColorHex": "#C0B09C",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "66",
+    "CountryName": "Martinique",
+    "RasterCode": 21,
+    "ColorHex": "#678597",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "70",
+    "CountryName": "Mexico",
+    "RasterCode": 22,
+    "ColorHex": "#AAF692",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "80",
+    "CountryName": "Belize",
+    "RasterCode": 23,
+    "ColorHex": "#EDCB8D",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "90",
+    "CountryName": "Guatemala",
+    "RasterCode": 24,
+    "ColorHex": "#94A088",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "91",
+    "CountryName": "Honduras",
+    "RasterCode": 25,
+    "ColorHex": "#D77583",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "92",
+    "CountryName": "El Salvador",
+    "RasterCode": 26,
+    "ColorHex": "#7EE67E",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "93",
+    "CountryName": "Nicaragua",
+    "RasterCode": 27,
+    "ColorHex": "#C1BB79",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "94",
+    "CountryName": "Costa Rica",
+    "RasterCode": 28,
+    "ColorHex": "#689074",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "95",
+    "CountryName": "Panama",
+    "RasterCode": 29,
+    "ColorHex": "#AB656F",
+    "StartYear": 1903,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "100",
+    "CountryName": "Colombia",
+    "RasterCode": 30,
+    "ColorHex": "#EED66A",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "100",
+    "CountryName": "Colombia",
+    "RasterCode": 31,
+    "ColorHex": "#95AB65",
+    "StartYear": 1903,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "100",
+    "CountryName": "Colombia",
+    "RasterCode": 32,
+    "ColorHex": "#D880FC",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "101",
+    "CountryName": "Venezuela",
+    "RasterCode": 33,
+    "ColorHex": "#7FF1F7",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "110",
+    "CountryName": "Guyana",
+    "RasterCode": 34,
+    "ColorHex": "#C2C6F2",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "115",
+    "CountryName": "Surinam",
+    "RasterCode": 35,
+    "ColorHex": "#699BED",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "120",
+    "CountryName": "French Guyana",
+    "RasterCode": 36,
+    "ColorHex": "#AC70E8",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "120",
+    "CountryName": "French Guyana",
+    "RasterCode": 37,
+    "ColorHex": "#EFE1E3",
+    "StartYear": 1930,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "120",
+    "CountryName": "French Guyana",
+    "RasterCode": 38,
+    "ColorHex": "#96B6DE",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "130",
+    "CountryName": "Ecuador",
+    "RasterCode": 39,
+    "ColorHex": "#D98BD9",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "130",
+    "CountryName": "Ecuador",
+    "RasterCode": 40,
+    "ColorHex": "#80FCD4",
+    "StartYear": 1942,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "135",
+    "CountryName": "Peru",
+    "RasterCode": 41,
+    "ColorHex": "#C3D1CF",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "135",
+    "CountryName": "Peru",
+    "RasterCode": 42,
+    "ColorHex": "#6AA6CA",
+    "StartYear": 1909,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "135",
+    "CountryName": "Peru",
+    "RasterCode": 43,
+    "ColorHex": "#AD7BC5",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "135",
+    "CountryName": "Peru",
+    "RasterCode": 44,
+    "ColorHex": "#F0ECC0",
+    "StartYear": 1942,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "140",
+    "CountryName": "Brazil",
+    "RasterCode": 45,
+    "ColorHex": "#97C1BB",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "140",
+    "CountryName": "Brazil",
+    "RasterCode": 46,
+    "ColorHex": "#DA96B6",
+    "StartYear": 1903,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "140",
+    "CountryName": "Brazil",
+    "RasterCode": 47,
+    "ColorHex": "#816BB1",
+    "StartYear": 1909,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "145",
+    "CountryName": "Bolivia",
+    "RasterCode": 48,
+    "ColorHex": "#C4DCAC",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "145",
+    "CountryName": "Bolivia",
+    "RasterCode": 49,
+    "ColorHex": "#6BB1A7",
+    "StartYear": 1903,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "145",
+    "CountryName": "Bolivia",
+    "RasterCode": 50,
+    "ColorHex": "#AE86A2",
+    "StartYear": 1909,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "145",
+    "CountryName": "Bolivia",
+    "RasterCode": 51,
+    "ColorHex": "#F1F79D",
+    "StartYear": 1938,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "150",
+    "CountryName": "Paraguay",
+    "RasterCode": 52,
+    "ColorHex": "#98CC98",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "150",
+    "CountryName": "Paraguay",
+    "RasterCode": 53,
+    "ColorHex": "#DBA193",
+    "StartYear": 1938,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "155",
+    "CountryName": "Chile",
+    "RasterCode": 54,
+    "ColorHex": "#82768E",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "155",
+    "CountryName": "Chile",
+    "RasterCode": 55,
+    "ColorHex": "#C5E789",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "155",
+    "CountryName": "Chile",
+    "RasterCode": 56,
+    "ColorHex": "#6CBC84",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "160",
+    "CountryName": "Argentina",
+    "RasterCode": 57,
+    "ColorHex": "#AF917F",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "160",
+    "CountryName": "Argentina",
+    "RasterCode": 58,
+    "ColorHex": "#F2667A",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "160",
+    "CountryName": "Argentina",
+    "RasterCode": 59,
+    "ColorHex": "#99D775",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "165",
+    "CountryName": "Uruguay",
+    "RasterCode": 60,
+    "ColorHex": "#DCAC70",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "200",
+    "CountryName": "United Kingdom",
+    "RasterCode": 61,
+    "ColorHex": "#83816B",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "200",
+    "CountryName": "United Kingdom",
+    "RasterCode": 62,
+    "ColorHex": "#C6F266",
+    "StartYear": 1921,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "205",
+    "CountryName": "Ireland",
+    "RasterCode": 63,
+    "ColorHex": "#6DC7FD",
+    "StartYear": 1921,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "210",
+    "CountryName": "Netherlands",
+    "RasterCode": 64,
+    "ColorHex": "#B09CF8",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "211",
+    "CountryName": "Belgium",
+    "RasterCode": 65,
+    "ColorHex": "#F371F3",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "212",
+    "CountryName": "Luxembourg",
+    "RasterCode": 66,
+    "ColorHex": "#9AE2EE",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "220",
+    "CountryName": "France",
+    "RasterCode": 67,
+    "ColorHex": "#DDB7E9",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "220",
+    "CountryName": "France",
+    "RasterCode": 68,
+    "ColorHex": "#848CE4",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "225",
+    "CountryName": "Switzerland",
+    "RasterCode": 69,
+    "ColorHex": "#C7FDDF",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "230",
+    "CountryName": "Spain",
+    "RasterCode": 70,
+    "ColorHex": "#6ED2DA",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "235",
+    "CountryName": "Portugal",
+    "RasterCode": 71,
+    "ColorHex": "#B1A7D5",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "255",
+    "CountryName": "Germany (Prussia)",
+    "RasterCode": 72,
+    "ColorHex": "#F47CD0",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "255",
+    "CountryName": "Germany (Prussia)",
+    "RasterCode": 73,
+    "ColorHex": "#9BEDCB",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "255",
+    "CountryName": "Germany (Prussia)",
+    "RasterCode": 74,
+    "ColorHex": "#DEC2C6",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "255",
+    "CountryName": "Germany (Prussia)",
+    "RasterCode": 75,
+    "ColorHex": "#8597C1",
+    "StartYear": 1938,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "260",
+    "CountryName": "German Federal Republic",
+    "RasterCode": 76,
+    "ColorHex": "#C86CBC",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "260",
+    "CountryName": "German Federal Republic",
+    "RasterCode": 77,
+    "ColorHex": "#6FDDB7",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "265",
+    "CountryName": "German Democratic Republic",
+    "RasterCode": 78,
+    "ColorHex": "#B2B2B2",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "265",
+    "CountryName": "German Democratic Republic",
+    "RasterCode": 79,
+    "ColorHex": "#F587AD",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "290",
+    "CountryName": "Poland",
+    "RasterCode": 80,
+    "ColorHex": "#9CF8A8",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "290",
+    "CountryName": "Poland",
+    "RasterCode": 81,
+    "ColorHex": "#DFCDA3",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "290",
+    "CountryName": "Poland",
+    "RasterCode": 82,
+    "ColorHex": "#86A29E",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "290",
+    "CountryName": "Poland",
+    "RasterCode": 83,
+    "ColorHex": "#C97799",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "290",
+    "CountryName": "Poland",
+    "RasterCode": 84,
+    "ColorHex": "#70E894",
+    "StartYear": 1921,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "290",
+    "CountryName": "Poland",
+    "RasterCode": 85,
+    "ColorHex": "#B3BD8F",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "291",
+    "CountryName": "Danzig",
+    "RasterCode": 86,
+    "ColorHex": "#F6928A",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "300",
+    "CountryName": "Austria-Hungary",
+    "RasterCode": 87,
+    "ColorHex": "#9D6785",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "300",
+    "CountryName": "Austria-Hungary",
+    "RasterCode": 88,
+    "ColorHex": "#E0D880",
+    "StartYear": 1908,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "305",
+    "CountryName": "Austria",
+    "RasterCode": 89,
+    "ColorHex": "#87AD7B",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "305",
+    "CountryName": "Austria",
+    "RasterCode": 90,
+    "ColorHex": "#CA8276",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "310",
+    "CountryName": "Hungary",
+    "RasterCode": 91,
+    "ColorHex": "#71F371",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "310",
+    "CountryName": "Hungary",
+    "RasterCode": 92,
+    "ColorHex": "#B4C86C",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "310",
+    "CountryName": "Hungary",
+    "RasterCode": 93,
+    "ColorHex": "#F79D67",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "310",
+    "CountryName": "Hungary",
+    "RasterCode": 94,
+    "ColorHex": "#9E72FE",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "310",
+    "CountryName": "Hungary",
+    "RasterCode": 95,
+    "ColorHex": "#E1E3F9",
+    "StartYear": 1938,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "310",
+    "CountryName": "Hungary",
+    "RasterCode": 96,
+    "ColorHex": "#88B8F4",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "315",
+    "CountryName": "Czechoslovakia",
+    "RasterCode": 97,
+    "ColorHex": "#CB8DEF",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "315",
+    "CountryName": "Czechoslovakia",
+    "RasterCode": 98,
+    "ColorHex": "#72FEEA",
+    "StartYear": 1938,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "315",
+    "CountryName": "Czechoslovakia",
+    "RasterCode": 99,
+    "ColorHex": "#B5D3E5",
+    "StartYear": 1938,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "315",
+    "CountryName": "Czechoslovakia",
+    "RasterCode": 100,
+    "ColorHex": "#F8A8E0",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "315",
+    "CountryName": "Czechoslovakia",
+    "RasterCode": 101,
+    "ColorHex": "#9F7DDB",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "325",
+    "CountryName": "Italy/Sardinia",
+    "RasterCode": 102,
+    "ColorHex": "#E2EED6",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "325",
+    "CountryName": "Italy/Sardinia",
+    "RasterCode": 103,
+    "ColorHex": "#89C3D1",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "338",
+    "CountryName": "Malta",
+    "RasterCode": 104,
+    "ColorHex": "#CC98CC",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "339",
+    "CountryName": "Albania",
+    "RasterCode": 105,
+    "ColorHex": "#736DC7",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "339",
+    "CountryName": "Albania",
+    "RasterCode": 106,
+    "ColorHex": "#B6DEC2",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "339",
+    "CountryName": "Albania",
+    "RasterCode": 107,
+    "ColorHex": "#F9B3BD",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "340",
+    "CountryName": "Serbia",
+    "RasterCode": 108,
+    "ColorHex": "#A088B8",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "340",
+    "CountryName": "Serbia",
+    "RasterCode": 109,
+    "ColorHex": "#E3F9B3",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "340",
+    "CountryName": "Serbia",
+    "RasterCode": 110,
+    "ColorHex": "#8ACEAE",
+    "StartYear": 1915,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "341",
+    "CountryName": "Montenegro",
+    "RasterCode": 111,
+    "ColorHex": "#CDA3A9",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "341",
+    "CountryName": "Montenegro",
+    "RasterCode": 112,
+    "ColorHex": "#7478A4",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "341",
+    "CountryName": "Montenegro",
+    "RasterCode": 113,
+    "ColorHex": "#B7E99F",
+    "StartYear": 1915,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "345",
+    "CountryName": "Yugoslavia",
+    "RasterCode": 114,
+    "ColorHex": "#FABE9A",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "345",
+    "CountryName": "Yugoslavia",
+    "RasterCode": 115,
+    "ColorHex": "#A19395",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "345",
+    "CountryName": "Yugoslavia",
+    "RasterCode": 116,
+    "ColorHex": "#E46890",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "350",
+    "CountryName": "Greece",
+    "RasterCode": 117,
+    "ColorHex": "#8BD98B",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "350",
+    "CountryName": "Greece",
+    "RasterCode": 118,
+    "ColorHex": "#CEAE86",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "350",
+    "CountryName": "Greece",
+    "RasterCode": 119,
+    "ColorHex": "#758381",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "352",
+    "CountryName": "Cyprus",
+    "RasterCode": 120,
+    "ColorHex": "#B8F47C",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "355",
+    "CountryName": "Bulgaria",
+    "RasterCode": 121,
+    "ColorHex": "#FBC977",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "355",
+    "CountryName": "Bulgaria",
+    "RasterCode": 122,
+    "ColorHex": "#A29E72",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "355",
+    "CountryName": "Bulgaria",
+    "RasterCode": 123,
+    "ColorHex": "#E5736D",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "355",
+    "CountryName": "Bulgaria",
+    "RasterCode": 124,
+    "ColorHex": "#8CE468",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "355",
+    "CountryName": "Bulgaria",
+    "RasterCode": 125,
+    "ColorHex": "#CFB9FF",
+    "StartYear": 1940,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 126,
+    "ColorHex": "#768EFA",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 127,
+    "ColorHex": "#B9FFF5",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 128,
+    "ColorHex": "#FCD4F0",
+    "StartYear": 1916,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 129,
+    "ColorHex": "#A3A9EB",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 130,
+    "ColorHex": "#E67EE6",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 131,
+    "ColorHex": "#8DEFE1",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 132,
+    "ColorHex": "#D0C4DC",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 133,
+    "ColorHex": "#7799D7",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 134,
+    "ColorHex": "#BA6ED2",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 135,
+    "ColorHex": "#FDDFCD",
+    "StartYear": 1940,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "360",
+    "CountryName": "Rumania",
+    "RasterCode": 136,
+    "ColorHex": "#A4B4C8",
+    "StartYear": 1940,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 137,
+    "ColorHex": "#E789C3",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 138,
+    "ColorHex": "#8EFABE",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 139,
+    "ColorHex": "#D1CFB9",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 140,
+    "ColorHex": "#78A4B4",
+    "StartYear": 1917,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 141,
+    "ColorHex": "#BB79AF",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 142,
+    "ColorHex": "#FEEAAA",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 143,
+    "ColorHex": "#A5BFA5",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 144,
+    "ColorHex": "#E894A0",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 145,
+    "ColorHex": "#8F699B",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 146,
+    "ColorHex": "#D2DA96",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 147,
+    "ColorHex": "#79AF91",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 148,
+    "ColorHex": "#BC848C",
+    "StartYear": 1921,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 149,
+    "ColorHex": "#FFF587",
+    "StartYear": 1940,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 150,
+    "ColorHex": "#A6CA82",
+    "StartYear": 1940,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 151,
+    "ColorHex": "#E99F7D",
+    "StartYear": 1940,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 152,
+    "ColorHex": "#907478",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "365",
+    "CountryName": "Russia (Soviet Union)",
+    "RasterCode": 153,
+    "ColorHex": "#D3E573",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "366",
+    "CountryName": "Estonia",
+    "RasterCode": 154,
+    "ColorHex": "#7ABA6E",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "367",
+    "CountryName": "Latvia",
+    "RasterCode": 155,
+    "ColorHex": "#BD8F69",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "368",
+    "CountryName": "Lithuania",
+    "RasterCode": 156,
+    "ColorHex": "#646464",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "368",
+    "CountryName": "Lithuania",
+    "RasterCode": 157,
+    "ColorHex": "#A7D5FB",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "368",
+    "CountryName": "Lithuania",
+    "RasterCode": 158,
+    "ColorHex": "#EAAAF6",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "368",
+    "CountryName": "Lithuania",
+    "RasterCode": 159,
+    "ColorHex": "#917FF1",
+    "StartYear": 1939,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "375",
+    "CountryName": "Finland",
+    "RasterCode": 160,
+    "ColorHex": "#D4F0EC",
+    "StartYear": 1917,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "375",
+    "CountryName": "Finland",
+    "RasterCode": 161,
+    "ColorHex": "#7BC5E7",
+    "StartYear": 1940,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "380",
+    "CountryName": "Sweden",
+    "RasterCode": 162,
+    "ColorHex": "#BE9AE2",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "380",
+    "CountryName": "Sweden",
+    "RasterCode": 163,
+    "ColorHex": "#656FDD",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "385",
+    "CountryName": "Norway",
+    "RasterCode": 164,
+    "ColorHex": "#A8E0D8",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "390",
+    "CountryName": "Denmark",
+    "RasterCode": 165,
+    "ColorHex": "#EBB5D3",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "390",
+    "CountryName": "Denmark",
+    "RasterCode": 166,
+    "ColorHex": "#928ACE",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "395",
+    "CountryName": "Iceland",
+    "RasterCode": 167,
+    "ColorHex": "#D5FBC9",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "395",
+    "CountryName": "Iceland",
+    "RasterCode": 168,
+    "ColorHex": "#7CD0C4",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "395",
+    "CountryName": "Iceland",
+    "RasterCode": 169,
+    "ColorHex": "#BFA5BF",
+    "StartYear": 1942,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "395",
+    "CountryName": "Iceland",
+    "RasterCode": 170,
+    "ColorHex": "#667ABA",
+    "StartYear": 1944,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "402",
+    "CountryName": "Cape Verde",
+    "RasterCode": 171,
+    "ColorHex": "#A9EBB5",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "404",
+    "CountryName": "Guinea-Bissau",
+    "RasterCode": 172,
+    "ColorHex": "#ECC0B0",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "404",
+    "CountryName": "Guinea-Bissau",
+    "RasterCode": 173,
+    "ColorHex": "#9395AB",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "404",
+    "CountryName": "Guinea-Bissau",
+    "RasterCode": 174,
+    "ColorHex": "#D66AA6",
+    "StartYear": 1942,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "411",
+    "CountryName": "Equatorial Guinea",
+    "RasterCode": 175,
+    "ColorHex": "#7DDBA1",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "411",
+    "CountryName": "Equatorial Guinea",
+    "RasterCode": 176,
+    "ColorHex": "#C0B09C",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "420",
+    "CountryName": "Gambia",
+    "RasterCode": 177,
+    "ColorHex": "#678597",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "430",
+    "CountryName": "French West Africa",
+    "RasterCode": 178,
+    "ColorHex": "#AAF692",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "430",
+    "CountryName": "French West Africa",
+    "RasterCode": 179,
+    "ColorHex": "#EDCB8D",
+    "StartYear": 1898,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "430",
+    "CountryName": "French West Africa",
+    "RasterCode": 180,
+    "ColorHex": "#94A088",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "432",
+    "CountryName": "Mali",
+    "RasterCode": 181,
+    "ColorHex": "#D77583",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "432",
+    "CountryName": "Mali",
+    "RasterCode": 182,
+    "ColorHex": "#7EE67E",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "432",
+    "CountryName": "Mali",
+    "RasterCode": 183,
+    "ColorHex": "#C1BB79",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "432",
+    "CountryName": "Mali",
+    "RasterCode": 184,
+    "ColorHex": "#689074",
+    "StartYear": 1932,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "432",
+    "CountryName": "Mali",
+    "RasterCode": 185,
+    "ColorHex": "#AB656F",
+    "StartYear": 1944,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "432",
+    "CountryName": "Mali",
+    "RasterCode": 186,
+    "ColorHex": "#EED66A",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "433",
+    "CountryName": "Senegal",
+    "RasterCode": 187,
+    "ColorHex": "#95AB65",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "434",
+    "CountryName": "Benin",
+    "RasterCode": 188,
+    "ColorHex": "#D880FC",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "434",
+    "CountryName": "Benin",
+    "RasterCode": 189,
+    "ColorHex": "#7FF1F7",
+    "StartYear": 1897,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "434",
+    "CountryName": "Benin",
+    "RasterCode": 190,
+    "ColorHex": "#C2C6F2",
+    "StartYear": 1898,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "435",
+    "CountryName": "Mauritania",
+    "RasterCode": 191,
+    "ColorHex": "#699BED",
+    "StartYear": 1904,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "435",
+    "CountryName": "Mauritania",
+    "RasterCode": 192,
+    "ColorHex": "#AC70E8",
+    "StartYear": 1904,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "435",
+    "CountryName": "Mauritania",
+    "RasterCode": 193,
+    "ColorHex": "#EFE1E3",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "435",
+    "CountryName": "Mauritania",
+    "RasterCode": 194,
+    "ColorHex": "#96B6DE",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "435",
+    "CountryName": "Mauritania",
+    "RasterCode": 195,
+    "ColorHex": "#D98BD9",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "435",
+    "CountryName": "Mauritania",
+    "RasterCode": 196,
+    "ColorHex": "#80FCD4",
+    "StartYear": 1944,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "436",
+    "CountryName": "Niger",
+    "RasterCode": 197,
+    "ColorHex": "#C3D1CF",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "436",
+    "CountryName": "Niger",
+    "RasterCode": 198,
+    "ColorHex": "#6AA6CA",
+    "StartYear": 1926,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "436",
+    "CountryName": "Niger",
+    "RasterCode": 199,
+    "ColorHex": "#AD7BC5",
+    "StartYear": 1932,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "436",
+    "CountryName": "Niger",
+    "RasterCode": 200,
+    "ColorHex": "#F0ECC0",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "437",
+    "CountryName": "Cote D\u0027Ivoire",
+    "RasterCode": 201,
+    "ColorHex": "#97C1BB",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "437",
+    "CountryName": "Cote D\u0027Ivoire",
+    "RasterCode": 202,
+    "ColorHex": "#DA96B6",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "437",
+    "CountryName": "Cote D\u0027Ivoire",
+    "RasterCode": 203,
+    "ColorHex": "#816BB1",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "437",
+    "CountryName": "Cote D\u0027Ivoire",
+    "RasterCode": 204,
+    "ColorHex": "#C4DCAC",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "437",
+    "CountryName": "Cote D\u0027Ivoire",
+    "RasterCode": 205,
+    "ColorHex": "#6BB1A7",
+    "StartYear": 1932,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "437",
+    "CountryName": "Cote D\u0027Ivoire",
+    "RasterCode": 206,
+    "ColorHex": "#AE86A2",
+    "StartYear": 1933,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "437",
+    "CountryName": "Cote D\u0027Ivoire",
+    "RasterCode": 207,
+    "ColorHex": "#F1F79D",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "438",
+    "CountryName": "Guinea",
+    "RasterCode": 208,
+    "ColorHex": "#98CC98",
+    "StartYear": 1894,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "439",
+    "CountryName": "Burkina Faso (Upper Volta)",
+    "RasterCode": 209,
+    "ColorHex": "#DBA193",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "439",
+    "CountryName": "Burkina Faso (Upper Volta)",
+    "RasterCode": 210,
+    "ColorHex": "#82768E",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "450",
+    "CountryName": "Liberia",
+    "RasterCode": 211,
+    "ColorHex": "#C5E789",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "450",
+    "CountryName": "Liberia",
+    "RasterCode": 212,
+    "ColorHex": "#6CBC84",
+    "StartYear": 1892,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "451",
+    "CountryName": "Sierra Leone",
+    "RasterCode": 213,
+    "ColorHex": "#AF917F",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "451",
+    "CountryName": "Sierra Leone",
+    "RasterCode": 214,
+    "ColorHex": "#F2667A",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "451",
+    "CountryName": "Sierra Leone",
+    "RasterCode": 215,
+    "ColorHex": "#99D775",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "452",
+    "CountryName": "Ghana",
+    "RasterCode": 216,
+    "ColorHex": "#DCAC70",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "452",
+    "CountryName": "Ghana",
+    "RasterCode": 217,
+    "ColorHex": "#83816B",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "452",
+    "CountryName": "Ghana",
+    "RasterCode": 218,
+    "ColorHex": "#C6F266",
+    "StartYear": 1898,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "460",
+    "CountryName": "German Togoland",
+    "RasterCode": 219,
+    "ColorHex": "#6DC7FD",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "460",
+    "CountryName": "German Togoland",
+    "RasterCode": 220,
+    "ColorHex": "#B09CF8",
+    "StartYear": 1887,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "460",
+    "CountryName": "German Togoland",
+    "RasterCode": 221,
+    "ColorHex": "#F371F3",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "460",
+    "CountryName": "German Togoland",
+    "RasterCode": 222,
+    "ColorHex": "#9AE2EE",
+    "StartYear": 1897,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "460",
+    "CountryName": "German Togoland",
+    "RasterCode": 223,
+    "ColorHex": "#DDB7E9",
+    "StartYear": 1897,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "460",
+    "CountryName": "German Togoland",
+    "RasterCode": 224,
+    "ColorHex": "#848CE4",
+    "StartYear": 1897,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "460",
+    "CountryName": "German Togoland",
+    "RasterCode": 225,
+    "ColorHex": "#C7FDDF",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "460",
+    "CountryName": "German Togoland",
+    "RasterCode": 226,
+    "ColorHex": "#6ED2DA",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "461",
+    "CountryName": "Togo",
+    "RasterCode": 227,
+    "ColorHex": "#B1A7D5",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "462",
+    "CountryName": "British Togoland",
+    "RasterCode": 228,
+    "ColorHex": "#F47CD0",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "470",
+    "CountryName": "Kamerun",
+    "RasterCode": 229,
+    "ColorHex": "#9BEDCB",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "470",
+    "CountryName": "Kamerun",
+    "RasterCode": 230,
+    "ColorHex": "#DEC2C6",
+    "StartYear": 1894,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "470",
+    "CountryName": "Kamerun",
+    "RasterCode": 231,
+    "ColorHex": "#8597C1",
+    "StartYear": 1901,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "470",
+    "CountryName": "Kamerun",
+    "RasterCode": 232,
+    "ColorHex": "#C86CBC",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "470",
+    "CountryName": "Kamerun",
+    "RasterCode": 233,
+    "ColorHex": "#6FDDB7",
+    "StartYear": 1916,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "471",
+    "CountryName": "Cameroon",
+    "RasterCode": 234,
+    "ColorHex": "#B2B2B2",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "471",
+    "CountryName": "Cameroon",
+    "RasterCode": 235,
+    "ColorHex": "#F587AD",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "472",
+    "CountryName": "British Cameroons",
+    "RasterCode": 236,
+    "ColorHex": "#9CF8A8",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "472",
+    "CountryName": "British Cameroons",
+    "RasterCode": 237,
+    "ColorHex": "#DFCDA3",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "475",
+    "CountryName": "Nigeria",
+    "RasterCode": 238,
+    "ColorHex": "#86A29E",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "481",
+    "CountryName": "Gabon",
+    "RasterCode": 239,
+    "ColorHex": "#C97799",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "481",
+    "CountryName": "Gabon",
+    "RasterCode": 240,
+    "ColorHex": "#70E894",
+    "StartYear": 1903,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "481",
+    "CountryName": "Gabon",
+    "RasterCode": 241,
+    "ColorHex": "#B3BD8F",
+    "StartYear": 1906,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "481",
+    "CountryName": "Gabon",
+    "RasterCode": 242,
+    "ColorHex": "#F6928A",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "481",
+    "CountryName": "Gabon",
+    "RasterCode": 243,
+    "ColorHex": "#9D6785",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "482",
+    "CountryName": "Central African Republic",
+    "RasterCode": 244,
+    "ColorHex": "#E0D880",
+    "StartYear": 1906,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "482",
+    "CountryName": "Central African Republic",
+    "RasterCode": 245,
+    "ColorHex": "#87AD7B",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "482",
+    "CountryName": "Central African Republic",
+    "RasterCode": 246,
+    "ColorHex": "#CA8276",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "483",
+    "CountryName": "Chad",
+    "RasterCode": 247,
+    "ColorHex": "#71F371",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "483",
+    "CountryName": "Chad",
+    "RasterCode": 248,
+    "ColorHex": "#B4C86C",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "483",
+    "CountryName": "Chad",
+    "RasterCode": 249,
+    "ColorHex": "#F79D67",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "483",
+    "CountryName": "Chad",
+    "RasterCode": 250,
+    "ColorHex": "#9E72FE",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "484",
+    "CountryName": "Congo",
+    "RasterCode": 251,
+    "ColorHex": "#E1E3F9",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "484",
+    "CountryName": "Congo",
+    "RasterCode": 252,
+    "ColorHex": "#88B8F4",
+    "StartYear": 1898,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "484",
+    "CountryName": "Congo",
+    "RasterCode": 253,
+    "ColorHex": "#CB8DEF",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "484",
+    "CountryName": "Congo",
+    "RasterCode": 254,
+    "ColorHex": "#72FEEA",
+    "StartYear": 1906,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "484",
+    "CountryName": "Congo",
+    "RasterCode": 255,
+    "ColorHex": "#B5D3E5",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "484",
+    "CountryName": "Congo",
+    "RasterCode": 256,
+    "ColorHex": "#F8A8E0",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "490",
+    "CountryName": "Congo, Democratic Republic of (Zaire)",
+    "RasterCode": 257,
+    "ColorHex": "#9F7DDB",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "490",
+    "CountryName": "Congo, Democratic Republic of (Zaire)",
+    "RasterCode": 258,
+    "ColorHex": "#E2EED6",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "490",
+    "CountryName": "Congo, Democratic Republic of (Zaire)",
+    "RasterCode": 259,
+    "ColorHex": "#89C3D1",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "490",
+    "CountryName": "Congo, Democratic Republic of (Zaire)",
+    "RasterCode": 260,
+    "ColorHex": "#CC98CC",
+    "StartYear": 1894,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "490",
+    "CountryName": "Congo, Democratic Republic of (Zaire)",
+    "RasterCode": 261,
+    "ColorHex": "#736DC7",
+    "StartYear": 1908,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "490",
+    "CountryName": "Congo, Democratic Republic of (Zaire)",
+    "RasterCode": 262,
+    "ColorHex": "#B6DEC2",
+    "StartYear": 1910,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "500",
+    "CountryName": "Uganda",
+    "RasterCode": 263,
+    "ColorHex": "#F9B3BD",
+    "StartYear": 1894,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "500",
+    "CountryName": "Uganda",
+    "RasterCode": 264,
+    "ColorHex": "#A088B8",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "500",
+    "CountryName": "Uganda",
+    "RasterCode": 265,
+    "ColorHex": "#E3F9B3",
+    "StartYear": 1910,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "500",
+    "CountryName": "Uganda",
+    "RasterCode": 266,
+    "ColorHex": "#8ACEAE",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "500",
+    "CountryName": "Uganda",
+    "RasterCode": 267,
+    "ColorHex": "#CDA3A9",
+    "StartYear": 1926,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 268,
+    "ColorHex": "#7478A4",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 269,
+    "ColorHex": "#B7E99F",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 270,
+    "ColorHex": "#FABE9A",
+    "StartYear": 1894,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 271,
+    "ColorHex": "#A19395",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 272,
+    "ColorHex": "#E46890",
+    "StartYear": 1907,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 273,
+    "ColorHex": "#8BD98B",
+    "StartYear": 1907,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 274,
+    "ColorHex": "#CEAE86",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 275,
+    "ColorHex": "#758381",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 276,
+    "ColorHex": "#B8F47C",
+    "StartYear": 1924,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "501",
+    "CountryName": "Kenya",
+    "RasterCode": 277,
+    "ColorHex": "#FBC977",
+    "StartYear": 1926,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "510",
+    "CountryName": "Tanzania (Tanganyika)",
+    "RasterCode": 278,
+    "ColorHex": "#A29E72",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "510",
+    "CountryName": "Tanzania (Tanganyika)",
+    "RasterCode": 279,
+    "ColorHex": "#E5736D",
+    "StartYear": 1916,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "510",
+    "CountryName": "Tanzania (Tanganyika)",
+    "RasterCode": 280,
+    "ColorHex": "#8CE468",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "510",
+    "CountryName": "Tanzania (Tanganyika)",
+    "RasterCode": 281,
+    "ColorHex": "#CFB9FF",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "510",
+    "CountryName": "Tanzania (Tanganyika)",
+    "RasterCode": 282,
+    "ColorHex": "#768EFA",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "511",
+    "CountryName": "Zanzibar",
+    "RasterCode": 283,
+    "ColorHex": "#B9FFF5",
+    "StartYear": 1890,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "511",
+    "CountryName": "Zanzibar",
+    "RasterCode": 284,
+    "ColorHex": "#FCD4F0",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "515",
+    "CountryName": "Rwanda-Urundi",
+    "RasterCode": 285,
+    "ColorHex": "#A3A9EB",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "515",
+    "CountryName": "Rwanda-Urundi",
+    "RasterCode": 286,
+    "ColorHex": "#E67EE6",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "521",
+    "CountryName": "British Somaliland (Somaliland Republic)",
+    "RasterCode": 287,
+    "ColorHex": "#8DEFE1",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "521",
+    "CountryName": "British Somaliland (Somaliland Republic)",
+    "RasterCode": 288,
+    "ColorHex": "#D0C4DC",
+    "StartYear": 1897,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "522",
+    "CountryName": "Djibouti",
+    "RasterCode": 289,
+    "ColorHex": "#7799D7",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "522",
+    "CountryName": "Djibouti",
+    "RasterCode": 290,
+    "ColorHex": "#BA6ED2",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "530",
+    "CountryName": "Ethiopia",
+    "RasterCode": 291,
+    "ColorHex": "#FDDFCD",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "530",
+    "CountryName": "Ethiopia",
+    "RasterCode": 292,
+    "ColorHex": "#A4B4C8",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "530",
+    "CountryName": "Ethiopia",
+    "RasterCode": 293,
+    "ColorHex": "#E789C3",
+    "StartYear": 1897,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "530",
+    "CountryName": "Ethiopia",
+    "RasterCode": 294,
+    "ColorHex": "#8EFABE",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "530",
+    "CountryName": "Ethiopia",
+    "RasterCode": 295,
+    "ColorHex": "#D1CFB9",
+    "StartYear": 1907,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "531",
+    "CountryName": "Eritrea",
+    "RasterCode": 296,
+    "ColorHex": "#78A4B4",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "531",
+    "CountryName": "Eritrea",
+    "RasterCode": 297,
+    "ColorHex": "#BB79AF",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "531",
+    "CountryName": "Eritrea",
+    "RasterCode": 298,
+    "ColorHex": "#FEEAAA",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "531",
+    "CountryName": "Eritrea",
+    "RasterCode": 299,
+    "ColorHex": "#A5BFA5",
+    "StartYear": 1941,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "540",
+    "CountryName": "Angola",
+    "RasterCode": 300,
+    "ColorHex": "#E894A0",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "540",
+    "CountryName": "Angola",
+    "RasterCode": 301,
+    "ColorHex": "#8F699B",
+    "StartYear": 1890,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "540",
+    "CountryName": "Angola",
+    "RasterCode": 302,
+    "ColorHex": "#D2DA96",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "540",
+    "CountryName": "Angola",
+    "RasterCode": 303,
+    "ColorHex": "#79AF91",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "541",
+    "CountryName": "Mozambique",
+    "RasterCode": 304,
+    "ColorHex": "#BC848C",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "541",
+    "CountryName": "Mozambique",
+    "RasterCode": 305,
+    "ColorHex": "#FFF587",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "551",
+    "CountryName": "Zambia",
+    "RasterCode": 306,
+    "ColorHex": "#A6CA82",
+    "StartYear": 1911,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "552",
+    "CountryName": "Zimbabwe (Rhodesia)",
+    "RasterCode": 307,
+    "ColorHex": "#E99F7D",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "552",
+    "CountryName": "Zimbabwe (Rhodesia)",
+    "RasterCode": 308,
+    "ColorHex": "#907478",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "552",
+    "CountryName": "Zimbabwe (Rhodesia)",
+    "RasterCode": 309,
+    "ColorHex": "#D3E573",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "553",
+    "CountryName": "Malawi",
+    "RasterCode": 310,
+    "ColorHex": "#7ABA6E",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "560",
+    "CountryName": "South Africa",
+    "RasterCode": 311,
+    "ColorHex": "#BD8F69",
+    "StartYear": 1910,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "561",
+    "CountryName": "Cape Colony",
+    "RasterCode": 312,
+    "ColorHex": "#646464",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "561",
+    "CountryName": "Cape Colony",
+    "RasterCode": 313,
+    "ColorHex": "#A7D5FB",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "562",
+    "CountryName": "Natal",
+    "RasterCode": 314,
+    "ColorHex": "#EAAAF6",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "562",
+    "CountryName": "Natal",
+    "RasterCode": 315,
+    "ColorHex": "#917FF1",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "563",
+    "CountryName": "Transvaal",
+    "RasterCode": 316,
+    "ColorHex": "#D4F0EC",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "564",
+    "CountryName": "Orange Free State",
+    "RasterCode": 317,
+    "ColorHex": "#7BC5E7",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "565",
+    "CountryName": "Namibia",
+    "RasterCode": 318,
+    "ColorHex": "#BE9AE2",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "565",
+    "CountryName": "Namibia",
+    "RasterCode": 319,
+    "ColorHex": "#656FDD",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "565",
+    "CountryName": "Namibia",
+    "RasterCode": 320,
+    "ColorHex": "#A8E0D8",
+    "StartYear": 1915,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "565",
+    "CountryName": "Namibia",
+    "RasterCode": 321,
+    "ColorHex": "#EBB5D3",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "570",
+    "CountryName": "Lesotho",
+    "RasterCode": 322,
+    "ColorHex": "#928ACE",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "571",
+    "CountryName": "Botswana",
+    "RasterCode": 323,
+    "ColorHex": "#D5FBC9",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "571",
+    "CountryName": "Botswana",
+    "RasterCode": 324,
+    "ColorHex": "#7CD0C4",
+    "StartYear": 1890,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "571",
+    "CountryName": "Botswana",
+    "RasterCode": 325,
+    "ColorHex": "#BFA5BF",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "572",
+    "CountryName": "Swaziland (Eswatini)",
+    "RasterCode": 326,
+    "ColorHex": "#667ABA",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "572",
+    "CountryName": "Swaziland (Eswatini)",
+    "RasterCode": 327,
+    "ColorHex": "#A9EBB5",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "580",
+    "CountryName": "Madagascar (Malagasy)",
+    "RasterCode": 328,
+    "ColorHex": "#ECC0B0",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "580",
+    "CountryName": "Madagascar (Malagasy)",
+    "RasterCode": 329,
+    "ColorHex": "#9395AB",
+    "StartYear": 1896,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "580",
+    "CountryName": "Madagascar (Malagasy)",
+    "RasterCode": 330,
+    "ColorHex": "#D66AA6",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "580",
+    "CountryName": "Madagascar (Malagasy)",
+    "RasterCode": 331,
+    "ColorHex": "#7DDBA1",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "581",
+    "CountryName": "Comoros",
+    "RasterCode": 332,
+    "ColorHex": "#C0B09C",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "585",
+    "CountryName": "Reunion",
+    "RasterCode": 333,
+    "ColorHex": "#678597",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "590",
+    "CountryName": "Mauritius",
+    "RasterCode": 334,
+    "ColorHex": "#AAF692",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "600",
+    "CountryName": "Morocco",
+    "RasterCode": 335,
+    "ColorHex": "#EDCB8D",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "600",
+    "CountryName": "Morocco",
+    "RasterCode": 336,
+    "ColorHex": "#94A088",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "600",
+    "CountryName": "Morocco",
+    "RasterCode": 337,
+    "ColorHex": "#D77583",
+    "StartYear": 1904,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "600",
+    "CountryName": "Morocco",
+    "RasterCode": 338,
+    "ColorHex": "#7EE67E",
+    "StartYear": 1904,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "600",
+    "CountryName": "Morocco",
+    "RasterCode": 339,
+    "ColorHex": "#C1BB79",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "602",
+    "CountryName": "Spanish Morocco",
+    "RasterCode": 340,
+    "ColorHex": "#689074",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "610",
+    "CountryName": "Spanish West Africa",
+    "RasterCode": 341,
+    "ColorHex": "#AB656F",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "610",
+    "CountryName": "Spanish West Africa",
+    "RasterCode": 342,
+    "ColorHex": "#EED66A",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "610",
+    "CountryName": "Spanish West Africa",
+    "RasterCode": 343,
+    "ColorHex": "#95AB65",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "615",
+    "CountryName": "Algeria",
+    "RasterCode": 344,
+    "ColorHex": "#D880FC",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "615",
+    "CountryName": "Algeria",
+    "RasterCode": 345,
+    "ColorHex": "#7FF1F7",
+    "StartYear": 1901,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "615",
+    "CountryName": "Algeria",
+    "RasterCode": 346,
+    "ColorHex": "#C2C6F2",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "615",
+    "CountryName": "Algeria",
+    "RasterCode": 347,
+    "ColorHex": "#699BED",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "616",
+    "CountryName": "Tunisia",
+    "RasterCode": 348,
+    "ColorHex": "#AC70E8",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "620",
+    "CountryName": "Libya",
+    "RasterCode": 349,
+    "ColorHex": "#EFE1E3",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "620",
+    "CountryName": "Libya",
+    "RasterCode": 350,
+    "ColorHex": "#96B6DE",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "620",
+    "CountryName": "Libya",
+    "RasterCode": 351,
+    "ColorHex": "#D98BD9",
+    "StartYear": 1925,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "620",
+    "CountryName": "Libya",
+    "RasterCode": 352,
+    "ColorHex": "#80FCD4",
+    "StartYear": 1934,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "620",
+    "CountryName": "Libya",
+    "RasterCode": 353,
+    "ColorHex": "#C3D1CF",
+    "StartYear": 1943,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "620",
+    "CountryName": "Libya",
+    "RasterCode": 354,
+    "ColorHex": "#6AA6CA",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "625",
+    "CountryName": "Sudan",
+    "RasterCode": 355,
+    "ColorHex": "#AD7BC5",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "625",
+    "CountryName": "Sudan",
+    "RasterCode": 356,
+    "ColorHex": "#F0ECC0",
+    "StartYear": 1902,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "625",
+    "CountryName": "Sudan",
+    "RasterCode": 357,
+    "ColorHex": "#97C1BB",
+    "StartYear": 1910,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "625",
+    "CountryName": "Sudan",
+    "RasterCode": 358,
+    "ColorHex": "#DA96B6",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "625",
+    "CountryName": "Sudan",
+    "RasterCode": 359,
+    "ColorHex": "#816BB1",
+    "StartYear": 1934,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "630",
+    "CountryName": "Iran (Persia)",
+    "RasterCode": 360,
+    "ColorHex": "#C4DCAC",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 361,
+    "ColorHex": "#6BB1A7",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 362,
+    "ColorHex": "#AE86A2",
+    "StartYear": 1912,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 363,
+    "ColorHex": "#F1F79D",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 364,
+    "ColorHex": "#98CC98",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 365,
+    "ColorHex": "#DBA193",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 366,
+    "ColorHex": "#82768E",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 367,
+    "ColorHex": "#C5E789",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 368,
+    "ColorHex": "#6CBC84",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "640",
+    "CountryName": "Turkey (Ottoman Empire)",
+    "RasterCode": 369,
+    "ColorHex": "#AF917F",
+    "StartYear": 1923,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "645",
+    "CountryName": "Iraq",
+    "RasterCode": 370,
+    "ColorHex": "#F2667A",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "645",
+    "CountryName": "Iraq",
+    "RasterCode": 371,
+    "ColorHex": "#99D775",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "645",
+    "CountryName": "Iraq",
+    "RasterCode": 372,
+    "ColorHex": "#DCAC70",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "645",
+    "CountryName": "Iraq",
+    "RasterCode": 373,
+    "ColorHex": "#83816B",
+    "StartYear": 1932,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "645",
+    "CountryName": "Iraq",
+    "RasterCode": 374,
+    "ColorHex": "#C6F266",
+    "StartYear": 1932,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "651",
+    "CountryName": "Egypt",
+    "RasterCode": 375,
+    "ColorHex": "#6DC7FD",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "651",
+    "CountryName": "Egypt",
+    "RasterCode": 376,
+    "ColorHex": "#B09CF8",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "651",
+    "CountryName": "Egypt",
+    "RasterCode": 377,
+    "ColorHex": "#F371F3",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "651",
+    "CountryName": "Egypt",
+    "RasterCode": 378,
+    "ColorHex": "#9AE2EE",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "651",
+    "CountryName": "Egypt",
+    "RasterCode": 379,
+    "ColorHex": "#DDB7E9",
+    "StartYear": 1925,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "652",
+    "CountryName": "Syria",
+    "RasterCode": 380,
+    "ColorHex": "#848CE4",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "652",
+    "CountryName": "Syria",
+    "RasterCode": 381,
+    "ColorHex": "#C7FDDF",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "652",
+    "CountryName": "Syria",
+    "RasterCode": 382,
+    "ColorHex": "#6ED2DA",
+    "StartYear": 1922,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "652",
+    "CountryName": "Syria",
+    "RasterCode": 383,
+    "ColorHex": "#B1A7D5",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "660",
+    "CountryName": "Lebanon",
+    "RasterCode": 384,
+    "ColorHex": "#F47CD0",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "660",
+    "CountryName": "Lebanon",
+    "RasterCode": 385,
+    "ColorHex": "#9BEDCB",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "660",
+    "CountryName": "Lebanon",
+    "RasterCode": 386,
+    "ColorHex": "#DEC2C6",
+    "StartYear": 1944,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "663",
+    "CountryName": "Jordan",
+    "RasterCode": 387,
+    "ColorHex": "#8597C1",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "663",
+    "CountryName": "Jordan",
+    "RasterCode": 388,
+    "ColorHex": "#C86CBC",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "663",
+    "CountryName": "Jordan",
+    "RasterCode": 389,
+    "ColorHex": "#6FDDB7",
+    "StartYear": 1923,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "663",
+    "CountryName": "Jordan",
+    "RasterCode": 390,
+    "ColorHex": "#B2B2B2",
+    "StartYear": 1925,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "663",
+    "CountryName": "Jordan",
+    "RasterCode": 391,
+    "ColorHex": "#F587AD",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "665",
+    "CountryName": "Palestine",
+    "RasterCode": 392,
+    "ColorHex": "#9CF8A8",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "665",
+    "CountryName": "Palestine",
+    "RasterCode": 393,
+    "ColorHex": "#DFCDA3",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "665",
+    "CountryName": "Palestine",
+    "RasterCode": 394,
+    "ColorHex": "#86A29E",
+    "StartYear": 1923,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "666",
+    "CountryName": "Israel",
+    "RasterCode": 395,
+    "ColorHex": "#C97799",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "670",
+    "CountryName": "Saudi Arabia",
+    "RasterCode": 396,
+    "ColorHex": "#70E894",
+    "StartYear": 1932,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "670",
+    "CountryName": "Saudi Arabia",
+    "RasterCode": 397,
+    "ColorHex": "#B3BD8F",
+    "StartYear": 1935,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "678",
+    "CountryName": "Yemen (Arab Republic of Yemen)",
+    "RasterCode": 398,
+    "ColorHex": "#F6928A",
+    "StartYear": 1918,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "678",
+    "CountryName": "Yemen (Arab Republic of Yemen)",
+    "RasterCode": 399,
+    "ColorHex": "#9D6785",
+    "StartYear": 1934,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "681",
+    "CountryName": "Aden",
+    "RasterCode": 400,
+    "ColorHex": "#E0D880",
+    "StartYear": 1937,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "694",
+    "CountryName": "Qatar",
+    "RasterCode": 401,
+    "ColorHex": "#87AD7B",
+    "StartYear": 1916,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "696",
+    "CountryName": "United Arab Emirates",
+    "RasterCode": 402,
+    "ColorHex": "#CA8276",
+    "StartYear": 1892,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "696",
+    "CountryName": "United Arab Emirates",
+    "RasterCode": 403,
+    "ColorHex": "#71F371",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "698",
+    "CountryName": "Oman",
+    "RasterCode": 404,
+    "ColorHex": "#B4C86C",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "700",
+    "CountryName": "Afghanistan",
+    "RasterCode": 405,
+    "ColorHex": "#F79D67",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "700",
+    "CountryName": "Afghanistan",
+    "RasterCode": 406,
+    "ColorHex": "#9E72FE",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "700",
+    "CountryName": "Afghanistan",
+    "RasterCode": 407,
+    "ColorHex": "#E1E3F9",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "700",
+    "CountryName": "Afghanistan",
+    "RasterCode": 408,
+    "ColorHex": "#88B8F4",
+    "StartYear": 1919,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 409,
+    "ColorHex": "#CB8DEF",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 410,
+    "ColorHex": "#72FEEA",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 411,
+    "ColorHex": "#B5D3E5",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 412,
+    "ColorHex": "#F8A8E0",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 413,
+    "ColorHex": "#9F7DDB",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 414,
+    "ColorHex": "#E2EED6",
+    "StartYear": 1921,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 415,
+    "ColorHex": "#89C3D1",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 416,
+    "ColorHex": "#CC98CC",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 417,
+    "ColorHex": "#736DC7",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "710",
+    "CountryName": "China",
+    "RasterCode": 418,
+    "ColorHex": "#B6DEC2",
+    "StartYear": 1950,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "711",
+    "CountryName": "Tibet",
+    "RasterCode": 419,
+    "ColorHex": "#F9B3BD",
+    "StartYear": 1913,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "711",
+    "CountryName": "Tibet",
+    "RasterCode": 420,
+    "ColorHex": "#A088B8",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "712",
+    "CountryName": "Mongolia",
+    "RasterCode": 421,
+    "ColorHex": "#E3F9B3",
+    "StartYear": 1921,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "713",
+    "CountryName": "Taiwan",
+    "RasterCode": 422,
+    "ColorHex": "#8ACEAE",
+    "StartYear": 1895,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "713",
+    "CountryName": "Taiwan",
+    "RasterCode": 423,
+    "ColorHex": "#CDA3A9",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "730",
+    "CountryName": "Korea",
+    "RasterCode": 424,
+    "ColorHex": "#7478A4",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "730",
+    "CountryName": "Korea",
+    "RasterCode": 425,
+    "ColorHex": "#B7E99F",
+    "StartYear": 1910,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "731",
+    "CountryName": "Korea, People\u0027s Republic of",
+    "RasterCode": 426,
+    "ColorHex": "#FABE9A",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "731",
+    "CountryName": "Korea, People\u0027s Republic of",
+    "RasterCode": 427,
+    "ColorHex": "#A19395",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "732",
+    "CountryName": "Korea, Republic of",
+    "RasterCode": 428,
+    "ColorHex": "#E46890",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "732",
+    "CountryName": "Korea, Republic of",
+    "RasterCode": 429,
+    "ColorHex": "#8BD98B",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "740",
+    "CountryName": "Japan",
+    "RasterCode": 430,
+    "ColorHex": "#CEAE86",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "750",
+    "CountryName": "India",
+    "RasterCode": 431,
+    "ColorHex": "#758381",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "750",
+    "CountryName": "India",
+    "RasterCode": 432,
+    "ColorHex": "#B8F47C",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "750",
+    "CountryName": "India",
+    "RasterCode": 433,
+    "ColorHex": "#FBC977",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "750",
+    "CountryName": "India",
+    "RasterCode": 434,
+    "ColorHex": "#A29E72",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "750",
+    "CountryName": "India",
+    "RasterCode": 435,
+    "ColorHex": "#E5736D",
+    "StartYear": 1931,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "750",
+    "CountryName": "India",
+    "RasterCode": 436,
+    "ColorHex": "#8CE468",
+    "StartYear": 1937,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "750",
+    "CountryName": "India",
+    "RasterCode": 437,
+    "ColorHex": "#CFB9FF",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "750",
+    "CountryName": "India",
+    "RasterCode": 438,
+    "ColorHex": "#768EFA",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "760",
+    "CountryName": "Bhutan",
+    "RasterCode": 439,
+    "ColorHex": "#B9FFF5",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "760",
+    "CountryName": "Bhutan",
+    "RasterCode": 440,
+    "ColorHex": "#FCD4F0",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "760",
+    "CountryName": "Bhutan",
+    "RasterCode": 441,
+    "ColorHex": "#A3A9EB",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "770",
+    "CountryName": "Pakistan",
+    "RasterCode": 442,
+    "ColorHex": "#E67EE6",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "770",
+    "CountryName": "Pakistan",
+    "RasterCode": 443,
+    "ColorHex": "#8DEFE1",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "775",
+    "CountryName": "Myanmar (Burma)",
+    "RasterCode": 444,
+    "ColorHex": "#D0C4DC",
+    "StartYear": 1937,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "775",
+    "CountryName": "Myanmar (Burma)",
+    "RasterCode": 445,
+    "ColorHex": "#7799D7",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "780",
+    "CountryName": "Sri Lanka (Ceylon)",
+    "RasterCode": 446,
+    "ColorHex": "#BA6ED2",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "780",
+    "CountryName": "Sri Lanka (Ceylon)",
+    "RasterCode": 447,
+    "ColorHex": "#FDDFCD",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "781",
+    "CountryName": "Maldives",
+    "RasterCode": 448,
+    "ColorHex": "#A4B4C8",
+    "StartYear": 1887,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "790",
+    "CountryName": "Nepal",
+    "RasterCode": 449,
+    "ColorHex": "#E789C3",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "800",
+    "CountryName": "Thailand",
+    "RasterCode": 450,
+    "ColorHex": "#8EFABE",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "800",
+    "CountryName": "Thailand",
+    "RasterCode": 451,
+    "ColorHex": "#D1CFB9",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "800",
+    "CountryName": "Thailand",
+    "RasterCode": 452,
+    "ColorHex": "#78A4B4",
+    "StartYear": 1904,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "800",
+    "CountryName": "Thailand",
+    "RasterCode": 453,
+    "ColorHex": "#BB79AF",
+    "StartYear": 1907,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "800",
+    "CountryName": "Thailand",
+    "RasterCode": 454,
+    "ColorHex": "#FEEAAA",
+    "StartYear": 1909,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "811",
+    "CountryName": "Cambodia (Kampuchea)",
+    "RasterCode": 455,
+    "ColorHex": "#A5BFA5",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "811",
+    "CountryName": "Cambodia (Kampuchea)",
+    "RasterCode": 456,
+    "ColorHex": "#E894A0",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "811",
+    "CountryName": "Cambodia (Kampuchea)",
+    "RasterCode": 457,
+    "ColorHex": "#8F699B",
+    "StartYear": 1904,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "811",
+    "CountryName": "Cambodia (Kampuchea)",
+    "RasterCode": 458,
+    "ColorHex": "#D2DA96",
+    "StartYear": 1907,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "812",
+    "CountryName": "Laos",
+    "RasterCode": 459,
+    "ColorHex": "#79AF91",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "812",
+    "CountryName": "Laos",
+    "RasterCode": 460,
+    "ColorHex": "#BC848C",
+    "StartYear": 1896,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "815",
+    "CountryName": "Vietnam (Annam/Cochin China/Tonkin)",
+    "RasterCode": 461,
+    "ColorHex": "#FFF587",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "815",
+    "CountryName": "Vietnam (Annam/Cochin China/Tonkin)",
+    "RasterCode": 462,
+    "ColorHex": "#A6CA82",
+    "StartYear": 1887,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "815",
+    "CountryName": "Vietnam (Annam/Cochin China/Tonkin)",
+    "RasterCode": 463,
+    "ColorHex": "#E99F7D",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "815",
+    "CountryName": "Vietnam (Annam/Cochin China/Tonkin)",
+    "RasterCode": 464,
+    "ColorHex": "#907478",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "820",
+    "CountryName": "Malaysia",
+    "RasterCode": 465,
+    "ColorHex": "#D3E573",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "821",
+    "CountryName": "Federated Malay States",
+    "RasterCode": 466,
+    "ColorHex": "#7ABA6E",
+    "StartYear": 1896,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "821",
+    "CountryName": "Federated Malay States",
+    "RasterCode": 467,
+    "ColorHex": "#BD8F69",
+    "StartYear": 1909,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "822",
+    "CountryName": "Unfederated Malay States",
+    "RasterCode": 468,
+    "ColorHex": "#646464",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "822",
+    "CountryName": "Unfederated Malay States",
+    "RasterCode": 469,
+    "ColorHex": "#A7D5FB",
+    "StartYear": 1909,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "823",
+    "CountryName": "Sabah (North Borneo)",
+    "RasterCode": 470,
+    "ColorHex": "#EAAAF6",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "823",
+    "CountryName": "Sabah (North Borneo)",
+    "RasterCode": 471,
+    "ColorHex": "#917FF1",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "823",
+    "CountryName": "Sabah (North Borneo)",
+    "RasterCode": 472,
+    "ColorHex": "#D4F0EC",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "824",
+    "CountryName": "Sarawak",
+    "RasterCode": 473,
+    "ColorHex": "#7BC5E7",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "824",
+    "CountryName": "Sarawak",
+    "RasterCode": 474,
+    "ColorHex": "#BE9AE2",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "824",
+    "CountryName": "Sarawak",
+    "RasterCode": 475,
+    "ColorHex": "#656FDD",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "827",
+    "CountryName": "Straits Settlements",
+    "RasterCode": 476,
+    "ColorHex": "#A8E0D8",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "830",
+    "CountryName": "Singapore",
+    "RasterCode": 477,
+    "ColorHex": "#EBB5D3",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "835",
+    "CountryName": "Brunei",
+    "RasterCode": 478,
+    "ColorHex": "#928ACE",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "840",
+    "CountryName": "Philippines",
+    "RasterCode": 479,
+    "ColorHex": "#D5FBC9",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "840",
+    "CountryName": "Philippines",
+    "RasterCode": 480,
+    "ColorHex": "#7CD0C4",
+    "StartYear": 1898,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "840",
+    "CountryName": "Philippines",
+    "RasterCode": 481,
+    "ColorHex": "#BFA5BF",
+    "StartYear": 1946,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "840",
+    "CountryName": "Philippines",
+    "RasterCode": 482,
+    "ColorHex": "#667ABA",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "850",
+    "CountryName": "Indonesia",
+    "RasterCode": 483,
+    "ColorHex": "#A9EBB5",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "850",
+    "CountryName": "Indonesia",
+    "RasterCode": 484,
+    "ColorHex": "#ECC0B0",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "850",
+    "CountryName": "Indonesia",
+    "RasterCode": 485,
+    "ColorHex": "#9395AB",
+    "StartYear": 1945,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "850",
+    "CountryName": "Indonesia",
+    "RasterCode": 486,
+    "ColorHex": "#D66AA6",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "851",
+    "CountryName": "West Irian (Dutch New Guinea)",
+    "RasterCode": 487,
+    "ColorHex": "#7DDBA1",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "860",
+    "CountryName": "East Timor",
+    "RasterCode": 488,
+    "ColorHex": "#C0B09C",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "900",
+    "CountryName": "Australia",
+    "RasterCode": 489,
+    "ColorHex": "#678597",
+    "StartYear": 1901,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "900",
+    "CountryName": "Australia",
+    "RasterCode": 490,
+    "ColorHex": "#AAF692",
+    "StartYear": 1927,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "901",
+    "CountryName": "New South Wales",
+    "RasterCode": 491,
+    "ColorHex": "#EDCB8D",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "902",
+    "CountryName": "Western Australia",
+    "RasterCode": 492,
+    "ColorHex": "#94A088",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "903",
+    "CountryName": "South Australia",
+    "RasterCode": 493,
+    "ColorHex": "#D77583",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "904",
+    "CountryName": "Victoria",
+    "RasterCode": 494,
+    "ColorHex": "#7EE67E",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "905",
+    "CountryName": "Queensland",
+    "RasterCode": 495,
+    "ColorHex": "#C1BB79",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "906",
+    "CountryName": "Tasmania",
+    "RasterCode": 496,
+    "ColorHex": "#689074",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "910",
+    "CountryName": "Papua New Guinea",
+    "RasterCode": 497,
+    "ColorHex": "#AB656F",
+    "StartYear": 1949,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "911",
+    "CountryName": "Papua",
+    "RasterCode": 498,
+    "ColorHex": "#EED66A",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "911",
+    "CountryName": "Papua",
+    "RasterCode": 499,
+    "ColorHex": "#95AB65",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "911",
+    "CountryName": "Papua",
+    "RasterCode": 500,
+    "ColorHex": "#D880FC",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "911",
+    "CountryName": "Papua",
+    "RasterCode": 501,
+    "ColorHex": "#7FF1F7",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "912",
+    "CountryName": "New Guinea (German New Guinea) (Kaiser Wilhelmsland)",
+    "RasterCode": 502,
+    "ColorHex": "#C2C6F2",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "912",
+    "CountryName": "New Guinea (German New Guinea) (Kaiser Wilhelmsland)",
+    "RasterCode": 503,
+    "ColorHex": "#699BED",
+    "StartYear": 1891,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "912",
+    "CountryName": "New Guinea (German New Guinea) (Kaiser Wilhelmsland)",
+    "RasterCode": 504,
+    "ColorHex": "#AC70E8",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "912",
+    "CountryName": "New Guinea (German New Guinea) (Kaiser Wilhelmsland)",
+    "RasterCode": 505,
+    "ColorHex": "#EFE1E3",
+    "StartYear": 1910,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "912",
+    "CountryName": "New Guinea (German New Guinea) (Kaiser Wilhelmsland)",
+    "RasterCode": 506,
+    "ColorHex": "#96B6DE",
+    "StartYear": 1914,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "912",
+    "CountryName": "New Guinea (German New Guinea) (Kaiser Wilhelmsland)",
+    "RasterCode": 507,
+    "ColorHex": "#D98BD9",
+    "StartYear": 1920,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "920",
+    "CountryName": "New Zealand",
+    "RasterCode": 508,
+    "ColorHex": "#80FCD4",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "920",
+    "CountryName": "New Zealand",
+    "RasterCode": 509,
+    "ColorHex": "#C3D1CF",
+    "StartYear": 1907,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "930",
+    "CountryName": "New Caledonia and Dependencies",
+    "RasterCode": 510,
+    "ColorHex": "#6AA6CA",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "940",
+    "CountryName": "Solomon Islands",
+    "RasterCode": 511,
+    "ColorHex": "#AD7BC5",
+    "StartYear": 1893,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "940",
+    "CountryName": "Solomon Islands",
+    "RasterCode": 512,
+    "ColorHex": "#F0ECC0",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "950",
+    "CountryName": "Fiji",
+    "RasterCode": 513,
+    "ColorHex": "#97C1BB",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "960",
+    "CountryName": "French Polynesia",
+    "RasterCode": 514,
+    "ColorHex": "#DA96B6",
+    "StartYear": 1903,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "1201",
+    "CountryName": "Inini",
+    "RasterCode": 515,
+    "ColorHex": "#816BB1",
+    "StartYear": 1930,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "3461",
+    "CountryName": "Bosnia",
+    "RasterCode": 516,
+    "ColorHex": "#C4DCAC",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "3462",
+    "CountryName": "Herzegovina",
+    "RasterCode": 517,
+    "ColorHex": "#6BB1A7",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "4781",
+    "CountryName": "Lagos",
+    "RasterCode": 518,
+    "ColorHex": "#AE86A2",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "4782",
+    "CountryName": "Oil Rivers Protectorate",
+    "RasterCode": 519,
+    "ColorHex": "#F1F79D",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "4783",
+    "CountryName": "Southern Nigeria",
+    "RasterCode": 520,
+    "ColorHex": "#98CC98",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "4783",
+    "CountryName": "Southern Nigeria",
+    "RasterCode": 521,
+    "ColorHex": "#DBA193",
+    "StartYear": 1906,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "4784",
+    "CountryName": "Northern Nigeria",
+    "RasterCode": 522,
+    "ColorHex": "#82768E",
+    "StartYear": 1899,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "4784",
+    "CountryName": "Northern Nigeria",
+    "RasterCode": 523,
+    "ColorHex": "#C5E789",
+    "StartYear": 1903,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "4784",
+    "CountryName": "Northern Nigeria",
+    "RasterCode": 524,
+    "ColorHex": "#6CBC84",
+    "StartYear": 1904,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5200",
+    "CountryName": "Italian Somaliland",
+    "RasterCode": 525,
+    "ColorHex": "#AF917F",
+    "StartYear": 1889,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5200",
+    "CountryName": "Italian Somaliland",
+    "RasterCode": 526,
+    "ColorHex": "#F2667A",
+    "StartYear": 1897,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5200",
+    "CountryName": "Italian Somaliland",
+    "RasterCode": 527,
+    "ColorHex": "#99D775",
+    "StartYear": 1908,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5200",
+    "CountryName": "Italian Somaliland",
+    "RasterCode": 528,
+    "ColorHex": "#DCAC70",
+    "StartYear": 1924,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5200",
+    "CountryName": "Italian Somaliland",
+    "RasterCode": 529,
+    "ColorHex": "#83816B",
+    "StartYear": 1941,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5200",
+    "CountryName": "Italian Somaliland",
+    "RasterCode": 530,
+    "ColorHex": "#C6F266",
+    "StartYear": 1950,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5518",
+    "CountryName": "Northeastern Rhodesia",
+    "RasterCode": 531,
+    "ColorHex": "#6DC7FD",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5519",
+    "CountryName": "Northwestern Rhodesia",
+    "RasterCode": 532,
+    "ColorHex": "#B09CF8",
+    "StartYear": 1900,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5519",
+    "CountryName": "Northwestern Rhodesia",
+    "RasterCode": 533,
+    "ColorHex": "#F371F3",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5612",
+    "CountryName": "British Bechuanaland",
+    "RasterCode": 534,
+    "ColorHex": "#9AE2EE",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "5612",
+    "CountryName": "British Bechuanaland",
+    "RasterCode": 535,
+    "ColorHex": "#DDB7E9",
+    "StartYear": 1890,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "6511",
+    "CountryName": "Gaza",
+    "RasterCode": 536,
+    "ColorHex": "#848CE4",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "6631",
+    "CountryName": "West Bank",
+    "RasterCode": 537,
+    "ColorHex": "#C7FDDF",
+    "StartYear": 1948,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "6812",
+    "CountryName": "East Aden Protectorate",
+    "RasterCode": 538,
+    "ColorHex": "#6ED2DA",
+    "StartYear": 1937,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "7020",
+    "CountryName": "Bokhara",
+    "RasterCode": 539,
+    "ColorHex": "#B1A7D5",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "7030",
+    "CountryName": "Khiva",
+    "RasterCode": 540,
+    "ColorHex": "#F47CD0",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "7351",
+    "CountryName": "Southern Sakhalin Island",
+    "RasterCode": 541,
+    "ColorHex": "#9BEDCB",
+    "StartYear": 1905,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "7506",
+    "CountryName": "Jammu and Kashmir",
+    "RasterCode": 542,
+    "ColorHex": "#DEC2C6",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "7708",
+    "CountryName": "Kashmir (North, Azad)",
+    "RasterCode": 543,
+    "ColorHex": "#8597C1",
+    "StartYear": 1947,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "8201",
+    "CountryName": "Perak",
+    "RasterCode": 544,
+    "ColorHex": "#C86CBC",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "8202",
+    "CountryName": "Selangore",
+    "RasterCode": 545,
+    "ColorHex": "#6FDDB7",
+    "StartYear": 1886,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "8203",
+    "CountryName": "Pahang",
+    "RasterCode": 546,
+    "ColorHex": "#B2B2B2",
+    "StartYear": 1888,
+    "EndYear": 2000
+  },
+  {
+    "CountryCode": "9401",
+    "CountryName": "German Solomon Islands",
+    "RasterCode": 547,
+    "ColorHex": "#F587AD",
+    "StartYear": 1886,
+    "EndYear": 2000
+  }
+]
