@@ -1,5 +1,5 @@
 using Economy_sim.OpenGL;
-using OpenTK.Mathematics;
+using System.Numerics;
 using SkiaSharp;
 using System;
 using System.Diagnostics;

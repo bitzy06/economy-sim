@@ -3,32 +3,14 @@ using Avalonia.Controls;
 using Avalonia.OpenGL;
 using Avalonia.OpenGL.Controls;
 using Avalonia.Platform;
-using OpenTK.Graphics.OpenGL4;
-using OpenTK.Mathematics;
 using SkiaSharp;
 using System;
 using System.Diagnostics;
+using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace Economy_sim.OpenGL
 {
-    /// <summary>
-    /// Bridge class to make Avalonia's GlInterface work with OpenTK's binding system
-    /// </summary>
-    internal class AvaloniaOpenTKBindingContext : OpenTK.IBindingsContext
-    {
-        private readonly GlInterface _gl;
-
-        public AvaloniaOpenTKBindingContext(GlInterface gl)
-        {
-            _gl = gl ?? throw new ArgumentNullException(nameof(gl));
-        }
-
-        public IntPtr GetProcAddress(string procName)
-        {
-            return _gl.GetProcAddress(procName);
-        }
-    }
-
     /// <summary>
     /// OpenGL control that can be embedded in Avalonia UI for map rendering
     /// </summary>
@@ -79,26 +61,33 @@ namespace Economy_sim.OpenGL
             
             try
             {
-                // Initialize OpenTK bindings using the current context
-                OpenTK.Graphics.OpenGL4.GL.LoadBindings(new AvaloniaOpenTKBindingContext(gl));
+                // Initialize OpenGL settings using Avalonia's GL interface
+                gl.Enable(0x0BE2); // GL_BLEND
                 
-                // Initialize OpenGL settings
-                GL.Enable(EnableCap.Blend);
-                GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
-                GL.ClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+                // Load BlendFunc and call it
+                var blendFuncPtr = gl.GetProcAddress("glBlendFunc");
+                if (blendFuncPtr != IntPtr.Zero)
+                {
+                    var blendFunc = Marshal.GetDelegateForFunctionPointer<BlendFuncDelegate>(blendFuncPtr);
+                    blendFunc(0x0302, 0x0303); // GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+                }
+                
+                gl.ClearColor(0.2f, 0.3f, 0.3f, 1.0f);
                 
                 // Initialize our renderer
                 _renderer = new OpenGLMapRenderer();
-                _renderer.Initialize();
+                _renderer.Initialize(gl);
                 
                 _initialized = true;
-                Debug.WriteLine("OpenGL control initialized successfully");
+                Debug.WriteLine("OpenGL control initialized as the only map renderer");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Failed to initialize OpenGL control: {ex.Message}");
             }
         }
+
+        private delegate void BlendFuncDelegate(int sfactor, int dfactor);
 
         protected override void OnOpenGlRender(GlInterface gl, int fb)
         {
@@ -108,14 +97,14 @@ namespace Economy_sim.OpenGL
             try
             {
                 // Clear the frame
-                GL.Clear(ClearBufferMask.ColorBufferBit);
+                gl.Clear(0x00004000); // GL_COLOR_BUFFER_BIT
                 
                 // Set up viewport
                 var size = Bounds.Size;
-                GL.Viewport(0, 0, (int)size.Width, (int)size.Height);
+                gl.Viewport(0, 0, (int)size.Width, (int)size.Height);
                 
                 // Render the map
-                _renderer.Render(_viewOffset, _zoomLevel, (int)size.Width, (int)size.Height);
+                _renderer.Render(gl, _viewOffset, _zoomLevel, (int)size.Width, (int)size.Height);
             }
             catch (Exception ex)
             {
