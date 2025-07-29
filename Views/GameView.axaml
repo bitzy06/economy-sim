@@ -152,6 +152,11 @@
 					Width="130"
 					Height="50"
 					IsHitTestVisible="True"/>
+			<Button x:Name="ToggleRendererButton"
+					Content="OpenGL"
+					Width="130"
+					Height="50"
+					IsHitTestVisible="True"/>
 			<Button x:Name="PlaceHolder1Button"
 					Content="Place Holder"
 					Width="130"

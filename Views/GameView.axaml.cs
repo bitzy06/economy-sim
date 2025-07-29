@@ -10,12 +10,17 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using Economy_sim.OpenGL;
 
 namespace Economy_sim
 {
     public partial class GameView : Window
     {
         private readonly HybridMapManager _mapManager;
+
+        // --- Rendering Mode ---
+        private bool _useOpenGL = false; // Toggle between SkiaSharp and OpenGL
+        private OpenGLControl? _openGLControl;
 
         // --- Optimized Rendering Fields ---
         private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
@@ -52,6 +57,9 @@ namespace Economy_sim
             // Subscribe to map manager events
             _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
             UpdateMapViewButtons();
+            
+            // Initialize OpenGL control but don't add it to the UI yet
+            InitializeOpenGLControl();
             
             // Run basic integration test for political borders (commented out for production)
             // Economy_sim.Testing.PoliticalBorderIntegrationTest.RunBasicTests();
@@ -213,6 +221,13 @@ namespace Economy_sim
         /// </summary>
         private void QueueRender()
         {
+            if (_useOpenGL)
+            {
+                // If using OpenGL, update the OpenGL control instead
+                UpdateOpenGLWithCurrentMap();
+                return;
+            }
+
             lock (_renderLock)
             {
                 if (_renderInProgress) return;
@@ -313,6 +328,115 @@ namespace Economy_sim
 
         #endregion
 
+        #region OpenGL Integration
+
+        private void InitializeOpenGLControl()
+        {
+            try
+            {
+                _openGLControl = new OpenGLControl();
+                _openGLControl.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
+                _openGLControl.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
+                _openGLControl.IsVisible = false; // Initially hidden
+                
+                // Add to the MapContainer but keep it hidden initially
+                if (this.FindControl<Border>("MapContainer") is Border mapContainer)
+                {
+                    if (mapContainer.Child is Grid existingGrid)
+                    {
+                        // Add to existing grid
+                        existingGrid.Children.Add(_openGLControl);
+                    }
+                    else
+                    {
+                        // Create a new grid to hold both the image and OpenGL control
+                        var newGrid = new Grid();
+                        if (mapContainer.Child != null)
+                        {
+                            newGrid.Children.Add(mapContainer.Child);
+                        }
+                        newGrid.Children.Add(_openGLControl);
+                        mapContainer.Child = newGrid;
+                    }
+                }
+                
+                Debug.WriteLine("OpenGL control initialized and added to UI");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to initialize OpenGL control: {ex.Message}");
+                _openGLControl = null;
+            }
+        }
+
+        private void ToggleRenderingMode()
+        {
+            _useOpenGL = !_useOpenGL;
+            
+            if (_useOpenGL && _openGLControl != null)
+            {
+                // Switch to OpenGL rendering
+                Debug.WriteLine("Switching to OpenGL rendering");
+                this.MapImage.IsVisible = false;
+                _openGLControl.IsVisible = true;
+                
+                // Update OpenGL with current map data
+                UpdateOpenGLWithCurrentMap();
+            }
+            else
+            {
+                // Switch to SkiaSharp rendering
+                Debug.WriteLine("Switching to SkiaSharp rendering");
+                if (_openGLControl != null)
+                {
+                    _openGLControl.IsVisible = false;
+                }
+                this.MapImage.IsVisible = true;
+                
+                // Trigger a refresh of the SkiaSharp renderer
+                QueueRender();
+            }
+        }
+
+        private void UpdateOpenGLWithCurrentMap()
+        {
+            if (_openGLControl != null && _mapManager != null)
+            {
+                // Get the current map bitmap from the map manager
+                Task.Run(() =>
+                {
+                    try
+                    {
+                        var effectiveSize = GetEffectiveRenderSize();
+                        if (effectiveSize.Width > 0 && effectiveSize.Height > 0)
+                        {
+                            var viewArea = new SKRectI(
+                                _viewOffset.X,
+                                _viewOffset.Y,
+                                _viewOffset.X + (int)effectiveSize.Width,
+                                _viewOffset.Y + (int)effectiveSize.Height
+                            );
+
+                            var bitmap = _mapManager.AssembleView(_currentZoomLevel, viewArea, null);
+                            if (bitmap != null)
+                            {
+                                Dispatcher.UIThread.Post(() =>
+                                {
+                                    _openGLControl?.UpdateMapTexture(bitmap);
+                                });
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error updating OpenGL texture: {ex.Message}");
+                    }
+                });
+            }
+        }
+
+        #endregion
+
         #region HUD Management
 
         // Sample game state for HUD demonstration
@@ -382,6 +506,9 @@ namespace Economy_sim
 
             if (this.FindControl<Button>("PoliticalViewButton") is Button politicalBtn)
                 politicalBtn.Click += OnPoliticalViewClicked;
+
+            if (this.FindControl<Button>("ToggleRendererButton") is Button toggleRendererBtn)
+                toggleRendererBtn.Click += OnToggleRendererClicked;
 
             if (this.FindControl<Button>("MenuButton") is Button menuBtn)
                 menuBtn.Click += OnMenuClicked;
@@ -716,14 +843,35 @@ namespace Economy_sim
         {
             Debug.WriteLine("Terrain view button clicked");
             _mapManager.SetViewType(MapViewType.Terrain);
-            QueueRender();
+            if (!_useOpenGL)
+            {
+                QueueRender();
+            }
+            else
+            {
+                UpdateOpenGLWithCurrentMap();
+            }
         }
 
         private void OnPoliticalViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Political view button clicked");
             _mapManager.SetViewType(MapViewType.Political);
-            QueueRender();
+            if (!_useOpenGL)
+            {
+                QueueRender();
+            }
+            else
+            {
+                UpdateOpenGLWithCurrentMap();
+            }
+        }
+
+        private void OnToggleRendererClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Toggle renderer button clicked");
+            ToggleRenderingMode();
+            UpdateToggleRendererButton();
         }
 
         private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
@@ -766,6 +914,19 @@ namespace Economy_sim
             {
                 politicalBtn.Background = _mapManager.CurrentViewType == MapViewType.Political 
                     ? Avalonia.Media.Brushes.DarkRed 
+                    : Avalonia.Media.Brushes.DarkSlateGray;
+            }
+
+            UpdateToggleRendererButton();
+        }
+
+        private void UpdateToggleRendererButton()
+        {
+            if (this.FindControl<Button>("ToggleRendererButton") is Button toggleBtn)
+            {
+                toggleBtn.Content = _useOpenGL ? "SkiaSharp" : "OpenGL";
+                toggleBtn.Background = _useOpenGL 
+                    ? Avalonia.Media.Brushes.DarkGreen 
                     : Avalonia.Media.Brushes.DarkSlateGray;
             }
         }
