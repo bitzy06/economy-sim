@@ -11,17 +11,13 @@
 	</Window.Styles>
 
 	<Grid>
-		<!-- Map Layer (Background) -->
+		<!-- Map Layer (Background) - OpenGL Only -->
 		<Border x:Name="MapContainer"
 			Background="Transparent"
 			HorizontalAlignment="Stretch"
 			VerticalAlignment="Stretch"
 			IsHitTestVisible="True">
-			<Image x:Name="MapImage"
-				   Stretch="None"
-				   HorizontalAlignment="Left"
-				   VerticalAlignment="Top"
-				   IsHitTestVisible="True"/>
+			<!-- OpenGL Control will be added programmatically -->
 		</Border>
 
 		<!-- HUD Overlay Layers -->
@@ -149,11 +145,6 @@
 					IsHitTestVisible="True"/>
 			<Button x:Name="TerrainViewButton"
 					Content="Terrain"
-					Width="130"
-					Height="50"
-					IsHitTestVisible="True"/>
-			<Button x:Name="ToggleRendererButton"
-					Content="OpenGL"
 					Width="130"
 					Height="50"
 					IsHitTestVisible="True"/>

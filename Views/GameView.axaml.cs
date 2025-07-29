@@ -1,14 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
-using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using Avalonia.Threading;
 using SkiaSharp;
 using StrategyGame; // Assuming HybridMapManager is in this namespace
 using System;
 using System.Diagnostics;
-using System.IO;
 using System.Threading.Tasks;
 using Economy_sim.OpenGL;
 
@@ -18,12 +15,10 @@ namespace Economy_sim
     {
         private readonly HybridMapManager _mapManager;
 
-        // --- Rendering Mode ---
-        private bool _useOpenGL = false; // Toggle between SkiaSharp and OpenGL
+        // --- OpenGL Rendering Only ---
         private OpenGLControl? _openGLControl;
 
-        // --- Optimized Rendering Fields ---
-        private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
+        // --- View State Fields ---
         private int _currentZoomLevel = 1; // Start at the lowest zoom level so user doesn't have to zoom out
         private SKPointI _viewOffset = SKPointI.Empty;
         private bool _isPanning = false;
@@ -33,8 +28,6 @@ namespace Economy_sim
         private readonly DispatcherTimer _mapUpdateTimer;
         private DispatcherTimer _initialRenderTimer; // Timer to poll for initial size.
         private bool _pendingMapUpdate = false;
-        private readonly object _renderLock = new object();
-        private bool _renderInProgress = false;
 
 
         public GameView()
@@ -58,7 +51,7 @@ namespace Economy_sim
             _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
             UpdateMapViewButtons();
             
-            // Initialize OpenGL control but don't add it to the UI yet
+            // Initialize OpenGL control as the only renderer
             InitializeOpenGLControl();
             
             // Run basic integration test for political borders (commented out for production)
@@ -68,13 +61,13 @@ namespace Economy_sim
         private void OnWindowLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("OnWindowLoaded called");
-            if (this.MapImage != null)
+            if (_openGLControl != null)
             {
-                // Attach input event handlers
-                this.MapImage.PointerPressed += OnPointerPressed;
-                this.MapImage.PointerMoved += OnPointerMoved;
-                this.MapImage.PointerReleased += OnPointerReleased;
-                this.MapImage.PointerWheelChanged += OnPointerWheelChanged;
+                // Attach input event handlers to OpenGL control
+                _openGLControl.PointerPressed += OnPointerPressed;
+                _openGLControl.PointerMoved += OnPointerMoved;
+                _openGLControl.PointerReleased += OnPointerReleased;
+                _openGLControl.PointerWheelChanged += OnPointerWheelChanged;
 
                 // Flag that the view is ready
                 _isInitialized = true;
@@ -86,13 +79,13 @@ namespace Economy_sim
         }
 
         /// <summary>
-        /// This timer will tick until it finds a valid size for the MapImage control,
+        /// This timer will tick until it finds a valid size for the OpenGL control,
         /// ensuring the initial render happens correctly.
         /// </summary>
         private void InitialRenderTimer_Tick(object? sender, EventArgs e)
         {
             // This check will run repeatedly until the layout is ready.
-            // We now check the Window's ClientSize directly, as the Image's bounds can be unreliable at startup.
+            // We now check the Window's ClientSize directly, as the control's bounds can be unreliable at startup.
             if (_isInitialized && this.ClientSize.Width > 1 && this.ClientSize.Height > 1)
             {
                 // Stop the timer, we don't need it anymore.
@@ -100,27 +93,25 @@ namespace Economy_sim
                 _initialRenderTimer = null;
 
                 Debug.WriteLine($"Initial size detected via timer using ClientSize: {this.ClientSize}. Triggering render.");
-                UpdateBitmapSource(PixelSize.FromSize(this.ClientSize, 1.0));
                 
-                // Center the view to ensure both map types start at the same position
+                // Center the view to ensure proper starting position
                 CenterView();
                 
-                QueueRender();
+                UpdateOpenGLWithCurrentMap();
             }
         }
 
 
         /// <summary>
-        /// This is the most reliable place to create/resize the bitmap after startup,
+        /// This is the most reliable place to update the OpenGL control after startup,
         /// as it guarantees the control has a valid size.
         /// </summary>
         private void OnSizeChanged(object? sender, SizeChangedEventArgs e)
         {
-            if (_isInitialized && this.MapImage != null && e.NewSize.Width > 0 && e.NewSize.Height > 0)
+            if (_isInitialized && _openGLControl != null && e.NewSize.Width > 0 && e.NewSize.Height > 0)
             {
-                Debug.WriteLine($"Size changed to {e.NewSize}, updating bitmap and re-rendering.");
-                UpdateBitmapSource(PixelSize.FromSize(e.NewSize, 1.0));
-                QueueRender();
+                Debug.WriteLine($"Size changed to {e.NewSize}, updating OpenGL rendering.");
+                UpdateOpenGLWithCurrentMap();
             }
         }
 
@@ -129,7 +120,7 @@ namespace Economy_sim
             if (_pendingMapUpdate)
             {
                 _pendingMapUpdate = false;
-                QueueRender();
+                UpdateOpenGLWithCurrentMap();
             }
         }
 
@@ -137,9 +128,9 @@ namespace Economy_sim
 
         private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
-            if (this.MapImage == null) return;
+            if (_openGLControl == null) return;
 
-            var mousePos = e.GetPosition(this.MapImage);
+            var mousePos = e.GetPosition(_openGLControl);
             int oldZoomLevel = _currentZoomLevel;
 
             _currentZoomLevel = Math.Clamp(_currentZoomLevel + Math.Sign(e.Delta.Y), 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
@@ -153,7 +144,7 @@ namespace Economy_sim
 
             _viewOffset = new SKPointI(newOffsetX, newOffsetY);
 
-            QueueRender();
+            UpdateOpenGLWithCurrentMap();
             e.Handled = true;
         }
 
@@ -162,7 +153,7 @@ namespace Economy_sim
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             {
                 _isPanning = true;
-                _panStartPoint = e.GetPosition(this.MapImage);
+                _panStartPoint = e.GetPosition(_openGLControl);
                 this.Cursor = new Cursor(StandardCursorType.Hand);
             }
         }
@@ -171,7 +162,7 @@ namespace Economy_sim
         {
             if (!_isPanning) return;
 
-            var currentPoint = e.GetPosition(this.MapImage);
+            var currentPoint = e.GetPosition(_openGLControl);
             var delta = _panStartPoint - currentPoint;
             _panStartPoint = currentPoint;
 
@@ -192,143 +183,7 @@ namespace Economy_sim
 
         #endregion
 
-        #region Rendering Logic
-
-        /// <summary>
-        /// Creates or resizes the WriteableBitmap used as the target for rendering.
-        /// </summary>
-        private void UpdateBitmapSource(PixelSize size)
-        {
-            if (size.Width <= 0 || size.Height <= 0) return;
-
-            // Dispose the old bitmap if it exists and the size is different
-            if (_writeableBitmap != null && _writeableBitmap.PixelSize != size)
-            {
-                _writeableBitmap.Dispose();
-                _writeableBitmap = null;
-            }
-
-            if (_writeableBitmap == null)
-            {
-                _writeableBitmap = new WriteableBitmap(size, new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
-                this.MapImage.Source = _writeableBitmap;
-            }
-        }
-
-        /// <summary>
-        /// Queues a render operation, ensuring it runs on a background thread without blocking the UI.
-        /// This version is fully asynchronous to prevent deadlocks.
-        /// </summary>
-        private void QueueRender()
-        {
-            if (_useOpenGL)
-            {
-                // If using OpenGL, update the OpenGL control instead
-                UpdateOpenGLWithCurrentMap();
-                return;
-            }
-
-            lock (_renderLock)
-            {
-                if (_renderInProgress) return;
-                _renderInProgress = true;
-            }
-
-            // Fire and forget the async task.
-            _ = Task.Run(async () =>
-            {
-                SKBitmap skBitmap = null;
-                try
-                {
-                    // This runs on a background thread.
-                    skBitmap = RenderMapOnWorkerThread();
-
-                    if (skBitmap != null)
-                    {
-                        // Dispatch the pixel copy to the UI thread without blocking the background thread.
-                        await Dispatcher.UIThread.InvokeAsync(() =>
-                        {
-                            if (_writeableBitmap != null && _writeableBitmap.PixelSize.Width == skBitmap.Width && _writeableBitmap.PixelSize.Height == skBitmap.Height)
-                            {
-                                using (var frameBuffer = _writeableBitmap.Lock())
-                                {
-                                    var size = frameBuffer.RowBytes * frameBuffer.Size.Height;
-                                    unsafe
-                                    {
-                                        Buffer.MemoryCopy(skBitmap.GetPixels().ToPointer(), frameBuffer.Address.ToPointer(), size, size);
-                                    }
-                                }
-                                // Explicitly tell the UI to redraw the updated area.
-                                MapImage.InvalidateVisual();
-                            }
-                        });
-                    }
-                }
-                finally
-                {
-                    skBitmap?.Dispose(); // Dispose the Skia bitmap after we're done with it.
-                    lock (_renderLock)
-                    {
-                        _renderInProgress = false;
-                    }
-                }
-            });
-        }
-
-        private SKBitmap RenderMapOnWorkerThread()
-        {
-            var effectiveSize = GetEffectiveRenderSize();
-            if (!_isInitialized || effectiveSize.Width < 1 || effectiveSize.Height < 1 || _mapManager == null)
-            {
-                return null;
-            }
-
-            ClampViewOffset();
-
-            var viewArea = new SKRectI(
-                _viewOffset.X,
-                _viewOffset.Y,
-                _viewOffset.X + (int)effectiveSize.Width,
-                _viewOffset.Y + (int)effectiveSize.Height
-            );
-
-            Debug.WriteLine($"RenderMap: ZoomLevel={_currentZoomLevel}, ViewArea={viewArea}, Offset={_viewOffset}");
-
-            return _mapManager.AssembleView(
-                _currentZoomLevel,
-                viewArea,
-                () => Dispatcher.UIThread.Post(QueueRender, DispatcherPriority.Background)
-            );
-        }
-
-        private Size GetEffectiveRenderSize()
-        {
-            if (this.MapImage?.Bounds.Width > 1 && this.MapImage?.Bounds.Height > 1)
-            {
-                return this.MapImage.Bounds.Size;
-            }
-            return this.ClientSize;
-        }
-
-        private void ClampViewOffset()
-        {
-            if (_mapManager == null) return;
-            var effectiveSize = GetEffectiveRenderSize();
-            if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
-            var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
-
-            _viewOffset.X = mapSize.Width < effectiveSize.Width
-                ? (mapSize.Width - (int)effectiveSize.Width) / 2
-                : Math.Clamp(_viewOffset.X, 0, mapSize.Width - (int)effectiveSize.Width);
-
-            _viewOffset.Y = mapSize.Height < effectiveSize.Height
-                ? (mapSize.Height - (int)effectiveSize.Height) / 2
-                : Math.Clamp(_viewOffset.Y, 0, mapSize.Height - (int)effectiveSize.Height);
-        }
-
-        #endregion
-
-        #region OpenGL Integration
+        #region OpenGL Rendering
 
         private void InitializeOpenGLControl()
         {
@@ -337,64 +192,20 @@ namespace Economy_sim
                 _openGLControl = new OpenGLControl();
                 _openGLControl.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
                 _openGLControl.VerticalAlignment = Avalonia.Layout.VerticalAlignment.Stretch;
-                _openGLControl.IsVisible = false; // Initially hidden
+                _openGLControl.IsVisible = true; // Always visible as the only renderer
                 
-                // Add to the MapContainer but keep it hidden initially
+                // Add to the MapContainer
                 if (this.FindControl<Border>("MapContainer") is Border mapContainer)
                 {
-                    if (mapContainer.Child is Grid existingGrid)
-                    {
-                        // Add to existing grid
-                        existingGrid.Children.Add(_openGLControl);
-                    }
-                    else
-                    {
-                        // Create a new grid to hold both the image and OpenGL control
-                        var newGrid = new Grid();
-                        if (mapContainer.Child != null)
-                        {
-                            newGrid.Children.Add(mapContainer.Child);
-                        }
-                        newGrid.Children.Add(_openGLControl);
-                        mapContainer.Child = newGrid;
-                    }
+                    mapContainer.Child = _openGLControl;
                 }
                 
-                Debug.WriteLine("OpenGL control initialized and added to UI");
+                Debug.WriteLine("OpenGL control initialized as the only map renderer");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Failed to initialize OpenGL control: {ex.Message}");
                 _openGLControl = null;
-            }
-        }
-
-        private void ToggleRenderingMode()
-        {
-            _useOpenGL = !_useOpenGL;
-            
-            if (_useOpenGL && _openGLControl != null)
-            {
-                // Switch to OpenGL rendering
-                Debug.WriteLine("Switching to OpenGL rendering");
-                this.MapImage.IsVisible = false;
-                _openGLControl.IsVisible = true;
-                
-                // Update OpenGL with current map data
-                UpdateOpenGLWithCurrentMap();
-            }
-            else
-            {
-                // Switch to SkiaSharp rendering
-                Debug.WriteLine("Switching to SkiaSharp rendering");
-                if (_openGLControl != null)
-                {
-                    _openGLControl.IsVisible = false;
-                }
-                this.MapImage.IsVisible = true;
-                
-                // Trigger a refresh of the SkiaSharp renderer
-                QueueRender();
             }
         }
 
@@ -410,6 +221,8 @@ namespace Economy_sim
                         var effectiveSize = GetEffectiveRenderSize();
                         if (effectiveSize.Width > 0 && effectiveSize.Height > 0)
                         {
+                            ClampViewOffset();
+                            
                             var viewArea = new SKRectI(
                                 _viewOffset.X,
                                 _viewOffset.Y,
@@ -433,6 +246,31 @@ namespace Economy_sim
                     }
                 });
             }
+        }
+
+        private Size GetEffectiveRenderSize()
+        {
+            if (_openGLControl?.Bounds.Width > 1 && _openGLControl?.Bounds.Height > 1)
+            {
+                return _openGLControl.Bounds.Size;
+            }
+            return this.ClientSize;
+        }
+
+        private void ClampViewOffset()
+        {
+            if (_mapManager == null) return;
+            var effectiveSize = GetEffectiveRenderSize();
+            if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
+            var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
+
+            _viewOffset.X = mapSize.Width < effectiveSize.Width
+                ? (mapSize.Width - (int)effectiveSize.Width) / 2
+                : Math.Clamp(_viewOffset.X, 0, mapSize.Width - (int)effectiveSize.Width);
+
+            _viewOffset.Y = mapSize.Height < effectiveSize.Height
+                ? (mapSize.Height - (int)effectiveSize.Height) / 2
+                : Math.Clamp(_viewOffset.Y, 0, mapSize.Height - (int)effectiveSize.Height);
         }
 
         #endregion
@@ -506,9 +344,6 @@ namespace Economy_sim
 
             if (this.FindControl<Button>("PoliticalViewButton") is Button politicalBtn)
                 politicalBtn.Click += OnPoliticalViewClicked;
-
-            if (this.FindControl<Button>("ToggleRendererButton") is Button toggleRendererBtn)
-                toggleRendererBtn.Click += OnToggleRendererClicked;
 
             if (this.FindControl<Button>("MenuButton") is Button menuBtn)
                 menuBtn.Click += OnMenuClicked;
@@ -843,35 +678,14 @@ namespace Economy_sim
         {
             Debug.WriteLine("Terrain view button clicked");
             _mapManager.SetViewType(MapViewType.Terrain);
-            if (!_useOpenGL)
-            {
-                QueueRender();
-            }
-            else
-            {
-                UpdateOpenGLWithCurrentMap();
-            }
+            UpdateOpenGLWithCurrentMap();
         }
 
         private void OnPoliticalViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Political view button clicked");
             _mapManager.SetViewType(MapViewType.Political);
-            if (!_useOpenGL)
-            {
-                QueueRender();
-            }
-            else
-            {
-                UpdateOpenGLWithCurrentMap();
-            }
-        }
-
-        private void OnToggleRendererClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            Debug.WriteLine("Toggle renderer button clicked");
-            ToggleRenderingMode();
-            UpdateToggleRendererButton();
+            UpdateOpenGLWithCurrentMap();
         }
 
         private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
@@ -882,7 +696,7 @@ namespace Economy_sim
             // CenterView(); // Removed to prevent annoying recentering
             
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
-            Dispatcher.UIThread.Post(QueueRender);
+            Dispatcher.UIThread.Post(UpdateOpenGLWithCurrentMap);
         }
         
         private void CenterView()
@@ -914,19 +728,6 @@ namespace Economy_sim
             {
                 politicalBtn.Background = _mapManager.CurrentViewType == MapViewType.Political 
                     ? Avalonia.Media.Brushes.DarkRed 
-                    : Avalonia.Media.Brushes.DarkSlateGray;
-            }
-
-            UpdateToggleRendererButton();
-        }
-
-        private void UpdateToggleRendererButton()
-        {
-            if (this.FindControl<Button>("ToggleRendererButton") is Button toggleBtn)
-            {
-                toggleBtn.Content = _useOpenGL ? "SkiaSharp" : "OpenGL";
-                toggleBtn.Background = _useOpenGL 
-                    ? Avalonia.Media.Brushes.DarkGreen 
                     : Avalonia.Media.Brushes.DarkSlateGray;
             }
         }
