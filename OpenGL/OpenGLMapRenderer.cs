@@ -155,10 +155,29 @@ namespace Economy_sim.OpenGL
         {
             if (_gl == null) throw new InvalidOperationException("GL interface not initialized");
 
-            // Vertex shader source - using older GLSL version for better compatibility
-            string vertexShaderSource = @"
-#version 120
+            // Get OpenGL version and renderer info for debugging
+            LogOpenGLInfo();
 
+            // Try different shader versions in order of preference
+            string[] vertexShaderSources = {
+                // Modern OpenGL (3.3+)
+                @"#version 330 core
+layout (location = 0) in vec2 aPosition;
+layout (location = 1) in vec2 aTexCoord;
+
+uniform mat4 projection;
+uniform mat4 view;
+uniform mat4 model;
+
+out vec2 TexCoord;
+
+void main()
+{
+    gl_Position = projection * view * model * vec4(aPosition, 0.0, 1.0);
+    TexCoord = aTexCoord;
+}",
+                // Legacy OpenGL (1.5+) with version directive
+                @"#version 110
 attribute vec2 aPosition;
 attribute vec2 aTexCoord;
 
@@ -172,13 +191,39 @@ void main()
 {
     gl_Position = projection * view * model * vec4(aPosition, 0.0, 1.0);
     TexCoord = aTexCoord;
-}
-";
+}",
+                // Fallback - no version directive for maximum compatibility
+                @"attribute vec2 aPosition;
+attribute vec2 aTexCoord;
 
-            // Fragment shader source  
-            string fragmentShaderSource = @"
-#version 120
+uniform mat4 projection;
+uniform mat4 view;
+uniform mat4 model;
 
+varying vec2 TexCoord;
+
+void main()
+{
+    gl_Position = projection * view * model * vec4(aPosition, 0.0, 1.0);
+    TexCoord = aTexCoord;
+}"
+            };
+
+            string[] fragmentShaderSources = {
+                // Modern OpenGL (3.3+)
+                @"#version 330 core
+in vec2 TexCoord;
+
+uniform sampler2D ourTexture;
+
+out vec4 FragColor;
+
+void main()
+{
+    FragColor = texture(ourTexture, TexCoord);
+}",
+                // Legacy OpenGL (1.5+) with version directive
+                @"#version 110
 varying vec2 TexCoord;
 
 uniform sampler2D ourTexture;
@@ -186,37 +231,108 @@ uniform sampler2D ourTexture;
 void main()
 {
     gl_FragColor = texture2D(ourTexture, TexCoord);
-}
-";
+}",
+                // Fallback - no version directive for maximum compatibility
+                @"varying vec2 TexCoord;
 
-            // Compile vertex shader
-            int vertexShader = _gl.CreateShader(GL_VERTEX_SHADER);
-            SetShaderSource(vertexShader, vertexShaderSource);
-            _gl.CompileShader(vertexShader);
-            CheckShaderCompilation(vertexShader, "vertex");
+uniform sampler2D ourTexture;
 
-            // Compile fragment shader
-            int fragmentShader = _gl.CreateShader(GL_FRAGMENT_SHADER);
-            SetShaderSource(fragmentShader, fragmentShaderSource);
-            _gl.CompileShader(fragmentShader);
-            CheckShaderCompilation(fragmentShader, "fragment");
+void main()
+{
+    gl_FragColor = texture2D(ourTexture, TexCoord);
+}"
+            };
 
-            // Create shader program
-            _shaderProgram = _gl.CreateProgram();
-            _gl.AttachShader(_shaderProgram, vertexShader);
-            _gl.AttachShader(_shaderProgram, fragmentShader);
-            _gl.LinkProgram(_shaderProgram);
-            CheckProgramLinking(_shaderProgram);
+            // Try compiling shaders with different versions
+            for (int i = 0; i < vertexShaderSources.Length; i++)
+            {
+                try
+                {
+                    var vertexShaderSource = vertexShaderSources[i];
+                    var fragmentShaderSource = fragmentShaderSources[i];
+                    
+                    Debug.WriteLine($"Attempting to compile shaders with version {i + 1}...");
+                    
+                    // Compile vertex shader
+                    int vertexShader = _gl.CreateShader(GL_VERTEX_SHADER);
+                    SetShaderSource(vertexShader, vertexShaderSource);
+                    _gl.CompileShader(vertexShader);
+                    
+                    if (!CheckShaderCompilation(vertexShader, "vertex", false))
+                    {
+                        _gl.DeleteShader(vertexShader);
+                        continue;
+                    }
 
-            // Get uniform locations
-            _projectionLocation = GetUniformLocation(_shaderProgram, "projection");
-            _viewLocation = GetUniformLocation(_shaderProgram, "view");
-            _modelLocation = GetUniformLocation(_shaderProgram, "model");
-            _textureLocation = GetUniformLocation(_shaderProgram, "ourTexture");
+                    // Compile fragment shader
+                    int fragmentShader = _gl.CreateShader(GL_FRAGMENT_SHADER);
+                    SetShaderSource(fragmentShader, fragmentShaderSource);
+                    _gl.CompileShader(fragmentShader);
+                    
+                    if (!CheckShaderCompilation(fragmentShader, "fragment", false))
+                    {
+                        _gl.DeleteShader(vertexShader);
+                        _gl.DeleteShader(fragmentShader);
+                        continue;
+                    }
 
-            // Clean up individual shaders as they're now linked into our program
-            _gl.DeleteShader(vertexShader);
-            _gl.DeleteShader(fragmentShader);
+                    // Create shader program
+                    _shaderProgram = _gl.CreateProgram();
+                    _gl.AttachShader(_shaderProgram, vertexShader);
+                    _gl.AttachShader(_shaderProgram, fragmentShader);
+                    _gl.LinkProgram(_shaderProgram);
+                    
+                    if (!CheckProgramLinking(_shaderProgram, false))
+                    {
+                        _gl.DeleteProgram(_shaderProgram);
+                        _gl.DeleteShader(vertexShader);
+                        _gl.DeleteShader(fragmentShader);
+                        continue;
+                    }
+
+                    // Success! Get uniform locations
+                    _projectionLocation = GetUniformLocation(_shaderProgram, "projection");
+                    _viewLocation = GetUniformLocation(_shaderProgram, "view");
+                    _modelLocation = GetUniformLocation(_shaderProgram, "model");
+                    _textureLocation = GetUniformLocation(_shaderProgram, "ourTexture");
+
+                    // Clean up individual shaders as they're now linked into our program
+                    _gl.DeleteShader(vertexShader);
+                    _gl.DeleteShader(fragmentShader);
+                    
+                    Debug.WriteLine($"Successfully compiled shaders with version {i + 1}");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to compile shader version {i + 1}: {ex.Message}");
+                }
+            }
+            
+            throw new Exception("Failed to compile any shader version. OpenGL context may not support basic shader functionality.");
+        }
+
+        private void LogOpenGLInfo()
+        {
+            if (_gl == null) return;
+            
+            try
+            {
+                // Get OpenGL version
+                var version = _gl.GetString(0x1F02); // GL_VERSION
+                var renderer = _gl.GetString(0x1F01); // GL_RENDERER
+                var vendor = _gl.GetString(0x1F00); // GL_VENDOR
+                var glslVersion = _gl.GetString(0x8B8C); // GL_SHADING_LANGUAGE_VERSION
+                
+                Debug.WriteLine($"OpenGL Version: {version}");
+                Debug.WriteLine($"OpenGL Renderer: {renderer}");
+                Debug.WriteLine($"OpenGL Vendor: {vendor}");
+                Debug.WriteLine($"GLSL Version: {glslVersion}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to get OpenGL info: {ex.Message}");
+            }
         }
 
         private void SetShaderSource(int shader, string source)
@@ -408,9 +524,9 @@ void main()
             }
         }
 
-        private void CheckShaderCompilation(int shader, string type)
+        private bool CheckShaderCompilation(int shader, string type, bool throwOnError = true)
         {
-            if (_glGetShaderiv == null) return;
+            if (_glGetShaderiv == null) return !throwOnError;
 
             int success = 0;
             _glGetShaderiv(shader, GL_COMPILE_STATUS, ref success);
@@ -419,6 +535,7 @@ void main()
                 // Get info log
                 int logLength = 0;
                 _glGetShaderiv(shader, GL_INFO_LOG_LENGTH, ref logLength);
+                string infoLog = "";
                 if (logLength > 0 && _glGetShaderInfoLog != null)
                 {
                     unsafe
@@ -426,17 +543,25 @@ void main()
                         byte* logPtr = stackalloc byte[logLength];
                         int actualLength = 0;
                         _glGetShaderInfoLog(shader, logLength, ref actualLength, logPtr);
-                        string infoLog = Marshal.PtrToStringAnsi(new IntPtr(logPtr), actualLength) ?? "";
-                        throw new Exception($"Shader compilation failed ({type}): {infoLog}");
+                        infoLog = Marshal.PtrToStringAnsi(new IntPtr(logPtr), actualLength) ?? "";
                     }
                 }
-                throw new Exception($"Shader compilation failed ({type}): Unknown error");
+                
+                string errorMessage = $"Shader compilation failed ({type}): {(string.IsNullOrEmpty(infoLog) ? "Unknown error" : infoLog)}";
+                Debug.WriteLine(errorMessage);
+                
+                if (throwOnError)
+                {
+                    throw new Exception(errorMessage);
+                }
+                return false;
             }
+            return true;
         }
 
-        private void CheckProgramLinking(int program)
+        private bool CheckProgramLinking(int program, bool throwOnError = true)
         {
-            if (_glGetProgramiv == null) return;
+            if (_glGetProgramiv == null) return !throwOnError;
 
             int success = 0;
             _glGetProgramiv(program, GL_LINK_STATUS, ref success);
@@ -445,6 +570,7 @@ void main()
                 // Get info log
                 int logLength = 0;
                 _glGetProgramiv(program, GL_INFO_LOG_LENGTH, ref logLength);
+                string infoLog = "";
                 if (logLength > 0 && _glGetProgramInfoLog != null)
                 {
                     unsafe
@@ -452,12 +578,20 @@ void main()
                         byte* logPtr = stackalloc byte[logLength];
                         int actualLength = 0;
                         _glGetProgramInfoLog(program, logLength, ref actualLength, logPtr);
-                        string infoLog = Marshal.PtrToStringAnsi(new IntPtr(logPtr), actualLength) ?? "";
-                        throw new Exception($"Shader program linking failed: {infoLog}");
+                        infoLog = Marshal.PtrToStringAnsi(new IntPtr(logPtr), actualLength) ?? "";
                     }
                 }
-                throw new Exception("Shader program linking failed: Unknown error");
+                
+                string errorMessage = $"Shader program linking failed: {(string.IsNullOrEmpty(infoLog) ? "Unknown error" : infoLog)}";
+                Debug.WriteLine(errorMessage);
+                
+                if (throwOnError)
+                {
+                    throw new Exception(errorMessage);
+                }
+                return false;
             }
+            return true;
         }
 
         // OpenGL function delegates
