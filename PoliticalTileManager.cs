@@ -6,6 +6,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using SkiaSharp;
+using OSGeo.OGR;
 
 namespace StrategyGame
 {
@@ -566,6 +567,80 @@ namespace StrategyGame
             int index = zoomLevel - 1;
             index = Math.Clamp(index, 0, MultiResolutionMapManager.PixelsPerCellLevels.Length - 1);
             return MultiResolutionMapManager.PixelsPerCellLevels[index];
+        }
+        
+        /// <summary>
+        /// Gets the country at a specific geographic point
+        /// </summary>
+        /// <param name="longitude">Longitude in degrees</param>
+        /// <param name="latitude">Latitude in degrees</param>
+        /// <returns>Country information if found, null otherwise</returns>
+        public IndexedCountryFeature? GetCountryAtGeographicPoint(double longitude, double latitude)
+        {
+            try
+            {
+                // Ensure spatial index is built
+                EnsureSpatialIndexBuilt();
+                
+                // Create a small search bounds around the point
+                double tolerance = 0.01; // Small tolerance for point-in-polygon tests
+                var searchBounds = new GeoBounds
+                {
+                    MinLon = longitude - tolerance,
+                    MaxLon = longitude + tolerance,
+                    MinLat = latitude - tolerance,
+                    MaxLat = latitude + tolerance
+                };
+                
+                // Get countries that might contain this point
+                var candidates = _spatialIndex.GetCountriesInBounds(searchBounds);
+                
+                // Test each candidate to see if it actually contains the point
+                foreach (var candidate in candidates)
+                {
+                    if (IsPointInCountry(longitude, latitude, candidate))
+                    {
+                        Debug.WriteLine($"Found country at ({longitude:F4}, {latitude:F4}): {candidate.CountryName} ({candidate.CountryCode})");
+                        return candidate;
+                    }
+                }
+                
+                Debug.WriteLine($"No country found at ({longitude:F4}, {latitude:F4})");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error finding country at ({longitude:F4}, {latitude:F4}): {ex.Message}");
+                return null;
+            }
+        }
+        
+        /// <summary>
+        /// Tests if a geographic point is within a country's boundaries
+        /// </summary>
+        private bool IsPointInCountry(double longitude, double latitude, IndexedCountryFeature country)
+        {
+            try
+            {
+                // First check if point is within the bounding box for quick elimination
+                if (longitude < country.Bounds.MinLon || longitude > country.Bounds.MaxLon ||
+                    latitude < country.Bounds.MinLat || latitude > country.Bounds.MaxLat)
+                {
+                    return false;
+                }
+                
+                // Use OGR geometry to test if point is within the country polygon
+                using var point = new OSGeo.OGR.Geometry(wkbGeometryType.wkbPoint);
+                point.AddPoint_2D(longitude, latitude);
+                
+                // Test if the point is within the country geometry
+                return country.Geometry.Contains(point);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error testing point in country {country.CountryCode}: {ex.Message}");
+                return false;
+            }
         }
         
         public void Dispose()

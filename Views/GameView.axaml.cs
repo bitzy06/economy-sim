@@ -151,11 +151,20 @@ namespace Economy_sim
 
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            var currentPoint = e.GetCurrentPoint(this);
+            
+            if (currentPoint.Properties.IsLeftButtonPressed)
             {
                 _isPanning = true;
                 _panStartPoint = e.GetPosition(this.MapImage);
                 this.Cursor = new Cursor(StandardCursorType.Hand);
+            }
+            else if (currentPoint.Properties.IsRightButtonPressed)
+            {
+                // Right-click for country detection
+                var mousePos = e.GetPosition(this.MapImage);
+                DetectCountryAtPosition((int)mousePos.X, (int)mousePos.Y);
+                e.Handled = true;
             }
         }
 
@@ -180,6 +189,73 @@ namespace Economy_sim
                 _isPanning = false;
                 this.Cursor = new Cursor(StandardCursorType.Arrow);
             }
+        }
+
+        #endregion
+
+        #region Country Detection
+
+        /// <summary>
+        /// Detects which country is at the specified screen position
+        /// </summary>
+        private void DetectCountryAtPosition(int screenX, int screenY)
+        {
+            try
+            {
+                var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                
+                if (country != null)
+                {
+                    // Show country information
+                    string message = $"Country: {country.CountryName} ({country.CountryCode})";
+                    Debug.WriteLine($"[COUNTRY DETECTED] {message}");
+                    
+                    // You could add visual feedback here, such as:
+                    // - Highlighting the country border
+                    // - Showing a tooltip
+                    // - Opening a country information panel
+                    ShowCountryDetectionFeedback(country, screenX, screenY);
+                }
+                else
+                {
+                    Debug.WriteLine($"[COUNTRY DETECTED] No country found at position ({screenX}, {screenY})");
+                    // Could show "Ocean" or "No country" message
+                    ShowCountryDetectionFeedback(null, screenX, screenY);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[COUNTRY DETECTION ERROR] {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Shows visual feedback for country detection (placeholder implementation)
+        /// </summary>
+        private void ShowCountryDetectionFeedback(IndexedCountryFeature? country, int screenX, int screenY)
+        {
+            // For now, just update a text display or create a simple notification
+            // In a full implementation, this could:
+            // 1. Highlight the country borders
+            // 2. Show a tooltip near the mouse cursor
+            // 3. Update a country information panel
+            // 4. Play a sound effect
+            
+            string message = country != null 
+                ? $"Selected: {country.CountryName}" 
+                : "No country selected";
+                
+            // Update the HUD or show temporary feedback
+            Dispatcher.UIThread.Post(() =>
+            {
+                // You could update a label in the UI here
+                Debug.WriteLine($"[UI FEEDBACK] {message}");
+                
+                // Example: Update window title to show selected country (temporary solution)
+                this.Title = country != null 
+                    ? $"Economy Sim - {country.CountryName} ({country.CountryCode})"
+                    : "Economy Sim";
+            });
         }
 
         #endregion

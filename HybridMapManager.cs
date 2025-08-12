@@ -86,6 +86,49 @@ namespace StrategyGame
         {
             return _terrainManager.GetCellSizeForZoom(zoomLevel);
         }
+        
+        public int BaseWidth => _terrainManager.BaseWidth;
+        public int BaseHeight => _terrainManager.BaseHeight;
+
+        /// <summary>
+        /// Gets the country at a specific pixel position (accounting for zoom and pan)
+        /// </summary>
+        /// <param name="pixelX">Screen pixel X coordinate</param>
+        /// <param name="pixelY">Screen pixel Y coordinate</param>
+        /// <param name="zoomLevel">Current zoom level</param>
+        /// <param name="viewOffset">Current view offset</param>
+        /// <returns>Country information if found, null otherwise</returns>
+        public IndexedCountryFeature? GetCountryAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
+        {
+            try
+            {
+                // Convert screen pixel to map pixel (accounting for view offset)
+                int mapPixelX = pixelX + viewOffset.X;
+                int mapPixelY = pixelY + viewOffset.Y;
+                
+                // Get current map dimensions for this zoom level
+                int cellSize = GetCellSizeForZoom(zoomLevel);
+                int mapWidth = _terrainManager.BaseWidth * cellSize;
+                int mapHeight = _terrainManager.BaseHeight * cellSize;
+                
+                // Check bounds
+                if (mapPixelX < 0 || mapPixelX >= mapWidth || mapPixelY < 0 || mapPixelY >= mapHeight)
+                {
+                    return null;
+                }
+                
+                // Convert map pixel to geographic coordinates
+                var (longitude, latitude) = CoordinateTransform.PixelToGeographic(mapPixelX, mapPixelY, mapWidth, mapHeight);
+                
+                // Find country at this geographic location
+                return _politicalTileManager.GetCountryAtGeographicPoint(longitude, latitude);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error detecting country at pixel ({pixelX}, {pixelY}): {ex.Message}");
+                return null;
+            }
+        }
 
         public void Dispose()
         {
