@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Diagnostics;
 using OSGeo.OGR;
@@ -73,6 +74,17 @@ namespace StrategyGame
         public Dictionary<string, SKColor> GetAllCountryColors()
         {
             return new Dictionary<string, SKColor>(_countryColors);
+        }
+
+        /// <summary>
+        /// Forces regeneration of country data, ignoring existing cache
+        /// </summary>
+        public void ForceRegenerateCountryData(string cshapesPath)
+        {
+            Debug.WriteLine($"Force regenerating country data for year {_targetDate.Year}...");
+            GenerateCountryData(cshapesPath);
+            SaveToCache();
+            _cacheLoaded = true;
         }
 
         private void LoadFromCacheOrGenerate(string cshapesPath)
@@ -151,6 +163,8 @@ namespace StrategyGame
                 double targetYear = _targetDate.Year + (_targetDate.DayOfYear - 1) / 
                     (DateTime.IsLeapYear(_targetDate.Year) ? 366.0 : 365.0);
 
+                Debug.WriteLine($"Processing CShapes data for target year: {targetYear:F1}");
+
                 // Open the CShapes shapefile
                 DataSource ds = Ogr.Open(cshapesPath, 0);
                 if (ds == null)
@@ -163,55 +177,136 @@ namespace StrategyGame
                 _rasterCodeToCountry.Clear();
                 _countryColors.Clear();
 
+                // Use sets to track unique countries and prevent duplicates
+                var uniqueCountryCodes = new HashSet<string>();
+                var uniqueCountryNames = new HashSet<string>();
+                var featuresPerCountry = new Dictionary<string, List<(Feature feature, double startYear, double endYear)>>();
+
+                // First pass: collect all features and group by country
                 layer.ResetReading();
                 Feature feature;
-                int countryCode = 1; // Start from 1 (0 is typically nodata)
                 int totalFeatures = 0;
-                int validFeatures = 0;
+                int featuresWithValidDates = 0;
+                int featuresInTimeRange = 0;
+
+                Debug.WriteLine("First pass: Collecting and validating features...");
 
                 while ((feature = layer.GetNextFeature()) != null)
                 {
                     totalFeatures++;
 
-                    // Get start and end dates
+                    // Get start and end dates with strict validation
                     double startYear = GetFieldAsDouble(feature, "GWSYEAR");
                     double endYear = GetFieldAsDouble(feature, "GWEYER");
 
-                    // Handle missing dates - use reasonable defaults for 1950
-                    if (startYear <= 0 || startYear > 2020) startYear = 1900;
-                    if (endYear <= 0 || endYear < startYear) endYear = 2000;
-
-                    // Strict filtering for 1950 only (allow small tolerance for data precision)
-                    if (targetYear >= startYear - 0.5 && targetYear <= endYear + 0.5)
+                    // Skip features with clearly invalid or missing temporal data
+                    if (startYear <= 0 || endYear <= 0 || startYear > 2020 || endYear > 2020 || startYear > endYear)
                     {
-                        validFeatures++;
-
-                        string countryName = GetFieldAsString(feature, "CNTRY_NAME") ?? $"Country_{countryCode}";
-                        string iso3Code = GetCountryCodeWithFallback(feature, countryCode);
-
-                        var cachedCountry = new CachedCountryData
-                        {
-                            CountryCode = iso3Code,
-                            CountryName = countryName,
-                            RasterCode = countryCode,
-                            StartYear = startYear,
-                            EndYear = endYear
-                        };
-
-                        // Generate consistent color
-                        var color = GenerateSimpleColor(countryCode);
-                        cachedCountry.ColorHex = $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
-
-                        _rasterCodeToCountry[countryCode] = cachedCountry;
-                        _countryColors[iso3Code] = color;
-
-                        countryCode++;
+                        Debug.WriteLine($"Skipping feature with invalid dates: start={startYear}, end={endYear}");
+                        feature.Dispose();
+                        continue;
                     }
 
-                    feature.Dispose();
+                    featuresWithValidDates++;
+
+                    // Check if this feature is valid for 1950 (strict temporal filtering)
+                    if (targetYear >= startYear && targetYear <= endYear)
+                    {
+                        featuresInTimeRange++;
+
+                        string countryName = GetFieldAsString(feature, "CNTRY_NAME");
+                        string iso3Code = GetCountryCodeWithFallback(feature, 0);
+
+                        // Group features by country code for duplicate resolution
+                        string key = !string.IsNullOrEmpty(iso3Code) ? iso3Code : countryName ?? "UNKNOWN";
+                        
+                        if (!featuresPerCountry.ContainsKey(key))
+                        {
+                            featuresPerCountry[key] = new List<(Feature, double, double)>();
+                        }
+                        featuresPerCountry[key].Add((feature, startYear, endYear));
+                    }
+                    else
+                    {
+                        feature.Dispose();
+                    }
                 }
 
-                Debug.WriteLine($"Country data generation complete: {validFeatures}/{totalFeatures} features included for year {targetYear:F1}");
+                Debug.WriteLine($"Feature analysis: {totalFeatures} total, {featuresWithValidDates} with valid dates, {featuresInTimeRange} in time range");
+                Debug.WriteLine($"Found {featuresPerCountry.Count} unique countries/territories");
+
+                // Second pass: resolve duplicates and create final country data
+                int countryCode = 1; // Start from 1 (0 is typically nodata)
+                int processedCountries = 0;
+
+                Debug.WriteLine("Second pass: Resolving duplicates and creating country data...");
+
+                foreach (var kvp in featuresPerCountry)
+                {
+                    string countryKey = kvp.Key;
+                    var countryFeatures = kvp.Value;
+
+                    // For countries with multiple features, prefer the one with the most appropriate time range
+                    // or the most recent start date within the valid range
+                    var bestFeature = countryFeatures
+                        .OrderBy(f => Math.Abs(f.startYear - targetYear)) // Prefer features starting closest to target year
+                        .ThenBy(f => f.endYear - f.startYear) // Prefer shorter time ranges (more specific)
+                        .First();
+
+                    var selectedFeature = bestFeature.feature;
+                    
+                    string countryName = GetFieldAsString(selectedFeature, "CNTRY_NAME") ?? countryKey;
+                    string iso3Code = GetCountryCodeWithFallback(selectedFeature, countryCode);
+
+                    // Ensure unique country codes
+                    string uniqueCode = iso3Code;
+                    int suffix = 1;
+                    while (uniqueCountryCodes.Contains(uniqueCode))
+                    {
+                        uniqueCode = $"{iso3Code}_{suffix}";
+                        suffix++;
+                    }
+                    uniqueCountryCodes.Add(uniqueCode);
+                    
+                    // Ensure unique country names
+                    string uniqueName = countryName;
+                    suffix = 1;
+                    while (uniqueCountryNames.Contains(uniqueName))
+                    {
+                        uniqueName = $"{countryName}_{suffix}";
+                        suffix++;
+                    }
+                    uniqueCountryNames.Add(uniqueName);
+
+                    var cachedCountry = new CachedCountryData
+                    {
+                        CountryCode = uniqueCode,
+                        CountryName = uniqueName,
+                        RasterCode = countryCode,
+                        StartYear = bestFeature.startYear,
+                        EndYear = bestFeature.endYear
+                    };
+
+                    // Generate consistent color
+                    var color = GenerateSimpleColor(countryCode);
+                    cachedCountry.ColorHex = $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
+
+                    _rasterCodeToCountry[countryCode] = cachedCountry;
+                    _countryColors[uniqueCode] = color;
+
+                    Debug.WriteLine($"Added country {countryCode}: {uniqueName} ({uniqueCode}) - {bestFeature.startYear:F1} to {bestFeature.endYear:F1}");
+
+                    countryCode++;
+                    processedCountries++;
+
+                    // Dispose all features for this country
+                    foreach (var f in countryFeatures)
+                    {
+                        f.feature.Dispose();
+                    }
+                }
+
+                Debug.WriteLine($"Country data generation complete: {processedCountries} unique countries processed for year {targetYear:F1}");
 
                 ds.Dispose();
             }

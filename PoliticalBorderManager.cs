@@ -300,5 +300,13 @@ namespace StrategyGame
         {
             return _dataCache.GetAllCountryColors();
         }
+        
+        /// <summary>
+        /// Forces generation of country cache from CShapes data, ignoring existing cache
+        /// </summary>
+        public void GenerateCountryCacheForced(string cshapesPath)
+        {
+            _dataCache.ForceRegenerateCountryData(cshapesPath);
+        }
     }
 }

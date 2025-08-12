@@ -39,16 +39,24 @@ namespace Economy_sim
             {
                 // Disable button during processing
                 processButton.IsEnabled = false;
-                statusText.Text = "Processing countries from CShapes-2.0 data...";
+                statusText.Text = "🔄 Processing CShapes-2.0 data for 1950 countries...";
 
                 // Run the processing in a background task
                 await Task.Run(() => ProcessCountriesFromCShapes());
 
-                statusText.Text = "✓ Successfully processed 1950 countries! Data saved to Documents\\data\\country_borders\\";
+                statusText.Text = "✅ Successfully processed 1950 countries!\n" + 
+                                 "📁 Data saved to Documents\\data\\country_borders\\country_cache_1950.json\n" +
+                                 "🌍 Countries are now available for the political map system";
+            }
+            catch (FileNotFoundException ex)
+            {
+                statusText.Text = $"❌ CShapes file not found:\n{ex.Message}";
             }
             catch (Exception ex)
             {
-                statusText.Text = $"❌ Error processing countries: {ex.Message}";
+                statusText.Text = $"❌ Error processing countries: {ex.Message}\n\n" +
+                                 "Please check that the CShapes-2.0.shp file and its associated files " +
+                                 "(.shx, .dbf, .prj) are in Documents\\data\\country_borders\\";
             }
             finally
             {
@@ -76,15 +84,9 @@ namespace Economy_sim
                     "in the Documents\\data\\country_borders\\ directory.");
             }
 
-            // This will trigger the processing of 1950 countries and save the cache
-            // The PoliticalBorderManager already has all the logic to:
-            // 1. Filter CShapes data for countries that existed in 1950
-            // 2. Assign colors and tags to countries  
-            // 3. Save the data in Documents\data\country_borders\country_cache_1950.json
-            var colors = _politicalManager.GetAllCountryColors();
-            
-            // The processing happens automatically when GetAllCountryColors() is called
-            // because it triggers the cache generation if it doesn't exist
+            // Force cache generation by calling the method that actually triggers the processing
+            // This will ensure the 1950 country data is generated and cached properly
+            _politicalManager.GenerateCountryCacheForced(cshapesPath);
         }
 
         private void BackToMainMenuButton_Click(object? sender, RoutedEventArgs e)
