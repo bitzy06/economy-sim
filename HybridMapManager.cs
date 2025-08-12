@@ -21,10 +21,15 @@ namespace StrategyGame
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
         
+        // Selected country tracking for white border highlighting
+        private IndexedCountryFeature? _selectedCountry = null;
+        
         public MapViewType CurrentViewType => _currentViewType;
         public DateTime PoliticalMapDate => _politicalMapDate;
+        public IndexedCountryFeature? SelectedCountry => _selectedCountry;
         
         public event EventHandler<MapViewType>? ViewTypeChanged;
+        public event EventHandler<IndexedCountryFeature?>? SelectedCountryChanged;
         
         public HybridMapManager(int baseWidth = 4096, int baseHeight = 2048)
         {
@@ -139,6 +144,33 @@ namespace StrategyGame
                 Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Selects a country for highlighting with white borders
+        /// </summary>
+        public void SelectCountry(IndexedCountryFeature? country)
+        {
+            if (_selectedCountry != country)
+            {
+                _selectedCountry = country;
+                
+                // Notify the political tile manager about the selection change
+                _politicalTileManager.SetSelectedCountry(country);
+                
+                // Notify listeners about the selection change
+                SelectedCountryChanged?.Invoke(this, country);
+                
+                Debug.WriteLine($"Country selection changed: {(country != null ? $"{country.CountryName} ({country.CountryCode})" : "None")}");
+            }
+        }
+
+        /// <summary>
+        /// Clears the current country selection
+        /// </summary>
+        public void ClearCountrySelection()
+        {
+            SelectCountry(null);
         }
 
         public void Dispose()
