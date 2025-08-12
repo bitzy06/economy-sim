@@ -98,6 +98,9 @@ namespace StrategyGame
 
         private readonly int _baseWidth;
         private readonly int _baseHeight;
+        
+        public int BaseWidth => _baseWidth;
+        public int BaseHeight => _baseHeight;
 
         public MultiResolutionMapManager(int baseWidth, int baseHeight)
         {
