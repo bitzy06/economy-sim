@@ -190,19 +190,38 @@ namespace StrategyGame
                 int featuresInTimeRange = 0;
 
                 Debug.WriteLine("First pass: Collecting and validating features...");
+                
+                // Debug: Log available fields in the first feature
+                Feature firstFeature = layer.GetNextFeature();
+                if (firstFeature != null)
+                {
+                    FeatureDefn featureDefn = firstFeature.GetDefnRef();
+                    Debug.WriteLine("Available fields in CShapes dataset:");
+                    for (int i = 0; i < featureDefn.GetFieldCount(); i++)
+                    {
+                        FieldDefn fieldDefn = featureDefn.GetFieldDefn(i);
+                        Debug.WriteLine($"  {i}: {fieldDefn.GetName()} ({fieldDefn.GetTypeName()})");
+                    }
+                    firstFeature.Dispose();
+                }
+                layer.ResetReading();
 
                 while ((feature = layer.GetNextFeature()) != null)
                 {
                     totalFeatures++;
 
-                    // Get start and end dates with strict validation
+                    // Get start and end dates with permissive handling
                     double startYear = GetFieldAsDouble(feature, "GWSYEAR");
                     double endYear = GetFieldAsDouble(feature, "GWEYER");
 
-                    // Skip features with clearly invalid or missing temporal data
-                    if (startYear <= 0 || endYear <= 0 || startYear > 2020 || endYear > 2020 || startYear > endYear)
+                    // Handle missing or invalid dates with reasonable defaults for 1950 processing
+                    if (startYear <= 0 || startYear > 2020) startYear = 1900;
+                    if (endYear <= 0 || endYear < startYear) endYear = 2000;
+                    
+                    // Now validate the processed dates
+                    if (startYear > endYear)
                     {
-                        Debug.WriteLine($"Skipping feature with invalid dates: start={startYear}, end={endYear}");
+                        Debug.WriteLine($"Skipping feature with inconsistent dates: start={startYear}, end={endYear}");
                         feature.Dispose();
                         continue;
                     }
@@ -353,8 +372,70 @@ namespace StrategyGame
             int fieldIndex = feature.GetFieldIndex(fieldName);
             if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
             {
-                return feature.GetFieldAsDouble(fieldIndex);
+                try
+                {
+                    return feature.GetFieldAsDouble(fieldIndex);
+                }
+                catch
+                {
+                    // Try parsing as string if direct double access fails
+                    string strValue = feature.GetFieldAsString(fieldIndex);
+                    if (double.TryParse(strValue, out double result))
+                    {
+                        return result;
+                    }
+                }
             }
+            
+            // Try alternative field names for dates
+            if (fieldName == "GWSYEAR")
+            {
+                string[] alternatives = { "STARTDATE", "START_YEAR", "STYEAR", "GWSDATE" };
+                foreach (string alt in alternatives)
+                {
+                    fieldIndex = feature.GetFieldIndex(alt);
+                    if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
+                    {
+                        try
+                        {
+                            return feature.GetFieldAsDouble(fieldIndex);
+                        }
+                        catch
+                        {
+                            string strValue = feature.GetFieldAsString(fieldIndex);
+                            if (double.TryParse(strValue, out double result))
+                            {
+                                return result;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (fieldName == "GWEYER")
+            {
+                string[] alternatives = { "ENDDATE", "END_YEAR", "ENYEAR", "GWEDATE" };
+                foreach (string alt in alternatives)
+                {
+                    fieldIndex = feature.GetFieldIndex(alt);
+                    if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
+                    {
+                        try
+                        {
+                            return feature.GetFieldAsDouble(fieldIndex);
+                        }
+                        catch
+                        {
+                            string strValue = feature.GetFieldAsString(fieldIndex);
+                            if (double.TryParse(strValue, out double result))
+                            {
+                                return result;
+                            }
+                        }
+                    }
+                }
+            }
+            
             return -1; // Default for missing fields
         }
 
