@@ -2,13 +2,15 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
 using SkiaSharp;
 using OSGeo.OGR;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// High-performance tile-based political map manager with spatial indexing optimizations
@@ -447,14 +449,13 @@ namespace StrategyGame
                 }
 
                 Debug.WriteLine($"Political mask contains {maxCountryCode} country codes");
-
-                // Use unsafe direct pixel access for maximum performance
+                
+                // First pass: fill all pixels with country colors
                 unsafe
                 {
                     var pixelPtr = (uint*)bitmap.GetPixels().ToPointer();
                     int stride = bitmap.RowBytes / 4;
-
-                    // Parallel processing for optimal performance
+                    
                     Parallel.For(0, height, y =>
                     {
                         var rng = ThreadLocalRandom.Value;
@@ -510,8 +511,54 @@ namespace StrategyGame
                             pixelPtr[y * stride + x] = color;
                         }
                     });
+                    
+                    // Second pass: add country borders
+                    uint borderColor = 0xFF000000; // Black with full alpha
+                    
+                    Parallel.For(0, height, y =>
+                    {
+                        for (int x = 0; x < width; x++)
+                        {
+                            // Skip if out of mask bounds
+                            if (y >= mask.GetLength(0) || x >= mask.GetLength(1))
+                                continue;
+                                
+                            int countryId = mask[y, x];
+                            
+                            // Skip water tiles (don't draw borders around water)
+                            if (countryId == 0)
+                                continue;
+                                
+                            bool isBorder = false;
+                            
+                            // Check neighboring pixels
+                            if (y > 0 && mask[y - 1, x] != countryId && mask[y - 1, x] != 0)
+                            {
+                                isBorder = true;
+                            }
+                            else if (y < height - 1 && y < mask.GetLength(0) - 1 && 
+                                     mask[y + 1, x] != countryId && mask[y + 1, x] != 0)
+                            {
+                                isBorder = true;
+                            }
+                            else if (x > 0 && mask[y, x - 1] != countryId && mask[y, x - 1] != 0)
+                            {
+                                isBorder = true;
+                            }
+                            else if (x < width - 1 && x < mask.GetLength(1) - 1 && 
+                                     mask[y, x + 1] != countryId && mask[y, x + 1] != 0)
+                            {
+                                isBorder = true;
+                            }
+                            
+                            if (isBorder)
+                            {
+                                pixelPtr[y * stride + x] = borderColor;
+                            }
+                        }
+                    });
                 }
-
+                
                 return bitmap;
             }
             catch (Exception ex)
@@ -521,7 +568,141 @@ namespace StrategyGame
                 return null;
             }
         }
+        
+        public SKBitmap? CountryBoarderSelectAdd (SKBitmap bitmap, int[,] mask, int width, int height, Point mousepoint)
+        {
+            try
+            {
+                if (bitmap == null || mask == null)
+                {
+                    Debug.WriteLine("CountryBoarderSelectAdd: Bitmap or mask is null");
+                    return bitmap;
+                }
 
+                // Ensure the mouse point is within bounds
+                if (mousepoint.X < 0 || mousepoint.X >= width || mousepoint.Y < 0 || mousepoint.Y >= height)
+                {
+                    Debug.WriteLine($"CountryBoarderSelectAdd: Mouse point {mousepoint} out of bounds (width={width}, height={height})");
+                    return bitmap;
+                }
+                
+                // If the mouse point is outside the mask bounds, adjust to find the nearest valid point
+                int maskY = Math.Min(mousepoint.Y, mask.GetLength(0) - 1);
+                int maskX = Math.Min(mousepoint.X, mask.GetLength(1) - 1);
+
+                // Get the country ID at the mouse position
+                int selectedCountryId = mask[maskY, maskX];
+                Debug.WriteLine($"CountryBoarderSelectAdd: Selected country ID = {selectedCountryId} at position {mousepoint}");
+                
+                // If mouse is over water (ID = 0), don't highlight anything
+                if (selectedCountryId == 0)
+                {
+                    Debug.WriteLine("CountryBoarderSelectAdd: Selected point is water (country ID = 0)");
+                    return bitmap;
+                }
+                
+                // Create a copy of the bitmap for modification
+                var newBitmap = bitmap.Copy();
+                
+                // Count how many border pixels we find for debugging
+                int borderPixelCount = 0;
+                
+                // Use unsafe code for direct pixel access (faster)
+                unsafe
+                {
+                    var pixelPtr = (uint*)newBitmap.GetPixels().ToPointer();
+                    int stride = newBitmap.RowBytes / 4;
+                    // Use a bright color with proper contrast against the map
+                    uint borderColor = 0xFFFFFFFF; // White (ARGB)
+
+                    // Process the image for border detection
+                    for (int y = 0; y < height; y++)
+                    {
+                        if (y >= mask.GetLength(0)) continue;
+                        
+                        for (int x = 0; x < width; x++)
+                        {
+                            if (x >= mask.GetLength(1)) continue;
+                            
+                            // Check if this pixel belongs to the selected country
+                            if (mask[y, x] == selectedCountryId)
+                            {
+                                bool isBorder = false;
+                                
+                                // Only check immediate neighbors (not diagonals) for thinner borders
+                                // Top neighbor
+                                if (y > 0 && y - 1 < mask.GetLength(0) && mask[y - 1, x] != selectedCountryId)
+                                {
+                                    isBorder = true;
+                                }
+                                // Bottom neighbor
+                                else if (y < height - 1 && y + 1 < mask.GetLength(0) && mask[y + 1, x] != selectedCountryId)
+                                {
+                                    isBorder = true;
+                                }
+                                // Left neighbor
+                                else if (x > 0 && x - 1 < mask.GetLength(1) && mask[y, x - 1] != selectedCountryId)
+                                {
+                                    isBorder = true;
+                                }
+                                // Right neighbor
+                                else if (x < width - 1 && x + 1 < mask.GetLength(1) && mask[y, x + 1] != selectedCountryId)
+                                {
+                                    isBorder = true;
+                                }
+                                
+                                if (isBorder)
+                                {
+                                    // Draw the border pixel
+                                    pixelPtr[y * stride + x] = borderColor;
+                                    borderPixelCount++;
+                                }
+                            }
+                        }
+                    }
+                }
+                int blockSize = 10;
+                int startX = Math.Max(0, mousepoint.X - blockSize / 2);
+                int startY = Math.Max(0, mousepoint.Y - blockSize / 2);
+                int endX = Math.Min(width - 1, startX + blockSize);
+                int endY = Math.Min(height - 1, startY + blockSize);
+
+                Debug.WriteLine($"Drawing test block at mouse position ({mousepoint.X},{mousepoint.Y}), block bounds: ({startX},{startY}) to ({endX},{endY})");
+
+                for (int y = startY; y <= endY; y++)
+                {
+                    for (int x = startX; x <= endX; x++)
+                    {
+                        // Make a bright red block
+                        newBitmap.SetPixel(x, y, 0xFFFF0000);
+                    }
+                }
+
+                // Also draw a crosshair pattern to make it even more visible
+                for (int i = -15; i <= 15; i++)
+                {
+                    int x = mousepoint.X + i;
+                    int y = mousepoint.Y;
+                    if (x >= 0 && x < width)
+                        newBitmap.SetPixel(x, y, 0xFF00FFFF); // Cyan horizontal line
+
+                    x = mousepoint.X;
+                    y = mousepoint.Y + i;
+                    if (y >= 0 && y < height)
+                        newBitmap.SetPixel(x, y, 0xFF00FFFF); // Cyan vertical line
+                }
+                // newBitmap.SetPixel(width,height, 0xFFFFFFFF); // Ensure we apply changes
+                Debug.WriteLine($"CountryBoarderSelectAdd: Added {borderPixelCount} border pixels for country ID {selectedCountryId}");
+                return newBitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in CountryBoarderSelectAdd: {ex.Message}");
+                Debug.WriteLine(ex.StackTrace);
+                return bitmap; // Return original bitmap on error
+            }
+        }
+        
         private SKColor GenerateConsistentColor(string countryCode)
         {
             // Generate consistent colors based on country code hash for performance
@@ -690,7 +871,37 @@ namespace StrategyGame
                 _spatialIndexBuilt = false;
             }
         }
-
+        
+        /// <summary>
+        /// Returns the political mask for a specific view area
+        /// </summary>
+        public int[,]? GetViewMask(int cellSize, int pixelX, int pixelY, int width, int height)
+        {
+            try
+            {
+                // Calculate scaled map dimensions
+                int scaledMapWidth = _baseWidth * cellSize;
+                int scaledMapHeight = _baseHeight * cellSize;
+                
+                // Make sure we don't exceed map bounds
+                int effectiveWidth = Math.Min(width, scaledMapWidth - pixelX);
+                int effectiveHeight = Math.Min(height, scaledMapHeight - pixelY);
+                
+                if (effectiveWidth <= 0 || effectiveHeight <= 0)
+                {
+                    return null;
+                }
+                
+                // Get the mask
+                return GetTileMask(cellSize, pixelX, pixelY, effectiveWidth, effectiveHeight);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error getting view mask: {ex.Message}");
+                return null;
+            }
+        }
+        
         private SKBitmap CreateUnavailablePlaceholder(int width, int height)
         {
             var bitmap = new SKBitmap(width, height);

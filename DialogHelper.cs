@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public static class DialogHelper
     {

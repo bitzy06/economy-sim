@@ -1,6 +1,6 @@
 using Nts = NetTopologySuite.Geometries;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public static class GeometryUtil
     {

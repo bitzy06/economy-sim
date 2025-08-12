@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using OSGeo.OGR;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     
 

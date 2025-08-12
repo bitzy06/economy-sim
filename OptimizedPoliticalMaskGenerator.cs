@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using OSGeo.GDAL;
 using OSGeo.OGR;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Optimized political mask generator using spatial indexing and GDAL reuse

@@ -1,4 +1,4 @@
-namespace StrategyGame
+namespace Economy_sim
 {
     public enum MapViewType
     {

@@ -16,7 +16,7 @@ using NetTopologySuite.Index.Quadtree;
 using NetTopologySuite.Index.Strtree;
 using NetTopologySuite.Simplify;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public static class RoadNetworkGenerator
     {

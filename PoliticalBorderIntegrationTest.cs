@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using SkiaSharp;
-using StrategyGame;
+using Economy_sim;
 
 namespace Economy_sim.Testing
 {

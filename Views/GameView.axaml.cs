@@ -5,7 +5,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using SkiaSharp;
-using StrategyGame; // Assuming HybridMapManager is in this namespace
+using Economy_sim; // Assuming HybridMapManager is in this namespace
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -32,7 +32,7 @@ namespace Economy_sim
         private bool _pendingMapUpdate = false;
         private readonly object _renderLock = new object();
         private bool _renderInProgress = false;
-
+        public Point mousepoint;
 
         public GameView()
         {
@@ -161,6 +161,27 @@ namespace Economy_sim
                 _hasPanned = false;
                 _panStartPoint = e.GetPosition(this.MapImage);
                 this.Cursor = new Cursor(StandardCursorType.Hand);
+                mousepoint = _panStartPoint; // Store initial mouse position for panning
+                Debug.WriteLine($"Pointer pressed at {_panStartPoint}, starting pan.");
+                
+                // Highlight country border in political view mode
+                if (_mapManager.CurrentViewType == MapViewType.Political)
+                {
+                    // Get the cell size for the current zoom level
+                    int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
+                    
+                    // Convert mouse position to map coordinates - use raw unscaled coordinates 
+                    // since the political masks are already at the correct zoom level
+                    var mouseMapPos = new System.Drawing.Point(
+                        (int)(_viewOffset.X + _panStartPoint.X),
+                        (int)(_viewOffset.Y + _panStartPoint.Y)
+                    );
+                    
+                    // Request a country border highlight with the current zoom level info
+                    _mapManager.HighlightCountryBorder(mouseMapPos, _currentZoomLevel);
+                    QueueRender();
+                    Debug.WriteLine($"Highlighting country at map position: {mouseMapPos}, zoom level: {_currentZoomLevel}, cell size: {cellSize}");
+                }
             }
             else if (currentPoint.Properties.IsRightButtonPressed)
             {

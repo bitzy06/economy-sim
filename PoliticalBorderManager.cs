@@ -6,7 +6,7 @@ using OSGeo.GDAL;
 using OSGeo.OGR;
 using SkiaSharp;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Manages political borders using CShapes-2.0 with strict 1950 filtering and exact country matching.

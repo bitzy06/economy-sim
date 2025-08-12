@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace StrategyGame // Reverted from EconomySim
+namespace Economy_sim // Reverted from EconomySim
 {
     // Class to track trade volume with directional information
     public class TradeFlow
@@ -60,7 +60,7 @@ namespace StrategyGame // Reverted from EconomySim
         }
         
         // Method signature changed to reflect that it's part of EconomySim and might not need all these specific StrategyGame types directly if they are wrapped or accessed via a common interface.
-        public void UpdateGlobalMarket(List<StrategyGame.City> allCities, List<StrategyGame.Country> allCountries,
+        public void UpdateGlobalMarket(List<Economy_sim.City> allCities, List<Economy_sim.Country> allCountries,
                                      TradeRouteManager routeManager, EnhancedTradeManager tradeManager)
         {
             // Clear previous turn trade volumes and flows

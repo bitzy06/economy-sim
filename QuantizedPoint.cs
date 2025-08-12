@@ -1,6 +1,6 @@
 using System;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public readonly struct QuantizedPoint : IEquatable<QuantizedPoint>
     {

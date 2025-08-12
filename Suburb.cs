@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public class Suburb
     {

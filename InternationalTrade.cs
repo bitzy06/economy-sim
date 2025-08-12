@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Basic international trade processor. Aggregates country level supply and

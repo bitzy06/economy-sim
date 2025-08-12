@@ -12,7 +12,7 @@ using NetTopologySuite.Operation.Polygonize;
 using NetTopologySuite.Operation.Union;
 using NetTopologySuite.Geometries.Utilities;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     // Existing CityGenerationData class
     public class CityGenerationData

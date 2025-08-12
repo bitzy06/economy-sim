@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public enum GoodCategory
     {
@@ -522,10 +522,10 @@ namespace StrategyGame
                             
                             // Record the trade in the global market if available
                             // Record the trade in the global market if available
-                            if (StrategyGame.GlobalMarket.Instance != null)
+                            if (Economy_sim.GlobalMarket.Instance != null)
                             {
                                 // Use default "Unknown" for country names - the global market will handle this
-                                StrategyGame.GlobalMarket.Instance.RecordTrade(
+                                Economy_sim.GlobalMarket.Instance.RecordTrade(
                                     goodName, 
                                     "Unknown", // Exporter country - this should be set by the GlobalMarket based on city relationships
                                     "Unknown", // Importer country - this should be set by the GlobalMarket based on city relationships

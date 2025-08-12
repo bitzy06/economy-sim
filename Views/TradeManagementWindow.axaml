@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="StrategyGame.TradeManagementWindow"
+        x:Class="Economy_sim.TradeManagementWindow"
         Width="400" Height="300"
         Title="TradeManagement">
     <TextBlock Text="TradeManagement content" HorizontalAlignment="Center" VerticalAlignment="Center"/>

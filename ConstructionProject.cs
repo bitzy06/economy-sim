@@ -1,7 +1,7 @@
 // ConstructionProject.cs
 using System;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public enum ProjectType
     {

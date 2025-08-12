@@ -6,7 +6,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     internal static class CityModelCache
     {

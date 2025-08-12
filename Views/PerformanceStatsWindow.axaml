@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="StrategyGame.PerformanceStatsWindow"
+        x:Class="Economy_sim.PerformanceStatsWindow"
         Width="400" Height="300"
         Title="PerformanceStats">
     <TextBlock Text="PerformanceStats content" HorizontalAlignment="Center" VerticalAlignment="Center"/>

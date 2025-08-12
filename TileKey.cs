@@ -1,6 +1,6 @@
 using System;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public readonly struct TileKey : IEquatable<TileKey>
     {

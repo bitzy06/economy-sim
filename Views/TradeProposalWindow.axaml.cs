@@ -1,6 +1,6 @@
 using Avalonia.Controls;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public partial class TradeProposalWindow : Window
     {

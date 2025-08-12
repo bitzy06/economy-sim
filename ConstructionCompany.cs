@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     // Construction companies are corporations that specialise in building
     // projects for cities. They maintain their own budgets and workers and

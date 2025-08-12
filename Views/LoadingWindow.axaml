@@ -1,6 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        x:Class="StrategyGame.LoadingWindow"
+        x:Class="Economy_sim.LoadingWindow"
         Width="400" Height="300"
         Title="Loading">
     <TextBlock Text="Loading content" HorizontalAlignment="Center" VerticalAlignment="Center"/>

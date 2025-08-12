@@ -1,6 +1,6 @@
 using System;
 using System.Diagnostics;
-using StrategyGame;
+using Economy_sim;
 
 public class CoordinateValidation
 {

@@ -1,7 +1,7 @@
 using System;
 using SkiaSharp;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Unified coordinate transformation utilities to ensure consistency between terrain and political rendering

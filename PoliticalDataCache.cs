@@ -7,7 +7,7 @@ using System.Diagnostics;
 using OSGeo.OGR;
 using SkiaSharp;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Cached country data for a specific year to prevent repeated filtering operations.

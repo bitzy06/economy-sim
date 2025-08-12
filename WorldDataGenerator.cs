@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     // Generates initial world data similar to generate_world.py
     public static class WorldDataGenerator

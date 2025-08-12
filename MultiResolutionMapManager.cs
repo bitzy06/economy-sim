@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 using DrawingPoint = SkiaSharp.SKPointI;
 using DrawingRectangle = SkiaSharp.SKRectI;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Generates and stores maps for each zoom level at game start.

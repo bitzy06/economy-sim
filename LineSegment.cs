@@ -1,4 +1,4 @@
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Types of roads used for procedural generation.

@@ -15,7 +15,7 @@ using SixLabors.ImageSharp.Drawing;
 using SkiaSharp;
 using economy_sim;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public static class ProceduralCityRenderer
     {

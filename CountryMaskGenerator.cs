@@ -2,7 +2,7 @@
 using OSGeo.GDAL;
 using OSGeo.OGR;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Utility class that creates a raster mask where each pixel contains

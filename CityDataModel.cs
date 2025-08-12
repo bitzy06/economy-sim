@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Nts = NetTopologySuite.Geometries;
 using NetTopologySuite.Index.Strtree;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public class CityDataModel
     {

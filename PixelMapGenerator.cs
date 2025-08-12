@@ -16,7 +16,7 @@ using System.Threading; // Ensure this namespace is included for ThreadLocal
 using System.Threading.Tasks;
 using Nts = NetTopologySuite.Geometries;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     // Removed duplicate GeoBounds struct definition - using the one from CoordinateTransform.cs
 
@@ -632,7 +632,7 @@ DrawBordersLarge(SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rg
         private static void RenderPolygon(
             SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> img,
             NetTopologySuite.Geometries.Polygon poly,
-            StrategyGame.GeoBounds bounds,
+            Economy_sim.GeoBounds bounds,
             int tileWidth,
             int tileHeight,
             SixLabors.ImageSharp.PixelFormats.Rgba32 color)

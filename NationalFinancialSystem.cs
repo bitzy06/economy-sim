@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace StrategyGame // Changed from EconomySim to StrategyGame
+namespace Economy_sim // Changed from EconomySim to StrategyGame
 {
     // Core finance enums and structures consolidated here
     public enum CurrencyStandard

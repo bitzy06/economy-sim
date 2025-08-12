@@ -1,7 +1,7 @@
 using Nts = NetTopologySuite.Geometries;
 using System.Collections.Concurrent;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public class Building
     {

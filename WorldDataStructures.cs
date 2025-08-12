@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     // DTO for initial factory setup in a city
     public class InitialFactoryData

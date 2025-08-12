@@ -6,8 +6,9 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Threading;
 using System.Collections.Concurrent;
+using System.Drawing;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     /// <summary>
     /// Manages both terrain and political map layers with memory-efficient rendering
@@ -20,6 +21,7 @@ namespace StrategyGame
         
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
+        private Point? _highlightedLocation = null;
         
         // Selected country tracking for white border highlighting
         private IndexedCountryFeature? _selectedCountry = null;
@@ -65,21 +67,82 @@ namespace StrategyGame
         }
         
         /// <summary>
+        /// Highlights a country border at the specified mouse position
+        /// </summary>
+        /// <param name="mousePosition">The mouse position in map coordinates</param>
+        /// <param name="zoomLevel">The current zoom level</param>
+        public void HighlightCountryBorder(Point mousePosition, int zoomLevel = 1)
+        {
+            if (_currentViewType == MapViewType.Political)
+            {
+                _highlightedLocation = mousePosition;
+                Debug.WriteLine($"Country border highlight requested at {mousePosition} with zoom level {zoomLevel}");
+                // The actual highlighting will happen during the next AssembleView call
+            }
+        }
+        
+        /// <summary>
         /// Assembles the current view based on the selected map type
         /// </summary>
         public SKBitmap? AssembleView(int zoomLevel, SKRectI viewArea, Action? onTileReady = null)
         {
+            SKBitmap? result = null;
+            
             switch (_currentViewType)
             {
                 case MapViewType.Terrain:
-                    return _terrainManager.AssembleView(zoomLevel, viewArea, onTileReady);
+                    result = _terrainManager.AssembleView(zoomLevel, viewArea, onTileReady);
+                    break;
                 
                 case MapViewType.Political:
-                    return _politicalTileManager.AssembleView(zoomLevel, viewArea, onTileReady);
+                    // Get the base political map
+                    result = _politicalTileManager.AssembleView(zoomLevel, viewArea, onTileReady);
+                    
+                    // Apply country highlight if needed
+                    if (result != null && _highlightedLocation.HasValue)
+                    {
+                        // Get the mask for this view area
+                        int cellSize = GetCellSizeForZoom(zoomLevel);
+                        int tileWidth = viewArea.Width;
+                        int tileHeight = viewArea.Height;
+                        
+                        try
+                        {
+                            // Get the political mask for this view (required for border detection)
+                            var mask = _politicalTileManager.GetViewMask(cellSize, viewArea.Left, viewArea.Top, tileWidth, tileHeight);
+                            if (mask != null)
+                            {
+                                // Convert map coordinates to local bitmap coordinates
+                                Point localPoint = new Point(
+                                   _highlightedLocation.Value.X - viewArea.Left,
+                                   _highlightedLocation.Value.Y - viewArea.Top
+                               );
+
+                                // Ensure the local point is within the actual mask dimensions
+                                if (mask != null && localPoint.X >= 0 && localPoint.Y >= 0 &&
+                                    localPoint.X < mask.GetLength(1) && localPoint.Y < mask.GetLength(0))
+                                {
+                                    Debug.WriteLine($"Applying country border highlight at local point: {localPoint}");
+                                    Debug.WriteLine($"Mask dimensions: {mask.GetLength(1)}x{mask.GetLength(0)}, Bitmap dimensions: {tileWidth}x{tileHeight}");
+                                    Debug.WriteLine($"actual point: map coordinates={_highlightedLocation.Value}, local coordinates={localPoint}");
+                                    // Apply the border highlight using the actual mask dimensions
+                                    result = _politicalTileManager.CountryBoarderSelectAdd(result, mask, mask.GetLength(1), mask.GetLength(0), localPoint);
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Error highlighting country border: {ex.Message}");
+                        }
+                    }
+                    break;
                 
                 default:
-                    return null;
+                    result = null;
+                    break;
             }
+            
+            return result;
         }
         
         public SKSizeI GetMapSize(int zoomLevel)

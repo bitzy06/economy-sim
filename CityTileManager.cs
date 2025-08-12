@@ -15,7 +15,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Buffers;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public class CityTileManager
     {
