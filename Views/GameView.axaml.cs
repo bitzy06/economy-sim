@@ -202,6 +202,21 @@ namespace Economy_sim
         {
             try
             {
+                // Validate inputs
+                if (screenX < 0 || screenY < 0 || _mapManager == null)
+                {
+                    Debug.WriteLine($"[COUNTRY DETECTION] Invalid input: screenX={screenX}, screenY={screenY}, mapManager={_mapManager != null}");
+                    return;
+                }
+
+                // Only detect countries when in political view mode
+                if (_mapManager.CurrentViewType != MapViewType.Political)
+                {
+                    Debug.WriteLine($"[COUNTRY DETECTION] Country detection only available in political view mode (current: {_mapManager.CurrentViewType})");
+                    ShowCountryDetectionFeedback(null, screenX, screenY, "Switch to Political View to detect countries");
+                    return;
+                }
+
                 var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
                 
                 if (country != null)
@@ -226,13 +241,15 @@ namespace Economy_sim
             catch (Exception ex)
             {
                 Debug.WriteLine($"[COUNTRY DETECTION ERROR] {ex.Message}");
+                Debug.WriteLine($"[COUNTRY DETECTION ERROR] Stack trace: {ex.StackTrace}");
+                ShowCountryDetectionFeedback(null, screenX, screenY, "Error detecting country");
             }
         }
         
         /// <summary>
         /// Shows visual feedback for country detection (placeholder implementation)
         /// </summary>
-        private void ShowCountryDetectionFeedback(IndexedCountryFeature? country, int screenX, int screenY)
+        private void ShowCountryDetectionFeedback(IndexedCountryFeature? country, int screenX, int screenY, string? customMessage = null)
         {
             // For now, just update a text display or create a simple notification
             // In a full implementation, this could:
@@ -241,20 +258,52 @@ namespace Economy_sim
             // 3. Update a country information panel
             // 4. Play a sound effect
             
-            string message = country != null 
+            string message = customMessage ?? (country != null 
                 ? $"Selected: {country.CountryName}" 
-                : "No country selected";
+                : "No country selected (ocean or outside map bounds)");
                 
             // Update the HUD or show temporary feedback
             Dispatcher.UIThread.Post(() =>
             {
-                // You could update a label in the UI here
-                Debug.WriteLine($"[UI FEEDBACK] {message}");
-                
-                // Example: Update window title to show selected country (temporary solution)
-                this.Title = country != null 
-                    ? $"Economy Sim - {country.CountryName} ({country.CountryCode})"
-                    : "Economy Sim";
+                try
+                {
+                    // You could update a label in the UI here
+                    Debug.WriteLine($"[UI FEEDBACK] {message}");
+                    
+                    // Example: Update window title to show selected country (temporary solution)
+                    this.Title = country != null 
+                        ? $"Economy Sim - {country.CountryName} ({country.CountryCode})"
+                        : customMessage != null 
+                        ? $"Economy Sim - {customMessage}"
+                        : "Economy Sim";
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[UI FEEDBACK ERROR] {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Shows instructions for the country detection feature
+        /// </summary>
+        private void ShowCountryDetectionInstructions()
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    // Update the window title to show instructions
+                    this.Title = "Economy Sim - Political View - RIGHT-CLICK on countries to identify them";
+                    
+                    Debug.WriteLine("[INSTRUCTIONS] Country detection is now active!");
+                    Debug.WriteLine("[INSTRUCTIONS] RIGHT-CLICK on any country to see its name and code.");
+                    Debug.WriteLine("[INSTRUCTIONS] The country name will appear in the window title.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[INSTRUCTION ERROR] {ex.Message}");
+                }
             });
         }
 
@@ -799,6 +848,10 @@ namespace Economy_sim
         {
             Debug.WriteLine("Political view button clicked");
             _mapManager.SetViewType(MapViewType.Political);
+            
+            // Show instruction for country detection when switching to political view
+            ShowCountryDetectionInstructions();
+            
             QueueRender();
         }
 
