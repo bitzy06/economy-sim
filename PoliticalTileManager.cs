@@ -6,6 +6,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using SkiaSharp;
+using OSGeo.OGR;
 
 namespace StrategyGame
 {
@@ -28,6 +29,10 @@ namespace StrategyGame
         private readonly OptimizedPoliticalMaskGenerator _maskGenerator;
         private bool _spatialIndexBuilt = false;
         private readonly object _indexLock = new object();
+        
+        // Selected country for white border highlighting
+        private IndexedCountryFeature? _selectedCountry = null;
+        private readonly object _selectionLock = new object();
         
         // LRU Cache with proper eviction
         private readonly ConcurrentDictionary<string, CacheEntry> _tileCache = new();
@@ -72,6 +77,35 @@ namespace StrategyGame
                 {
                     _spatialIndexBuilt = false;
                 }
+            }
+        }
+        
+        /// <summary>
+        /// Sets the selected country for white border highlighting
+        /// </summary>
+        public void SetSelectedCountry(IndexedCountryFeature? country)
+        {
+            lock (_selectionLock)
+            {
+                _selectedCountry = country;
+                
+                // Clear tile cache to force re-rendering with new selection
+                ClearTileCache();
+            }
+        }
+        
+        /// <summary>
+        /// Clears the tile cache to force re-rendering
+        /// </summary>
+        private void ClearTileCache()
+        {
+            lock (_cacheLock)
+            {
+                foreach (var entry in _tileCache.Values)
+                {
+                    entry.Bitmap.Dispose();
+                }
+                _tileCache.Clear();
             }
         }
         
@@ -351,10 +385,24 @@ namespace StrategyGame
                             {
                                 int countryId = mask[y, x];
                                 
+                                // Check if this pixel is on a country border
+                                bool isBorder = IsBorderPixel(mask, x, y, width, height);
+                                bool isSelectedCountry = IsSelectedCountryPixel(countryId);
+                                
                                 if (countryId == 0)
                                 {
                                     // Water - light blue
                                     color = 0xFF87CEEB; // LightSkyBlue in ARGB
+                                }
+                                else if (isBorder && isSelectedCountry)
+                                {
+                                    // Selected country border - white
+                                    color = 0xFFFFFFFF; // White in ARGB
+                                }
+                                else if (isBorder)
+                                {
+                                    // Regular country border - dark gray/black
+                                    color = 0xFF404040; // Dark gray in ARGB
                                 }
                                 else
                                 {
@@ -410,6 +458,66 @@ namespace StrategyGame
             byte g = (byte)(100 + Math.Abs((hash >> 8) % 156));
             byte b = (byte)(100 + Math.Abs((hash >> 16) % 156));
             return new SKColor(r, g, b, 255);
+        }
+        
+        /// <summary>
+        /// Determines if a pixel is on a country border by checking adjacent pixels
+        /// </summary>
+        private bool IsBorderPixel(int[,] mask, int x, int y, int width, int height)
+        {
+            if (x >= mask.GetLength(1) || y >= mask.GetLength(0)) return false;
+            
+            int currentCountryId = mask[y, x];
+            
+            // Don't draw borders for water (country ID 0)
+            if (currentCountryId == 0) return false;
+            
+            // Check all 8 surrounding pixels (including diagonals for better border detection)
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue; // Skip center pixel
+                    
+                    int newX = x + dx;
+                    int newY = y + dy;
+                    
+                    // Check bounds
+                    if (newX < 0 || newX >= mask.GetLength(1) || 
+                        newY < 0 || newY >= mask.GetLength(0))
+                    {
+                        continue; // Skip out-of-bounds pixels
+                    }
+                    
+                    int neighborCountryId = mask[newY, newX];
+                    
+                    // If neighbor has different country ID (including water), this is a border pixel
+                    if (neighborCountryId != currentCountryId)
+                    {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+        
+        /// <summary>
+        /// Determines if a pixel belongs to the currently selected country
+        /// </summary>
+        private bool IsSelectedCountryPixel(int countryId)
+        {
+            lock (_selectionLock)
+            {
+                if (_selectedCountry == null) return false;
+                
+                // Get the country information for this raster code
+                var country = _spatialIndex.GetCountryByRasterCode(countryId);
+                if (country == null) return false;
+                
+                // Check if this is the selected country (match by country code)
+                return country.CountryCode == _selectedCountry.CountryCode;
+            }
         }
         
         private void CacheTile(string cacheKey, SKBitmap bitmap)
@@ -566,6 +674,80 @@ namespace StrategyGame
             int index = zoomLevel - 1;
             index = Math.Clamp(index, 0, MultiResolutionMapManager.PixelsPerCellLevels.Length - 1);
             return MultiResolutionMapManager.PixelsPerCellLevels[index];
+        }
+        
+        /// <summary>
+        /// Gets the country at a specific geographic point
+        /// </summary>
+        /// <param name="longitude">Longitude in degrees</param>
+        /// <param name="latitude">Latitude in degrees</param>
+        /// <returns>Country information if found, null otherwise</returns>
+        public IndexedCountryFeature? GetCountryAtGeographicPoint(double longitude, double latitude)
+        {
+            try
+            {
+                // Ensure spatial index is built
+                EnsureSpatialIndexBuilt();
+                
+                // Create a small search bounds around the point
+                double tolerance = 0.01; // Small tolerance for point-in-polygon tests
+                var searchBounds = new GeoBounds
+                {
+                    MinLon = longitude - tolerance,
+                    MaxLon = longitude + tolerance,
+                    MinLat = latitude - tolerance,
+                    MaxLat = latitude + tolerance
+                };
+                
+                // Get countries that might contain this point
+                var candidates = _spatialIndex.GetCountriesInBounds(searchBounds);
+                
+                // Test each candidate to see if it actually contains the point
+                foreach (var candidate in candidates)
+                {
+                    if (IsPointInCountry(longitude, latitude, candidate))
+                    {
+                        Debug.WriteLine($"Found country at ({longitude:F4}, {latitude:F4}): {candidate.CountryName} ({candidate.CountryCode})");
+                        return candidate;
+                    }
+                }
+                
+                Debug.WriteLine($"No country found at ({longitude:F4}, {latitude:F4})");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error finding country at ({longitude:F4}, {latitude:F4}): {ex.Message}");
+                return null;
+            }
+        }
+        
+        /// <summary>
+        /// Tests if a geographic point is within a country's boundaries
+        /// </summary>
+        private bool IsPointInCountry(double longitude, double latitude, IndexedCountryFeature country)
+        {
+            try
+            {
+                // First check if point is within the bounding box for quick elimination
+                if (longitude < country.Bounds.MinLon || longitude > country.Bounds.MaxLon ||
+                    latitude < country.Bounds.MinLat || latitude > country.Bounds.MaxLat)
+                {
+                    return false;
+                }
+                
+                // Use OGR geometry to test if point is within the country polygon
+                using var point = new OSGeo.OGR.Geometry(wkbGeometryType.wkbPoint);
+                point.AddPoint_2D(longitude, latitude);
+                
+                // Test if the point is within the country geometry
+                return country.Geometry.Contains(point);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error testing point in country {country.CountryCode}: {ex.Message}");
+                return false;
+            }
         }
         
         public void Dispose()

@@ -23,6 +23,8 @@ namespace Economy_sim
         private SKPointI _viewOffset = SKPointI.Empty;
         private bool _isPanning = false;
         private Point _panStartPoint;
+        private bool _hasPanned = false; // Track if user actually moved during pan
+        private const double PAN_THRESHOLD = 5.0; // Minimum distance to consider as panning
         private bool _isInitialized = false;
 
         private readonly DispatcherTimer _mapUpdateTimer;
@@ -151,11 +153,21 @@ namespace Economy_sim
 
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
-            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            var currentPoint = e.GetCurrentPoint(this);
+            
+            if (currentPoint.Properties.IsLeftButtonPressed)
             {
                 _isPanning = true;
+                _hasPanned = false;
                 _panStartPoint = e.GetPosition(this.MapImage);
                 this.Cursor = new Cursor(StandardCursorType.Hand);
+            }
+            else if (currentPoint.Properties.IsRightButtonPressed)
+            {
+                // Right-click for country detection (existing behavior)
+                var mousePos = e.GetPosition(this.MapImage);
+                DetectCountryAtPosition((int)mousePos.X, (int)mousePos.Y);
+                e.Handled = true;
             }
         }
 
@@ -165,12 +177,20 @@ namespace Economy_sim
 
             var currentPoint = e.GetPosition(this.MapImage);
             var delta = _panStartPoint - currentPoint;
-            _panStartPoint = currentPoint;
+            
+            // Check if movement is significant enough to be considered panning
+            var distance = Math.Sqrt(delta.X * delta.X + delta.Y * delta.Y);
+            if (distance > PAN_THRESHOLD)
+            {
+                _hasPanned = true;
+                
+                _panStartPoint = currentPoint;
 
-            _viewOffset.X += (int)delta.X;
-            _viewOffset.Y += (int)delta.Y;
+                _viewOffset.X += (int)delta.X;
+                _viewOffset.Y += (int)delta.Y;
 
-            _pendingMapUpdate = true;
+                _pendingMapUpdate = true;
+            }
         }
 
         private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -179,7 +199,216 @@ namespace Economy_sim
             {
                 _isPanning = false;
                 this.Cursor = new Cursor(StandardCursorType.Arrow);
+                
+                // If user didn't pan (just clicked), select country at click position
+                if (!_hasPanned && _mapManager.CurrentViewType == MapViewType.Political)
+                {
+                    var mousePos = e.GetPosition(this.MapImage);
+                    SelectCountryAtPosition((int)mousePos.X, (int)mousePos.Y);
+                }
+                
+                _hasPanned = false;
             }
+        }
+
+        #endregion
+
+        #region Country Detection
+
+        /// <summary>
+        /// Detects which country is at the specified screen position
+        /// </summary>
+        private void DetectCountryAtPosition(int screenX, int screenY)
+        {
+            try
+            {
+                // Validate inputs
+                if (screenX < 0 || screenY < 0 || _mapManager == null)
+                {
+                    Debug.WriteLine($"[COUNTRY DETECTION] Invalid input: screenX={screenX}, screenY={screenY}, mapManager={_mapManager != null}");
+                    return;
+                }
+
+                // Only detect countries when in political view mode
+                if (_mapManager.CurrentViewType != MapViewType.Political)
+                {
+                    Debug.WriteLine($"[COUNTRY DETECTION] Country detection only available in political view mode (current: {_mapManager.CurrentViewType})");
+                    ShowCountryDetectionFeedback(null, screenX, screenY, "Switch to Political View to detect countries");
+                    return;
+                }
+
+                var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                
+                if (country != null)
+                {
+                    // Show country information
+                    string message = $"Country: {country.CountryName} ({country.CountryCode})";
+                    Debug.WriteLine($"[COUNTRY DETECTED] {message}");
+                    
+                    // You could add visual feedback here, such as:
+                    // - Highlighting the country border
+                    // - Showing a tooltip
+                    // - Opening a country information panel
+                    ShowCountryDetectionFeedback(country, screenX, screenY);
+                }
+                else
+                {
+                    Debug.WriteLine($"[COUNTRY DETECTED] No country found at position ({screenX}, {screenY})");
+                    // Could show "Ocean" or "No country" message
+                    ShowCountryDetectionFeedback(null, screenX, screenY);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[COUNTRY DETECTION ERROR] {ex.Message}");
+                Debug.WriteLine($"[COUNTRY DETECTION ERROR] Stack trace: {ex.StackTrace}");
+                ShowCountryDetectionFeedback(null, screenX, screenY, "Error detecting country");
+            }
+        }
+        
+        /// <summary>
+        /// Shows visual feedback for country detection (placeholder implementation)
+        /// </summary>
+        private void ShowCountryDetectionFeedback(IndexedCountryFeature? country, int screenX, int screenY, string? customMessage = null)
+        {
+            // For now, just update a text display or create a simple notification
+            // In a full implementation, this could:
+            // 1. Highlight the country borders
+            // 2. Show a tooltip near the mouse cursor
+            // 3. Update a country information panel
+            // 4. Play a sound effect
+            
+            string message = customMessage ?? (country != null 
+                ? $"Selected: {country.CountryName}" 
+                : "No country selected (ocean or outside map bounds)");
+                
+            // Update the HUD or show temporary feedback
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    // You could update a label in the UI here
+                    Debug.WriteLine($"[UI FEEDBACK] {message}");
+                    
+                    // Example: Update window title to show selected country (temporary solution)
+                    this.Title = country != null 
+                        ? $"Economy Sim - {country.CountryName} ({country.CountryCode})"
+                        : customMessage != null 
+                        ? $"Economy Sim - {customMessage}"
+                        : "Economy Sim";
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[UI FEEDBACK ERROR] {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Shows instructions for the country detection feature
+        /// </summary>
+        private void ShowCountryDetectionInstructions()
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    // Update the window title to show instructions
+                    this.Title = "Economy Sim - Political View - LEFT-CLICK to select, RIGHT-CLICK to identify countries";
+                    
+                    Debug.WriteLine("[INSTRUCTIONS] Country detection and selection are now active!");
+                    Debug.WriteLine("[INSTRUCTIONS] LEFT-CLICK on any country to select it (shows white borders).");
+                    Debug.WriteLine("[INSTRUCTIONS] RIGHT-CLICK on any country to see its name and code.");
+                    Debug.WriteLine("[INSTRUCTIONS] The country name will appear in the window title.");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[INSTRUCTION ERROR] {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Selects a country at the specified screen position (left-click)
+        /// </summary>
+        private void SelectCountryAtPosition(int screenX, int screenY)
+        {
+            try
+            {
+                // Validate inputs
+                if (screenX < 0 || screenY < 0 || _mapManager == null)
+                {
+                    Debug.WriteLine($"[COUNTRY SELECTION] Invalid input: screenX={screenX}, screenY={screenY}, mapManager={_mapManager != null}");
+                    return;
+                }
+
+                // Only select countries when in political view mode
+                if (_mapManager.CurrentViewType != MapViewType.Political)
+                {
+                    Debug.WriteLine($"[COUNTRY SELECTION] Country selection only available in political view mode (current: {_mapManager.CurrentViewType})");
+                    return;
+                }
+
+                var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                
+                if (country != null)
+                {
+                    // Select the country (will show white borders)
+                    _mapManager.SelectCountry(country);
+                    
+                    string message = $"Selected: {country.CountryName} ({country.CountryCode})";
+                    Debug.WriteLine($"[COUNTRY SELECTED] {message}");
+                    
+                    // Update UI feedback
+                    ShowCountrySelectionFeedback(country, screenX, screenY);
+                    
+                    // Force map re-render to show white borders
+                    QueueRender();
+                }
+                else
+                {
+                    // Clear selection if clicking on water/empty area
+                    _mapManager.ClearCountrySelection();
+                    Debug.WriteLine($"[COUNTRY SELECTION] No country found at position ({screenX}, {screenY}) - cleared selection");
+                    
+                    ShowCountrySelectionFeedback(null, screenX, screenY);
+                    
+                    // Force map re-render to remove white borders
+                    QueueRender();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[COUNTRY SELECTION ERROR] {ex.Message}");
+                Debug.WriteLine($"[COUNTRY SELECTION ERROR] Stack trace: {ex.StackTrace}");
+            }
+        }
+        
+        /// <summary>
+        /// Shows visual feedback for country selection
+        /// </summary>
+        private void ShowCountrySelectionFeedback(IndexedCountryFeature? country, int screenX, int screenY)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (country != null)
+                    {
+                        this.Title = $"Economy Sim - SELECTED: {country.CountryName} ({country.CountryCode})";
+                        Debug.WriteLine($"[SELECTION FEEDBACK] Country selected: {country.CountryName}");
+                    }
+                    else
+                    {
+                        this.Title = "Economy Sim - No country selected";
+                        Debug.WriteLine("[SELECTION FEEDBACK] No country selected");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[SELECTION FEEDBACK ERROR] {ex.Message}");
+                }
+            });
         }
 
         #endregion
@@ -723,6 +952,10 @@ namespace Economy_sim
         {
             Debug.WriteLine("Political view button clicked");
             _mapManager.SetViewType(MapViewType.Political);
+            
+            // Show instruction for country detection when switching to political view
+            ShowCountryDetectionInstructions();
+            
             QueueRender();
         }
 
