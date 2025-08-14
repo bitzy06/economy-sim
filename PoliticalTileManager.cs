@@ -50,11 +50,38 @@ namespace StrategyGame
         private static readonly ThreadLocal<Random> ThreadLocalRandom = new ThreadLocal<Random>(
             () => new Random(Environment.TickCount + Thread.CurrentThread.ManagedThreadId));
 
-        private class CacheEntry
+        private sealed class CacheEntry
         {
-            public SKBitmap Bitmap { get; set; }
+            public required string Key { get; init; }
+            public required SKBitmap Bitmap { get; init; }
             public long AccessTime { get; set; }
             public DateTime CreatedForDate { get; set; }
+            public int RefCount { get; set; }
+            public bool DisposeRequested { get; set; }
+            public bool Disposed { get; set; }
+        }
+
+        private sealed class TileLease : IDisposable
+        {
+            private readonly PoliticalTileManager _owner;
+            private CacheEntry? _entry;
+            public SKBitmap Bitmap { get; }
+
+            public TileLease(PoliticalTileManager owner, CacheEntry entry)
+            {
+                _owner = owner;
+                _entry = entry;
+                Bitmap = entry.Bitmap;
+            }
+
+            public void Dispose()
+            {
+                var e = Interlocked.Exchange(ref _entry, null);
+                if (e != null)
+                {
+                    _owner.ReleaseLease(e);
+                }
+            }
         }
 
         public PoliticalTileManager(PoliticalBorderManager politicalManager, int baseWidth, int baseHeight)
@@ -109,13 +136,29 @@ namespace StrategyGame
         /// </summary>
         private void ClearTileCache()
         {
+            List<CacheEntry> toDispose = new();
             lock (_cacheLock)
             {
-                foreach (var entry in _tileCache.Values)
+                foreach (var kv in _tileCache)
                 {
-                    entry.Bitmap.Dispose();
+                    if (_tileCache.TryRemove(kv.Key, out var entry))
+                    {
+                        if (entry.RefCount == 0 && !entry.Disposed)
+                        {
+                            toDispose.Add(entry);
+                        }
+                        else
+                        {
+                            entry.DisposeRequested = true;
+                        }
+                    }
                 }
-                _tileCache.Clear();
+            }
+
+            foreach (var e in toDispose)
+            {
+                e.Disposed = true;
+                e.Bitmap.Dispose();
             }
         }
 
@@ -150,11 +193,11 @@ namespace StrategyGame
                         int destY = tileY * TileSizePx - viewArea.Top;
 
                         // Get tile (async if not cached)
-                        var tile = GetTileSync(cellSize, tileX, tileY);
-                        if (tile != null)
+                        using var lease = AcquireTileLease(cellSize, tileX, tileY);
+                        if (lease?.Bitmap != null && !lease.Bitmap.IsNull && !lease.Bitmap.IsEmpty)
                         {
-                            var destRect = SKRect.Create(destX, destY, tile.Width, tile.Height);
-                            canvas.DrawBitmap(tile, destRect);
+                            var destRect = SKRect.Create(destX, destY, lease.Bitmap.Width, lease.Bitmap.Height);
+                            canvas.DrawBitmap(lease.Bitmap, destRect);
                         }
                         else
                         {
@@ -178,18 +221,45 @@ namespace StrategyGame
             }
         }
 
-        private SKBitmap? GetTileSync(int cellSize, int tileX, int tileY)
+        // Replaces direct bitmap access with a ref-counted lease.
+        private TileLease? AcquireTileLease(int cellSize, int tileX, int tileY)
         {
             string cacheKey = $"{cellSize}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
 
-            if (_tileCache.TryGetValue(cacheKey, out var cached))
+            lock (_cacheLock)
             {
-                // Update access time for LRU
-                cached.AccessTime = Interlocked.Increment(ref _cacheAccessCounter);
-                return cached.Bitmap;
+                if (_tileCache.TryGetValue(cacheKey, out var entry) && !entry.Disposed)
+                {
+                    entry.AccessTime = Interlocked.Increment(ref _cacheAccessCounter);
+                    entry.RefCount++;
+                    return new TileLease(this, entry);
+                }
+            }
+            return null;
+        }
+
+        private void ReleaseLease(CacheEntry entry)
+        {
+            bool disposeNow = false;
+
+            lock (_cacheLock)
+            {
+                if (entry.Disposed)
+                    return;
+
+                entry.RefCount = Math.Max(0, entry.RefCount - 1);
+
+                if (entry.RefCount == 0 && entry.DisposeRequested)
+                {
+                    entry.Disposed = true;
+                    disposeNow = true;
+                }
             }
 
-            return null;
+            if (disposeNow)
+            {
+                entry.Bitmap.Dispose();
+            }
         }
 
         private async Task<SKBitmap?> GetTileAsync(int cellSize, int tileX, int tileY, Action? onComplete = null)
@@ -524,26 +594,38 @@ namespace StrategyGame
 
         private void CacheTile(string cacheKey, SKBitmap bitmap)
         {
+            var entry = new CacheEntry
+            {
+                Key = cacheKey,
+                Bitmap = bitmap.Copy(), // Make a copy to avoid disposal issues
+                AccessTime = Interlocked.Increment(ref _cacheAccessCounter),
+                CreatedForDate = _politicalMapDate,
+                RefCount = 0,
+                DisposeRequested = false,
+                Disposed = false
+            };
+
             lock (_cacheLock)
             {
                 // Implement LRU eviction if cache is full
                 if (_tileCache.Count >= MaxCacheSize)
                 {
-                    EvictOldestCacheEntry();
+                    EvictOldestCacheEntry_NoLock();
                 }
 
-                var entry = new CacheEntry
-                {
-                    Bitmap = bitmap.Copy(), // Make a copy to avoid disposal issues
-                    AccessTime = Interlocked.Increment(ref _cacheAccessCounter),
-                    CreatedForDate = _politicalMapDate
-                };
-
-                _tileCache.TryAdd(cacheKey, entry);
+                _tileCache[cacheKey] = entry;
             }
         }
 
         private void EvictOldestCacheEntry()
+        {
+            lock (_cacheLock)
+            {
+                EvictOldestCacheEntry_NoLock();
+            }
+        }
+
+        private void EvictOldestCacheEntry_NoLock()
         {
             string? oldestKey = null;
             long oldestTime = long.MaxValue;
@@ -559,20 +641,46 @@ namespace StrategyGame
 
             if (oldestKey != null && _tileCache.TryRemove(oldestKey, out var removed))
             {
-                removed.Bitmap.Dispose();
+                if (removed.RefCount == 0 && !removed.Disposed)
+                {
+                    removed.Disposed = true;
+                    // Dispose outside lock to avoid blocking
+                    Task.Run(() => removed.Bitmap.Dispose());
+                }
+                else
+                {
+                    removed.DisposeRequested = true;
+                }
             }
         }
 
         private void ClearCacheForDateChange()
         {
+            List<CacheEntry> toDispose = new();
             lock (_cacheLock)
             {
-                foreach (var entry in _tileCache.Values)
+                foreach (var kv in _tileCache)
                 {
-                    entry.Bitmap.Dispose();
+                    if (_tileCache.TryRemove(kv.Key, out var entry))
+                    {
+                        if (entry.RefCount == 0 && !entry.Disposed)
+                        {
+                            toDispose.Add(entry);
+                        }
+                        else
+                        {
+                            entry.DisposeRequested = true;
+                        }
+                    }
                 }
-                _tileCache.Clear();
+
                 _maskCache.Clear();
+            }
+
+            foreach (var e in toDispose)
+            {
+                e.Disposed = true;
+                e.Bitmap.Dispose();
             }
 
             // Clear spatial index as well since it's date-specific
