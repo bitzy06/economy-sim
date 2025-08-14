@@ -10,7 +10,7 @@ using SkiaSharp;
 namespace StrategyGame
 {
     /// <summary>
-    /// Cached country data for 1950 to prevent repeated filtering operations
+    /// Cached country data for a specific year to prevent repeated filtering operations.
     /// </summary>
     public class CachedCountryData
     {
@@ -23,7 +23,7 @@ namespace StrategyGame
     }
 
     /// <summary>
-    /// Manages cached political data to prevent repeated filtering and improve performance
+    /// Manages cached political data to prevent repeated filtering and improve performance.
     /// </summary>
     public class PoliticalDataCache
     {
@@ -38,12 +38,12 @@ namespace StrategyGame
             _targetDate = targetDate;
             _cacheFilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                cacheDirectory, 
+                cacheDirectory,
                 $"country_cache_{targetDate.Year}.json");
         }
 
         /// <summary>
-        /// Gets cached country data or generates it if not available
+        /// Gets cached country data or generates it if not available.
         /// </summary>
         public Dictionary<int, CachedCountryData> GetOrGenerateCountryData(string cshapesPath)
         {
@@ -56,20 +56,21 @@ namespace StrategyGame
         }
 
         /// <summary>
-        /// Gets color for a country by raster code
+        /// Gets the color for a country by its raster code.
         /// </summary>
         public SKColor GetCountryColorByRasterCode(int rasterCode)
         {
             if (_rasterCodeToCountry.TryGetValue(rasterCode, out var countryData) &&
+                !string.IsNullOrEmpty(countryData.CountryCode) &&
                 _countryColors.TryGetValue(countryData.CountryCode, out var color))
             {
                 return color;
             }
-            return new SKColor(128, 128, 128, 255); // Grey default
+            return new SKColor(128, 128, 128, 255); // A default grey color.
         }
 
         /// <summary>
-        /// Gets all country colors
+        /// Gets all country colors.
         /// </summary>
         public Dictionary<string, SKColor> GetAllCountryColors()
         {
@@ -77,11 +78,11 @@ namespace StrategyGame
         }
 
         /// <summary>
-        /// Forces regeneration of country data, ignoring existing cache
+        /// Forces the regeneration of country data, ignoring any existing cache.
         /// </summary>
         public void ForceRegenerateCountryData(string cshapesPath)
         {
-            Debug.WriteLine($"Force regenerating country data for year {_targetDate.Year}...");
+            Debug.WriteLine($"Force regenerating country data for the year {_targetDate.Year}...");
             GenerateCountryData(cshapesPath);
             SaveToCache();
             _cacheLoaded = true;
@@ -90,16 +91,14 @@ namespace StrategyGame
         private void LoadFromCacheOrGenerate(string cshapesPath)
         {
             Debug.WriteLine($"Attempting to load cache from: {_cacheFilePath}");
-            
-            // Try to load from cache first
+
             if (LoadFromCache())
             {
-                Debug.WriteLine($"Loaded {_rasterCodeToCountry.Count} countries from cache for year {_targetDate.Year}");
+                Debug.WriteLine($"Loaded {_rasterCodeToCountry.Count} countries from cache for the year {_targetDate.Year}");
                 return;
             }
 
-            // Generate fresh data
-            Debug.WriteLine($"Cache not found or invalid, generating fresh country data for year {_targetDate.Year}...");
+            Debug.WriteLine($"Cache not found or invalid. Generating fresh country data for the year {_targetDate.Year}...");
             GenerateCountryData(cshapesPath);
             SaveToCache();
         }
@@ -109,20 +108,20 @@ namespace StrategyGame
             try
             {
                 Debug.WriteLine($"Checking for cache file at: {_cacheFilePath}");
-                
+
                 if (!File.Exists(_cacheFilePath))
                 {
-                    Debug.WriteLine("Cache file does not exist");
+                    Debug.WriteLine("Cache file does not exist.");
                     return false;
                 }
 
-                Debug.WriteLine("Cache file found, attempting to load...");
+                Debug.WriteLine("Cache file found. Attempting to load...");
                 string json = File.ReadAllText(_cacheFilePath);
                 var cachedData = JsonSerializer.Deserialize<List<CachedCountryData>>(json);
 
-                if (cachedData == null || cachedData.Count == 0)
+                if (cachedData == null || !cachedData.Any())
                 {
-                    Debug.WriteLine("Cache file is empty or invalid");
+                    Debug.WriteLine("Cache file is empty or invalid.");
                     return false;
                 }
 
@@ -132,19 +131,19 @@ namespace StrategyGame
                 foreach (var country in cachedData)
                 {
                     _rasterCodeToCountry[country.RasterCode] = country;
-                    
+
                     if (SKColor.TryParse(country.ColorHex, out SKColor color))
                     {
+                        // Use the standard code from the cache as the key
                         _countryColors[country.CountryCode] = color;
                     }
                     else
                     {
-                        // Generate fallback color
                         _countryColors[country.CountryCode] = GenerateSimpleColor(country.RasterCode);
                     }
                 }
 
-                Debug.WriteLine($"Successfully loaded {cachedData.Count} countries from cache");
+                Debug.WriteLine($"Successfully loaded {cachedData.Count} countries from cache.");
                 return true;
             }
             catch (Exception ex)
@@ -159,179 +158,92 @@ namespace StrategyGame
         {
             try
             {
-                // CShapes uses decimal years (e.g., 1950.0 for Jan 1950)
-                double targetYear = _targetDate.Year + (_targetDate.DayOfYear - 1) / 
+                double targetYear = _targetDate.Year + (_targetDate.DayOfYear - 1) /
                     (DateTime.IsLeapYear(_targetDate.Year) ? 366.0 : 365.0);
 
-                Debug.WriteLine($"Processing CShapes data for target year: {targetYear:F1}");
+                Debug.WriteLine($"Processing CShapes data for target year: {targetYear:F2}");
 
-                // Open the CShapes shapefile
-                DataSource ds = Ogr.Open(cshapesPath, 0);
-                if (ds == null)
-                    throw new ApplicationException($"Failed to open CShapes file: {cshapesPath}");
-
-                Layer layer = ds.GetLayerByIndex(0);
-                if (layer == null)
-                    throw new ApplicationException("No layer found in CShapes file");
+                using var ds = Ogr.Open(cshapesPath, 0) ?? throw new ApplicationException($"Failed to open CShapes file: {cshapesPath}");
+                using var layer = ds.GetLayerByIndex(0) ?? throw new ApplicationException("No layer found in the CShapes file.");
 
                 _rasterCodeToCountry.Clear();
                 _countryColors.Clear();
 
-                // Use sets to track unique countries and prevent duplicates
-                var uniqueCountryCodes = new HashSet<string>();
-                var uniqueCountryNames = new HashSet<string>();
                 var featuresPerCountry = new Dictionary<string, List<(Feature feature, double startYear, double endYear)>>();
 
-                // First pass: collect all features and group by country
                 layer.ResetReading();
                 Feature feature;
-                int totalFeatures = 0;
-                int featuresWithValidDates = 0;
-                int featuresInTimeRange = 0;
 
-                Debug.WriteLine("First pass: Collecting and validating features...");
-                
-                // Debug: Log available fields in the first feature
-                Feature firstFeature = layer.GetNextFeature();
-                if (firstFeature != null)
-                {
-                    FeatureDefn featureDefn = firstFeature.GetDefnRef();
-                    Debug.WriteLine("Available fields in CShapes dataset:");
-                    for (int i = 0; i < featureDefn.GetFieldCount(); i++)
-                    {
-                        FieldDefn fieldDefn = featureDefn.GetFieldDefn(i);
-                        Debug.WriteLine($"  {i}: {fieldDefn.GetName()} ({fieldDefn.GetTypeName()})");
-                    }
-                    firstFeature.Dispose();
-                }
-                layer.ResetReading();
-
+                // First pass: Group features by a reliable identifier
                 while ((feature = layer.GetNextFeature()) != null)
                 {
-                    totalFeatures++;
-
-                    // Get start and end dates with permissive handling
                     double startYear = GetFieldAsDouble(feature, "GWSYEAR");
-                    double endYear = GetFieldAsDouble(feature, "GWEYER");
+                    double endYear = GetFieldAsDouble(feature, "GWEYEAR");
 
-                    // Handle missing or invalid dates with reasonable defaults for 1950 processing
-                    if (startYear <= 0 || startYear > 2020) startYear = 1900;
-                    if (endYear <= 0 || endYear < startYear) endYear = 2000;
-                    
-                    // Now validate the processed dates
-                    if (startYear > endYear)
+                    if (startYear <= 0 || endYear <= 0 || startYear > endYear)
                     {
-                        Debug.WriteLine($"Skipping feature with inconsistent dates: start={startYear}, end={endYear}");
                         feature.Dispose();
                         continue;
                     }
 
-                    featuresWithValidDates++;
-
-                    // Check if this feature is valid for 1950 (strict temporal filtering)
-                    if (targetYear >= startYear && targetYear <= endYear)
+                    if (targetYear >= startYear && targetYear < endYear)
                     {
-                        featuresInTimeRange++;
-
-                        string countryName = GetFieldAsString(feature, "CNTRY_NAME");
-                        string iso3Code = GetCountryCodeWithFallback(feature, 0);
-
-                        // Group features by country code for duplicate resolution
-                        string key = !string.IsNullOrEmpty(iso3Code) ? iso3Code : countryName ?? "UNKNOWN";
-                        
-                        if (!featuresPerCountry.ContainsKey(key))
+                        // Use a consistent method to get the best possible identifier for grouping.
+                        string groupIdentifier = GetBestIdentifier(feature);
+                        if (string.IsNullOrEmpty(groupIdentifier))
                         {
-                            featuresPerCountry[key] = new List<(Feature, double, double)>();
+                            feature.Dispose();
+                            continue; // Skip if no usable identifier
                         }
-                        featuresPerCountry[key].Add((feature, startYear, endYear));
+
+                        if (!featuresPerCountry.ContainsKey(groupIdentifier))
+                        {
+                            featuresPerCountry[groupIdentifier] = new List<(Feature, double, double)>();
+                        }
+                        featuresPerCountry[groupIdentifier].Add((feature.Clone(), startYear, endYear));
                     }
-                    else
-                    {
-                        feature.Dispose();
-                    }
+                    feature.Dispose();
                 }
 
-                Debug.WriteLine($"Feature analysis: {totalFeatures} total, {featuresWithValidDates} with valid dates, {featuresInTimeRange} in time range");
-                Debug.WriteLine($"Found {featuresPerCountry.Count} unique countries/territories");
+                Debug.WriteLine($"Found {featuresPerCountry.Count} unique country groups for the target year.");
 
-                // Second pass: resolve duplicates and create final country data
-                int countryCode = 1; // Start from 1 (0 is typically nodata)
-                int processedCountries = 0;
-
-                Debug.WriteLine("Second pass: Resolving duplicates and creating country data...");
-
+                // Second pass: Resolve duplicates and create final country data
+                int rasterCode = 1;
                 foreach (var kvp in featuresPerCountry)
                 {
-                    string countryKey = kvp.Key;
                     var countryFeatures = kvp.Value;
+                    var bestFeatureTuple = countryFeatures.OrderByDescending(f => f.startYear).First();
+                    var selectedFeature = bestFeatureTuple.feature;
 
-                    // For countries with multiple features, prefer the one with the most appropriate time range
-                    // or the most recent start date within the valid range
-                    var bestFeature = countryFeatures
-                        .OrderBy(f => Math.Abs(f.startYear - targetYear)) // Prefer features starting closest to target year
-                        .ThenBy(f => f.endYear - f.startYear) // Prefer shorter time ranges (more specific)
-                        .First();
-
-                    var selectedFeature = bestFeature.feature;
-                    
-                    string countryName = GetFieldAsString(selectedFeature, "CNTRY_NAME") ?? countryKey;
-                    string iso3Code = GetCountryCodeWithFallback(selectedFeature, countryCode);
-
-                    // Ensure unique country codes
-                    string uniqueCode = iso3Code;
-                    int suffix = 1;
-                    while (uniqueCountryCodes.Contains(uniqueCode))
-                    {
-                        uniqueCode = $"{iso3Code}_{suffix}";
-                        suffix++;
-                    }
-                    uniqueCountryCodes.Add(uniqueCode);
-                    
-                    // Ensure unique country names
-                    string uniqueName = countryName;
-                    suffix = 1;
-                    while (uniqueCountryNames.Contains(uniqueName))
-                    {
-                        uniqueName = $"{countryName}_{suffix}";
-                        suffix++;
-                    }
-                    uniqueCountryNames.Add(uniqueName);
+                    // Prioritize standard codes (ISO/COW) over names for the cache entry.
+                    string countryName = GetFieldAsString(selectedFeature, "CNTRY_NAME")?.Trim() ?? kvp.Key;
+                    string finalCode = GetBestIdentifier(selectedFeature);
 
                     var cachedCountry = new CachedCountryData
                     {
-                        CountryCode = uniqueCode,
-                        CountryName = uniqueName,
-                        RasterCode = countryCode,
-                        StartYear = bestFeature.startYear,
-                        EndYear = bestFeature.endYear
+                        CountryCode = finalCode, // <-- Ensures a standard code is stored
+                        CountryName = countryName,
+                        RasterCode = rasterCode,
+                        StartYear = bestFeatureTuple.startYear,
+                        EndYear = bestFeatureTuple.endYear
                     };
 
-                    // Generate consistent color
-                    var color = GenerateSimpleColor(countryCode);
+                    var color = GenerateSimpleColor(rasterCode);
                     cachedCountry.ColorHex = $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
 
-                    _rasterCodeToCountry[countryCode] = cachedCountry;
-                    _countryColors[uniqueCode] = color;
+                    _rasterCodeToCountry[rasterCode] = cachedCountry;
+                    _countryColors[finalCode] = color;
 
-                    Debug.WriteLine($"Added country {countryCode}: {uniqueName} ({uniqueCode}) - {bestFeature.startYear:F1} to {bestFeature.endYear:F1}");
+                    rasterCode++;
 
-                    countryCode++;
-                    processedCountries++;
-
-                    // Dispose all features for this country
-                    foreach (var f in countryFeatures)
-                    {
-                        f.feature.Dispose();
-                    }
+                    foreach (var f in countryFeatures) f.feature.Dispose();
                 }
 
-                Debug.WriteLine($"Country data generation complete: {processedCountries} unique countries processed for year {targetYear:F1}");
-
-                ds.Dispose();
+                Debug.WriteLine($"Country data generation complete: {_rasterCodeToCountry.Count} unique countries processed.");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error generating country data: {ex.Message}");
+                Debug.WriteLine($"An error occurred while generating country data: {ex.Message}");
                 throw;
             }
         }
@@ -340,23 +252,16 @@ namespace StrategyGame
         {
             try
             {
-                // Ensure directory exists
-                string directory = Path.GetDirectoryName(_cacheFilePath);
-                if (!string.IsNullOrEmpty(directory))
+                string? directory = Path.GetDirectoryName(_cacheFilePath);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 {
-                    if (!Directory.Exists(directory))
-                    {
-                        Debug.WriteLine($"Creating cache directory: {directory}");
-                        Directory.CreateDirectory(directory);
-                    }
+                    Debug.WriteLine($"Creating cache directory: {directory}");
+                    Directory.CreateDirectory(directory);
                 }
 
                 var cacheData = new List<CachedCountryData>(_rasterCodeToCountry.Values);
-                string json = JsonSerializer.Serialize(cacheData, new JsonSerializerOptions 
-                { 
-                    WriteIndented = true 
-                });
-                
+                string json = JsonSerializer.Serialize(cacheData, new JsonSerializerOptions { WriteIndented = true });
+
                 File.WriteAllText(_cacheFilePath, json);
                 Debug.WriteLine($"Saved {cacheData.Count} countries to cache: {_cacheFilePath}");
             }
@@ -367,109 +272,43 @@ namespace StrategyGame
             }
         }
 
+        /// <summary>
+        /// Gets the best available identifier for a feature, prioritizing standard codes.
+        /// </summary>
+        private string GetBestIdentifier(Feature feature)
+        {
+            string id = GetFieldAsString(feature, "ISO1AL3")?.Trim();
+            if (!string.IsNullOrEmpty(id)) return id;
+
+            id = GetFieldAsString(feature, "COWCODE")?.Trim();
+            if (!string.IsNullOrEmpty(id)) return id;
+
+            // Fallback to name ONLY if no standard code is available.
+            return GetFieldAsString(feature, "CNTRY_NAME")?.Trim();
+        }
+
         private double GetFieldAsDouble(Feature feature, string fieldName)
         {
             int fieldIndex = feature.GetFieldIndex(fieldName);
-            if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
+            if (fieldIndex != -1 && feature.IsFieldSet(fieldIndex))
             {
-                try
-                {
-                    return feature.GetFieldAsDouble(fieldIndex);
-                }
-                catch
-                {
-                    // Try parsing as string if direct double access fails
-                    string strValue = feature.GetFieldAsString(fieldIndex);
-                    if (double.TryParse(strValue, out double result))
-                    {
-                        return result;
-                    }
-                }
+                return feature.GetFieldAsDouble(fieldIndex);
             }
-            
-            // Try alternative field names for dates
-            if (fieldName == "GWSYEAR")
-            {
-                string[] alternatives = { "STARTDATE", "START_YEAR", "STYEAR", "GWSDATE" };
-                foreach (string alt in alternatives)
-                {
-                    fieldIndex = feature.GetFieldIndex(alt);
-                    if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
-                    {
-                        try
-                        {
-                            return feature.GetFieldAsDouble(fieldIndex);
-                        }
-                        catch
-                        {
-                            string strValue = feature.GetFieldAsString(fieldIndex);
-                            if (double.TryParse(strValue, out double result))
-                            {
-                                return result;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            if (fieldName == "GWEYER")
-            {
-                string[] alternatives = { "ENDDATE", "END_YEAR", "ENYEAR", "GWEDATE" };
-                foreach (string alt in alternatives)
-                {
-                    fieldIndex = feature.GetFieldIndex(alt);
-                    if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
-                    {
-                        try
-                        {
-                            return feature.GetFieldAsDouble(fieldIndex);
-                        }
-                        catch
-                        {
-                            string strValue = feature.GetFieldAsString(fieldIndex);
-                            if (double.TryParse(strValue, out double result))
-                            {
-                                return result;
-                            }
-                        }
-                    }
-                }
-            }
-            
-            return -1; // Default for missing fields
+            return -1;
         }
 
-        private string GetFieldAsString(Feature feature, string fieldName)
+        private string? GetFieldAsString(Feature feature, string fieldName)
         {
             int fieldIndex = feature.GetFieldIndex(fieldName);
-            if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
+            if (fieldIndex != -1 && feature.IsFieldSet(fieldIndex))
             {
                 return feature.GetFieldAsString(fieldIndex);
             }
-            return null; // Default for missing fields
-        }
-
-        private string GetCountryCodeWithFallback(Feature feature, int countryCode)
-        {
-            // Try different possible field names for country code in order of preference
-            string[] possibleFields = { "ISO1AL3", "COWCODE", "GWCODE", "ISO", "CNTRY_NAME" };
-
-            foreach (string fieldName in possibleFields)
-            {
-                string value = GetFieldAsString(feature, fieldName);
-                if (!string.IsNullOrEmpty(value))
-                {
-                    return value;
-                }
-            }
-
-            // If no field is found, generate a fallback code
-            return $"UNK{countryCode:D3}";
+            return null;
         }
 
         private SKColor GenerateSimpleColor(int index)
         {
-            // Deterministic color generation based on index for consistency
             byte r = (byte)(100 + (index * 67) % 156);
             byte g = (byte)(100 + (index * 113) % 156);
             byte b = (byte)(100 + (index * 151) % 156);
