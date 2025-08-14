@@ -21,7 +21,6 @@ namespace Economy_sim
         
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
-        private Point? _highlightedLocation = null;
         
         // Selected country tracking for white border highlighting
         private IndexedCountryFeature? _selectedCountry = null;
@@ -75,9 +74,42 @@ namespace Economy_sim
         {
             if (_currentViewType == MapViewType.Political)
             {
-                _highlightedLocation = mousePosition;
-                Debug.WriteLine($"Country border highlight requested at {mousePosition} with zoom level {zoomLevel}");
-                // The actual highlighting will happen during the next AssembleView call
+                try
+                {
+                    // Convert screen pixel to map pixel (accounting for view offset)
+                    int mapPixelX = mousePosition.X;
+                    int mapPixelY = mousePosition.Y;
+                    
+                    // Get current map dimensions for this zoom level
+                    int cellSize = GetCellSizeForZoom(zoomLevel);
+                    int mapWidth = BaseWidth * cellSize;
+                    int mapHeight = BaseHeight * cellSize;
+                    
+                    // Check bounds
+                    if (mapPixelX < 0 || mapPixelX >= mapWidth || mapPixelY < 0 || mapPixelY >= mapHeight)
+                    {
+                        Debug.WriteLine($"Point ({mapPixelX}, {mapPixelY}) is outside map bounds ({mapWidth}x{mapHeight})");
+                        return;
+                    }
+                    
+                    // Convert map pixel to geographic coordinates
+                    var (longitude, latitude) = CoordinateTransform.PixelToGeographic(mapPixelX, mapPixelY, mapWidth, mapHeight);
+                    
+                    Debug.WriteLine($"Highlight: Map ({mapPixelX},{mapPixelY}) -> Geo ({longitude:F4},{latitude:F4})");
+                    
+                    // Find country at this geographic location and select it directly
+                    // This is better than using visual highlighting with red blocks/crosshairs
+                    var country = _politicalTileManager.GetCountryAtGeographicPoint(longitude, latitude);
+                    if (country != null)
+                    {
+                        // We won't call SelectCountry here as that will be done by the caller if needed
+                        Debug.WriteLine($"Found country at highlight position: {country.CountryName} ({country.CountryCode})");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error highlighting country border: {ex.Message}");
+                }
             }
         }
         
@@ -95,46 +127,8 @@ namespace Economy_sim
                     break;
                 
                 case MapViewType.Political:
-                    // Get the base political map
+                    // Get the base political map - selection highlighting is handled internally by the tile manager
                     result = _politicalTileManager.AssembleView(zoomLevel, viewArea, onTileReady);
-                    
-                    // Apply country highlight if needed
-                    if (result != null && _highlightedLocation.HasValue)
-                    {
-                        // Get the mask for this view area
-                        int cellSize = GetCellSizeForZoom(zoomLevel);
-                        int tileWidth = viewArea.Width;
-                        int tileHeight = viewArea.Height;
-                        
-                        try
-                        {
-                            // Get the political mask for this view (required for border detection)
-                            var mask = _politicalTileManager.GetViewMask(cellSize, viewArea.Left, viewArea.Top, tileWidth, tileHeight);
-                            if (mask != null)
-                            {
-                                // Convert map coordinates to local bitmap coordinates
-                                Point localPoint = new Point(
-                                   _highlightedLocation.Value.X - viewArea.Left,
-                                   _highlightedLocation.Value.Y - viewArea.Top
-                               );
-
-                                // Ensure the local point is within the actual mask dimensions
-                                if (mask != null && localPoint.X >= 0 && localPoint.Y >= 0 &&
-                                    localPoint.X < mask.GetLength(1) && localPoint.Y < mask.GetLength(0))
-                                {
-                                    Debug.WriteLine($"Applying country border highlight at local point: {localPoint}");
-                                    Debug.WriteLine($"Mask dimensions: {mask.GetLength(1)}x{mask.GetLength(0)}, Bitmap dimensions: {tileWidth}x{tileHeight}");
-                                    Debug.WriteLine($"actual point: map coordinates={_highlightedLocation.Value}, local coordinates={localPoint}");
-                                    // Apply the border highlight using the actual mask dimensions
-                                    result = _politicalTileManager.CountryBoarderSelectAdd(result, mask, mask.GetLength(1), mask.GetLength(0), localPoint);
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"Error highlighting country border: {ex.Message}");
-                        }
-                    }
                     break;
                 
                 default:

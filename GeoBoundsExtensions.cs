@@ -1,6 +1,6 @@
 using System;
 
-namespace StrategyGame
+namespace Economy_sim
 {
     public static class GeoBoundsExtensions
     {

@@ -19,6 +19,9 @@ namespace Economy_sim
 
         // --- Optimized Rendering Fields ---
         private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
+        private WriteableBitmap _backBufferBitmap; // Back buffer for double buffering
+        private SKBitmap _currentFrameBuffer; // Current frame in SkBitmap format
+        private SKBitmap _nextFrameBuffer; // Next frame being rendered
         private int _currentZoomLevel = 1; // Start at the lowest zoom level so user doesn't have to zoom out
         private SKPointI _viewOffset = SKPointI.Empty;
         private bool _isPanning = false;
@@ -29,9 +32,13 @@ namespace Economy_sim
 
         private readonly DispatcherTimer _mapUpdateTimer;
         private DispatcherTimer _initialRenderTimer; // Timer to poll for initial size.
+        private DispatcherTimer _continuousRenderTimer; // Timer for continuous refreshing
         private bool _pendingMapUpdate = false;
         private readonly object _renderLock = new object();
+        private readonly object _bufferSwapLock = new object();
         private bool _renderInProgress = false;
+        private bool _frameReady = false;
+        private readonly TimeSpan _refreshInterval = TimeSpan.FromMilliseconds(100); // 10 FPS continuous refresh
         public Point mousepoint;
 
         public GameView()
@@ -47,6 +54,13 @@ namespace Economy_sim
             };
             _mapUpdateTimer.Tick += MapUpdateTimer_Tick;
             _mapUpdateTimer.Start();
+
+            // Create continuous render timer
+            _continuousRenderTimer = new DispatcherTimer
+            {
+                Interval = _refreshInterval
+            };
+            _continuousRenderTimer.Tick += ContinuousRenderTimer_Tick;
 
             // Initialize HUD after component initialization
             InitializeHUD();
@@ -94,15 +108,33 @@ namespace Economy_sim
                 _initialRenderTimer = null;
 
                 Debug.WriteLine($"Initial size detected via timer using ClientSize: {this.ClientSize}. Triggering render.");
-                UpdateBitmapSource(PixelSize.FromSize(this.ClientSize, 1.0));
+                var pixelSize = PixelSize.FromSize(this.ClientSize, 1.0);
+                UpdateBitmapSource(pixelSize);
                 
                 // Center the view to ensure both map types start at the same position
                 CenterView();
                 
-                QueueRender();
+                // Initial render
+                QueueRender(immediate: true);
+                
+                // Start the continuous refresh timer
+                _continuousRenderTimer.Start();
+                Debug.WriteLine($"Started continuous refresh timer at {_refreshInterval.TotalMilliseconds}ms interval");
             }
         }
 
+        /// <summary>
+        /// This timer continuously refreshes the map at a fixed interval
+        /// </summary>
+        private void ContinuousRenderTimer_Tick(object? sender, EventArgs e)
+        {
+            // Queue a new render if one is not already in progress
+            if (!_renderInProgress && _isInitialized)
+            {
+                // Debug.WriteLine("Continuous refresh tick - queueing new render");
+                QueueRender(immediate: false);
+            }
+        }
 
         /// <summary>
         /// This is the most reliable place to create/resize the bitmap after startup,
@@ -114,7 +146,7 @@ namespace Economy_sim
             {
                 Debug.WriteLine($"Size changed to {e.NewSize}, updating bitmap and re-rendering.");
                 UpdateBitmapSource(PixelSize.FromSize(e.NewSize, 1.0));
-                QueueRender();
+                QueueRender(immediate: true);
             }
         }
 
@@ -123,7 +155,7 @@ namespace Economy_sim
             if (_pendingMapUpdate)
             {
                 _pendingMapUpdate = false;
-                QueueRender();
+                QueueRender(immediate: true);
             }
         }
 
@@ -147,7 +179,7 @@ namespace Economy_sim
 
             _viewOffset = new SKPointI(newOffsetX, newOffsetY);
 
-            QueueRender();
+            QueueRender(immediate: true);
             e.Handled = true;
         }
 
@@ -163,25 +195,6 @@ namespace Economy_sim
                 this.Cursor = new Cursor(StandardCursorType.Hand);
                 mousepoint = _panStartPoint; // Store initial mouse position for panning
                 Debug.WriteLine($"Pointer pressed at {_panStartPoint}, starting pan.");
-                
-                // Highlight country border in political view mode
-                if (_mapManager.CurrentViewType == MapViewType.Political)
-                {
-                    // Get the cell size for the current zoom level
-                    int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
-                    
-                    // Convert mouse position to map coordinates - use raw unscaled coordinates 
-                    // since the political masks are already at the correct zoom level
-                    var mouseMapPos = new System.Drawing.Point(
-                        (int)(_viewOffset.X + _panStartPoint.X),
-                        (int)(_viewOffset.Y + _panStartPoint.Y)
-                    );
-                    
-                    // Request a country border highlight with the current zoom level info
-                    _mapManager.HighlightCountryBorder(mouseMapPos, _currentZoomLevel);
-                    QueueRender();
-                    Debug.WriteLine($"Highlighting country at map position: {mouseMapPos}, zoom level: {_currentZoomLevel}, cell size: {cellSize}");
-                }
             }
             else if (currentPoint.Properties.IsRightButtonPressed)
             {
@@ -382,9 +395,6 @@ namespace Economy_sim
                     
                     // Update UI feedback
                     ShowCountrySelectionFeedback(country, screenX, screenY);
-                    
-                    // Force map re-render to show white borders
-                    QueueRender();
                 }
                 else
                 {
@@ -393,9 +403,6 @@ namespace Economy_sim
                     Debug.WriteLine($"[COUNTRY SELECTION] No country found at position ({screenX}, {screenY}) - cleared selection");
                     
                     ShowCountrySelectionFeedback(null, screenX, screenY);
-                    
-                    // Force map re-render to remove white borders
-                    QueueRender();
                 }
             }
             catch (Exception ex)
@@ -438,76 +445,165 @@ namespace Economy_sim
 
         /// <summary>
         /// Creates or resizes the WriteableBitmap used as the target for rendering.
+        /// Sets up double-buffering for smooth rendering.
         /// </summary>
         private void UpdateBitmapSource(PixelSize size)
         {
             if (size.Width <= 0 || size.Height <= 0) return;
 
-            // Dispose the old bitmap if it exists and the size is different
-            if (_writeableBitmap != null && _writeableBitmap.PixelSize != size)
+            lock (_bufferSwapLock)
             {
-                _writeableBitmap.Dispose();
-                _writeableBitmap = null;
-            }
+                // Dispose old bitmaps if they exist
+                if (_writeableBitmap != null && _writeableBitmap.PixelSize != size)
+                {
+                    _writeableBitmap.Dispose();
+                    _writeableBitmap = null;
+                }
+                
+                if (_backBufferBitmap != null && _backBufferBitmap.PixelSize != size)
+                {
+                    _backBufferBitmap.Dispose();
+                    _backBufferBitmap = null;
+                }
 
-            if (_writeableBitmap == null)
-            {
-                _writeableBitmap = new WriteableBitmap(size, new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
-                this.MapImage.Source = _writeableBitmap;
+                // Dispose old frame buffers
+                _currentFrameBuffer?.Dispose();
+                _nextFrameBuffer?.Dispose();
+
+                // Create front buffer (displayed to user)
+                if (_writeableBitmap == null)
+                {
+                    _writeableBitmap = new WriteableBitmap(size, new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
+                    this.MapImage.Source = _writeableBitmap;
+                }
+                
+                // Create back buffer (for rendering next frame)
+                if (_backBufferBitmap == null)
+                {
+                    _backBufferBitmap = new WriteableBitmap(size, new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
+                }
+                
+                // Create frame buffers for rendering
+                _currentFrameBuffer = new SKBitmap(size.Width, size.Height);
+                _nextFrameBuffer = new SKBitmap(size.Width, size.Height);
+                
+                // Initialize with a clear background
+                _currentFrameBuffer.Erase(SKColors.LightGray);
+                _nextFrameBuffer.Erase(SKColors.LightGray);
+                
+                Debug.WriteLine($"Created double-buffered bitmaps at size: {size.Width}x{size.Height}");
             }
         }
 
         /// <summary>
         /// Queues a render operation, ensuring it runs on a background thread without blocking the UI.
-        /// This version is fully asynchronous to prevent deadlocks.
+        /// Uses double-buffering to prevent flickering.
         /// </summary>
-        private void QueueRender()
+        private void QueueRender(bool immediate = false)
         {
             lock (_renderLock)
             {
-                if (_renderInProgress) return;
+                if (_renderInProgress) 
+                {
+                    // If immediate mode and a render is already in progress, we need to ensure 
+                    // another render happens after the current one completes
+                    if (immediate)
+                    {
+                        _pendingMapUpdate = true;
+                    }
+                    return;
+                }
                 _renderInProgress = true;
             }
 
             // Fire and forget the async task.
             _ = Task.Run(async () =>
             {
-                SKBitmap skBitmap = null;
+                SKBitmap resultBitmap = null;
                 try
                 {
                     // This runs on a background thread.
-                    skBitmap = RenderMapOnWorkerThread();
-
-                    if (skBitmap != null)
+                    resultBitmap = RenderMapOnWorkerThread();
+                    
+                    if (resultBitmap != null)
                     {
-                        // Dispatch the pixel copy to the UI thread without blocking the background thread.
+                        lock (_bufferSwapLock)
+                        {
+                            // Copy the result to the next frame buffer
+                            if (_nextFrameBuffer != null && !_nextFrameBuffer.IsEmpty)
+                            {
+                                // Copy pixels from result to next frame buffer
+                                resultBitmap.CopyTo(_nextFrameBuffer);
+                                _frameReady = true;
+                            }
+                        }
+                        
+                        // Dispatch the buffer swap to the UI thread
                         await Dispatcher.UIThread.InvokeAsync(() =>
                         {
-                            if (_writeableBitmap != null && _writeableBitmap.PixelSize.Width == skBitmap.Width && _writeableBitmap.PixelSize.Height == skBitmap.Height)
-                            {
-                                using (var frameBuffer = _writeableBitmap.Lock())
-                                {
-                                    var size = frameBuffer.RowBytes * frameBuffer.Size.Height;
-                                    unsafe
-                                    {
-                                        Buffer.MemoryCopy(skBitmap.GetPixels().ToPointer(), frameBuffer.Address.ToPointer(), size, size);
-                                    }
-                                }
-                                // Explicitly tell the UI to redraw the updated area.
-                                MapImage.InvalidateVisual();
-                            }
-                        });
+                            SwapBuffers();
+                        }, immediate ? DispatcherPriority.Render : DispatcherPriority.Background);
                     }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error during map rendering: {ex.Message}");
                 }
                 finally
                 {
-                    skBitmap?.Dispose(); // Dispose the Skia bitmap after we're done with it.
+                    resultBitmap?.Dispose(); // Dispose the temporary Skia bitmap after we're done with it.
+                    
                     lock (_renderLock)
                     {
                         _renderInProgress = false;
+                        
+                        // If there are pending updates and we're allowed to immediately render again
+                        if (_pendingMapUpdate)
+                        {
+                            _pendingMapUpdate = false;
+                            // Use the dispatcher to avoid potential stack overflow
+                            Dispatcher.UIThread.Post(() => QueueRender(immediate));
+                        }
                     }
                 }
             });
+        }
+        
+        /// <summary>
+        /// Swaps the front and back buffers to display the new frame
+        /// </summary>
+        private void SwapBuffers()
+        {
+            lock (_bufferSwapLock)
+            {
+                try
+                {
+                    if (!_frameReady || _nextFrameBuffer == null || _writeableBitmap == null) 
+                        return;
+                    
+                    // Copy the next frame to the front buffer
+                    using (var frameBuffer = _writeableBitmap.Lock())
+                    {
+                        var size = frameBuffer.RowBytes * frameBuffer.Size.Height;
+                        unsafe
+                        {
+                            Buffer.MemoryCopy(_nextFrameBuffer.GetPixels().ToPointer(), 
+                                             frameBuffer.Address.ToPointer(), 
+                                             size, size);
+                        }
+                    }
+                    
+                    // Explicitly tell the UI to redraw the updated area
+                    MapImage.InvalidateVisual();
+                    
+                    // Reset the frame ready flag
+                    _frameReady = false;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error swapping buffers: {ex.Message}");
+                }
+            }
         }
 
         private SKBitmap RenderMapOnWorkerThread()
@@ -527,12 +623,12 @@ namespace Economy_sim
                 _viewOffset.Y + (int)effectiveSize.Height
             );
 
-            Debug.WriteLine($"RenderMap: ZoomLevel={_currentZoomLevel}, ViewArea={viewArea}, Offset={_viewOffset}");
+            // Debug.WriteLine($"RenderMap: ZoomLevel={_currentZoomLevel}, ViewArea={viewArea}, Offset={_viewOffset}");
 
             return _mapManager.AssembleView(
                 _currentZoomLevel,
                 viewArea,
-                () => Dispatcher.UIThread.Post(QueueRender, DispatcherPriority.Background)
+                () => Dispatcher.UIThread.Post(() => QueueRender(), DispatcherPriority.Background)
             );
         }
 
@@ -765,7 +861,7 @@ namespace Economy_sim
                 statsOverlay.IsVisible = false;
         }
 
-        private void ShowPopup(string popupName)
+        private void ShowPopup(String popupName)
         {
             HideAllPopups();
             if (this.FindControl<Border>(popupName) is Border popup)
@@ -954,6 +1050,9 @@ namespace Economy_sim
         {
             Debug.WriteLine("Menu button clicked - returning to main menu");
 
+            // Stop the continuous render timer before closing
+            _continuousRenderTimer?.Stop();
+
             // Create and show the main menu window
             var mainWindow = new MainWindow();
             mainWindow.Show();
@@ -966,7 +1065,7 @@ namespace Economy_sim
         {
             Debug.WriteLine("Terrain view button clicked");
             _mapManager.SetViewType(MapViewType.Terrain);
-            QueueRender();
+            QueueRender(immediate: true);
         }
 
         private void OnPoliticalViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -977,7 +1076,7 @@ namespace Economy_sim
             // Show instruction for country detection when switching to political view
             ShowCountryDetectionInstructions();
             
-            QueueRender();
+            QueueRender(immediate: true);
         }
 
         private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
@@ -988,7 +1087,7 @@ namespace Economy_sim
             // CenterView(); // Removed to prevent annoying recentering
             
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
-            Dispatcher.UIThread.Post(QueueRender);
+            Dispatcher.UIThread.Post(() => QueueRender(immediate: true));
         }
         
         private void CenterView()

@@ -38,6 +38,7 @@ namespace Economy_sim
         // Selected country for white border highlighting
         private IndexedCountryFeature? _selectedCountry = null;
         private readonly object _selectionLock = new object();
+        private int _selectedRasterCode = -1; // Cached selected country's raster code for fast comparisons
 
         // LRU Cache with proper eviction
         private readonly ConcurrentDictionary<string, CacheEntry> _tileCache = new();
@@ -127,6 +128,7 @@ namespace Economy_sim
             lock (_selectionLock)
             {
                 _selectedCountry = country;
+                _selectedRasterCode = country?.RasterCode ?? -1; // Cache raster code for fast comparisons
 
                 // Clear tile cache to force re-rendering with new selection
                 ClearTileCache();
@@ -449,13 +451,19 @@ namespace Economy_sim
                 }
 
                 Debug.WriteLine($"Political mask contains {maxCountryCode} country codes");
+
+                int selectedId;
+                lock (_selectionLock)
+                {
+                    selectedId = _selectedRasterCode;
+                }
                 
-                // First pass: fill all pixels with country colors
+                // First pass: fill all pixels with base colors only (no border logic here)
                 unsafe
                 {
                     var pixelPtr = (uint*)bitmap.GetPixels().ToPointer();
                     int stride = bitmap.RowBytes / 4;
-                    
+
                     Parallel.For(0, height, y =>
                     {
                         var rng = ThreadLocalRandom.Value;
@@ -469,24 +477,10 @@ namespace Economy_sim
                             {
                                 int countryId = mask[y, x];
 
-                                // Check if this pixel is on a country border
-                                bool isBorder = IsBorderPixel(mask, x, y, width, height);
-                                bool isSelectedCountry = IsSelectedCountryPixel(countryId);
-
                                 if (countryId == 0)
                                 {
                                     // Water - light blue
                                     color = 0xFF87CEEB; // LightSkyBlue in ARGB
-                                }
-                                else if (isBorder && isSelectedCountry)
-                                {
-                                    // Selected country border - white
-                                    color = 0xFFFFFFFF; // White in ARGB
-                                }
-                                else if (isBorder)
-                                {
-                                    // Regular country border - dark gray/black
-                                    color = 0xFF404040; // Dark gray in ARGB
                                 }
                                 else
                                 {
@@ -511,10 +505,11 @@ namespace Economy_sim
                             pixelPtr[y * stride + x] = color;
                         }
                     });
-                    
-                    // Second pass: add country borders
-                    uint borderColor = 0xFF000000; // Black with full alpha
-                    
+
+                    // Second pass: add borders. White between selected and any neighbor (including water), black between other countries.
+                    uint blackBorder = 0xFF000000; // Black with full alpha
+                    uint whiteBorder = 0xFFFFFFFF; // White
+
                     Parallel.For(0, height, y =>
                     {
                         for (int x = 0; x < width; x++)
@@ -522,43 +517,73 @@ namespace Economy_sim
                             // Skip if out of mask bounds
                             if (y >= mask.GetLength(0) || x >= mask.GetLength(1))
                                 continue;
-                                
+
                             int countryId = mask[y, x];
-                            
-                            // Skip water tiles (don't draw borders around water)
+
+                            // Skip water pixels in border calculation
+                            // (we only draw borders on the land side of the coast)
                             if (countryId == 0)
                                 continue;
-                                
-                            bool isBorder = false;
-                            
-                            // Check neighboring pixels
-                            if (y > 0 && mask[y - 1, x] != countryId && mask[y - 1, x] != 0)
+
+                            bool draw = false;
+                            bool drawWhite = false;
+
+                            // Check 4-neighborhood for differences
+                            // Up
+                            if (y > 0)
                             {
-                                isBorder = true;
+                                int n = mask[y - 1, x];
+                                if (n != countryId)
+                                {
+                                    // Draw borders with all neighbors, including water (n==0)
+                                    draw = true;
+                                    // Draw white border if this is the selected country
+                                    if (countryId == selectedId || (n > 0 && n == selectedId)) 
+                                        drawWhite = true;
+                                }
                             }
-                            else if (y < height - 1 && y < mask.GetLength(0) - 1 && 
-                                     mask[y + 1, x] != countryId && mask[y + 1, x] != 0)
+                            // Down
+                            if (!draw && y + 1 < mask.GetLength(0))
                             {
-                                isBorder = true;
+                                int n = mask[y + 1, x];
+                                if (n != countryId)
+                                {
+                                    draw = true;
+                                    if (countryId == selectedId || (n > 0 && n == selectedId)) 
+                                        drawWhite = true;
+                                }
                             }
-                            else if (x > 0 && mask[y, x - 1] != countryId && mask[y, x - 1] != 0)
+                            // Left
+                            if (!draw && x > 0)
                             {
-                                isBorder = true;
+                                int n = mask[y, x - 1];
+                                if (n != countryId)
+                                {
+                                    draw = true;
+                                    if (countryId == selectedId || (n > 0 && n == selectedId)) 
+                                        drawWhite = true;
+                                }
                             }
-                            else if (x < width - 1 && x < mask.GetLength(1) - 1 && 
-                                     mask[y, x + 1] != countryId && mask[y, x + 1] != 0)
+                            // Right
+                            if (!draw && x + 1 < mask.GetLength(1))
                             {
-                                isBorder = true;
+                                int n = mask[y, x + 1];
+                                if (n != countryId)
+                                {
+                                    draw = true;
+                                    if (countryId == selectedId || (n > 0 && n == selectedId)) 
+                                        drawWhite = true;
+                                }
                             }
-                            
-                            if (isBorder)
+
+                            if (draw)
                             {
-                                pixelPtr[y * stride + x] = borderColor;
+                                pixelPtr[y * stride + x] = drawWhite ? whiteBorder : blackBorder;
                             }
                         }
                     });
                 }
-                
+
                 return bitmap;
             }
             catch (Exception ex)
@@ -630,22 +655,22 @@ namespace Economy_sim
                                 bool isBorder = false;
                                 
                                 // Only check immediate neighbors (not diagonals) for thinner borders
-                                // Top neighbor
+                                // Top neighbor - include water (ID=0) for border detection
                                 if (y > 0 && y - 1 < mask.GetLength(0) && mask[y - 1, x] != selectedCountryId)
                                 {
                                     isBorder = true;
                                 }
-                                // Bottom neighbor
+                                // Bottom neighbor - include water for border detection
                                 else if (y < height - 1 && y + 1 < mask.GetLength(0) && mask[y + 1, x] != selectedCountryId)
                                 {
                                     isBorder = true;
                                 }
-                                // Left neighbor
+                                // Left neighbor - include water for border detection
                                 else if (x > 0 && x - 1 < mask.GetLength(1) && mask[y, x - 1] != selectedCountryId)
                                 {
                                     isBorder = true;
                                 }
-                                // Right neighbor
+                                // Right neighbor - include water for border detection
                                 else if (x < width - 1 && x + 1 < mask.GetLength(1) && mask[y, x + 1] != selectedCountryId)
                                 {
                                     isBorder = true;
@@ -691,7 +716,7 @@ namespace Economy_sim
                     if (y >= 0 && y < height)
                         newBitmap.SetPixel(x, y, 0xFF00FFFF); // Cyan vertical line
                 }
-                // newBitmap.SetPixel(width,height, 0xFFFFFFFF); // Ensure we apply changes
+                
                 Debug.WriteLine($"CountryBoarderSelectAdd: Added {borderPixelCount} border pixels for country ID {selectedCountryId}");
                 return newBitmap;
             }
@@ -722,7 +747,7 @@ namespace Economy_sim
 
             int currentCountryId = mask[y, x];
 
-            // Don't draw borders for water (country ID 0)
+            // Don't draw borders for water pixels themselves (country ID 0)
             if (currentCountryId == 0) return false;
 
             // Check all 8 surrounding pixels (including diagonals for better border detection)
@@ -744,7 +769,7 @@ namespace Economy_sim
 
                     int neighborCountryId = mask[newY, newX];
 
-                    // If neighbor has different country ID (including water), this is a border pixel
+                    // If neighbor has different country ID (including water - ID 0), this is a border pixel
                     if (neighborCountryId != currentCountryId)
                     {
                         return true;
@@ -764,11 +789,16 @@ namespace Economy_sim
             {
                 if (_selectedCountry == null) return false;
 
-                // Get the country information for this raster code
+                // Fast path using cached raster code
+                if (_selectedRasterCode != -1)
+                {
+                    return countryId == _selectedRasterCode;
+                }
+
+                // Fallback (shouldn't normally be hit): lookup via spatial index
                 var country = _spatialIndex.GetCountryByRasterCode(countryId);
                 if (country == null) return false;
 
-                // Check if this is the selected country (match by country code)
                 return country.CountryCode == _selectedCountry.CountryCode;
             }
         }

@@ -3,7 +3,7 @@ using Avalonia.Interactivity;
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using StrategyGame;
+
 
 namespace Economy_sim
 {
