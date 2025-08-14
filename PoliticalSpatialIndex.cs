@@ -1,21 +1,12 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using OSGeo.OGR;
 
 namespace StrategyGame
 {
-    /// <summary>
-    /// Extension methods for existing GeoBounds struct
-    /// </summary>
-    public static class GeoBoundsExtensions
-    {
-        public static bool Intersects(this GeoBounds bounds, GeoBounds other)
-        {
-            return !(other.MinLon > bounds.MaxLon || other.MaxLon < bounds.MinLon ||
-                     other.MinLat > bounds.MaxLat || other.MaxLat < bounds.MinLat);
-        }
-    }
+    
 
     /// <summary>
     /// Cached country feature for spatial indexing
@@ -32,7 +23,7 @@ namespace StrategyGame
     }
 
     /// <summary>
-    /// Spatial index for fast country lookup by geographic bounds
+    /// Spatial index for fast country lookup, built from pre-filtered data.
     /// </summary>
     public class PoliticalSpatialIndex
     {
@@ -41,102 +32,68 @@ namespace StrategyGame
         private bool _indexBuilt = false;
 
         /// <summary>
-        /// Builds spatial index from CShapes data for the target year
+        /// Builds the spatial index using a pre-filtered, clean set of country data.
+        /// It no longer performs its own filtering, preventing overlaps.
         /// </summary>
-        public void BuildIndex(string cshapesPath, DateTime targetDate)
+        public void BuildIndex(string cshapesPath, IReadOnlyDictionary<int, CachedCountryData> cleanCountryData)
         {
             if (_indexBuilt) return;
 
-            Debug.WriteLine($"Building spatial index for year {targetDate.Year}...");
+            Debug.WriteLine($"Building spatial index from {cleanCountryData.Count} pre-filtered countries...");
             var sw = Stopwatch.StartNew();
 
             try
             {
-                double targetYear = targetDate.Year + (targetDate.DayOfYear - 1) / 
-                    (DateTime.IsLeapYear(targetDate.Year) ? 366.0 : 365.0);
+                var featureLookup = cleanCountryData.Values.ToDictionary(c => $"{c.CountryCode}_{c.StartYear}", c => c);
 
-                DataSource ds = Ogr.Open(cshapesPath, 0);
-                if (ds == null)
-                    throw new ApplicationException($"Failed to open CShapes file: {cshapesPath}");
-
-                Layer layer = ds.GetLayerByIndex(0);
-                if (layer == null)
-                    throw new ApplicationException("No layer found in CShapes file");
+                using var ds = Ogr.Open(cshapesPath, 0) ?? throw new ApplicationException($"Failed to open CShapes file: {cshapesPath}");
+                using var layer = ds.GetLayerByIndex(0) ?? throw new ApplicationException("No layer found in CShapes file");
 
                 _countries.Clear();
                 _rasterCodeLookup.Clear();
-
                 layer.ResetReading();
                 Feature feature;
-                int rasterCode = 1;
-                int totalFeatures = 0;
-                int indexedFeatures = 0;
+                int featuresAdded = 0;
 
                 while ((feature = layer.GetNextFeature()) != null)
                 {
-                    totalFeatures++;
-
                     try
                     {
-                        // Get temporal information
                         double startYear = GetFieldAsDouble(feature, "GWSYEAR");
-                        double endYear = GetFieldAsDouble(feature, "GWEYER");
+                        CachedCountryData cachedCountry = null;
 
-                        // Handle missing dates
-                        if (startYear <= 0 || startYear > 2020) startYear = 1900;
-                        if (endYear <= 0 || endYear < startYear) endYear = 2000;
-
-                        // Filter for target year with tolerance
-                        if (targetYear < startYear - 0.5 || targetYear > endYear + 0.5)
+                        // Attempt to match using the same identifier priority as the cache generator.
+                        string identifier = GetBestIdentifier(feature);
+                        if (!string.IsNullOrEmpty(identifier))
                         {
-                            feature.Dispose();
-                            continue;
+                            featureLookup.TryGetValue($"{identifier}_{startYear}", out cachedCountry);
                         }
 
-                        // Get geometry and calculate bounds
-                        Geometry geom = feature.GetGeometryRef();
-                        if (geom == null || geom.IsEmpty())
+                        if (cachedCountry != null)
                         {
-                            feature.Dispose();
-                            continue;
+                            // A match was found! Index this feature.
+                            Geometry geom = feature.GetGeometryRef();
+                            if (geom == null || geom.IsEmpty()) continue;
+
+                            Envelope envelope = new Envelope();
+                            geom.GetEnvelope(envelope);
+                            var bounds = new GeoBounds { MinLon = envelope.MinX, MinLat = envelope.MinY, MaxLon = envelope.MaxX, MaxLat = envelope.MaxY };
+
+                            var indexedFeature = new IndexedCountryFeature
+                            {
+                                CountryCode = cachedCountry.CountryCode,
+                                CountryName = cachedCountry.CountryName,
+                                RasterCode = cachedCountry.RasterCode,
+                                StartYear = cachedCountry.StartYear,
+                                EndYear = cachedCountry.EndYear,
+                                Bounds = bounds,
+                                Geometry = geom.Clone(),
+                            };
+
+                            _countries.Add(indexedFeature);
+                            _rasterCodeLookup[indexedFeature.RasterCode] = indexedFeature;
+                            featuresAdded++;
                         }
-
-                        // Calculate bounding box
-                        Envelope envelope = new Envelope();
-                        geom.GetEnvelope(envelope);
-                        var bounds = new GeoBounds
-                        {
-                            MinLon = envelope.MinX,
-                            MinLat = envelope.MinY,
-                            MaxLon = envelope.MaxX,
-                            MaxLat = envelope.MaxY
-                        };
-
-                        // Get country information
-                        string countryName = GetFieldAsString(feature, "CNTRY_NAME") ?? $"Country_{rasterCode}";
-                        string countryCode = GetCountryCodeWithFallback(feature, rasterCode);
-
-                        // Create indexed feature with cloned geometry for thread safety
-                        var indexedFeature = new IndexedCountryFeature
-                        {
-                            CountryCode = countryCode,
-                            CountryName = countryName,
-                            RasterCode = rasterCode,
-                            Bounds = bounds,
-                            Geometry = geom.Clone(), // Clone for thread safety
-                            StartYear = startYear,
-                            EndYear = endYear
-                        };
-
-                        _countries.Add(indexedFeature);
-                        _rasterCodeLookup[rasterCode] = indexedFeature;
-                        
-                        rasterCode++;
-                        indexedFeatures++;
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Error processing feature {totalFeatures}: {ex.Message}");
                     }
                     finally
                     {
@@ -144,25 +101,23 @@ namespace StrategyGame
                     }
                 }
 
-                ds.Dispose();
                 _indexBuilt = true;
-
-                Debug.WriteLine($"Spatial index built in {sw.ElapsedMilliseconds}ms: {indexedFeatures}/{totalFeatures} countries indexed");
+                Debug.WriteLine($"Spatial index built in {sw.ElapsedMilliseconds}ms: {featuresAdded} features indexed.");
+                if (featuresAdded == 0 && cleanCountryData.Any())
+                {
+                    Debug.WriteLine("WARNING: No features were added to the spatial index. Check for identifier mismatches between cache and shapefile.");
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error building spatial index: {ex.Message}");
+                Debug.WriteLine($"Error building spatial index from clean data: {ex.Message}");
                 throw;
             }
         }
 
-        /// <summary>
-        /// Gets countries that intersect with the specified geographic bounds
-        /// </summary>
         public List<IndexedCountryFeature> GetCountriesInBounds(GeoBounds bounds)
         {
             var result = new List<IndexedCountryFeature>();
-
             foreach (var country in _countries)
             {
                 if (country.Bounds.Intersects(bounds))
@@ -170,70 +125,49 @@ namespace StrategyGame
                     result.Add(country);
                 }
             }
-
             return result;
         }
 
-        /// <summary>
-        /// Gets country by raster code
-        /// </summary>
         public IndexedCountryFeature? GetCountryByRasterCode(int rasterCode)
         {
             return _rasterCodeLookup.GetValueOrDefault(rasterCode);
         }
 
-        /// <summary>
-        /// Gets all indexed countries
-        /// </summary>
         public IReadOnlyList<IndexedCountryFeature> GetAllCountries()
         {
             return _countries.AsReadOnly();
         }
 
-        /// <summary>
-        /// Gets the total number of indexed countries
-        /// </summary>
         public int CountryCount => _countries.Count;
+
+        /// <summary>
+        /// Gets the best available identifier for a feature, prioritizing standard codes.
+        /// </summary>
+        private string GetBestIdentifier(Feature feature)
+        {
+            string id = GetFieldAsString(feature, "ISO1AL3")?.Trim();
+            if (!string.IsNullOrEmpty(id)) return id;
+
+            id = GetFieldAsString(feature, "COWCODE")?.Trim();
+            if (!string.IsNullOrEmpty(id)) return id;
+
+            return GetFieldAsString(feature, "CNTRY_NAME")?.Trim();
+        }
 
         private double GetFieldAsDouble(Feature feature, string fieldName)
         {
             int fieldIndex = feature.GetFieldIndex(fieldName);
-            if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
-            {
-                return feature.GetFieldAsDouble(fieldIndex);
-            }
+            if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex)) return feature.GetFieldAsDouble(fieldIndex);
             return -1;
         }
 
-        private string GetFieldAsString(Feature feature, string fieldName)
+        private string? GetFieldAsString(Feature feature, string fieldName)
         {
             int fieldIndex = feature.GetFieldIndex(fieldName);
-            if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex))
-            {
-                return feature.GetFieldAsString(fieldIndex);
-            }
+            if (fieldIndex >= 0 && feature.IsFieldSet(fieldIndex)) return feature.GetFieldAsString(fieldIndex);
             return null;
         }
 
-        private string GetCountryCodeWithFallback(Feature feature, int rasterCode)
-        {
-            string[] possibleFields = { "ISO1AL3", "COWCODE", "GWCODE", "ISO", "CNTRY_NAME" };
-
-            foreach (string fieldName in possibleFields)
-            {
-                string value = GetFieldAsString(feature, fieldName);
-                if (!string.IsNullOrEmpty(value))
-                {
-                    return value;
-                }
-            }
-
-            return $"UNK{rasterCode:D3}";
-        }
-
-        /// <summary>
-        /// Releases resources held by the spatial index
-        /// </summary>
         public void Dispose()
         {
             foreach (var country in _countries)
