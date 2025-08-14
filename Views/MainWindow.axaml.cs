@@ -56,7 +56,12 @@ namespace Economy_sim
 
         private void OptionsButton_Click(object? sender, RoutedEventArgs e)
         {
-            Console.WriteLine("Options button clicked!");
+            // Create and show the options window
+            var optionsWindow = new OptionsWindow();
+            optionsWindow.Show();
+
+            // Close this main menu window
+            this.Close();
         }
 
         private void ExitButton_Click(object? sender, RoutedEventArgs e)
