@@ -720,6 +720,25 @@ namespace Economy_sim
                     Debug.WriteLine($"Could not generate state mask for {selectedCountry.CountryCode}");
                     return;
                 }
+                
+                // Check if state mask actually contains any data
+                bool hasStateData = false;
+                for (int y = 0; y < stateMask.GetLength(0) && !hasStateData; y++)
+                {
+                    for (int x = 0; x < stateMask.GetLength(1) && !hasStateData; x++)
+                    {
+                        if (stateMask[y, x] > 0)
+                        {
+                            hasStateData = true;
+                        }
+                    }
+                }
+                
+                if (!hasStateData)
+                {
+                    Debug.WriteLine($"State mask for {selectedCountry.CountryCode} contains no data - check if Natural Earth states data is properly installed");
+                    return;
+                }
 
                 // Use surface and canvas for better drawing operations
                 using var surface = SKSurface.Create(bitmap.Info);

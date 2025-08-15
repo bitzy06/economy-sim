@@ -35,6 +35,12 @@ namespace Economy_sim
             
             // Initialize cache for states data
             _dataCache = new StatesDataCache(_colorMappingPath);
+            
+            // Validate setup on initialization (but don't fail if missing)
+            if (!StateRenderingSetup.ValidateStateRenderingSetup(showConsoleOutput: false))
+            {
+                Debug.WriteLine("StatesBorderManager: State rendering data not properly configured");
+            }
         }
 
         private void EnsureGdalRegistered()
@@ -57,7 +63,8 @@ namespace Economy_sim
         {
             if (!File.Exists(_statesShapefilePath))
             {
-                Debug.WriteLine($"States shapefile not found at: {_statesShapefilePath}");
+                Debug.WriteLine($"STATES DATA MISSING: Cannot render states for country '{countryFilter ?? "all"}'");
+                Debug.WriteLine("Run StateRenderingSetup.ValidateStateRenderingSetup() for detailed setup instructions.");
                 return new int[height, width]; // Return empty mask
             }
 

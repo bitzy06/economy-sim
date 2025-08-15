@@ -350,6 +350,14 @@ namespace Economy_sim
             SelectState(null);
         }
 
+        /// <summary>
+        /// Validates state rendering setup and provides detailed feedback
+        /// </summary>
+        public bool ValidateStateRenderingSetup(bool showOutput = true)
+        {
+            return StateRenderingSetup.ValidateStateRenderingSetup(showOutput);
+        }
+
         public void Dispose()
         {
             _politicalTileManager?.Dispose();
