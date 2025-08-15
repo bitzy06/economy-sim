@@ -11,10 +11,10 @@
 	</Window.Styles>
 
 	<!-- Root grid now reserves space for a right-side column when the side menu is visible -->
-	<Grid>
+	<Grid x:Name="RootGrid">
 		<Grid.ColumnDefinitions>
 			<ColumnDefinition Width="*"/>
-			<ColumnDefinition Width="Auto"/>
+			<ColumnDefinition Width="0"/>
 		</Grid.ColumnDefinitions>
 
 		<!-- Main Content Area (shifts left when side menu column is occupied) -->

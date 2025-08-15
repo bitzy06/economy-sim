@@ -693,10 +693,34 @@ namespace Economy_sim
 
         private Size GetEffectiveRenderSize()
         {
+            // First check if we have a proper MapContainer with valid bounds
+            if (this.FindControl<Border>("MapContainer") is Border mapContainer && 
+                mapContainer.Bounds.Width > 1 && mapContainer.Bounds.Height > 1)
+            {
+                Debug.WriteLine($"Using MapContainer bounds: {mapContainer.Bounds.Size}");
+                return mapContainer.Bounds.Size;
+            }
+            
+            // Fallback to MapImage bounds if available
             if (this.MapImage?.Bounds.Width > 1 && this.MapImage?.Bounds.Height > 1)
             {
+                Debug.WriteLine($"Using MapImage bounds: {this.MapImage.Bounds.Size}");
                 return this.MapImage.Bounds.Size;
             }
+            
+            // Calculate available space based on Grid column layout
+            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid && 
+                rootGrid.ColumnDefinitions.Count > 1)
+            {
+                var sideMenuColumnWidth = rootGrid.ColumnDefinitions[1].Width.Value;
+                var availableWidth = this.ClientSize.Width - sideMenuColumnWidth;
+                var calculatedSize = new Size(availableWidth, this.ClientSize.Height);
+                Debug.WriteLine($"Calculated size based on Grid layout: {calculatedSize}");
+                return calculatedSize;
+            }
+            
+            // Final fallback to ClientSize
+            Debug.WriteLine($"Using ClientSize: {this.ClientSize}");
             return this.ClientSize;
         }
 
@@ -1178,58 +1202,32 @@ namespace Economy_sim
             {
                 Debug.WriteLine($"Setting RightSideMenu IsVisible to false. Was: {panel.IsVisible}");
                 panel.IsVisible = false;
-                
-                // Force immediate visual update
-                panel.InvalidateVisual();
             }
             else
             {
                 Debug.WriteLine("RightSideMenu Border not found!");
             }
 
-            // Force complete layout update to ensure proper map resize
-            this.InvalidateArrange();
-            this.InvalidateMeasure();
-            
-            // Use multiple dispatcher posts to ensure proper layout timing
-            Dispatcher.UIThread.Post(async () =>
+            // Collapse the side menu column by setting its width to 0
+            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid && 
+                rootGrid.ColumnDefinitions.Count > 1)
             {
-                Debug.WriteLine("First dispatcher post - updating layout");
+                Debug.WriteLine("Collapsing side menu column");
+                rootGrid.ColumnDefinitions[1].Width = new GridLength(0);
+            }
+
+            // Force immediate layout update
+            Dispatcher.UIThread.Post(() =>
+            {
+                Debug.WriteLine("HideRightSideMenu: Forcing layout update and buffer recreation");
                 
-                // Force layout update on the root grid
-                if (this.Content is Grid rootGrid)
-                {
-                    rootGrid.InvalidateArrange();
-                    rootGrid.InvalidateMeasure();
-                }
+                // Force layout updates
+                this.InvalidateArrange();
+                this.InvalidateMeasure();
                 
-                // Force layout update on the map image specifically
-                if (this.MapImage != null)
-                {
-                    this.MapImage.InvalidateArrange();
-                    this.MapImage.InvalidateMeasure();
-                }
-                
-                // Wait a bit for layout to settle
-                await Task.Delay(50);
-                
-                // Schedule buffer recreation after layout has time to complete
-                Dispatcher.UIThread.Post(async () =>
-                {
-                    Debug.WriteLine("Second dispatcher post - waiting for layout");
-                    
-                    // Wait a bit more for the layout to fully settle
-                    await Task.Delay(50);
-                    
-                    Dispatcher.UIThread.Post(() =>
-                    {
-                        Debug.WriteLine($"Final dispatcher post - recreating buffers. Current MapImage bounds: {this.MapImage?.Bounds}");
-                        Debug.WriteLine($"Current Window size: {this.ClientSize}");
-                        
-                        RecreateBuffersToCurrentSize();
-                        QueueRender(immediate: true);
-                    }, DispatcherPriority.Background);
-                }, DispatcherPriority.Background);
+                // Recreate buffers to new size and re-render
+                RecreateBuffersToCurrentSize();
+                QueueRender(immediate: true);
             }, DispatcherPriority.Normal);
         }
 
@@ -1238,6 +1236,14 @@ namespace Economy_sim
             Debug.WriteLine($"ShowRightSidePanel called: {title}, {panelName}");
             
             HideAllPopups();
+            
+            // Expand the side menu column to show the panel
+            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid && 
+                rootGrid.ColumnDefinitions.Count > 1)
+            {
+                Debug.WriteLine("Expanding side menu column to 420 pixels");
+                rootGrid.ColumnDefinitions[1].Width = new GridLength(420);
+            }
             
             // Show the RightSideMenu
             if (this.FindControl<Border>("RightSideMenu") is Border panel)
@@ -1266,38 +1272,17 @@ namespace Economy_sim
             }
 
             // Force layout update to ensure proper map resize when side menu appears
-            this.InvalidateArrange();
-            this.InvalidateMeasure();
-            
-            // Use dispatcher post to allow layout to update before recreating buffers
-            Dispatcher.UIThread.Post(async () =>
+            Dispatcher.UIThread.Post(() =>
             {
-                Debug.WriteLine("ShowRightSidePanel: First dispatcher post - updating layout");
+                Debug.WriteLine("ShowRightSidePanel: Forcing layout update and buffer recreation");
                 
-                // Force layout update on the root grid
-                if (this.Content is Grid rootGrid)
-                {
-                    rootGrid.InvalidateArrange();
-                    rootGrid.InvalidateMeasure();
-                }
+                // Force layout updates
+                this.InvalidateArrange();
+                this.InvalidateMeasure();
                 
-                // Force layout update on the map image specifically
-                if (this.MapImage != null)
-                {
-                    this.MapImage.InvalidateArrange();
-                    this.MapImage.InvalidateMeasure();
-                }
-                
-                // Wait for layout to settle
-                await Task.Delay(50);
-                
-                // Schedule buffer recreation after layout completes
-                Dispatcher.UIThread.Post(() =>
-                {
-                    Debug.WriteLine($"ShowRightSidePanel: Recreating buffers. Current MapImage bounds: {this.MapImage?.Bounds}");
-                    RecreateBuffersToCurrentSize();
-                    QueueRender(immediate: true);
-                }, DispatcherPriority.Background);
+                // Recreate buffers to new size and re-render
+                RecreateBuffersToCurrentSize();
+                QueueRender(immediate: true);
             }, DispatcherPriority.Normal);
         }
 
