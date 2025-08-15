@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
@@ -18,6 +19,7 @@ namespace Economy_sim
     public class PoliticalTileManager : IDisposable
     {
         private readonly PoliticalBorderManager _politicalManager;
+        private readonly StatesBorderManager _statesManager;
         private readonly int _baseWidth;
         private readonly int _baseHeight;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
@@ -31,14 +33,21 @@ namespace Economy_sim
 
         // Spatial index for fast country lookup
         private readonly PoliticalSpatialIndex _spatialIndex;
+        private readonly StatesSpatialIndex _statesSpatialIndex;
         private readonly OptimizedPoliticalMaskGenerator _maskGenerator;
         private bool _spatialIndexBuilt = false;
+        private bool _statesIndexBuilt = false;
         private readonly object _indexLock = new object();
 
-        // Selected country for white border highlighting
+        // Selected country and state for highlighting
         private IndexedCountryFeature? _selectedCountry = null;
+        private IndexedStateFeature? _selectedState = null;
         private readonly object _selectionLock = new object();
         private int _selectedRasterCode = -1; // Cached selected country's raster code for fast comparisons
+        private int _selectedStateRasterCode = -1; // Cached selected state's raster code for fast comparisons
+
+        // Zoom threshold for state rendering
+        private const int StateRenderingZoomThreshold = 3;
 
         // LRU Cache with proper eviction
         private readonly ConcurrentDictionary<string, CacheEntry> _tileCache = new();
@@ -90,6 +99,7 @@ namespace Economy_sim
         public PoliticalTileManager(PoliticalBorderManager politicalManager, int baseWidth, int baseHeight)
         {
             _politicalManager = politicalManager;
+            _statesManager = new StatesBorderManager();
             _baseWidth = baseWidth;
             _baseHeight = baseHeight;
 
@@ -98,6 +108,7 @@ namespace Economy_sim
 
             // Initialize spatial optimization components
             _spatialIndex = new PoliticalSpatialIndex();
+            _statesSpatialIndex = new StatesSpatialIndex();
             _maskGenerator = new OptimizedPoliticalMaskGenerator(_spatialIndex);
         }
 
@@ -129,6 +140,28 @@ namespace Economy_sim
             {
                 _selectedCountry = country;
                 _selectedRasterCode = country?.RasterCode ?? -1; // Cache raster code for fast comparisons
+
+                // Clear state selection when country changes
+                if (country == null)
+                {
+                    _selectedState = null;
+                    _selectedStateRasterCode = -1;
+                }
+
+                // Clear tile cache to force re-rendering with new selection
+                ClearTileCache();
+            }
+        }
+
+        /// <summary>
+        /// Sets the selected state for highlighting
+        /// </summary>
+        public void SetSelectedState(IndexedStateFeature? state)
+        {
+            lock (_selectionLock)
+            {
+                _selectedState = state;
+                _selectedStateRasterCode = state?.RasterCode ?? -1; // Cache raster code for fast comparisons
 
                 // Clear tile cache to force re-rendering with new selection
                 ClearTileCache();
@@ -319,7 +352,7 @@ namespace Economy_sim
                 }
 
                 // Render political map using optimized parallel processing
-                var bitmap = RenderPoliticalTileOptimized(tileMask, tileWidth, tileHeight);
+                var bitmap = RenderPoliticalTileOptimized(tileMask, tileWidth, tileHeight, cellSize);
 
                 if (bitmap != null)
                 {
@@ -420,7 +453,60 @@ namespace Economy_sim
             }
         }
 
-        private SKBitmap? RenderPoliticalTileOptimized(int[,] mask, int width, int height)
+        private void EnsureStatesIndexBuilt()
+        {
+            lock (_indexLock)
+            {
+                if (_statesIndexBuilt) return;
+
+                try
+                {
+                    string statesPath = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "data", "country_borders", "states", "ne_10m_admin_1_states_provinces.shp");
+
+                    if (!File.Exists(statesPath))
+                    {
+                        Debug.WriteLine($"States shapefile not found at: {statesPath}");
+                        _statesIndexBuilt = true; // Mark as built even if no file to prevent repeated checks
+                        return;
+                    }
+
+                    Debug.WriteLine($"Building states spatial index from: {statesPath}");
+
+                    // Get states data - filter by selected country if one exists
+                    string? countryFilter = null;
+                    lock (_selectionLock)
+                    {
+                        countryFilter = _selectedCountry?.CountryCode;
+                    }
+
+                    var statesData = _statesManager.GetStatesForCountry(countryFilter ?? "")
+                        .ToDictionary(s => s.RasterCode, s => s);
+                    if (statesData.Count == 0)
+                    {
+                        // Try loading all states if no specific country filter
+                        var allStatesData = new Dictionary<int, CachedStateData>();
+                        // This will be populated by the StatesDataCache
+                        _statesSpatialIndex.BuildIndex(statesPath, allStatesData);
+                    }
+                    else
+                    {
+                        _statesSpatialIndex.BuildIndex(statesPath, statesData);
+                    }
+
+                    _statesIndexBuilt = true;
+                    Debug.WriteLine($"States spatial index built with {_statesSpatialIndex.StateCount} states");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error building states index: {ex.Message}");
+                    _statesIndexBuilt = true; // Mark as built to prevent repeated failures
+                }
+            }
+        }
+
+        private SKBitmap? RenderPoliticalTileOptimized(int[,] mask, int width, int height, int cellSize = 1)
         {
             try
             {
@@ -452,10 +538,13 @@ namespace Economy_sim
 
                 Debug.WriteLine($"Political mask contains {maxCountryCode} country codes");
 
-                int selectedId;
+                int selectedId, selectedStateId;
+                bool shouldRenderStates = cellSize >= StateRenderingZoomThreshold; // Check if we should render states
+                
                 lock (_selectionLock)
                 {
                     selectedId = _selectedRasterCode;
+                    selectedStateId = _selectedStateRasterCode;
                 }
                 
                 // First pass: fill all pixels with base colors only (no border logic here)
@@ -584,6 +673,12 @@ namespace Economy_sim
                     });
                 }
 
+                // Third pass: Add state borders and highlighting if zoom level is high enough
+                if (shouldRenderStates)
+                {
+                    RenderStateOverlays(bitmap, width, height, selectedId, selectedStateId);
+                }
+
                 return bitmap;
             }
             catch (Exception ex)
@@ -591,6 +686,116 @@ namespace Economy_sim
                 Debug.WriteLine($"Error in optimized political tile rendering: {ex.Message}");
                 Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// Renders state borders as overlays on the political map at high zoom levels
+        /// </summary>
+        private void RenderStateOverlays(SKBitmap bitmap, int width, int height, int selectedCountryId, int selectedStateId)
+        {
+            try
+            {
+                // Only render states if we have a selected country or if we're at very high zoom
+                if (selectedCountryId <= 0)
+                {
+                    Debug.WriteLine("No country selected, skipping state overlay rendering");
+                    return;
+                }
+
+                // Get the country by raster code to find its country code
+                var selectedCountry = _spatialIndex.GetCountryByRasterCode(selectedCountryId);
+                if (selectedCountry == null)
+                {
+                    Debug.WriteLine($"Could not find country for raster code {selectedCountryId}");
+                    return;
+                }
+
+                Debug.WriteLine($"Rendering state overlays for country: {selectedCountry.CountryName} ({selectedCountry.CountryCode})");
+
+                // Generate state mask for the selected country
+                var stateMask = _statesManager.CreateStatesMask(width, height, selectedCountry.CountryCode);
+                if (stateMask == null)
+                {
+                    Debug.WriteLine($"Could not generate state mask for {selectedCountry.CountryCode}");
+                    return;
+                }
+
+                // Use surface and canvas for better drawing operations
+                using var surface = SKSurface.Create(bitmap.Info);
+                var canvas = surface.Canvas;
+                
+                // Draw the existing bitmap first
+                canvas.DrawBitmap(bitmap, 0, 0);
+
+                // Create paint for state borders
+                using var stateBorderPaint = new SKPaint
+                {
+                    Color = selectedStateId > 0 ? SKColors.Yellow : SKColors.Gray,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = 1,
+                    IsAntialias = false // Keep crisp for better performance
+                };
+
+                using var selectedStatePaint = new SKPaint
+                {
+                    Color = SKColors.Yellow,
+                    Style = SKPaintStyle.Stroke,
+                    StrokeWidth = 2,
+                    IsAntialias = false
+                };
+
+                // Draw state borders
+                unsafe
+                {
+                    // Find borders between different states within the selected country
+                    for (int y = 0; y < height - 1; y++)
+                    {
+                        for (int x = 0; x < width - 1; x++)
+                        {
+                            if (y >= stateMask.GetLength(0) || x >= stateMask.GetLength(1)) continue;
+
+                            int currentStateId = stateMask[y, x];
+                            if (currentStateId == 0) continue; // No state here
+
+                            bool drawBorder = false;
+                            bool isSelectedState = (currentStateId == selectedStateId);
+
+                            // Check right neighbor
+                            if (x + 1 < stateMask.GetLength(1))
+                            {
+                                int rightStateId = stateMask[y, x + 1];
+                                if (rightStateId != currentStateId && rightStateId > 0)
+                                {
+                                    drawBorder = true;
+                                    canvas.DrawLine(x + 1, y, x + 1, y + 1, 
+                                        isSelectedState ? selectedStatePaint : stateBorderPaint);
+                                }
+                            }
+
+                            // Check bottom neighbor
+                            if (y + 1 < stateMask.GetLength(0))
+                            {
+                                int bottomStateId = stateMask[y + 1, x];
+                                if (bottomStateId != currentStateId && bottomStateId > 0)
+                                {
+                                    drawBorder = true;
+                                    canvas.DrawLine(x, y + 1, x + 1, y + 1,
+                                        isSelectedState ? selectedStatePaint : stateBorderPaint);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Read the pixels back to the bitmap
+                surface.ReadPixels(bitmap.Info, bitmap.GetPixels(), bitmap.RowBytes, 0, 0);
+                
+                Debug.WriteLine($"State overlay rendering completed for {selectedCountry.CountryCode}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error rendering state overlays: {ex.Message}");
             }
         }
         
@@ -1098,6 +1303,91 @@ namespace Economy_sim
             {
                 Debug.WriteLine($"Error testing point in country {country.CountryCode}: {ex.Message}");
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// Gets the state at a specific geographic point (only if zoom level supports state rendering)
+        /// </summary>
+        public IndexedStateFeature? GetStateAtGeographicPoint(double longitude, double latitude, string? countryFilter = null)
+        {
+            try
+            {
+                // Ensure states index is built
+                EnsureStatesIndexBuilt();
+
+                // Create a small search bounds around the point
+                double tolerance = 0.005; // Smaller tolerance for states since they're more precise
+                var searchBounds = new GeoBounds
+                {
+                    MinLon = longitude - tolerance,
+                    MaxLon = longitude + tolerance,
+                    MinLat = latitude - tolerance,
+                    MaxLat = latitude + tolerance
+                };
+
+                // Get states that might contain this point
+                var candidates = _statesSpatialIndex.GetStatesInBounds(searchBounds, countryFilter);
+
+                // Test each candidate to see if it actually contains the point
+                foreach (var candidate in candidates)
+                {
+                    if (IsPointInState(longitude, latitude, candidate))
+                    {
+                        Debug.WriteLine($"Found state at ({longitude:F4}, {latitude:F4}): {candidate.StateName} in {candidate.CountryCode}");
+                        return candidate;
+                    }
+                }
+
+                Debug.WriteLine($"No state found at geographic point ({longitude:F4}, {latitude:F4})");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error finding state at geographic point: {ex.Message}");
+                return null;
+            }
+        }
+
+        private bool IsPointInState(double longitude, double latitude, IndexedStateFeature state)
+        {
+            try
+            {
+                // First check if point is within the bounding box for quick elimination
+                if (longitude < state.Bounds.MinLon || longitude > state.Bounds.MaxLon ||
+                    latitude < state.Bounds.MinLat || latitude > state.Bounds.MaxLat)
+                {
+                    return false;
+                }
+
+                // Use OGR geometry to test if point is within the state polygon
+                using var point = new OSGeo.OGR.Geometry(wkbGeometryType.wkbPoint);
+                point.AddPoint_2D(longitude, latitude);
+
+                // Test if the point is within the state geometry
+                return state.Geometry.Contains(point);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error testing point in state {state.StateName}: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Gets all states for a specific country
+        /// </summary>
+        public List<IndexedStateFeature> GetStatesForCountry(string countryCode)
+        {
+            try
+            {
+                EnsureStatesIndexBuilt();
+                return _statesSpatialIndex.GetStatesForCountry(countryCode);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error getting states for country {countryCode}: {ex.Message}");
+                return new List<IndexedStateFeature>();
             }
         }
 
