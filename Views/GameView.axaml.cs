@@ -288,7 +288,7 @@ namespace Economy_sim
         #region Country Detection
 
         /// <summary>
-        /// Detects which country is at the specified screen position
+        /// Detects which country or state is at the specified screen position
         /// </summary>
         private void DetectCountryAtPosition(int screenX, int screenY)
         {
@@ -297,18 +297,34 @@ namespace Economy_sim
                 // Validate inputs
                 if (screenX < 0 || screenY < 0 || _mapManager == null)
                 {
-                    Debug.WriteLine($"[COUNTRY DETECTION] Invalid input: screenX={screenX}, screenY={screenY}, mapManager={_mapManager != null}");
+                    Debug.WriteLine($"[DETECTION] Invalid input: screenX={screenX}, screenY={screenY}, mapManager={_mapManager != null}");
                     return;
                 }
 
                 // Only detect countries when in political view mode
                 if (_mapManager.CurrentViewType != MapViewType.Political)
                 {
-                    Debug.WriteLine($"[COUNTRY DETECTION] Country detection only available in political view mode (current: {_mapManager.CurrentViewType})");
+                    Debug.WriteLine($"[DETECTION] Detection only available in political view mode (current: {_mapManager.CurrentViewType})");
                     ShowCountryDetectionFeedback(null, screenX, screenY, "Switch to Political View to detect countries");
                     return;
                 }
 
+                // First try to detect a state if zoom level is high enough
+                if (_mapManager.ShouldRenderStates(_currentZoomLevel))
+                {
+                    var state = _mapManager.GetStateAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                    if (state != null)
+                    {
+                        // Show state information
+                        string message = $"State: {state.StateName} ({state.CountryCode})";
+                        Debug.WriteLine($"[STATE DETECTED] {message}");
+                        
+                        ShowStateDetectionFeedback(state, screenX, screenY);
+                        return; // Early return - we detected a state
+                    }
+                }
+
+                // If no state was detected (or zoom not high enough), try country detection
                 var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
                 
                 if (country != null)
@@ -317,23 +333,19 @@ namespace Economy_sim
                     string message = $"Country: {country.CountryName} ({country.CountryCode})";
                     Debug.WriteLine($"[COUNTRY DETECTED] {message}");
                     
-                    // You could add visual feedback here, such as:
-                    // - Highlighting the country border
-                    // - Showing a tooltip
-                    // - Opening a country information panel
                     ShowCountryDetectionFeedback(country, screenX, screenY);
                 }
                 else
                 {
-                    Debug.WriteLine($"[COUNTRY DETECTED] No country found at position ({screenX}, {screenY})");
+                    Debug.WriteLine($"[DETECTION] No country or state found at position ({screenX}, {screenY})");
                     // Could show "Ocean" or "No country" message
                     ShowCountryDetectionFeedback(null, screenX, screenY);
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[COUNTRY DETECTION ERROR] {ex.Message}");
-                Debug.WriteLine($"[COUNTRY DETECTION ERROR] Stack trace: {ex.StackTrace}");
+                Debug.WriteLine($"[DETECTION ERROR] {ex.Message}");
+                Debug.WriteLine($"[DETECTION ERROR] Stack trace: {ex.StackTrace}");
                 ShowCountryDetectionFeedback(null, screenX, screenY, "Error detecting country");
             }
         }
@@ -377,6 +389,36 @@ namespace Economy_sim
         }
 
         /// <summary>
+        /// Shows visual feedback for state detection
+        /// </summary>
+        private void ShowStateDetectionFeedback(IndexedStateFeature? state, int screenX, int screenY, string? customMessage = null)
+        {
+            string message = customMessage ?? (state != null 
+                ? $"Selected: {state.StateName}, {state.CountryCode}" 
+                : "No state selected");
+                
+            // Update the HUD or show temporary feedback
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    Debug.WriteLine($"[UI FEEDBACK] {message}");
+                    
+                    // Update window title to show selected state
+                    this.Title = state != null 
+                        ? $"Economy Sim - {state.StateName}, {state.CountryCode}"
+                        : customMessage != null 
+                        ? $"Economy Sim - {customMessage}"
+                        : "Economy Sim";
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[STATE UI FEEDBACK ERROR] {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
         /// Shows instructions for the country detection feature
         /// </summary>
         private void ShowCountryDetectionInstructions()
@@ -402,6 +444,7 @@ namespace Economy_sim
 
         /// <summary>
         /// Selects a country at the specified screen position (left-click)
+        /// Also handles state selection if zoomed in enough
         /// </summary>
         private void SelectCountryAtPosition(int screenX, int screenY)
         {
@@ -421,6 +464,25 @@ namespace Economy_sim
                     return;
                 }
 
+                // First try to select a state if zoom level is high enough
+                if (_mapManager.ShouldRenderStates(_currentZoomLevel))
+                {
+                    var state = _mapManager.GetStateAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                    if (state != null)
+                    {
+                        // Select the state
+                        _mapManager.SelectState(state);
+                        
+                        string message = $"Selected State: {state.StateName} in {state.CountryCode}";
+                        Debug.WriteLine($"[STATE SELECTED] {message}");
+                        
+                        // Update UI feedback
+                        ShowStateSelectionFeedback(state, screenX, screenY);
+                        return; // Early return - we selected a state
+                    }
+                }
+
+                // If no state was selected (or zoom not high enough), try country selection
                 var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
                 
                 if (country != null)
@@ -438,15 +500,16 @@ namespace Economy_sim
                 {
                     // Clear selection if clicking on water/empty area
                     _mapManager.ClearCountrySelection();
-                    Debug.WriteLine($"[COUNTRY SELECTION] No country found at position ({screenX}, {screenY}) - cleared selection");
+                    _mapManager.ClearStateSelection();
+                    Debug.WriteLine($"[SELECTION] No country or state found at position ({screenX}, {screenY}) - cleared selection");
                     
                     ShowCountrySelectionFeedback(null, screenX, screenY);
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[COUNTRY SELECTION ERROR] {ex.Message}");
-                Debug.WriteLine($"[COUNTRY SELECTION ERROR] Stack trace: {ex.StackTrace}");
+                Debug.WriteLine($"[SELECTION ERROR] {ex.Message}");
+                Debug.WriteLine($"[SELECTION ERROR] Stack trace: {ex.StackTrace}");
             }
         }
         
@@ -473,6 +536,33 @@ namespace Economy_sim
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[SELECTION FEEDBACK ERROR] {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Shows visual feedback for state selection
+        /// </summary>
+        private void ShowStateSelectionFeedback(IndexedStateFeature? state, int screenX, int screenY)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (state != null)
+                    {
+                        this.Title = $"Economy Sim - SELECTED: {state.StateName}, {state.CountryCode}";
+                        Debug.WriteLine($"[SELECTION FEEDBACK] State selected: {state.StateName} in {state.CountryCode}");
+                    }
+                    else
+                    {
+                        this.Title = "Economy Sim - No state selected";
+                        Debug.WriteLine("[SELECTION FEEDBACK] No state selected");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[STATE SELECTION FEEDBACK ERROR] {ex.Message}");
                 }
             });
         }
