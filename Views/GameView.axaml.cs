@@ -84,12 +84,50 @@ namespace Economy_sim
                 this.MapImage.PointerReleased += OnPointerReleased;
                 this.MapImage.PointerWheelChanged += OnPointerWheelChanged;
 
+                // Also react to layout changes so buffers resize when side menu opens/closes
+                this.MapImage.PropertyChanged += MapImage_PropertyChanged;
+
                 // Flag that the view is ready
                 _isInitialized = true;
 
                 // Use a timer to poll for a valid size, as Loaded/SizeChanged can be unreliable at startup.
                 _initialRenderTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(50), DispatcherPriority.Normal, InitialRenderTimer_Tick);
                 _initialRenderTimer.Start();
+            }
+        }
+
+        private void MapImage_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (e.Property == BoundsProperty)
+            {
+                OnMapBoundsChanged();
+            }
+        }
+
+        private void OnMapBoundsChanged()
+        {
+            if (!_isInitialized || this.MapImage == null) return;
+            var size = this.MapImage.Bounds.Size;
+            if (size.Width <= 0 || size.Height <= 0) return;
+
+            var pixelSize = PixelSize.FromSize(size, 1.0);
+            if (_writeableBitmap == null || _writeableBitmap.PixelSize != pixelSize)
+            {
+                Debug.WriteLine($"MapImage bounds changed to {size}, recreating buffers.");
+                UpdateBitmapSource(pixelSize);
+                QueueRender(immediate: true);
+            }
+        }
+
+        /// <summary>
+        /// Recreate front/back buffers sized to the current effective render size (e.g., after UI layout changes)
+        /// </summary>
+        private void RecreateBuffersToCurrentSize()
+        {
+            var size = GetEffectiveRenderSize();
+            if (size.Width > 0 && size.Height > 0)
+            {
+                UpdateBitmapSource(PixelSize.FromSize(size, 1.0));
             }
         }
 
@@ -144,7 +182,7 @@ namespace Economy_sim
         {
             if (_isInitialized && this.MapImage != null && e.NewSize.Width > 0 && e.NewSize.Height > 0)
             {
-                Debug.WriteLine($"Size changed to {e.NewSize}, updating bitmap and re-rendering.");
+                Debug.WriteLine($"Window size changed to {e.NewSize}, updating bitmap and re-rendering.");
                 UpdateBitmapSource(PixelSize.FromSize(e.NewSize, 1.0));
                 QueueRender(immediate: true);
             }
@@ -578,18 +616,38 @@ namespace Economy_sim
             {
                 try
                 {
-                    if (!_frameReady || _nextFrameBuffer == null || _writeableBitmap == null) 
+                    if (!_frameReady || _nextFrameBuffer == null || _writeableBitmap == null)
                         return;
-                    
-                    // Copy the next frame to the front buffer
+
+                    // Validate size compatibility to avoid overruns
+                    var ps = _writeableBitmap.PixelSize;
+                    if (_nextFrameBuffer.Width != ps.Width || _nextFrameBuffer.Height != ps.Height)
+                    {
+                        Debug.WriteLine($"SwapBuffers skipped due to size mismatch. NextFrame: {_nextFrameBuffer.Width}x{_nextFrameBuffer.Height}, Front: {ps.Width}x{ps.Height}");
+                        _frameReady = false; // Drop this frame safely
+                        return;
+                    }
+
+                    // Copy with stride awareness to avoid overruns
                     using (var frameBuffer = _writeableBitmap.Lock())
                     {
-                        var size = frameBuffer.RowBytes * frameBuffer.Size.Height;
+                        int dstRowBytes = frameBuffer.RowBytes;
+                        int srcRowBytes = _nextFrameBuffer.RowBytes;
+                        int rows = Math.Min(frameBuffer.Size.Height, _nextFrameBuffer.Height);
+                        int copyBytesPerRow = Math.Min(dstRowBytes, srcRowBytes);
+
                         unsafe
                         {
-                            Buffer.MemoryCopy(_nextFrameBuffer.GetPixels().ToPointer(), 
-                                             frameBuffer.Address.ToPointer(), 
-                                             size, size);
+                            byte* src = (byte*)_nextFrameBuffer.GetPixels().ToPointer();
+                            byte* dst = (byte*)frameBuffer.Address.ToPointer();
+
+                            for (int y = 0; y < rows; y++)
+                            {
+                                Buffer.MemoryCopy(src + (long)y * srcRowBytes,
+                                                  dst + (long)y * dstRowBytes,
+                                                  dstRowBytes,
+                                                  copyBytesPerRow);
+                            }
                         }
                     }
                     
@@ -601,7 +659,8 @@ namespace Economy_sim
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"Error swapping buffers: {ex.Message}");
+                    Debug.WriteLine($"Error swapping buffers: {ex}");
+                    _frameReady = false; // Ensure we don't loop on a bad frame
                 }
             }
         }
@@ -764,8 +823,13 @@ namespace Economy_sim
             if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
                 statsOverlay.PointerPressed += OnOverlayClicked;
 
-            // Setup popup menu content
+            // Side menu close button
+            if (this.FindControl<Button>("SideMenuCloseButton") is Button sideCloseBtn)
+                sideCloseBtn.Click += (s, e) => HideRightSideMenu();
+
+            // Setup popup and side menu content
             InitializePopupMenus();
+            InitializeSideMenus();
         }
 
         private void UpdateHUDDisplay(object? sender, EventArgs? e)
@@ -986,6 +1050,257 @@ namespace Economy_sim
             }
         }
 
+        private void InitializeSideMenus()
+        {
+            // Header defaults
+            if (this.FindControl<TextBlock>("SideMenuTitleText") is TextBlock title)
+                title.Text = "Details";
+
+            // Diplomacy
+            if (this.FindControl<ListBox>("SideDiplomacyRelationsList") is ListBox sideDip)
+            {
+                var relations = new[]
+                {
+                    "🇬🇧 United Kingdom - Allied (+85)",
+                    "🇷🇺 Russia - Cold War (-45)",
+                    "🇨🇳 China - Neutral (0)",
+                    "🇫🇷 France - Friendly (+60)",
+                    "🇩🇪 Germany - Allied (+75)",
+                    "🇯🇵 Japan - Trade Partner (+40)"
+                };
+                foreach (var relation in relations)
+                    sideDip.Items.Add(relation);
+            }
+
+            // Trade
+            if (this.FindControl<ListBox>("SideExportsList") is ListBox sideExports)
+            {
+                var exports = new[]
+                {
+                    "💼 Manufactured Goods → UK ($2.5B)",
+                    "🌾 Agricultural Products → Japan ($1.8B)",
+                    "⚙️ Technology → Germany ($3.2B)",
+                    "🛢️ Oil Products → Various ($4.1B)"
+                };
+                foreach (var export in exports)
+                    sideExports.Items.Add(export);
+            }
+            if (this.FindControl<ListBox>("SideImportsList") is ListBox sideImports)
+            {
+                var imports = new[]
+                {
+                    "📱 Electronics ← China ($2.8B)",
+                    "☕ Coffee ← Brazil ($0.9B)",
+                    "💎 Rare Metals ← Africa ($1.5B)",
+                    "🏭 Machinery ← Germany ($2.2B)"
+                };
+                foreach (var import in imports)
+                    sideImports.Items.Add(import);
+            }
+
+            // Construction
+            if (this.FindControl<ListBox>("SideActiveProjectsList") is ListBox sideProjects)
+            {
+                var projects = new[]
+                {
+                    "🏭 Steel Factory - Los Angeles (Progress: 75%)",
+                    "🛣️ Interstate Highway - Texas (Progress: 45%)",
+                    "🌉 Golden Gate Bridge Maintenance (Progress: 20%)",
+                    "✈️ Airport Expansion - New York (Progress: 90%)"
+                };
+                foreach (var project in projects)
+                    sideProjects.Items.Add(project);
+            }
+
+            // Economy
+            if (this.FindControl<TextBlock>("SideGDPText") is TextBlock gdp)
+                gdp.Text = "$2.5T";
+            if (this.FindControl<TextBlock>("SideUnemploymentText") is TextBlock unemp)
+                unemp.Text = "4.2%";
+            if (this.FindControl<TextBlock>("SideInflationText") is TextBlock infl)
+                infl.Text = "2.1%";
+            if (this.FindControl<ListBox>("SideIndustriesList") is ListBox sideIndustries)
+            {
+                var industries = new[]
+                {
+                    "🏭 Manufacturing - Output: $850B (↗️ +2.8%)",
+                    "💻 Technology - Output: $620B (↗️ +8.1%)",
+                    "🌾 Agriculture - Output: $180B (↗️ +1.2%)"
+                };
+                foreach (var ind in industries)
+                    sideIndustries.Items.Add(ind);
+            }
+
+            // Stats
+            if (this.FindControl<TextBlock>("SideTotalPopulationText") is TextBlock totPop)
+                totPop.Text = "328,000,000";
+            if (this.FindControl<TextBlock>("SidePopGrowthText") is TextBlock popG)
+                popG.Text = "+0.7%";
+            if (this.FindControl<ListBox>("SideDetailedStatsList") is ListBox sideStats)
+            {
+                var stats = new[]
+                {
+                    "👥 Total Cities: 125",
+                    "🏭 Active Factories: 2,847",
+                    "🛣️ Roads Built: 45,230 km"
+                };
+                foreach (var s in stats)
+                    sideStats.Items.Add(s);
+            }
+        }
+
+        #endregion
+
+        #region Side Menu Helpers
+
+        private void HideAllSidePanels()
+        {
+            void Hide(string name)
+            {
+                if (this.FindControl<Control>(name) is Control c)
+                    c.IsVisible = false;
+            }
+            Hide("SideDiplomacyPanel");
+            Hide("SideTradePanel");
+            Hide("SideConstructionPanel");
+            Hide("SideEconomyPanel");
+            Hide("SideStatsPanel");
+        }
+
+        private void HideRightSideMenu()
+        {
+            Debug.WriteLine("HideRightSideMenu called");
+            
+            HideAllSidePanels();
+            
+            // Find and hide the RightSideMenu
+            if (this.FindControl<Border>("RightSideMenu") is Border panel)
+            {
+                Debug.WriteLine($"Setting RightSideMenu IsVisible to false. Was: {panel.IsVisible}");
+                panel.IsVisible = false;
+                
+                // Force immediate visual update
+                panel.InvalidateVisual();
+            }
+            else
+            {
+                Debug.WriteLine("RightSideMenu Border not found!");
+            }
+
+            // Force complete layout update to ensure proper map resize
+            this.InvalidateArrange();
+            this.InvalidateMeasure();
+            
+            // Use multiple dispatcher posts to ensure proper layout timing
+            Dispatcher.UIThread.Post(async () =>
+            {
+                Debug.WriteLine("First dispatcher post - updating layout");
+                
+                // Force layout update on the root grid
+                if (this.Content is Grid rootGrid)
+                {
+                    rootGrid.InvalidateArrange();
+                    rootGrid.InvalidateMeasure();
+                }
+                
+                // Force layout update on the map image specifically
+                if (this.MapImage != null)
+                {
+                    this.MapImage.InvalidateArrange();
+                    this.MapImage.InvalidateMeasure();
+                }
+                
+                // Wait a bit for layout to settle
+                await Task.Delay(50);
+                
+                // Schedule buffer recreation after layout has time to complete
+                Dispatcher.UIThread.Post(async () =>
+                {
+                    Debug.WriteLine("Second dispatcher post - waiting for layout");
+                    
+                    // Wait a bit more for the layout to fully settle
+                    await Task.Delay(50);
+                    
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        Debug.WriteLine($"Final dispatcher post - recreating buffers. Current MapImage bounds: {this.MapImage?.Bounds}");
+                        Debug.WriteLine($"Current Window size: {this.ClientSize}");
+                        
+                        RecreateBuffersToCurrentSize();
+                        QueueRender(immediate: true);
+                    }, DispatcherPriority.Background);
+                }, DispatcherPriority.Background);
+            }, DispatcherPriority.Normal);
+        }
+
+        private void ShowRightSidePanel(string title, string panelName)
+        {
+            Debug.WriteLine($"ShowRightSidePanel called: {title}, {panelName}");
+            
+            HideAllPopups();
+            
+            // Show the RightSideMenu
+            if (this.FindControl<Border>("RightSideMenu") is Border panel)
+            {
+                Debug.WriteLine($"Setting RightSideMenu IsVisible to true. Was: {panel.IsVisible}");
+                panel.IsVisible = true;
+            }
+            else
+            {
+                Debug.WriteLine("RightSideMenu Border not found!");
+            }
+            
+            // Set title
+            if (this.FindControl<TextBlock>("SideMenuTitleText") is TextBlock titleText)
+                titleText.Text = title;
+
+            HideAllSidePanels();
+            if (this.FindControl<Control>(panelName) is Control content)
+            {
+                Debug.WriteLine($"Setting {panelName} IsVisible to true");
+                content.IsVisible = true;
+            }
+            else
+            {
+                Debug.WriteLine($"Panel {panelName} not found!");
+            }
+
+            // Force layout update to ensure proper map resize when side menu appears
+            this.InvalidateArrange();
+            this.InvalidateMeasure();
+            
+            // Use dispatcher post to allow layout to update before recreating buffers
+            Dispatcher.UIThread.Post(async () =>
+            {
+                Debug.WriteLine("ShowRightSidePanel: First dispatcher post - updating layout");
+                
+                // Force layout update on the root grid
+                if (this.Content is Grid rootGrid)
+                {
+                    rootGrid.InvalidateArrange();
+                    rootGrid.InvalidateMeasure();
+                }
+                
+                // Force layout update on the map image specifically
+                if (this.MapImage != null)
+                {
+                    this.MapImage.InvalidateArrange();
+                    this.MapImage.InvalidateMeasure();
+                }
+                
+                // Wait for layout to settle
+                await Task.Delay(50);
+                
+                // Schedule buffer recreation after layout completes
+                Dispatcher.UIThread.Post(() =>
+                {
+                    Debug.WriteLine($"ShowRightSidePanel: Recreating buffers. Current MapImage bounds: {this.MapImage?.Bounds}");
+                    RecreateBuffersToCurrentSize();
+                    QueueRender(immediate: true);
+                }, DispatcherPriority.Background);
+            }, DispatcherPriority.Normal);
+        }
+
         #endregion
 
         #region HUD Event Handlers
@@ -994,18 +1309,24 @@ namespace Economy_sim
         {
             Debug.WriteLine("Diplomacy button clicked - showing diplomacy menu");
             ShowPopup("DiplomacyMenuOverlay");
+            Debug.WriteLine("Diplomacy button clicked - showing right side diplomacy panel");
+            ShowRightSidePanel("Diplomatic Relations", "SideDiplomacyPanel");
         }
 
         private void OnTradeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Trade button clicked - showing trade menu");
             ShowPopup("TradeMenuOverlay");
+            Debug.WriteLine("Trade button clicked - showing right side trade panel");
+            ShowRightSidePanel("Trade Management", "SideTradePanel");
         }
 
         private void OnConstructionClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Construction button clicked - showing construction menu");
             ShowPopup("ConstructionMenuOverlay");
+            Debug.WriteLine("Construction button clicked - showing right side construction panel");
+            ShowRightSidePanel("Construction Projects", "SideConstructionPanel");
         }
 
         private void OnRoleActionClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1038,12 +1359,16 @@ namespace Economy_sim
         {
             Debug.WriteLine("Economy view button clicked - showing economy menu");
             ShowPopup("EconomyMenuOverlay");
+            Debug.WriteLine("Economy view button clicked - showing right side economy panel");
+            ShowRightSidePanel("Economic Overview", "SideEconomyPanel");
         }
 
         private void OnStatsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Stats button clicked - showing statistics menu");
             ShowPopup("StatsMenuOverlay");
+            Debug.WriteLine("Stats button clicked - showing right side statistics panel");
+            ShowRightSidePanel("Game Statistics", "SideStatsPanel");
         }
 
         private void OnMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
