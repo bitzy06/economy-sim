@@ -213,23 +213,7 @@
 									Height="50"
 									IsHitTestVisible="True"/>
 
-							<!-- Role-specific action button -->
-							<Border Background="#3A3A5A"
-									CornerRadius="5"
-									Padding="15,10"
-									BorderBrush="#5A5A7A"
-									BorderThickness="2"
-									IsHitTestVisible="True">
-								<Button x:Name="RoleActionButton"
-										Content="Set Policy"
-										Width="160"
-										Height="40"
-										Background="#4A4A6A"
-										Foreground="#FFFFFF"
-										FontWeight="Bold"
-										FontSize="14"
-										IsHitTestVisible="True"/>
-							</Border>
+							
 
 							<!-- View buttons -->
 							<Button x:Name="EconomyViewButton"
