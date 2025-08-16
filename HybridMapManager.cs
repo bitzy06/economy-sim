@@ -153,13 +153,9 @@ namespace Economy_sim
         public int BaseHeight => _terrainManager.BaseHeight;
 
         /// <summary>
-        /// Gets the country at a specific pixel position (accounting for zoom and pan)
+        /// Gets the country at a specific pixel position (accounting for zoom and pan).
+        /// Includes a relaxed search radius around the cursor to make selection easier.
         /// </summary>
-        /// <param name="pixelX">Screen pixel X coordinate</param>
-        /// <param name="pixelY">Screen pixel Y coordinate</param>
-        /// <param name="zoomLevel">Current zoom level</param>
-        /// <param name="viewOffset">Current view offset</param>
-        /// <returns>Country information if found, null otherwise</returns>
         public IndexedCountryFeature? GetCountryAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
         {
             try
@@ -171,29 +167,32 @@ namespace Economy_sim
                     return null;
                 }
 
-                // Convert screen pixel to map pixel (accounting for view offset)
-                int mapPixelX = pixelX + viewOffset.X;
-                int mapPixelY = pixelY + viewOffset.Y;
-                
-                // Get current map dimensions for this zoom level
                 int cellSize = GetCellSizeForZoom(zoomLevel);
                 int mapWidth = BaseWidth * cellSize;
                 int mapHeight = BaseHeight * cellSize;
-                
-                // Check bounds
-                if (mapPixelX < 0 || mapPixelX >= mapWidth || mapPixelY < 0 || mapPixelY >= mapHeight)
+
+                // relaxed spiral search around the pointer
+                const int radius = 5; // pixels
+                foreach (var (dx, dy) in GetSpiralOffsets(radius))
                 {
-                    Debug.WriteLine($"Pixel ({mapPixelX}, {mapPixelY}) is outside map bounds ({mapWidth}x{mapHeight})");
-                    return null;
+                    int mapPixelX = pixelX + viewOffset.X + dx;
+                    int mapPixelY = pixelY + viewOffset.Y + dy;
+
+                    if (mapPixelX < 0 || mapPixelX >= mapWidth || mapPixelY < 0 || mapPixelY >= mapHeight)
+                        continue;
+
+                    // Convert map pixel to geographic coordinates
+                    var (longitude, latitude) = CoordinateTransform.PixelToGeographic(mapPixelX, mapPixelY, mapWidth, mapHeight);
+                    
+                    // Find country at this geographic location
+                    var country = _politicalTileManager.GetCountryAtGeographicPoint(longitude, latitude);
+                    if (country != null)
+                    {
+                        return country;
+                    }
                 }
-                
-                // Convert map pixel to geographic coordinates
-                var (longitude, latitude) = CoordinateTransform.PixelToGeographic(mapPixelX, mapPixelY, mapWidth, mapHeight);
-                
-                Debug.WriteLine($"Screen ({pixelX},{pixelY}) + Offset ({viewOffset.X},{viewOffset.Y}) = Map ({mapPixelX},{mapPixelY}) -> Geo ({longitude:F4},{latitude:F4})");
-                
-                // Find country at this geographic location
-                return _politicalTileManager.GetCountryAtGeographicPoint(longitude, latitude);
+
+                return null;
             }
             catch (Exception ex)
             {
@@ -230,11 +229,76 @@ namespace Economy_sim
             SelectCountry(null);
         }
 
+        // ----- New helpers for editor integration -----
+
+        /// <summary>
+        /// Returns all available country data (names, codes, raster codes) for the current date.
+        /// </summary>
+        public List<CachedCountryData> GetAllCountryData()
+        {
+            return _politicalTileManager.GetAllCountryData();
+        }
+
+        /// <summary>
+        /// Finds a country by name (case-insensitive) and returns an IndexedCountryFeature with raster code.
+        /// </summary>
+        public IndexedCountryFeature? FindCountryByName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            var all = _politicalTileManager.GetAllCountryData();
+            var match = all.Find(c => string.Equals(c.CountryName, name, StringComparison.OrdinalIgnoreCase));
+            if (match == null) return null;
+            // Convert to feature using political manager helper
+            return _politicalTileManager.GetCountryFeatureByRasterCode(match.RasterCode);
+        }
+
+        /// <summary>
+        /// Change control of specific grid cells to a given country raster code.
+        /// </summary>
+        public void ChangeCountryControlAtGrid(int rasterCode, IEnumerable<Point> cells)
+        {
+            _politicalTileManager.ChangeControl(rasterCode, cells);
+        }
+
+        // Surface ChangeControlZeroSum from PoliticalTileManager
+        public List<(Point cell, int previousId)> ChangeCountryControlZeroSum(int rasterCode, IEnumerable<Point> brushCells)
+        {
+            return _politicalTileManager.ChangeControlZeroSum(rasterCode, brushCells);
+        }
+
         public void Dispose()
         {
             _politicalTileManager?.Dispose();
             // Note: MultiResolutionMapManager doesn't implement IDisposable
             // _terrainManager?.Dispose();
+        }
+
+        private static IEnumerable<(int dx, int dy)> GetSpiralOffsets(int radius)
+        {
+            yield return (0, 0);
+            for (int r = 1; r <= radius; r++)
+            {
+                for (int dy = -r; dy <= r; dy++)
+                {
+                    int dx = -r;
+                    yield return (dx, dy);
+                }
+                for (int dx = -r + 1; dx <= r; dx++)
+                {
+                    int dy = r;
+                    yield return (dx, dy);
+                }
+                for (int dy = r - 1; dy >= -r; dy--)
+                {
+                    int dx = r;
+                    yield return (dx, dy);
+                }
+                for (int dx = r - 1; dx >= -r + 1; dx--)
+                {
+                    int dy = -r;
+                    yield return (dx, dy);
+                }
+            }
         }
     }
 }

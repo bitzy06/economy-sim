@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using SDPoint = System.Drawing.Point;
 
 namespace Economy_sim
 {
@@ -17,89 +18,115 @@ namespace Economy_sim
         private readonly HybridMapManager _mapManager;
         private readonly StateBorderManager _stateBorderManager;
         
-        // Map rendering fields
         private WriteableBitmap? _writeableBitmap;
         private int _currentZoomLevel = 1;
         private SKPointI _viewOffset = SKPointI.Empty;
         private bool _isPanning = false;
-        private Point _panStartPoint;
+        private Avalonia.Point _panStartPoint;
         private bool _isInitialized = false;
         
-        // Map editor state
         private MapViewLevel _currentLevel = MapViewLevel.Countries;
         private bool _isDrawingMode = false;
+        private bool _allowWaterPaint = false;
         private IndexedCountryFeature? _selectedCountry = null;
         private StateBorderManager.StateFeature? _selectedState = null;
         
+        // Brush size for drawing
+        private int _brushSize = 2;
+
         private readonly DispatcherTimer _mapUpdateTimer;
         private bool _pendingMapUpdate = false;
         private readonly object _renderLock = new object();
         private bool _renderInProgress = false;
 
+        private readonly LinkedList<EditorAction> _undoStack = new();
+        private const int MaxUndo = 50;
+
+        private bool _isDrawingStrokeActive = false;
+        private List<(SDPoint cell, int previousId)> _currentStrokeChanges = new();
+
+        private record EditorAction(EditorActionType Type, MapViewLevel Level, int TargetId, List<(SDPoint cell, int previousId)> Changes);
+        private enum EditorActionType { ZeroSumAssign, DirectAssign }
+
         public MapEditorWindow()
         {
             InitializeComponent();
             
-            // Initialize map manager with political view
             _mapManager = new HybridMapManager(baseWidth: 4096, baseHeight: 2048);
             _mapManager.SetViewType(MapViewType.Political);
-            
-            // Initialize state border manager
             _stateBorderManager = new StateBorderManager();
             
             this.Loaded += OnWindowLoaded;
             this.SizeChanged += OnSizeChanged;
 
-            // Setup map update timer
             _mapUpdateTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(16) // ~60fps
+                Interval = TimeSpan.FromMilliseconds(16)
             };
             _mapUpdateTimer.Tick += MapUpdateTimer_Tick;
             _mapUpdateTimer.Start();
 
-            // Setup UI event handlers
             SetupUIEventHandlers();
         }
 
         private void SetupUIEventHandlers()
         {
-            // Exit button
             var exitButton = this.FindControl<Button>("ExitButton");
             if (exitButton != null)
             {
                 exitButton.Click += ExitButton_Click;
             }
 
-            // Level selector
             var levelSelector = this.FindControl<ComboBox>("LevelSelector");
             if (levelSelector != null)
             {
                 levelSelector.SelectionChanged += LevelSelector_SelectionChanged;
             }
 
-            // Entity selector
             var entitySelector = this.FindControl<ComboBox>("EntitySelector");
             if (entitySelector != null)
             {
                 entitySelector.SelectionChanged += EntitySelector_SelectionChanged;
             }
 
-            // Draw tool button
             var drawToolButton = this.FindControl<Button>("DrawToolButton");
             if (drawToolButton != null)
             {
                 drawToolButton.Click += DrawToolButton_Click;
             }
 
-            // Draw mode toggle
             var drawModeToggle = this.FindControl<ToggleButton>("DrawModeToggle");
             if (drawModeToggle != null)
             {
                 drawModeToggle.Click += DrawModeToggle_Click;
             }
 
-            // Initialize UI state
+            var waterToggle = this.FindControl<ToggleButton>("AllowWaterToggle");
+            if (waterToggle != null)
+            {
+                waterToggle.IsChecked = false;
+                waterToggle.Click += (s, e) =>
+                {
+                    _allowWaterPaint = waterToggle.IsChecked == true;
+                };
+            }
+
+            // Setup brush size slider
+            var brushSizeSlider = this.FindControl<Slider>("BrushSizeSlider");
+            var brushSizeLabel = this.FindControl<TextBlock>("BrushSizeLabel");
+            if (brushSizeSlider != null && brushSizeLabel != null)
+            {
+                brushSizeSlider.Value = _brushSize;
+                brushSizeLabel.Text = _brushSize.ToString();
+                
+                brushSizeSlider.ValueChanged += (s, e) =>
+                {
+                    _brushSize = (int)Math.Round(e.NewValue);
+                    brushSizeLabel.Text = _brushSize.ToString();
+                    Debug.WriteLine($"[MAP EDITOR] Brush size changed to: {_brushSize}");
+                };
+            }
+
             UpdateEntitySelector();
             UpdateTitle();
         }
@@ -123,16 +150,18 @@ namespace Economy_sim
             {
                 if (_currentLevel == MapViewLevel.Countries)
                 {
-                    // Find and select country
-                    // For now, just store the name - in a full implementation this would
-                    // interface with the country data
+                    var country = _mapManager.FindCountryByName(selectedName);
+                    _selectedCountry = country;
+                    _mapManager.SelectCountry(country);
                     Debug.WriteLine($"[MAP EDITOR] Selected country: {selectedName}");
+                    QueueRender();
                 }
                 else
                 {
-                    // Find and select state
                     _selectedState = _stateBorderManager.GetStateByName(selectedName);
+                    _stateBorderManager.SetSelectedState(_selectedState);
                     Debug.WriteLine($"[MAP EDITOR] Selected state: {selectedName}");
+                    QueueRender();
                 }
             }
         }
@@ -140,7 +169,6 @@ namespace Economy_sim
         private void DrawToolButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("[MAP EDITOR] Draw tool clicked");
-            // For now, just log - in a full implementation this would activate specific drawing tools
         }
 
         private void DrawModeToggle_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -170,21 +198,34 @@ namespace Economy_sim
                 if (_currentLevel == MapViewLevel.Countries)
                 {
                     entitySelectorLabel.Text = "Country:";
-                    
-                    // Add mock countries for now
-                    var countries = new[] { "United States", "Canada", "Mexico", "Germany", "France", "United Kingdom", "Australia" };
-                    foreach (var country in countries)
+
+                    try
                     {
-                        entitySelector.Items.Add(new ComboBoxItem { Content = country });
+                        var countries = _mapManager.GetAllCountryData();
+                        if (countries == null || countries.Count == 0)
+                        {
+                            entitySelector.Items.Add(new ComboBoxItem { Content = "(No country data loaded)" });
+                        }
+                        else
+                        {
+                            foreach (var c in countries.OrderBy(c => c.CountryName))
+                            {
+                                entitySelector.Items.Add(new ComboBoxItem { Content = c.CountryName });
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[MAP EDITOR] Failed loading country list: {ex.Message}");
+                        entitySelector.Items.Add(new ComboBoxItem { Content = "(Error loading countries)" });
                     }
                 }
                 else
                 {
                     entitySelectorLabel.Text = "State:";
                     
-                    // Add states from state manager
                     var states = _stateBorderManager.GetAllStates();
-                    foreach (var state in states)
+                    foreach (var state in states.OrderBy(s => s.StateName))
                     {
                         entitySelector.Items.Add(new ComboBoxItem { Content = state.StateName });
                     }
@@ -215,7 +256,6 @@ namespace Economy_sim
             var mapImage = this.FindControl<Image>("MapImage");
             if (mapImage != null)
             {
-                // Attach input event handlers for map interaction
                 mapImage.PointerPressed += OnPointerPressed;
                 mapImage.PointerMoved += OnPointerMoved;
                 mapImage.PointerReleased += OnPointerReleased;
@@ -223,7 +263,6 @@ namespace Economy_sim
 
                 _isInitialized = true;
                 
-                // Queue initial render
                 QueueRender();
             }
         }
@@ -266,7 +305,6 @@ namespace Economy_sim
                 var effectiveSize = GetEffectiveRenderSize();
                 if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
 
-                // Create view area for rendering
                 var viewArea = new SKRectI(_viewOffset.X, _viewOffset.Y, 
                     _viewOffset.X + (int)effectiveSize.Width, 
                     _viewOffset.Y + (int)effectiveSize.Height);
@@ -275,18 +313,15 @@ namespace Economy_sim
 
                 if (_currentLevel == MapViewLevel.Countries)
                 {
-                    // Render countries using existing political map
                     bitmap = _mapManager.AssembleView(_currentZoomLevel, viewArea);
                 }
                 else
                 {
-                    // Render states with country overlay
                     bitmap = RenderStatesWithCountryOverlay(viewArea, effectiveSize);
                 }
 
                 if (bitmap != null)
                 {
-                    // Convert SKBitmap to WriteableBitmap for display
                     var writeableBitmap = SKBitmapToWriteableBitmap(bitmap);
                     if (writeableBitmap != null)
                     {
@@ -311,28 +346,20 @@ namespace Economy_sim
             }
         }
 
-        private SKBitmap? RenderStatesWithCountryOverlay(SKRectI viewArea, Size effectiveSize)
+        private SKBitmap? RenderStatesWithCountryOverlay(SKRectI viewArea, Avalonia.Size effectiveSize)
         {
             try
             {
-                // Create a bitmap for state rendering
                 var bitmap = new SKBitmap((int)effectiveSize.Width, (int)effectiveSize.Height);
                 using (var canvas = new SKCanvas(bitmap))
                 {
-                    // Clear with a background color
                     canvas.Clear(SKColors.LightBlue);
-
-                    // Calculate the viewport for rendering
                     var viewport = new SKRect(viewArea.Left, viewArea.Top, viewArea.Right, viewArea.Bottom);
+                    var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
 
-                    // First, render state fills
-                    _stateBorderManager.RenderStateFills(canvas, viewport);
-
-                    // Then, render state borders (thicker)
-                    _stateBorderManager.RenderStateBorders(canvas, viewport, 2.0f, SKColors.Black);
-
-                    // Finally, overlay country borders (thinner)
-                    RenderCountryBordersOverlay(canvas, viewport);
+                    _stateBorderManager.RenderStateFills(canvas, viewport, mapSize);
+                    _stateBorderManager.RenderStateBorders(canvas, viewport, mapSize, 2.0f, SKColors.Black);
+                    RenderCountryBordersOverlay(canvas, viewport, mapSize);
                 }
 
                 return bitmap;
@@ -344,12 +371,10 @@ namespace Economy_sim
             }
         }
 
-        private void RenderCountryBordersOverlay(SKCanvas canvas, SKRect viewport)
+        private void RenderCountryBordersOverlay(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize)
         {
             try
             {
-                // Get country borders from the political map manager and render them as thin overlays
-                // For now, we'll create a simple mock implementation
                 using (var paint = new SKPaint
                 {
                     Style = SKPaintStyle.Stroke,
@@ -358,8 +383,10 @@ namespace Economy_sim
                     IsAntialias = true
                 })
                 {
-                    // Mock country borders - in a real implementation, this would get actual country geometry
-                    // and render it as thin lines over the states
+                    canvas.Save();
+                    canvas.Translate(-viewport.Left, -viewport.Top);
+                    canvas.DrawRect(viewport, paint);
+                    canvas.Restore();
                     Debug.WriteLine("[MAP EDITOR] Country border overlay rendered (mock implementation)");
                 }
             }
@@ -381,7 +408,6 @@ namespace Economy_sim
 
                 using (var lockedBitmap = writeableBitmap.Lock())
                 {
-                    // Copy pixel data safely
                     var skPixelSpan = skBitmap.GetPixelSpan();
                     var destSpan = lockedBitmap.Address;
                     var destSize = lockedBitmap.Size.Width * lockedBitmap.Size.Height * 4;
@@ -399,32 +425,31 @@ namespace Economy_sim
             }
         }
 
-        private Size GetEffectiveRenderSize()
+        private Avalonia.Size GetEffectiveRenderSize()
         {
             var mapContainer = this.FindControl<Border>("MapContainer");
             if (mapContainer != null)
             {
-                return new Size(Math.Max(1, mapContainer.Bounds.Width), 
+                return new Avalonia.Size(Math.Max(1, mapContainer.Bounds.Width), 
                                Math.Max(1, mapContainer.Bounds.Height));
             }
-            return new Size(800, 600); // Fallback size
+            return new Avalonia.Size(800, 600);
         }
 
-        // Input event handlers for map interaction
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             if (e.GetCurrentPoint(null).Properties.IsLeftButtonPressed)
             {
                 if (_isDrawingMode)
                 {
-                    // Handle drawing
+                    _isDrawingStrokeActive = true;
+                    _currentStrokeChanges.Clear();
                     var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
                     HandleDrawing((int)mousePos.Position.X, (int)mousePos.Position.Y);
                     e.Handled = true;
                 }
                 else
                 {
-                    // Handle panning
                     _isPanning = true;
                     _panStartPoint = e.GetCurrentPoint(null).Position;
                     e.Handled = true;
@@ -432,7 +457,6 @@ namespace Economy_sim
             }
             else if (e.GetCurrentPoint(null).Properties.IsRightButtonPressed)
             {
-                // Right-click for selection
                 var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
                 HandleSelection((int)mousePos.Position.X, (int)mousePos.Position.Y);
                 e.Handled = true;
@@ -443,7 +467,6 @@ namespace Economy_sim
         {
             if (_isDrawingMode && e.GetCurrentPoint(null).Properties.IsLeftButtonPressed)
             {
-                // Continue drawing
                 var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
                 HandleDrawing((int)mousePos.Position.X, (int)mousePos.Position.Y);
                 e.Handled = true;
@@ -458,6 +481,7 @@ namespace Economy_sim
                 _viewOffset.Y = Math.Max(0, _viewOffset.Y - (int)deltaY);
 
                 _panStartPoint = currentPoint;
+
                 QueueRender();
                 e.Handled = true;
             }
@@ -465,47 +489,99 @@ namespace Economy_sim
 
         private void HandleDrawing(int screenX, int screenY)
         {
-            Debug.WriteLine($"[MAP EDITOR] Drawing at ({screenX}, {screenY})");
-            
+            int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
+            int mapX = screenX + _viewOffset.X;
+            int mapY = screenY + _viewOffset.Y;
+            int gridX = Math.Clamp(mapX / cellSize, 0, 4096 - 1);
+            int gridY = Math.Clamp(mapY / cellSize, 0, 2048 - 1);
+
+            var brushCells = GetBrushCells(gridX, gridY, _brushSize).ToList();
+
+            List<(SDPoint cell, int previousId)> changes = new();
             if (_currentLevel == MapViewLevel.Countries && _selectedCountry != null)
             {
-                Debug.WriteLine($"[MAP EDITOR] Drawing with country: {_selectedCountry.CountryName}");
-                // In a full implementation, this would modify the underlying political map data
-                // to assign the tile at this position to the selected country
+                int rasterCode = _selectedCountry.RasterCode;
+
+                var zero = _mapManager.ChangeCountryControlZeroSum(rasterCode, brushCells);
+                if (zero.Count > 0)
+                    changes.AddRange(zero);
             }
             else if (_currentLevel == MapViewLevel.States && _selectedState != null)
             {
-                Debug.WriteLine($"[MAP EDITOR] Drawing with state: {_selectedState.StateName}");
-                // In a full implementation, this would modify the underlying state map data
-                // to assign the tile at this position to the selected state
+                // Border-aware state editing (works from inside selected state as well)
+                var zero = _stateBorderManager.ChangeControlZeroSum(_selectedState.RasterCode, brushCells);
+                if (zero.Count > 0)
+                    changes.AddRange(zero);
+
+                // Optional water paint
+                if (_allowWaterPaint)
+                {
+                    var waterOnly = _stateBorderManager.ChangeControlWaterOnly(_selectedState.RasterCode, brushCells);
+                    if (waterOnly.Count > 0) changes.AddRange(waterOnly);
+                }
             }
-            
-            // Force re-render to show changes
+
+            if (changes.Count > 0)
+            {
+                _currentStrokeChanges.AddRange(changes);
+                QueueRender();
+            }
+        }
+
+        private IEnumerable<SDPoint> GetBrushCells(int centerX, int centerY, int radius)
+        {
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    int x = centerX + dx;
+                    int y = centerY + dy;
+                    if (x >= 0 && x < 4096 && y >= 0 && y < 2048)
+                        yield return new SDPoint(x, y);
+                }
+            }
+        }
+
+        private void PushUndo(EditorAction action)
+        {
+            _undoStack.AddFirst(action);
+            while (_undoStack.Count > MaxUndo)
+                _undoStack.RemoveLast();
+        }
+
+        private void UndoLastAction()
+        {
+            if (_undoStack.First == null) return;
+            var action = _undoStack.First.Value;
+            _undoStack.RemoveFirst();
+
+            switch (action.Level)
+            {
+                case MapViewLevel.Countries:
+                    foreach (var (cell, prev) in action.Changes)
+                    {
+                        if (prev >= 0)
+                            _mapManager.ChangeCountryControlAtGrid(prev, new[] { cell });
+                    }
+                    break;
+                case MapViewLevel.States:
+                    foreach (var (cell, prev) in action.Changes)
+                    {
+                        if (prev >= 0)
+                            _stateBorderManager.ChangeControlAtGrid(prev, new[] { cell });
+                    }
+                    break;
+            }
             QueueRender();
         }
 
-        private void HandleSelection(int screenX, int screenY)
+        protected override void OnKeyDown(KeyEventArgs e)
         {
-            Debug.WriteLine($"[MAP EDITOR] Selection at ({screenX}, {screenY})");
-            
-            if (_currentLevel == MapViewLevel.Countries)
+            base.OnKeyDown(e);
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.Z)
             {
-                // Use existing country detection from map manager
-                var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
-                if (country != null)
-                {
-                    _selectedCountry = country;
-                    Debug.WriteLine($"[MAP EDITOR] Selected country: {country.CountryName}");
-                    
-                    // Update the entity selector to reflect the selection
-                    UpdateEntitySelectorToSelection(country.CountryName);
-                }
-            }
-            else
-            {
-                // For states, we'd need to implement state detection similar to country detection
-                // For now, just log the attempt
-                Debug.WriteLine("[MAP EDITOR] State selection not yet implemented - would detect state at position");
+                UndoLastAction();
+                e.Handled = true;
             }
         }
 
@@ -526,8 +602,49 @@ namespace Economy_sim
             }
         }
 
+        private void HandleSelection(int screenX, int screenY)
+        {
+            if (_currentLevel == MapViewLevel.Countries)
+            {
+                var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                if (country != null)
+                {
+                    _selectedCountry = country;
+                    _mapManager.SelectCountry(country);
+                    UpdateEntitySelectorToSelection(country.CountryName);
+                    QueueRender();
+                }
+            }
+            else
+            {
+                var state = _stateBorderManager.GetStateAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                if (state != null)
+                {
+                    _selectedState = state;
+                    _stateBorderManager.SetSelectedState(state);
+                    UpdateEntitySelectorToSelection(state.StateName);
+                    QueueRender();
+                }
+                else
+                {
+                    Debug.WriteLine("[MAP EDITOR] No state at clicked position");
+                }
+            }
+        }
+
         private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
         {
+            if (_isDrawingStrokeActive)
+            {
+                // finalize stroke as a single undo action
+                if (_currentStrokeChanges.Count > 0)
+                {
+                    var targetId = _currentLevel == MapViewLevel.Countries ? (_selectedCountry?.RasterCode ?? -1) : (_selectedState?.RasterCode ?? -1);
+                    PushUndo(new EditorAction(EditorActionType.ZeroSumAssign, _currentLevel, targetId, new List<(SDPoint cell, int previousId)>(_currentStrokeChanges)));
+                }
+                _currentStrokeChanges.Clear();
+                _isDrawingStrokeActive = false;
+            }
             _isPanning = false;
             e.Handled = true;
         }
@@ -557,17 +674,13 @@ namespace Economy_sim
 
         private void ExitButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            // Return to options window
             var optionsWindow = new OptionsWindow();
             optionsWindow.Show();
-            
-            // Close this map editor window
             this.Close();
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            // Clean up resources
             _mapUpdateTimer?.Stop();
             _mapManager?.Dispose();
             _stateBorderManager?.Dispose();
