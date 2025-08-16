@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using SDPoint = System.Drawing.Point;
 
 namespace Economy_sim
@@ -17,6 +18,7 @@ namespace Economy_sim
     {
         private readonly HybridMapManager _mapManager;
         private readonly StateBorderManager _stateBorderManager;
+        private readonly EnhancedMapEditor _enhancedEditor;
         
         private WriteableBitmap? _writeableBitmap;
         private int _currentZoomLevel = 1;
@@ -30,6 +32,10 @@ namespace Economy_sim
         private bool _allowWaterPaint = false;
         private IndexedCountryFeature? _selectedCountry = null;
         private StateBorderManager.StateFeature? _selectedState = null;
+        
+        // Enhanced editing features
+        private bool _useEnhancedEditor = true;
+        private EditPolicy _currentEditPolicy = EditPolicy.FillAllSubcells;
         
         // Brush size for drawing
         private int _brushSize = 2;
@@ -55,6 +61,12 @@ namespace Economy_sim
             _mapManager = new HybridMapManager(baseWidth: 4096, baseHeight: 2048);
             _mapManager.SetViewType(MapViewType.Political);
             _stateBorderManager = new StateBorderManager();
+            
+            // Initialize enhanced editor with data directory
+            string dataDirectory = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), 
+                "data");
+            _enhancedEditor = new EnhancedMapEditor(dataDirectory, _mapManager);
             
             this.Loaded += OnWindowLoaded;
             this.SizeChanged += OnSizeChanged;
@@ -489,6 +501,42 @@ namespace Economy_sim
 
         private void HandleDrawing(int screenX, int screenY)
         {
+            if (_useEnhancedEditor)
+            {
+                // Use the new enhanced editor
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Set brush value based on current selection
+                        uint brushValue = 0;
+                        if (_currentLevel == MapViewLevel.Countries && _selectedCountry != null)
+                        {
+                            brushValue = (uint)_selectedCountry.RasterCode;
+                        }
+                        else if (_currentLevel == MapViewLevel.States && _selectedState != null)
+                        {
+                            brushValue = (uint)_selectedState.RasterCode;
+                        }
+                        
+                        _enhancedEditor.SetBrushValue(brushValue);
+                        _enhancedEditor.SetBrushSize(_brushSize);
+                        _enhancedEditor.SetEditPolicy(_currentEditPolicy);
+                        
+                        await _enhancedEditor.ApplyEditAsync(screenX, screenY, _currentZoomLevel, _viewOffset);
+                        
+                        // Trigger UI refresh
+                        Dispatcher.UIThread.Post(() => QueueRender());
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[MAP EDITOR] Error in enhanced drawing: {ex.Message}");
+                    }
+                });
+                return;
+            }
+            
+            // Original drawing logic as fallback
             int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
             int mapX = screenX + _viewOffset.X;
             int mapY = screenY + _viewOffset.Y;
@@ -580,7 +628,79 @@ namespace Economy_sim
             base.OnKeyDown(e);
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.Z)
             {
-                UndoLastAction();
+                if (_useEnhancedEditor)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            bool result = await _enhancedEditor.UndoAsync();
+                            if (result)
+                            {
+                                Dispatcher.UIThread.Post(() => QueueRender());
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[MAP EDITOR] Error during enhanced undo: {ex.Message}");
+                        }
+                    });
+                }
+                else
+                {
+                    UndoLastAction();
+                }
+                e.Handled = true;
+            }
+            else if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.Y)
+            {
+                if (_useEnhancedEditor)
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            bool result = await _enhancedEditor.RedoAsync();
+                            if (result)
+                            {
+                                Dispatcher.UIThread.Post(() => QueueRender());
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[MAP EDITOR] Error during enhanced redo: {ex.Message}");
+                        }
+                    });
+                }
+                e.Handled = true;
+            }
+            else if (e.Key == Key.B)
+            {
+                // Toggle border-aware editing
+                _currentEditPolicy = _currentEditPolicy == EditPolicy.FillAllSubcells 
+                    ? EditPolicy.BorderAware 
+                    : EditPolicy.FillAllSubcells;
+                
+                Debug.WriteLine($"[MAP EDITOR] Edit policy changed to: {_currentEditPolicy}");
+                e.Handled = true;
+            }
+            else if (e.Key == Key.P)
+            {
+                // Toggle precision indicator
+                _enhancedEditor.TogglePrecisionIndicator();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.G)
+            {
+                // Toggle dirty tile glow
+                _enhancedEditor.ToggleDirtyTileGlow();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.E)
+            {
+                // Toggle enhanced editor
+                _useEnhancedEditor = !_useEnhancedEditor;
+                Debug.WriteLine($"[MAP EDITOR] Enhanced editor: {(_useEnhancedEditor ? "ON" : "OFF")}");
                 e.Handled = true;
             }
         }
@@ -684,6 +804,7 @@ namespace Economy_sim
             _mapUpdateTimer?.Stop();
             _mapManager?.Dispose();
             _stateBorderManager?.Dispose();
+            _enhancedEditor?.Dispose();
             base.OnClosed(e);
         }
     }

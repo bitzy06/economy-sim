@@ -15,6 +15,16 @@ class Program
     public static void Main(string[] args)
     {
         GdalInit.Ensure();
+        
+        // Run tests if --test argument is provided
+        if (args.Length > 0 && args[0] == "--test")
+        {
+            Console.WriteLine("Running Authoritative Grid Tests...");
+            _ = AuthoritativeGridTest.RunTests();
+            Console.WriteLine("Press any key to continue to the main application...");
+            Console.ReadKey();
+        }
+        
         BuildAvaloniaApp()
         .StartWithClassicDesktopLifetime(args);
     }
