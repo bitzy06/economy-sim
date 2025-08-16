@@ -1,0 +1,291 @@
+You are a senior C# graphics engineer. Redesign an existing map renderer from polygon shapefile rasterization to a grid/tiles control system optimized for dynamic war/occupation mechanics and GPU rendering. Maintain API compatibility where possible, but prefer clarity and performance.
+
+Context (current system)
+
+Vector shapefiles (CShapes-2.0) are filtered/rasterized once for a fixed year (1950) to an int[,] mask; rendering then colors pixels per country and draws borders by checking neighboring mask cells. See:
+
+PoliticalBorderManager.CreatePoliticalMask(..) and strict date filtering/rasterization path
+.
+
+PoliticalTileManager tile assembly, mask usage, and optimized per-pixel render incl. border passes in RenderPoliticalTileOptimized(..)
+.
+
+Spatial index for country lookup built from clean cache: PoliticalSpatialIndex.BuildIndex(..)
+.
+
+Selection/state overlays & zoom thresholds live in HybridMapManager and PoliticalTileManager
+.
+
+We need fast, frequent territorial updates (front lines, occupation), which are cumbersome with polygon ops.
+
+High-level goals
+
+Authoritative grid: Replace polygon-first rendering with a world control grid (uniform cells) as the primary source of truth for who controls each cell.
+
+Dynamic updates: War/occupation changes update cell ownership in real time (single cells, flood fills, fronts).
+
+GPU pipeline: Render grid via GPU (compute + texture or fragment shader) with CPU fallback. Update only dirty tiles.
+
+Tiled, LOD-aware: Partition world into fixed-size tiles (e.g., 512×512 cells), support mipmaps/LODs for zoom.
+
+Minimal churn: Keep the existing spatial index for click/country lookup, keep color palette mapping, keep HybridMapManager and the tile cache shape, but swap the guts to consume grid data.
+
+Deliverables
+
+New GridControlEngine (core data model + APIs).
+
+GPU renderer (OpenGL/Vulkan/Direct3D via Veldrid or Silk.NET) and a SkiaSharp CPU fallback.
+
+Tile storage, dirty-region system, LOD/mip generation.
+
+Integration patches for:
+
+PoliticalTileManager to render from grid instead of polygon mask
+.
+
+HybridMapManager to keep events and selection flow the same
+.
+
+Keep PoliticalDataCache for palette and initial country IDs (mapping ISO/name → raster code)
+.
+
+Tests (perf, correctness, visual diffs), doc, and migration notes.
+
+Technical requirements
+Grid & tiling
+
+Projection: Keep current equirectangular mapping and CoordinateTransform math (pixel ↔ geo) used today in managers
+.
+
+Base resolution: Propose default W×H = 8192×4096 (configurable). Each cell stores int countryId (raster code) and optionally int occupierId (or -1 for none).
+
+Tiles: Split grid into T×T cell tiles (e.g., 256×256 or 512×512). Track dirty flags per tile.
+
+Layers:
+
+baseOwnerGrid (immutable borders from initial rasterization),
+
+controlGrid (current controller, starts as a copy of base),
+
+optional frontlineGrid (bool/bit for contested), and stateGrid if you want intrastate control later.
+
+Compression (optional): RLE or palette per tile when idle.
+
+Initial ingest (one-time)
+
+Keep GDAL/OGR import to generate the initial base grid from CShapes (1950 or chosen date), reusing the existing PoliticalBorderManager rasterization, but write into the grid instead of an ephemeral tile mask
+.
+
+Use majority-coverage per cell (supersample N×N) when rasterizing vectors to reduce aliasing along coasts.
+
+Runtime updates (war mechanics)
+
+Public API (examples):
+
+// Apply ownership change to a set of cells (screen space → cell coords happens in manager)
+void ChangeControl(int countryId, IReadOnlyList<Point> cells);
+
+// Region ops
+void FloodFillControl(Point seed, int newCountryId, Func<int,bool> canReplace);
+void PaintPolyline(IEnumerable<PointF> geoPoints, float widthKm, int newCountryId);
+
+// Frontline utilities
+IReadOnlyList<Point> ComputeFrontline(); // diff between baseOwnerGrid and controlGrid
+
+
+All these mark tiles dirty, coalesce updates, and trigger GPU texture refresh for affected tiles.
+
+GPU path
+
+Renderer backend: Prefer Veldrid (multi-backend: D3D11, Metal, Vulkan, OpenGL), or Silk.NET. Keep SkiaSharp for CPU fallback and image compositing (labels, UI). If Avalonia is in use, allow swapchain integration.
+
+Data upload:
+
+Maintain a 1D palette texture Tex1D palette[MaxCountries] (RGBA colors from PoliticalDataCache.GetAllCountryColors()
+).
+
+For each tile, keep a control ID texture (R32_SINT or RGBA8 if needed). On change, upload only dirty tiles.
+
+Shading:
+
+Fragment shader path: Sample controlID → palette color; borders computed by sampling 4 neighbors and comparing IDs (white border if selected country on either side; black otherwise, matching current logic
+).
+
+Compute shader path (optional): Prebake an RGBA color tile from control IDs (and a single-channel border overlay), then present with a trivial textured quad. This trades shader ALU for simpler presentation.
+
+Borders:
+
+Replicate current border rules: draw borders for any ID change (including water), white for selected country vs neighbors, black otherwise
+.
+
+Allow border thickness via 8-neighbor test or multi-tap sampling; configurable.
+
+States overlay:
+
+Keep states for high zoom, but derive from a stateGrid or a separate ID texture rather than the CPU pass. Existing state overlay path lives in RenderStateOverlays
+; port logic into GPU with a secondary neighbor test gated by zoom.
+
+LOD / Mipmapping
+
+Generate mip levels for the control grid (majority downsample). Store per-tile mipmaps to avoid shimmering/aliasing when zoomed out.
+
+At low zoom, render from lower mips (fewer samples). At high zoom, render the base level.
+
+Picking / selection
+
+Keep spatial index for semantic info (country name/code) and bounds
+, but for which cell is under the cursor, use the grid:
+
+Convert pixel → geo → cell (same mapping used in HybridMapManager.GetCountryAtPixel)
+.
+
+Read the controlGrid[cell] as the authoritative controller.
+
+Optionally maintain an ID pick texture and call glReadPixels/mapped staging buffer for near-zero CPU logic.
+
+Integration points (very important)
+
+PoliticalTileManager:
+
+Replace GetTileMask(..) pipeline with grid tile pulls. The new tile renderer must not call polygon rasterization per frame
+.
+
+Replace RenderPoliticalTileOptimized(..) with GPU draw/dispatch that sources from control ID tile textures and palette 1D texture
+.
+
+Keep existing tile cache/leases & LRU eviction behavior, but cache GPU textures or prebaked RGBA tiles instead of CPU bitmaps.
+
+Preserve SetSelectedCountry/State and “white border for selected” behavior; selection still clears tile cache to force re-render
+.
+
+HybridMapManager:
+
+No API changes for AssembleView/GetMapSize/zoom thresholds; continue to switch between terrain/political views
+.
+
+SetPoliticalMapDate(..) can still rebuild baseOwnerGrid from the selected date; controlGrid resets or migrates with opt-in rule
+.
+
+PoliticalDataCache:
+
+Continue to provide (countryId → SKColor) palette and country code/name mappings; expose a method to export a palette array for GPU uploads
+.
+
+Optional: deprecate CountryBoarderSelectAdd(..) ad-hoc pixel edits; the grid + GPU border shader supersedes it
+.
+
+Performance targets
+
+Viewport 1920×1080, pan/zoom at 60 FPS on integrated GPUs; >144 FPS on midrange dGPU.
+
+Tile size 512×512 cells; update <2 ms per dirty tile (upload + draw).
+
+Bulk control change of 100k cells applies and re-renders within 50 ms (batched dirty tiles, async uploads).
+
+Testing
+
+Visual equivalence at t=0 (no war) vs current renderer on the same date.
+
+Border correctness: unit tests for neighbor rules (white/black borders) and water edges.
+
+Load tests: random territorial churn, ensure steady FPS and no VRAM leaks.
+
+Save/load: serialize only changed tiles (diff vs base), reload and compare hashes.
+
+API sketch (C#)
+public sealed class GridControlEngine {
+    public readonly int Width, Height, TileSize;
+
+    // Layers
+    public int[,] BaseOwnerGrid { get; }
+    public int[,] ControlGrid { get; }
+
+    // Tile and LOD
+    public TileHandle GetTile(int tileX, int tileY, int mipLevel = 0);
+    public void MarkCellsDirty(IEnumerable<Point> cells);
+    public void MarkRegionDirty(RectInt region);
+
+    // War ops
+    public void ChangeControl(int countryId, IEnumerable<Point> cells);
+    public void FloodFillControl(Point cell, int newCountryId, Func<int,bool> canReplace);
+
+    // Frontline
+    public IReadOnlyList<Point> ComputeFrontline();
+
+    // GPU
+    public void UploadPalette(ReadOnlySpan<uint> rgba);
+    public void UploadDirtyTiles(IGpuContext ctx);
+    public void Draw(ViewParams view, Selection sel);
+}
+
+// PoliticalTileManager integration
+public SKBitmap? AssembleView(int zoomLevel, SKRectI viewArea, Action? onTileReady = null); // unchanged signature
+
+Shader sketch (fragment shader path)
+// Uniforms: sampler2D controlTex; is 1 texel = 1 cell in the current LOD tile
+//           sampler1D paletteTex; uvec4 selection (selectedId, stateId, flags, 0)
+vec4 sampleColor(ivec2 cell) {
+    int id = texelFetch(controlTex, cell, 0).r; // integer ID
+    return texelFetch(paletteTex, id, 0);       // RGBA
+}
+
+bool isBorder(ivec2 c) {
+    int id = texelFetch(controlTex, c, 0).r;
+    if (id == 0) return false; // water isn't drawn as land border
+    return any(bvec4(
+      texelFetch(controlTex, c + ivec2( 1, 0), 0).r != id,
+      texelFetch(controlTex, c + ivec2(-1, 0), 0).r != id,
+      texelFetch(controlTex, c + ivec2( 0, 1), 0).r != id,
+      texelFetch(controlTex, c + ivec2( 0,-1), 0).r != id));
+}
+
+void main() {
+    ivec2 cell = ivec2(floor(vCellCoord)); // precomputed screen->cell mapping
+    int id = texelFetch(controlTex, cell, 0).r;
+    vec4 baseColor = texelFetch(paletteTex, id, 0);
+
+    bool border = isBorder(cell);
+    bool selectedNeighbor =
+         (id == uSelectedId) ||
+         any(bvec4(
+            texelFetch(controlTex, cell + ivec2(1,0),0).r == uSelectedId,
+            texelFetch(controlTex, cell + ivec2(-1,0),0).r == uSelectedId,
+            texelFetch(controlTex, cell + ivec2(0,1),0).r == uSelectedId,
+            texelFetch(controlTex, cell + ivec2(0,-1),0).r == uSelectedId));
+
+    vec4 borderColor = selectedNeighbor ? vec4(1,1,1,1) : vec4(0,0,0,1);
+    outColor = border ? borderColor : baseColor;
+}
+
+Migration plan
+
+GridControlEngine: implement with tile book-keeping, dirty flags, and LOD.
+
+One-time rasterization: reuse PoliticalBorderManager to seed BaseOwnerGrid, then clone to ControlGrid
+.
+
+Palette export: from PoliticalDataCache, produce packed RGBA and upload to GPU
+.
+
+PoliticalTileManager: swap GetTileMask/RenderPoliticalTileOptimized with grid tile fetch + GPU draw; preserve cache/lease pattern and selection pipelines
+.
+
+States: move to a state grid or a dedicated ID texture. Keep zoom gating as in current code (threshold 3)
+.
+
+Fallback: CPU path uses the same grid, with the previous neighbor border logic ported to a tight parallel loop (no shapefile rasterization per frame).
+
+Acceptance criteria
+
+No shapefile rasterization during interactive rendering; shapefiles are used only at startup/date change.
+
+Occupation updates (cell modifications) propagate to the screen within a frame, only touching dirty tiles.
+
+Visual parity with the current renderer at t=0 (same date) including white/black border semantics
+.
+
+Meets performance targets and passes tests described above.
+
+If helpful, also port the current “white between selected and any neighbor, black between others” rule from RenderPoliticalTileOptimized directly into the GPU border branch so selection behavior remains unchanged
+, and keep HybridMapManager.SetPoliticalMapDate re-wiring to re-seed grids from the chosen date
+.
