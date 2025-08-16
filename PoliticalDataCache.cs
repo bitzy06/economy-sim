@@ -281,6 +281,71 @@ namespace Economy_sim
         }
 
         /// <summary>
+        /// Load country mappings and colors directly from an export countries.json.
+        /// This bypasses the need for CShapes at runtime.
+        /// </summary>
+        public bool LoadFromCountriesJson(string countriesJsonPath)
+        {
+            try
+            {
+                if (!File.Exists(countriesJsonPath))
+                {
+                    Debug.WriteLine($"[PoliticalDataCache] countries.json not found at {countriesJsonPath}");
+                    return false;
+                }
+
+                string json = File.ReadAllText(countriesJsonPath);
+                var list = JsonSerializer.Deserialize<List<CachedCountryData>>(json);
+                if (list == null || list.Count == 0)
+                {
+                    Debug.WriteLine("[PoliticalDataCache] countries.json contained no data");
+                    return false;
+                }
+
+                _rasterCodeToCountry.Clear();
+                _countryColors.Clear();
+                foreach (var c in list)
+                {
+                    _rasterCodeToCountry[c.RasterCode] = c;
+                    if (!string.IsNullOrWhiteSpace(c.ColorHex) && SKColor.TryParse(c.ColorHex, out var col))
+                        _countryColors[c.CountryCode] = col;
+                    else
+                        _countryColors[c.CountryCode] = GenerateSimpleColor(c.RasterCode);
+                }
+                _cacheLoaded = true;
+                Debug.WriteLine($"[PoliticalDataCache] Loaded {list.Count} countries from export countries.json");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PoliticalDataCache] Failed to load countries.json: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Save the current mapping to an export countries.json at the given path.
+        /// </summary>
+        public bool SaveCountriesJson(string countriesJsonPath)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(countriesJsonPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                var list = new List<CachedCountryData>(_rasterCodeToCountry.Values);
+                string json = JsonSerializer.Serialize(list, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(countriesJsonPath, json);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[PoliticalDataCache] Failed to save countries.json: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Gets the best available identifier for a feature, prioritizing standard codes.
         /// </summary>
         private string GetBestIdentifier(Feature feature)

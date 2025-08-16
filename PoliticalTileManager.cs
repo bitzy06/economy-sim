@@ -16,7 +16,7 @@ namespace Economy_sim
     /// <summary>
     /// High-performance tile-based political map manager with spatial indexing optimizations
     /// </summary>
-    public class PoliticalTileManager : IDisposable
+    public partial class PoliticalTileManager : IDisposable
     {
         private readonly PoliticalBorderManager _politicalManager;
         private readonly int _baseWidth;
@@ -184,6 +184,52 @@ namespace Economy_sim
         }
 
         /// <summary>
+        /// Zero-sum change: only reassign border cells adjacent to the target country.
+        /// Returns list of changed cells with previous IDs for undo.
+        /// </summary>
+        public List<(Point cell, int previousId)> ChangeControlZeroSum(int targetCountryId, IEnumerable<Point> brushCells)
+        {
+            EnsureGridInitialized();
+            var changes = new List<(Point cell, int previousId)>();
+            var grid = _gridEngine.ControlGrid;
+            int w = grid.GetLength(1), h = grid.GetLength(0);
+
+            foreach (var c in brushCells)
+            {
+                int x = c.X, y = c.Y;
+                if (x < 0 || y < 0 || x >= w || y >= h) continue;
+                int cur = grid[y, x];
+                if (cur <= 0 || cur == targetCountryId) continue;
+
+                int nx0 = x + 1 < w ? grid[y, x + 1] : 0;
+                int nx1 = x - 1 >= 0 ? grid[y, x - 1] : 0;
+                int ny0 = y + 1 < h ? grid[y + 1, x] : 0;
+                int ny1 = y - 1 >= 0 ? grid[y - 1, x] : 0;
+                bool isBorder = nx0 != cur || nx1 != cur || ny0 != cur || ny1 != cur;
+                bool adjacentToTarget = nx0 == targetCountryId || nx1 == targetCountryId || ny0 == targetCountryId || ny1 == targetCountryId;
+                if (isBorder && adjacentToTarget)
+                {
+                    changes.Add((new Point(x, y), cur));
+                }
+            }
+
+            foreach (var (pt, _) in changes)
+            {
+                grid[pt.Y, pt.X] = targetCountryId;
+            }
+
+            if (changes.Count > 0)
+            {
+                var cells = changes.Select(ch => ch.cell);
+                var affectedTiles = _gridEngine.GetTileCoordinates(cells);
+                _gridEngine.MarkCellsDirty(cells);
+                ClearTilesFromCache(affectedTiles);
+            }
+
+            return changes;
+        }
+
+        /// <summary>
         /// Flood fill control from a seed point (war mechanics)
         /// </summary>
         public void FloodFillControl(System.Drawing.Point seed, int newCountryId, Func<int, bool> canReplace)
@@ -309,25 +355,17 @@ namespace Economy_sim
                     LogCacheMetrics();
                 }
 
-                // COORDINATE SYSTEM FIX: 
-                // The viewArea is in scaled map coordinates (baseWidth * cellSize x baseHeight * cellSize)
-                // But we need to work with grid coordinates (baseWidth x baseHeight)
-                // Scale the view area down to grid coordinate system
-                
+                // Convert viewArea to grid space
                 int scaledMapWidth = _baseWidth * cellSize;
                 int scaledMapHeight = _baseHeight * cellSize;
-                
-                // Transform viewArea from scaled map coordinates to grid coordinates
                 float scaleX = (float)_baseWidth / scaledMapWidth;
                 float scaleY = (float)_baseHeight / scaledMapHeight;
-                
                 int gridViewLeft = (int)(viewArea.Left * scaleX);
                 int gridViewTop = (int)(viewArea.Top * scaleY);
                 int gridViewRight = (int)(viewArea.Right * scaleX);
                 int gridViewBottom = (int)(viewArea.Bottom * scaleY);
-                
                 var gridViewArea = new SKRectI(gridViewLeft, gridViewTop, gridViewRight, gridViewBottom);
-                
+
                 Debug.WriteLine($"PoliticalTileManager.AssembleView: scaled map={scaledMapWidth}x{scaledMapHeight}, grid={_baseWidth}x{_baseHeight}");
                 Debug.WriteLine($"PoliticalTileManager.AssembleView: viewArea transform: {viewArea} -> {gridViewArea}");
 
@@ -349,8 +387,8 @@ namespace Economy_sim
 
                 Debug.WriteLine($"PoliticalTileManager.AssembleView: LOD={lodLevel}, grid={gridWidth}x{gridHeight}, maxTiles={maxTileX}x{maxTileY}");
 
-                // Adjust view and tile ranges for the current LOD scale so we don't request out-of-bounds tiles
-                int lodScale = 1 << lodLevel; // 0->1, 1->2, 2->4, 3->8
+                // Adjust view and tile ranges for the current LOD scale
+                int lodScale = 1 << lodLevel;
                 var gridViewAreaLod = new SKRectI(
                     gridViewArea.Left / lodScale,
                     gridViewArea.Top / lodScale,
@@ -368,29 +406,22 @@ namespace Economy_sim
                 var info = new SKImageInfo(viewArea.Width, viewArea.Height);
                 using var surface = SKSurface.Create(info);
                 var canvas = surface.Canvas;
-                canvas.Clear(new SKColor(135, 206, 235, 255)); // Light blue water background
+                canvas.Clear(new SKColor(135, 206, 235, 255)); // Light blue background
 
                 for (int ty = lodTileStartY; ty < lodTileEndY; ty++)
                 {
                     for (int tx = lodTileStartX; tx < lodTileEndX; tx++)
                     {
-                        int tileX = tx, tileY = ty; // Capture for closure
-
-                        // Calculate tile position in the composite image
-                        // Convert from LOD grid coordinates back to base grid coordinates
+                        int tileX = tx, tileY = ty;
                         int gridTileLeftBase = tileX * TileSizePx * lodScale;
                         int gridTileTopBase = tileY * TileSizePx * lodScale;
-                        
-                        // Then to scaled (pixel) coordinates of the full map
                         int scaledTileLeft = (int)(gridTileLeftBase / scaleX);
                         int scaledTileTop = (int)(gridTileTopBase / scaleY);
                         int scaledTileWidth = (int)((TileSizePx * lodScale) / scaleX);
                         int scaledTileHeight = (int)((TileSizePx * lodScale) / scaleY);
-                        
                         int destX = scaledTileLeft - viewArea.Left;
                         int destY = scaledTileTop - viewArea.Top;
 
-                        // Get tile (async if not cached)
                         using var lease = AcquireTileLease(cellSize, tileX, tileY);
                         if (lease?.Bitmap != null && !lease.Bitmap.IsNull && !lease.Bitmap.IsEmpty)
                         {
@@ -401,12 +432,10 @@ namespace Economy_sim
                         {
                             if (forceSync)
                             {
-                                // Generate synchronously for first frame (no more blank rendering)
                                 string cacheKey = $"lod{lodLevel}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
                                 var bitmap = GenerateTileFromGrid(cellSize, tileX, tileY, cacheKey, onTileReady);
                                 if (bitmap != null)
                                 {
-                                    // Try to get the tile again now that it's cached
                                     using var lease2 = AcquireTileLease(cellSize, tileX, tileY);
                                     if (lease2?.Bitmap != null && !lease2.Bitmap.IsNull && !lease2.Bitmap.IsEmpty)
                                     {
@@ -417,14 +446,12 @@ namespace Economy_sim
                             }
                             else
                             {
-                                // Trigger async loading for next frame
                                 _ = GetTileAsync(cellSize, tileX, tileY, onTileReady);
                             }
                         }
                     }
                 }
 
-                // Create result bitmap
                 var result = new SKBitmap(info);
                 surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
 
@@ -438,7 +465,6 @@ namespace Economy_sim
             }
         }
 
-        // Replaces direct bitmap access with a ref-counted lease.
         private TileLease? AcquireTileLease(int cellSize, int tileX, int tileY)
         {
             int lodLevel = GetLodLevelForCellSize(cellSize);
@@ -485,13 +511,11 @@ namespace Economy_sim
             int lodLevel = GetLodLevelForCellSize(cellSize);
             string cacheKey = $"lod{lodLevel}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
 
-            // Check if already in progress
             if (_inFlightTasks.TryGetValue(cacheKey, out var existingTask))
             {
                 return await existingTask;
             }
 
-            // Create new async task
             var task = Task.Run(() => GenerateTileAsync(cellSize, tileX, tileY, cacheKey, onComplete));
             _inFlightTasks.TryAdd(cacheKey, task);
 
@@ -507,13 +531,9 @@ namespace Economy_sim
 
         private SKBitmap? GenerateTileAsync(int cellSize, int tileX, int tileY, string cacheKey, Action? onComplete)
         {
-            // Use new grid-based rendering
             return GenerateTileFromGrid(cellSize, tileX, tileY, cacheKey, onComplete);
         }
 
-        /// <summary>
-        /// Generate tile using the new grid-based rendering system
-        /// </summary>
         private SKBitmap? GenerateTileFromGrid(int cellSize, int tileX, int tileY, string cacheKey, Action? onComplete)
         {
             var sw = Stopwatch.StartNew();
@@ -521,39 +541,27 @@ namespace Economy_sim
             try
             {
                 Debug.WriteLine($"GenerateTileFromGrid: Starting generation for tile ({tileX}, {tileY}) at cellSize={cellSize}");
-
-                // Ensure grid is initialized for current date
                 EnsureGridInitialized();
-
-                // Calculate appropriate LOD level based on cell size
                 int lodLevel = GetLodLevelForCellSize(cellSize);
-
-                // Get the LOD-specific grid to check its actual dimensions
                 var controlGrid = _gridEngine.GetControlGridLod(lodLevel);
                 int gridWidth = controlGrid.GetLength(1);
                 int gridHeight = controlGrid.GetLength(0);
-
-                // Calculate the maximum number of tiles possible for this grid at this resolution
                 int maxTileX = (gridWidth + TileSizePx - 1) / TileSizePx;
                 int maxTileY = (gridHeight + TileSizePx - 1) / TileSizePx;
 
                 Debug.WriteLine($"GenerateTileFromGrid: LOD={lodLevel}, grid={gridWidth}x{gridHeight}, maxTiles={maxTileX}x{maxTileY}");
 
-                // Check if the requested tile is beyond the grid bounds
                 if (tileX >= maxTileX || tileY >= maxTileY)
                 {
                     Debug.WriteLine($"GenerateTileFromGrid: Tile ({tileX}, {tileY}) is beyond grid bounds. Grid: {gridWidth}x{gridHeight}, Max tiles: {maxTileX}x{maxTileY}");
-                    
-                    // Return a water-only tile for out-of-bounds areas
                     var waterTile = new SKBitmap(TileSizePx, TileSizePx, SKColorType.Rgba8888, SKAlphaType.Opaque);
-                    waterTile.Erase(new SKColor(135, 206, 235, 255)); // Light blue water color
+                    waterTile.Erase(new SKColor(135, 206, 235, 255));
                     CacheTile(cacheKey, waterTile);
                     onComplete?.Invoke();
                     Debug.WriteLine($"GenerateTileFromGrid: Created water tile for out-of-bounds");
                     return waterTile;
                 }
 
-                // Get selected country raster code for border highlighting
                 int selectedCountryId = -1;
                 lock (_selectionLock)
                 {
@@ -561,20 +569,14 @@ namespace Economy_sim
                 }
 
                 Debug.WriteLine($"GenerateTileFromGrid: Calling GridRenderer.RenderGridTile({tileX}, {tileY}, {TileSizePx}, {selectedCountryId}, {lodLevel})");
-
-                // Render tile using grid renderer with appropriate LOD
                 var bitmap = _gridRenderer.RenderGridTile(tileX, tileY, TileSizePx, selectedCountryId, lodLevel);
 
                 if (bitmap != null)
                 {
                     Debug.WriteLine($"GenerateTileFromGrid: GridRenderer returned bitmap {bitmap.Width}x{bitmap.Height}");
-
-                    // Test bitmap content by sampling a few pixels
                     var centerPixel = bitmap.GetPixel(bitmap.Width / 2, bitmap.Height / 2);
                     var cornerPixel = bitmap.GetPixel(0, 0);
                     Debug.WriteLine($"GenerateTileFromGrid: Bitmap pixels - center: #{centerPixel.Red:X2}{centerPixel.Green:X2}{centerPixel.Blue:X2}, corner: #{cornerPixel.Red:X2}{cornerPixel.Green:X2}{cornerPixel.Blue:X2}");
-                    
-                    // Cache the result with LRU management
                     CacheTile(cacheKey, bitmap);
                     onComplete?.Invoke();
                     Debug.WriteLine($"GenerateTileFromGrid: Cached tile successfully in {sw.ElapsedMilliseconds}ms");
@@ -582,10 +584,8 @@ namespace Economy_sim
                 else
                 {
                     Debug.WriteLine($"GenerateTileFromGrid: GridRenderer returned NULL bitmap for tile ({tileX}, {tileY})");
-                    
-                    // Create a fallback water tile
                     var fallbackTile = new SKBitmap(TileSizePx, TileSizePx, SKColorType.Rgba8888, SKAlphaType.Opaque);
-                    fallbackTile.Erase(new SKColor(135, 206, 235, 255)); // Light blue water color
+                    fallbackTile.Erase(new SKColor(135, 206, 235, 255));
                     CacheTile(cacheKey, fallbackTile);
                     onComplete?.Invoke();
                     Debug.WriteLine($"GenerateTileFromGrid: Created fallback water tile");
@@ -602,47 +602,33 @@ namespace Economy_sim
             }
         }
 
-        /// <summary>
-        /// Legacy polygon-based tile generation (kept for fallback)
-        /// </summary>
         private SKBitmap? GenerateTileAsyncLegacy(int cellSize, int tileX, int tileY, string cacheKey, Action? onComplete)
         {
             var sw = Stopwatch.StartNew();
 
             try
             {
-                // Calculate tile bounds in pixel space using SCALED map dimensions
                 int scaledMapWidth = _baseWidth * cellSize;
                 int scaledMapHeight = _baseHeight * cellSize;
-
                 int pixelX = tileX * TileSizePx;
                 int pixelY = tileY * TileSizePx;
-
                 int tileWidth = Math.Min(TileSizePx, scaledMapWidth - pixelX);
                 int tileHeight = Math.Min(TileSizePx, scaledMapHeight - pixelY);
-
                 if (tileWidth <= 0 || tileHeight <= 0)
                 {
                     return null;
                 }
-
-                // Get or generate political mask for this tile
                 var tileMask = GetTileMask(cellSize, pixelX, pixelY, tileWidth, tileHeight);
                 if (tileMask == null)
                 {
                     return CreateUnavailablePlaceholder(tileWidth, tileHeight);
                 }
-
-                // Render political map using optimized parallel processing
                 var bitmap = RenderPoliticalTileOptimized(tileMask, tileWidth, tileHeight);
-
                 if (bitmap != null)
                 {
-                    // Cache the result with LRU management
                     CacheTile(cacheKey, bitmap);
                     onComplete?.Invoke();
                 }
-
                 Debug.WriteLine($"Legacy political tile ({tileX}, {tileY}) generated in {sw.ElapsedMilliseconds}ms");
                 return bitmap;
             }
@@ -653,53 +639,172 @@ namespace Economy_sim
             }
         }
 
+        private SKBitmap? RenderPoliticalTileOptimized(int[,] mask, int width, int height)
+        {
+            try
+            {
+                var bitmap = new SKBitmap(width, height);
+                bool hasData = false;
+                int maxCountryCode = 0;
+                for (int y = 0; y < mask.GetLength(0) && y < height; y++)
+                {
+                    for (int x = 0; x < mask.GetLength(1) && x < width; x++)
+                    {
+                        int code = mask[y, x];
+                        if (code > 0)
+                        {
+                            hasData = true;
+                            maxCountryCode = Math.Max(maxCountryCode, code);
+                        }
+                    }
+                }
+                if (!hasData)
+                {
+                    bitmap.Erase(new SKColor(135, 206, 235, 255));
+                    return bitmap;
+                }
+                int selectedId;
+                lock (_selectionLock)
+                {
+                    selectedId = _selectedRasterCode;
+                }
+                unsafe
+                {
+                    var pixelPtr = (uint*)bitmap.GetPixels().ToPointer();
+                    int stride = bitmap.RowBytes / 4;
+                    Parallel.For(0, height, y =>
+                    {
+                        var rng = ThreadLocalRandom.Value;
+                        for (int x = 0; x < width; x++)
+                        {
+                            uint color;
+                            if (y < mask.GetLength(0) && x < mask.GetLength(1))
+                            {
+                                int countryId = mask[y, x];
+                                if (countryId == 0)
+                                {
+                                    color = 0xFF87CEEB; // water
+                                }
+                                else
+                                {
+                                    SKColor baseColor = _dataCache.GetCountryColorByRasterCode(countryId);
+                                    int variation = rng.Next(-5, 6);
+                                    byte r = (byte)Math.Clamp(baseColor.Red + variation, 0, 255);
+                                    byte g = (byte)Math.Clamp(baseColor.Green + variation, 0, 255);
+                                    byte b = (byte)Math.Clamp(baseColor.Blue + variation, 0, 255);
+                                    color = (uint)(0xFF000000 | (r << 16) | (g << 8) | b);
+                                }
+                            }
+                            else
+                            {
+                                color = 0xFF87CEEB;
+                            }
+                            pixelPtr[y * stride + x] = color;
+                        }
+                    });
+
+                    uint blackBorder = 0xFF000000;
+                    uint whiteBorder = 0xFFFFFFFF;
+                    Parallel.For(0, height, y =>
+                    {
+                        for (int x = 0; x < width; x++)
+                        {
+                            if (y >= mask.GetLength(0) || x >= mask.GetLength(1))
+                                continue;
+                            int countryId = mask[y, x];
+                            if (countryId == 0)
+                                continue;
+                            bool draw = false;
+                            bool drawWhite = false;
+                            if (y > 0)
+                            {
+                                int n = mask[y - 1, x];
+                                if (n != countryId)
+                                {
+                                    draw = true;
+                                    if (countryId == selectedId || (n > 0 && n == selectedId))
+                                        drawWhite = true;
+                                }
+                            }
+                            if (!draw && y + 1 < mask.GetLength(0))
+                            {
+                                int n = mask[y + 1, x];
+                                if (n != countryId)
+                                {
+                                    draw = true;
+                                    if (countryId == selectedId || (n > 0 && n == selectedId))
+                                        drawWhite = true;
+                                }
+                            }
+                            if (!draw && x > 0)
+                            {
+                                int n = mask[y, x - 1];
+                                if (n != countryId)
+                                {
+                                    draw = true;
+                                    if (countryId == selectedId || (n > 0 && n == selectedId))
+                                        drawWhite = true;
+                                }
+                            }
+                            if (!draw && x + 1 < mask.GetLength(1))
+                            {
+                                int n = mask[y, x + 1];
+                                if (n != countryId)
+                                {
+                                    draw = true;
+                                    if (countryId == selectedId || (n > 0 && n == selectedId))
+                                        drawWhite = true;
+                                }
+                            }
+                            if (draw)
+                            {
+                                pixelPtr[y * stride + x] = drawWhite ? whiteBorder : blackBorder;
+                            }
+                        }
+                    });
+                }
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in optimized political tile rendering: {ex.Message}");
+                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+                return null;
+            }
+        }
+
         private int[,]? GetTileMask(int cellSize, int pixelX, int pixelY, int tileWidth, int tileHeight)
         {
             string maskKey = $"mask_{cellSize}_{pixelX}_{pixelY}_{tileWidth}_{tileHeight}_{_politicalMapDate:yyyyMMdd}";
-
             if (_maskCache.TryGetValue(maskKey, out var cached))
             {
                 Debug.WriteLine($"Using cached political mask for tile ({pixelX}, {pixelY})");
                 return cached;
             }
-
             try
             {
-                // Ensure spatial index is built
                 EnsureSpatialIndexBuilt();
-
-                // Use optimized mask generation with spatial indexing
                 var mask = _maskGenerator.GenerateOptimizedMask(
                     cellSize, pixelX, pixelY, tileWidth, tileHeight, _baseWidth, _baseHeight);
-
                 if (mask == null)
                 {
                     Debug.WriteLine($"Failed to generate optimized mask for tile ({pixelX}, {pixelY})");
                     return null;
                 }
-
-                // Verify mask has data
                 bool hasData = false;
                 for (int y = 0; y < mask.GetLength(0) && !hasData; y++)
                 {
                     for (int x = 0; x < mask.GetLength(1) && !hasData; x++)
                     {
-                        if (mask[y, x] > 0)
-                        {
-                            hasData = true;
-                        }
+                        if (mask[y, x] > 0) hasData = true;
                     }
                 }
-
                 Debug.WriteLine($"Optimized political mask generated for tile ({pixelX}, {pixelY}): {(hasData ? "HAS DATA" : "NO DATA")}");
-
-                // Cache the mask if successful
                 if (mask != null && _maskCache.Count < MaxCacheSize * 3)
                 {
                     _maskCache.TryAdd(maskKey, mask);
                     Debug.WriteLine($"Cached optimized political mask for tile ({pixelX}, {pixelY})");
                 }
-
                 return mask;
             }
             catch (Exception ex)
@@ -715,29 +820,19 @@ namespace Economy_sim
             lock (_indexLock)
             {
                 if (_spatialIndexBuilt) return;
-
                 string? cshapesPath = FindCShapesFile();
                 if (string.IsNullOrEmpty(cshapesPath))
                 {
                     throw new ApplicationException("CShapes file not found for spatial index generation");
                 }
-
                 Debug.WriteLine($"Ensuring data is ready for date: {_politicalMapDate:yyyy-MM-dd}");
-
-                // 1) Retrieve clean, non-overlapping data for the current date from cache.
                 var cleanCountryData = _dataCache.GetOrGenerateCountryData(cshapesPath);
-
-                // 2) Build spatial index strictly from this clean data.
                 _spatialIndex.BuildIndex(cshapesPath, cleanCountryData);
-
                 _spatialIndexBuilt = true;
                 Debug.WriteLine($"Spatial index built with {_spatialIndex.CountryCount} countries");
             }
         }
 
-        /// <summary>
-        /// Ensure the grid is initialized with data for the current political map date
-        /// </summary>
         private void EnsureGridInitialized()
         {
             lock (_gridLock)
@@ -747,8 +842,17 @@ namespace Economy_sim
                     Debug.WriteLine("Grid already initialized, skipping");
                     return;
                 }
-
                 Debug.WriteLine("Starting grid initialization...");
+
+                // 1) Try to load pre-exported grid first (exe-relative export folder)
+                if (TryLoadGridFromExport())
+                {
+                    _gridInitialized = true;
+                    Debug.WriteLine("Grid initialization completed from export data");
+                    return;
+                }
+
+                // 2) Fall back to shapefile pipeline
                 string? cshapesPath = FindCShapesFile();
                 if (string.IsNullOrEmpty(cshapesPath))
                 {
@@ -772,8 +876,6 @@ namespace Economy_sim
                         Debug.WriteLine("Falling back to test pattern");
                         _gridPopulator.PopulateTestPattern(_gridEngine);
                     }
-
-                    // Preload color/cache data so first render isn't grey
                     try
                     {
                         _ = _dataCache.GetOrGenerateCountryData(cshapesPath);
@@ -785,10 +887,8 @@ namespace Economy_sim
                     }
                 }
 
-                // Always ensure we have some grid data before marking as initialized
                 if (_gridEngine.BaseOwnerGrid != null)
                 {
-                    // Log grid statistics for debugging
                     var uniqueIds = new HashSet<int>();
                     int totalCells = _gridEngine.Width * _gridEngine.Height;
                     int nonWaterCells = 0;
@@ -803,36 +903,6 @@ namespace Economy_sim
                     }
                     Debug.WriteLine($"Grid populated with {uniqueIds.Count} unique country IDs from {totalCells} total cells");
                     Debug.WriteLine($"Non-water cells: {nonWaterCells} ({(nonWaterCells * 100.0 / totalCells):F1}%)");
-                    Debug.WriteLine($"Grid data sample at (0,0): {_gridEngine.BaseOwnerGrid[0, 0]}, at center: {_gridEngine.BaseOwnerGrid[_gridEngine.Height/2, _gridEngine.Width/2]}");
-                    
-                    // Sample more strategic points for verification - test known land areas
-                    // Test Europe (around longitude 10°, latitude 50°)
-                    var (europeX, europeY) = CoordinateTransform.GeographicToGridCell(10.0, 50.0, _gridEngine.Width, _gridEngine.Height);
-                    int europeValue = _gridEngine.BaseOwnerGrid[Math.Min(europeY, _gridEngine.Height-1), Math.Min(europeX, _gridEngine.Width-1)];
-                    
-                    // Test North America (around longitude -100°, latitude 45°)
-                    var (americaX, americaY) = CoordinateTransform.GeographicToGridCell(-100.0, 45.0, _gridEngine.Width, _gridEngine.Height);
-                    int americaValue = _gridEngine.BaseOwnerGrid[Math.Min(americaY, _gridEngine.Height-1), Math.Min(americaX, _gridEngine.Width-1)];
-                    
-                    // Test Africa (around longitude 20°, latitude 0°)
-                    var (africaX, africaY) = CoordinateTransform.GeographicToGridCell(20.0, 0.0, _gridEngine.Width, _gridEngine.Height);
-                    int africaValue = _gridEngine.BaseOwnerGrid[Math.Min(africaY, _gridEngine.Height-1), Math.Min(africaX, _gridEngine.Width-1)];
-
-                    Debug.WriteLine($"Land area samples: Europe(10°,50°)={europeValue} at grid({europeX},{europeY}), " +
-                                   $"America(-100°,45°)={americaValue} at grid({americaX},{americaY}), " +
-                                   $"Africa(20°,0°)={africaValue} at grid({africaX},{africaY})");
-                    
-                    // Sample a few more points for verification
-                    Debug.WriteLine($"Grid samples: (100,100)={_gridEngine.BaseOwnerGrid[Math.Min(100, _gridEngine.Height-1), Math.Min(100, _gridEngine.Width-1)]}, " +
-                                   $"(500,500)={_gridEngine.BaseOwnerGrid[Math.Min(500, _gridEngine.Height-1), Math.Min(500, _gridEngine.Width-1)]}, " +
-                                   $"(1000,1000)={_gridEngine.BaseOwnerGrid[Math.Min(1000, _gridEngine.Height-1), Math.Min(1000, _gridEngine.Width-1)]}");
-                    
-                    // Test the corners and edges
-                    Debug.WriteLine($"Corner samples: " +
-                                   $"TopLeft(0,0)={_gridEngine.BaseOwnerGrid[0, 0]}, " +
-                                   $"TopRight(0,{_gridEngine.Width-1})={_gridEngine.BaseOwnerGrid[0, _gridEngine.Width-1]}, " +
-                                   $"BottomLeft({_gridEngine.Height-1},0)={_gridEngine.BaseOwnerGrid[_gridEngine.Height-1, 0]}, " +
-                                   $"BottomRight({_gridEngine.Height-1},{_gridEngine.Width-1})={_gridEngine.BaseOwnerGrid[_gridEngine.Height-1, _gridEngine.Width-1]}");
                 }
                 else
                 {
@@ -844,180 +914,225 @@ namespace Economy_sim
             }
         }
 
-        private SKBitmap? RenderPoliticalTileOptimized(int[,] mask, int width, int height)
+        /// <summary>
+        /// Attempt to load a pre-exported grid and country color mapping from an export directory.
+        /// This allows running without shapefiles if an offline export is present.
+        /// </summary>
+        /// <returns>true if grid was loaded and initialized; false otherwise.</returns>
+        private bool TryLoadGridFromExport()
         {
             try
             {
-                var bitmap = new SKBitmap(width, height);
+                string baseDir = AppContext.BaseDirectory;
+                string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
 
-                // Check if mask has any political data
-                bool hasData = false;
-                int maxCountryCode = 0;
-                for (int y = 0; y < mask.GetLength(0) && y < height; y++)
+                var candidates = new List<string>
                 {
-                    for (int x = 0; x < mask.GetLength(1) && x < width; x++)
+                    Path.Combine(baseDir, "export"),
+                    Path.Combine(baseDir, "data", "export"),
+                    Path.Combine(baseDir, "data", "country_borders", "export"),
+                    Path.Combine(documents, "data", "country_borders", "export")
+                };
+
+                string? exportDir = candidates.FirstOrDefault(Directory.Exists);
+                if (exportDir == null)
+                {
+                    Debug.WriteLine("[TryLoadGridFromExport] No export directory found.");
+                    return false;
+                }
+
+                // Optionally load countries.json to seed colors/mappings
+                string countriesJson = Path.Combine(exportDir, "countries.json");
+                if (File.Exists(countriesJson))
+                {
+                    try
                     {
-                        int code = mask[y, x];
-                        if (code > 0)
+                        if (_dataCache.LoadFromCountriesJson(countriesJson))
                         {
-                            hasData = true;
-                            maxCountryCode = Math.Max(maxCountryCode, code);
+                            Debug.WriteLine($"[TryLoadGridFromExport] Loaded countries.json from {countriesJson}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[TryLoadGridFromExport] Failed to load countries.json: {ex.Message}");
+                    }
+                }
+
+                // Look for a binary grid dump named grid_{WxH}.bin or grid.bin
+                string wxh = $"{_gridEngine.Width}x{_gridEngine.Height}";
+                var gridCandidates = new[]
+                {
+                    Path.Combine(exportDir, $"grid_{wxh}.bin"),
+                    Path.Combine(exportDir, "grid.bin"),
+                    Path.Combine(exportDir, $"base_grid_{wxh}.bin"),
+                    Path.Combine(exportDir, "base_grid.bin")
+                };
+
+                string? gridPath = gridCandidates.FirstOrDefault(File.Exists);
+                if (gridPath == null)
+                {
+                    Debug.WriteLine("[TryLoadGridFromExport] No exported grid file found.");
+                    return false;
+                }
+
+                int width = _gridEngine.Width;
+                int height = _gridEngine.Height;
+                var grid = new int[height, width];
+
+                using (var fs = File.OpenRead(gridPath))
+                using (var br = new BinaryReader(fs))
+                {
+                    long expectedInts = (long)width * height;
+
+                    // If file starts with a header (magic + w + h), detect it
+                    // Try to read possible header safely
+                    fs.Seek(0, SeekOrigin.Begin);
+                    long remainingBytes = fs.Length;
+
+                    // Heuristic: if file size equals expectedInts*4 -> raw data; 
+                    // if larger, try to read 3 ints header (magic 0xBEEFBEEF, width, height)
+                    if (remainingBytes >= (expectedInts * 4))
+                    {
+                        if (remainingBytes >= (expectedInts * 4) + 12)
+                        {
+                            int magic = br.ReadInt32();
+                            int w = br.ReadInt32();
+                            int h = br.ReadInt32();
+                            if (magic != unchecked((int)0xBEEFBEEF) || w != width || h != height)
+                            {
+                                // Not a recognized header; reset to start
+                                fs.Seek(0, SeekOrigin.Begin);
+                            }
+                        }
+                    }
+
+                    for (int y = 0; y < height; y++)
+                    {
+                        for (int x = 0; x < width; x++)
+                        {
+                            if (fs.Position + 4 > fs.Length)
+                                throw new EndOfStreamException("Exported grid is smaller than expected");
+                            grid[y, x] = br.ReadInt32();
                         }
                     }
                 }
 
-                if (!hasData)
-                {
-                    Debug.WriteLine("Political mask contains no country data");
-                    // Fill with water color
-                    bitmap.Erase(new SKColor(135, 206, 235, 255)); // Light blue
-                    return bitmap;
-                }
-
-                Debug.WriteLine($"Political mask contains {maxCountryCode} country codes");
-
-                int selectedId;
-                lock (_selectionLock)
-                {
-                    selectedId = _selectedRasterCode;
-                }
-                
-                // First pass: fill all pixels with base colors only (no border logic here)
-                unsafe
-                {
-                    var pixelPtr = (uint*)bitmap.GetPixels().ToPointer();
-                    int stride = bitmap.RowBytes / 4;
-
-                    Parallel.For(0, height, y =>
-                    {
-                        var rng = ThreadLocalRandom.Value;
-
-                        for (int x = 0; x < width; x++)
-                        {
-                            uint color;
-
-                            // Check bounds to avoid out-of-range access
-                            if (y < mask.GetLength(0) && x < mask.GetLength(1))
-                            {
-                                int countryId = mask[y, x];
-
-                                if (countryId == 0)
-                                {
-                                    // Water - light blue
-                                    color = 0xFF87CEEB; // LightSkyBlue in ARGB
-                                }
-                                else
-                                {
-                                    // Color from date-correct cache
-                                    SKColor baseColor = _dataCache.GetCountryColorByRasterCode(countryId);
-
-                                    // Add slight random variation for visual interest (reduced for performance)
-                                    int variation = rng.Next(-5, 6);
-                                    byte r = (byte)Math.Clamp(baseColor.Red + variation, 0, 255);
-                                    byte g = (byte)Math.Clamp(baseColor.Green + variation, 0, 255);
-                                    byte b = (byte)Math.Clamp(baseColor.Blue + variation, 0, 255);
-
-                                    color = (uint)(0xFF000000 | (r << 16) | (g << 8) | b);
-                                }
-                            }
-                            else
-                            {
-                                // Out of bounds - water color
-                                color = 0xFF87CEEB;
-                            }
-
-                            pixelPtr[y * stride + x] = color;
-                        }
-                    });
-
-                    // Second pass: add borders. White between selected and any neighbor (including water), black between other countries.
-                    uint blackBorder = 0xFF000000; // Black with full alpha
-                    uint whiteBorder = 0xFFFFFFFF; // White
-
-                    Parallel.For(0, height, y =>
-                    {
-                        for (int x = 0; x < width; x++)
-                        {
-                            // Skip if out of mask bounds
-                            if (y >= mask.GetLength(0) || x >= mask.GetLength(1))
-                                continue;
-
-                            int countryId = mask[y, x];
-
-                            // Skip water pixels in border calculation
-                            // (we only draw borders on the land side of the coast)
-                            if (countryId == 0)
-                                continue;
-
-                            bool draw = false;
-                            bool drawWhite = false;
-
-                            // Check 4-neighborhood for differences
-                            // Up
-                            if (y > 0)
-                            {
-                                int n = mask[y - 1, x];
-                                if (n != countryId)
-                                {
-                                    // Draw borders with all neighbors, including water (n==0)
-                                    draw = true;
-                                    // Draw white border if this is the selected country
-                                    if (countryId == selectedId || (n > 0 && n == selectedId)) 
-                                        drawWhite = true;
-                                }
-                            }
-                            // Down
-                            if (!draw && y + 1 < mask.GetLength(0))
-                            {
-                                int n = mask[y + 1, x];
-                                if (n != countryId)
-                                {
-                                    draw = true;
-                                    if (countryId == selectedId || (n > 0 && n == selectedId)) 
-                                        drawWhite = true;
-                                }
-                            }
-                            // Left
-                            if (!draw && x > 0)
-                            {
-                                int n = mask[y, x - 1];
-                                if (n != countryId)
-                                {
-                                    draw = true;
-                                    if (countryId == selectedId || (n > 0 && n == selectedId)) 
-                                        drawWhite = true;
-                                }
-                            }
-                            // Right
-                            if (!draw && x + 1 < mask.GetLength(1))
-                            {
-                                int n = mask[y, x + 1];
-                                if (n != countryId)
-                                {
-                                    draw = true;
-                                    if (countryId == selectedId || (n > 0 && n == selectedId)) 
-                                        drawWhite = true;
-                                }
-                            }
-
-                            if (draw)
-                            {
-                                pixelPtr[y * stride + x] = drawWhite ? whiteBorder : blackBorder;
-                            }
-                        }
-                    });
-                }
-
-                return bitmap;
+                _gridEngine.InitializeBaseGrid(grid);
+                Debug.WriteLine($"[TryLoadGridFromExport] Loaded exported grid from {gridPath}");
+                return true;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error in optimized political tile rendering: {ex.Message}");
-                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
-                return null;
+                Debug.WriteLine($"[TryLoadGridFromExport] Failed: {ex.Message}");
+                return false;
             }
         }
-        
+
+        /// <summary>
+        /// Compute the political border mask for a given view area and zoom level.
+        /// </summary>
+        public int[,] ComputeBorderMask(SKRectI viewArea, int zoomLevel)
+        {
+            var sw = Stopwatch.StartNew();
+
+            try
+            {
+                int cellSize = GetCellSizeForZoom(zoomLevel);
+                int maskWidth = viewArea.Width;
+                int maskHeight = viewArea.Height;
+                var mask = new int[maskHeight, maskWidth];
+
+                Debug.WriteLine($"ComputeBorderMask: cellSize={cellSize}, viewArea={viewArea}");
+
+                // Iterate over each cell in the view area
+                Parallel.For(0, maskHeight, y =>
+                {
+                    for (int x = 0; x < maskWidth; x++)
+                    {
+                        // Map to global grid coordinates
+                        int globalX = viewArea.Left + x;
+                        int globalY = viewArea.Top + y;
+
+                        // Skip out-of-bounds
+                        if (globalX < 0 || globalY < 0 || globalX >= _gridEngine.Width || globalY >= _gridEngine.Height)
+                            continue;
+
+                        // Get the country ID from the control grid
+                        int countryId = _gridEngine.ControlGrid[globalY, globalX];
+                        mask[y, x] = countryId;
+
+                        // If this is a border cell, ensure surrounding cells are also marked
+                        if (IsBorderCell(globalX, globalY, countryId))
+                        {
+                            // TODO: Optimize - only mark directly adjacent cells
+                            MarkSurroundingCellsAsBorder(mask, x, y, countryId);
+                        }
+                    }
+                });
+
+                Debug.WriteLine($"ComputeBorderMask completed in {sw.ElapsedMilliseconds}ms");
+                return mask;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error in ComputeBorderMask: {ex.Message}");
+                return new int[viewArea.Height, viewArea.Width]; // Empty mask on error
+            }
+        }
+
+        /// <summary>
+        /// Check if a given cell is a border cell (surrounded by different country IDs).
+        /// </summary>
+        private bool IsBorderCell(int globalX, int globalY, int countryId)
+        {
+            // Simple check for land border - can be extended for sea borders, etc.
+            return GetAdjacentCountryIds(globalX, globalY).Any(adjacentId => adjacentId != countryId && adjacentId != 0);
+        }
+
+        /// <summary>
+        /// Mark surrounding cells as border in the mask.
+        /// </summary>
+        private void MarkSurroundingCellsAsBorder(int[,] mask, int centerX, int centerY, int countryId)
+        {
+            int maskWidth = mask.GetLength(1);
+            int maskHeight = mask.GetLength(0);
+
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue; // Skip the center cell
+                    int x = centerX + dx;
+                    int y = centerY + dy;
+
+                    // Skip out-of-bounds
+                    if (x < 0 || y < 0 || x >= maskWidth || y >= maskHeight)
+                        continue;
+
+                    // If the adjacent cell is land (non-zero ID), mark as border
+                    if (mask[y, x] != 0)
+                    {
+                        mask[y, x] = countryId;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Get the country IDs of adjacent cells (N, S, E, W) for a given cell.
+        /// </summary>
+        private IEnumerable<int> GetAdjacentCountryIds(int globalX, int globalY)
+        {
+            if (globalX > 0) // West
+                yield return _gridEngine.ControlGrid[globalY, globalX - 1];
+            if (globalX < _gridEngine.Width - 1) // East
+                yield return _gridEngine.ControlGrid[globalY, globalX + 1];
+            if (globalY > 0) // North
+                yield return _gridEngine.ControlGrid[globalY - 1, globalX];
+            if (globalY < _gridEngine.Height - 1) // South
+                yield return _gridEngine.ControlGrid[globalY + 1, globalX];
+        }
+
         public SKBitmap? CountryBoarderSelectAdd (SKBitmap bitmap, int[,] mask, int width, int height, Point mousepoint)
         {
             try
@@ -1027,83 +1142,42 @@ namespace Economy_sim
                     Debug.WriteLine("CountryBoarderSelectAdd: Bitmap or mask is null");
                     return bitmap;
                 }
-
-                // Ensure the mouse point is within bounds
                 if (mousepoint.X < 0 || mousepoint.X >= width || mousepoint.Y < 0 || mousepoint.Y >= height)
                 {
                     Debug.WriteLine($"CountryBoarderSelectAdd: Mouse point {mousepoint} out of bounds (width={width}, height={height})");
                     return bitmap;
                 }
-                
-                // If the mouse point is outside the mask bounds, adjust to find the nearest valid point
                 int maskY = Math.Min(mousepoint.Y, mask.GetLength(0) - 1);
                 int maskX = Math.Min(mousepoint.X, mask.GetLength(1) - 1);
-
-                // Get the country ID at the mouse position
                 int selectedCountryId = mask[maskY, maskX];
                 Debug.WriteLine($"CountryBoarderSelectAdd: Selected country ID = {selectedCountryId} at position {mousepoint}");
-                
-                // If mouse is over water (ID = 0), don't highlight anything
                 if (selectedCountryId == 0)
                 {
                     Debug.WriteLine("CountryBoarderSelectAdd: Selected point is water (country ID = 0)");
                     return bitmap;
                 }
-                
-                // Create a copy of the bitmap for modification
                 var newBitmap = bitmap.Copy();
-                
-                // Count how many border pixels we find for debugging
                 int borderPixelCount = 0;
-                
-                // Use unsafe code for direct pixel access (faster)
                 unsafe
                 {
                     var pixelPtr = (uint*)newBitmap.GetPixels().ToPointer();
                     int stride = newBitmap.RowBytes / 4;
-                    // Use a bright color with proper contrast against the map
-                    uint borderColor = 0xFFFFFFFF; // White (ARGB)
-
-                    // Process the image for border detection
+                    uint borderColor = 0xFFFFFFFF;
                     for (int y = 0; y < height; y++)
                     {
                         if (y >= mask.GetLength(0)) continue;
-                        
                         for (int x = 0; x < width; x++)
                         {
                             if (x >= mask.GetLength(1)) continue;
-                            
-
-                            // Check if this pixel belongs to the selected country
                             if (mask[y, x] == selectedCountryId)
                             {
                                 bool isBorder = false;
-                                
-                                // Only check immediate neighbors (not diagonals) for thinner borders
-                                // Top neighbor - include water (ID=0) for border detection
-                                if (y > 0 && y - 1 < mask.GetLength(0) && mask[y - 1, x] != selectedCountryId)
-                                {
-                                    isBorder = true;
-                                }
-                                // Bottom neighbor - include water for border detection
-                                else if (y < height - 1 && y + 1 < mask.GetLength(0) && mask[y + 1, x] != selectedCountryId)
-                                {
-                                    isBorder = true;
-                                }
-                                // Left neighbor - include water for border detection
-                                else if (x > 0 && x - 1 < mask.GetLength(1) && mask[y, x - 1] != selectedCountryId)
-                                {
-                                    isBorder = true;
-                                }
-                                // Right neighbor - include water for border detection
-                                else if (x < width - 1 && x + 1 < mask.GetLength(1) && mask[y, x + 1] != selectedCountryId)
-                                {
-                                    isBorder = true;
-                                }
-                                
+                                if (y > 0 && y - 1 < mask.GetLength(0) && mask[y - 1, x] != selectedCountryId) { isBorder = true; }
+                                else if (y < height - 1 && y + 1 < mask.GetLength(0) && mask[y + 1, x] != selectedCountryId) { isBorder = true; }
+                                else if (x > 0 && x - 1 < mask.GetLength(1) && mask[y, x - 1] != selectedCountryId) { isBorder = true; }
+                                else if (x < width - 1 && x + 1 < mask.GetLength(1) && mask[y, x + 1] != selectedCountryId) { isBorder = true; }
                                 if (isBorder)
                                 {
-                                    // Draw the border pixel
                                     pixelPtr[y * stride + x] = borderColor;
                                     borderPixelCount++;
                                 }
@@ -1116,32 +1190,25 @@ namespace Economy_sim
                 int startY = Math.Max(0, mousepoint.Y - blockSize / 2);
                 int endX = Math.Min(width - 1, startX + blockSize);
                 int endY = Math.Min(height - 1, startY + blockSize);
-
                 Debug.WriteLine($"Drawing test block at mouse position ({mousepoint.X},{mousepoint.Y}), block bounds: ({startX},{startY}) to ({endX},{endY})");
-
                 for (int y = startY; y <= endY; y++)
                 {
                     for (int x = startX; x <= endY; x++)
                     {
-                        // Make a bright red block
                         newBitmap.SetPixel(x, y, 0xFFFF0000);
                     }
                 }
-
-                // Also draw a crosshair pattern to make it even more visible
                 for (int i = -15; i <= 15; i++)
                 {
                     int x = mousepoint.X + i;
                     int y = mousepoint.Y;
                     if (x >= 0 && x < width)
-                        newBitmap.SetPixel(x, y, 0xFF00FFFF); // Cyan horizontal line
-
+                        newBitmap.SetPixel(x, y, 0xFF00FFFF);
                     x = mousepoint.X;
                     y = mousepoint.Y + i;
                     if (y >= 0 && y < height)
-                        newBitmap.SetPixel(x, y, 0xFF00FFFF); // Cyan vertical line
+                        newBitmap.SetPixel(x, y, 0xFF00FFFF);
                 }
-                
                 Debug.WriteLine($"CountryBoarderSelectAdd: Added {borderPixelCount} border pixels for country ID {selectedCountryId}");
                 return newBitmap;
             }
@@ -1149,13 +1216,12 @@ namespace Economy_sim
             {
                 Debug.WriteLine($"Error in CountryBoarderSelectAdd: {ex.Message}");
                 Debug.WriteLine(ex.StackTrace);
-                return bitmap; // Return original bitmap on error
+                return bitmap;
             }
         }
-        
+
         private SKColor GenerateConsistentColor(string countryCode)
         {
-            // Generate consistent colors based on country code hash for performance
             int hash = countryCode.GetHashCode();
             byte r = (byte)(100 + Math.Abs(hash % 156));
             byte g = (byte)(100 + Math.Abs((hash >> 8) % 156));
@@ -1163,67 +1229,43 @@ namespace Economy_sim
             return new SKColor(r, g, b, 255);
         }
 
-        /// <summary>
-        /// Determines if a pixel is on a country border by checking adjacent pixels
-        /// </summary>
         private bool IsBorderPixel(int[,] mask, int x, int y, int width, int height)
         {
             if (x >= mask.GetLength(1) || y >= mask.GetLength(0)) return false;
-
             int currentCountryId = mask[y, x];
-
-            // Don't draw borders for water pixels themselves (country ID 0)
             if (currentCountryId == 0) return false;
-
-            // Check all 8 surrounding pixels (including diagonals for better border detection)
             for (int dy = -1; dy <= 1; dy++)
             {
                 for (int dx = -1; dx <= 1; dx++)
                 {
-                    if (dx == 0 && dy == 0) continue; // Skip center pixel
-
+                    if (dx == 0 && dy == 0) continue;
                     int newX = x + dx;
                     int newY = y + dy;
-
-                    // Check bounds
-                    if (newX < 0 || newX >= mask.GetLength(1) ||
-                        newY < 0 || newY >= mask.GetLength(0))
+                    if (newX < 0 || newX >= mask.GetLength(1) || newY < 0 || newY >= mask.GetLength(0))
                     {
-                        continue; // Skip out-of-bounds pixels
+                        continue;
                     }
-
                     int neighborCountryId = mask[newY, newX];
-
-                    // If neighbor has different country ID (including water - ID 0), this is a border pixel
                     if (neighborCountryId != currentCountryId)
                     {
                         return true;
                     }
                 }
             }
-
             return false;
         }
 
-        /// <summary>
-        /// Determines if a pixel belongs to the currently selected country
-        /// </summary>
         private bool IsSelectedCountryPixel(int countryId)
         {
             lock (_selectionLock)
             {
                 if (_selectedCountry == null) return false;
-
-                // Fast path using cached raster code
                 if (_selectedRasterCode != -1)
                 {
                     return countryId == _selectedRasterCode;
                 }
-
-                // Fallback (shouldn't normally be hit): lookup via spatial index
                 var country = _spatialIndex.GetCountryByRasterCode(countryId);
                 if (country == null) return false;
-
                 return country.CountryCode == _selectedCountry.CountryCode;
             }
         }
@@ -1233,22 +1275,19 @@ namespace Economy_sim
             var entry = new CacheEntry
             {
                 Key = cacheKey,
-                Bitmap = bitmap, // Take ownership instead of copying
+                Bitmap = bitmap,
                 AccessTime = Interlocked.Increment(ref _cacheAccessCounter),
                 CreatedForDate = _politicalMapDate,
                 RefCount = 0,
                 DisposeRequested = false,
                 Disposed = false
             };
-
             lock (_cacheLock)
             {
-                // Implement hard LRU eviction - ensure we stay under limit
                 while (_tileCache.Count >= MaxCacheSize)
                 {
                     EvictOldestCacheEntry_NoLock();
                 }
-
                 _tileCache[cacheKey] = entry;
             }
         }
@@ -1265,7 +1304,6 @@ namespace Economy_sim
         {
             string? oldestKey = null;
             long oldestTime = long.MaxValue;
-
             foreach (var kvp in _tileCache)
             {
                 if (kvp.Value.AccessTime < oldestTime)
@@ -1274,13 +1312,11 @@ namespace Economy_sim
                     oldestKey = kvp.Key;
                 }
             }
-
             if (oldestKey != null && _tileCache.TryRemove(oldestKey, out var removed))
             {
                 if (removed.RefCount == 0 && !removed.Disposed)
                 {
                     removed.Disposed = true;
-                    // Dispose outside lock to avoid blocking
                     Task.Run(() => removed.Bitmap.Dispose());
                 }
                 else
@@ -1309,33 +1345,24 @@ namespace Economy_sim
                         }
                     }
                 }
-
                 _maskCache.Clear();
             }
-
             foreach (var e in toDispose)
             {
                 e.Disposed = true;
                 e.Bitmap.Dispose();
             }
-
-            // Clear spatial index as well since it's date-specific
             lock (_indexLock)
             {
                 _spatialIndex.Dispose();
                 _spatialIndexBuilt = false;
             }
-
-            // Mark grid as needing reinitialization
             lock (_gridLock)
             {
                 _gridInitialized = false;
             }
         }
 
-        /// <summary>
-        /// Purge completed tasks from in-flight tasks cache to prevent memory growth
-        /// </summary>
         private void PurgeCompletedTasks()
         {
             var completedKeys = new List<string>();
@@ -1346,21 +1373,16 @@ namespace Economy_sim
                     completedKeys.Add(kvp.Key);
                 }
             }
-
             foreach (var key in completedKeys)
             {
                 _inFlightTasks.TryRemove(key, out _);
             }
-
             if (completedKeys.Count > 0)
             {
                 Debug.WriteLine($"Purged {completedKeys.Count} completed tasks from in-flight cache");
             }
         }
 
-        /// <summary>
-        /// Clear legacy mask cache (used only for polygon-based rendering)
-        /// </summary>
         private void ClearLegacyMaskCache()
         {
             int removedCount = _maskCache.Count;
@@ -1371,14 +1393,10 @@ namespace Economy_sim
             }
         }
 
-        /// <summary>
-        /// Log debug metrics for cache monitoring
-        /// </summary>
         private void LogCacheMetrics()
         {
             long totalBitmapBytes = 0;
             int tileCount = 0;
-
             lock (_cacheLock)
             {
                 foreach (var entry in _tileCache.Values)
@@ -1390,34 +1408,22 @@ namespace Economy_sim
                     }
                 }
             }
-
-            // Get LOD count from grid engine
             int lodCount = _gridEngine.GetLodCount();
-
             Debug.WriteLine($"Cache metrics - Tiles: {tileCount}, VRAM: {totalBitmapBytes / (1024 * 1024)}MB, LODs: {lodCount}, InFlight: {_inFlightTasks.Count}, Masks: {_maskCache.Count}");
         }
         
-        /// <summary>
-        /// Returns the political mask for a specific view area
-        /// </summary>
         public int[,]? GetViewMask(int cellSize, int pixelX, int pixelY, int width, int height)
         {
             try
             {
-                // Calculate scaled map dimensions
                 int scaledMapWidth = _baseWidth * cellSize;
                 int scaledMapHeight = _baseHeight * cellSize;
-                
-                // Make sure we don't exceed map bounds
                 int effectiveWidth = Math.Min(width, scaledMapWidth - pixelX);
                 int effectiveHeight = Math.Min(height, scaledMapHeight - pixelY);
-                
                 if (effectiveWidth <= 0 || effectiveHeight <= 0)
                 {
                     return null;
                 }
-                
-                // Get the mask
                 return GetTileMask(cellSize, pixelX, pixelY, effectiveWidth, effectiveHeight);
             }
             catch (Exception ex)
@@ -1431,52 +1437,39 @@ namespace Economy_sim
         {
             var bitmap = new SKBitmap(width, height);
             using var canvas = new SKCanvas(bitmap);
-
-            // Fill with ocean blue to match water color everywhere else
-            var oceanBlue = new SKColor(135, 206, 235, 255); // LightSkyBlue
+            var oceanBlue = new SKColor(135, 206, 235, 255);
             canvas.Clear(oceanBlue);
-
-            // Optional subtle label (kept unobtrusive)
             using var paint = new SKPaint
             {
-                Color = new SKColor(80, 120, 150, 180), // subtle darker blue text
+                Color = new SKColor(80, 120, 150, 180),
                 TextSize = Math.Min(width, height) / 24f,
                 IsAntialias = true,
                 TextAlign = SKTextAlign.Center
             };
-
             string message = "Loading political data...";
             float x = width / 2f;
             float y = height / 2f;
-
             canvas.DrawText(message, x, y, paint);
-
             return bitmap;
         }
 
         private string? FindCShapesFile()
         {
-            // Check user Documents data directory first
             string userDataPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                 "data", "country_borders");
-
             string primaryPath = Path.Combine(userDataPath, "CShapes-2.0.shp");
             if (File.Exists(primaryPath))
             {
                 Debug.WriteLine($"Found CShapes file at: {primaryPath}");
                 return primaryPath;
             }
-
-            // Also check for ne_10m_admin_0_countries.shp as fallback
             string fallbackPath = Path.Combine(userDataPath, "ne_10m_admin_0_countries.shp");
             if (File.Exists(fallbackPath))
             {
                 Debug.WriteLine($"Found fallback shapefile at: {fallbackPath}");
                 return fallbackPath;
             }
-
-            // Check additional common locations
             string[] possiblePaths = {
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "CShapes-2.0.shp"),
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "ne_10m_admin_0_countries.shp"),
@@ -1487,7 +1480,6 @@ namespace Economy_sim
                 "../data/country_borders/CShapes-2.0.shp",
                 "../data/country_borders/ne_10m_admin_0_countries.shp"
             };
-
             foreach (string path in possiblePaths)
             {
                 if (File.Exists(path))
@@ -1496,29 +1488,16 @@ namespace Economy_sim
                     return path;
                 }
             }
-
-            Debug.WriteLine("No political boundary files found. Checked paths:");
-            Debug.WriteLine($"  Primary: {primaryPath}");
-            Debug.WriteLine($"  Fallback: {fallbackPath}");
-            foreach (string path in possiblePaths)
-            {
-                Debug.WriteLine($"  Alternative: {path}");
-            }
-
+            Debug.WriteLine("No political boundary files found.");
             return null;
         }
 
         private SKSizeI GetMapSize(int zoomLevel)
         {
-            // Use the same map size calculation as the terrain manager for alignment
             int cellSize = GetCellSizeForZoom(zoomLevel);
             return new SKSizeI(_baseWidth * cellSize, _baseHeight * cellSize);
         }
 
-        /// <summary>
-        /// Map cell size to appropriate LOD level for grid rendering
-        /// Force high resolution (LOD 0) at all zoom levels.
-        /// </summary>
         private int GetLodLevelForCellSize(int cellSize)
         {
             return 0;
@@ -1526,42 +1505,27 @@ namespace Economy_sim
 
         private int GetCellSizeForZoom(int zoomLevel)
         {
-            // Use the same zoom level calculation as MultiResolutionMapManager for alignment
             int index = zoomLevel - 1;
             index = Math.Clamp(index, 0, MultiResolutionMapManager.PixelsPerCellLevels.Length - 1);
             return MultiResolutionMapManager.PixelsPerCellLevels[index];
         }
 
-        /// <summary>
-        /// Gets the country at a specific geographic point
-        /// </summary>
-        /// <param name="longitude">Longitude in degrees</param>
-        /// <param name="latitude">Latitude in degrees</param>
-        /// <returns>Country information if found, null otherwise</returns>
         public IndexedCountryFeature? GetCountryAtGeographicPoint(double longitude, double latitude)
         {
             try
             {
-                // Ensure grid is initialized
                 EnsureGridInitialized();
-
-                // Get country ID from grid renderer (this is the raster code written into the grid)
                 int countryId = _gridRenderer.GetCountryAtGeographic(longitude, latitude);
-                
                 if (countryId <= 0)
                 {
                     Debug.WriteLine($"No country found at ({longitude:F4}, {latitude:F4}) - grid returned {countryId}");
                     return null;
                 }
-
-                // Ensure our local data cache is loaded so we can resolve raster code -> country
                 string? cshapesPath = FindCShapesFile();
                 if (!string.IsNullOrEmpty(cshapesPath))
                 {
                     _ = _dataCache.GetOrGenerateCountryData(cshapesPath);
                 }
-
-                // Get country information from data cache
                 var country = _dataCache.GetCountryFeatureByRasterCode(countryId);
                 if (country != null)
                 {
@@ -1569,9 +1533,6 @@ namespace Economy_sim
                 }
                 else
                 {
-                    Debug.WriteLine($"Grid returned country ID {countryId} but no country data found in cache. Ensuring spatial index is ready and retrying lookup.");
-
-                    // As a fallback, try the spatial index (will build from the same clean cache)
                     try
                     {
                         EnsureSpatialIndexBuilt();
@@ -1593,7 +1554,6 @@ namespace Economy_sim
                         Debug.WriteLine($"Fallback spatial index lookup failed: {ex.Message}");
                     }
                 }
-                
                 return country;
             }
             catch (Exception ex)
@@ -1610,6 +1570,29 @@ namespace Economy_sim
             _maskGenerator?.Dispose();
             _spatialIndex?.Dispose();
             _gridEngine?.Dispose();
+        }
+
+        public List<CachedCountryData> GetAllCountryData()
+        {
+            EnsureGridInitialized();
+            string? cshapesPath = FindCShapesFile();
+            if (!string.IsNullOrEmpty(cshapesPath))
+            {
+                var map = _dataCache.GetOrGenerateCountryData(cshapesPath);
+                return new List<CachedCountryData>(map.Values);
+            }
+            return new List<CachedCountryData>();
+        }
+
+        public IndexedCountryFeature? GetCountryFeatureByRasterCode(int rasterCode)
+        {
+            EnsureGridInitialized();
+            string? cshapesPath = FindCShapesFile();
+            if (!string.IsNullOrEmpty(cshapesPath))
+            {
+                _ = _dataCache.GetOrGenerateCountryData(cshapesPath);
+            }
+            return _dataCache.GetCountryFeatureByRasterCode(rasterCode);
         }
     }
 }

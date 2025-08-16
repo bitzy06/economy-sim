@@ -1,0 +1,188 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="Economy_sim.MapEditorWindow"
+        Title="Map Editor"
+        WindowState="FullScreen"
+        Background="#2D2D30">
+
+	<Window.Styles>
+		<StyleInclude Source="/GlobalStyles.axaml"/>
+	</Window.Styles>
+
+	<Grid>
+		<Grid.RowDefinitions>
+			<RowDefinition Height="*"/>
+			<RowDefinition Height="60"/>
+		</Grid.RowDefinitions>
+
+		<!-- Main Map Area -->
+		<Grid Grid.Row="0">
+			<!-- Map Container -->
+			<Border x:Name="MapContainer"
+				Background="Transparent"
+				HorizontalAlignment="Stretch"
+				VerticalAlignment="Stretch"
+				IsHitTestVisible="True">
+				<Image x:Name="MapImage"
+					   Stretch="None"
+					   HorizontalAlignment="Left"
+					   VerticalAlignment="Top"
+					   IsHitTestVisible="True"/>
+			</Border>
+
+			<!-- Title Overlay -->
+			<Border Background="#AA000000"
+					Height="50"
+					VerticalAlignment="Top"
+					HorizontalAlignment="Stretch"
+					IsHitTestVisible="False">
+				<StackPanel Orientation="Horizontal"
+							HorizontalAlignment="Center"
+							VerticalAlignment="Center">
+					<TextBlock x:Name="TitleText"
+							   Text="Map Editor - Political View"
+							   Foreground="#FFD700"
+							   FontSize="24"
+							   FontWeight="Bold"/>
+				</StackPanel>
+			</Border>
+		</Grid>
+
+		<!-- Bottom Ribbon -->
+		<Border Grid.Row="1"
+				Background="#AA000000"
+				BorderBrush="#555555"
+				BorderThickness="0,1,0,0">
+			<Grid Margin="10">
+				<Grid.ColumnDefinitions>
+					<ColumnDefinition Width="*"/>
+					<ColumnDefinition Width="Auto"/>
+				</Grid.ColumnDefinitions>
+
+				<!-- Left side - Map Editor Tools -->
+				<StackPanel Grid.Column="0" 
+							Orientation="Horizontal"
+							VerticalAlignment="Center"
+							Spacing="15">
+					
+					<!-- Level Selector -->
+					<StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="5">
+						<TextBlock Text="Level:" 
+								   Foreground="White" 
+								   FontSize="14" 
+								   VerticalAlignment="Center"/>
+						<ComboBox x:Name="LevelSelector"
+								  Width="120"
+								  Height="30"
+								  Background="#444444"
+								  Foreground="White"
+								  BorderBrush="#666666">
+							<ComboBoxItem Content="Countries" IsSelected="True"/>
+							<ComboBoxItem Content="States"/>
+						</ComboBox>
+					</StackPanel>
+					
+					<!-- Country/State Selector -->
+					<StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="5">
+						<TextBlock x:Name="EntitySelectorLabel"
+								   Text="Country:" 
+								   Foreground="White" 
+								   FontSize="14" 
+								   VerticalAlignment="Center"/>
+						<ComboBox x:Name="EntitySelector"
+								  Width="220"
+								  Height="30"
+								  Background="#444444"
+								  Foreground="White"
+								  BorderBrush="#666666"/>
+					</StackPanel>
+					
+					<!-- Drawing Tools -->
+					<Border Background="#333333" 
+							BorderBrush="#555555" 
+							BorderThickness="1" 
+							CornerRadius="3" 
+							Padding="10,5">
+						<StackPanel Orientation="Horizontal" Spacing="10">
+							<TextBlock Text="Tools:" 
+									   Foreground="White" 
+									   FontSize="14" 
+									   VerticalAlignment="Center"/>
+							<Button x:Name="DrawToolButton"
+									Content="Draw"
+									Width="60"
+									Height="25"
+									Background="#555555"
+									Foreground="White"
+									BorderBrush="#777777"
+									BorderThickness="1"
+									CornerRadius="2"
+									FontSize="12"/>
+							<ToggleButton x:Name="DrawModeToggle"
+										  Content="Drawing Off"
+										  Width="100"
+										  Height="25"
+										  Background="#666666"
+										  Foreground="White"
+										  BorderBrush="#777777"
+										  BorderThickness="1"
+										  CornerRadius="2"
+										  FontSize="11"/>
+							<ToggleButton x:Name="AllowWaterToggle"
+										  Content="Paint Water"
+										  Width="110"
+										  Height="25"
+										  Background="#666666"
+										  Foreground="White"
+										  BorderBrush="#777777"
+										  BorderThickness="1"
+										  CornerRadius="2"
+										  FontSize="11"/>
+							
+							<!-- Brush Size Slider -->
+							<StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="5" Margin="10,0,0,0">
+								<TextBlock Text="Brush:" 
+										   Foreground="White" 
+										   FontSize="12" 
+										   VerticalAlignment="Center"/>
+								<Slider x:Name="BrushSizeSlider"
+										Width="80"
+										Height="25"
+										Minimum="1"
+										Maximum="10"
+										Value="2"
+										TickFrequency="1"
+										IsSnapToTickEnabled="True"
+										Background="#555555"
+										Foreground="#FFD700"/>
+								<TextBlock x:Name="BrushSizeLabel"
+										   Text="2"
+										   Foreground="#FFD700" 
+										   FontSize="12" 
+										   FontWeight="Bold"
+										   VerticalAlignment="Center"
+										   Width="20"
+										   TextAlignment="Center"/>
+							</StackPanel>
+						</StackPanel>
+					</Border>
+				</StackPanel>
+
+				<!-- Right side - Exit button -->
+				<Button Grid.Column="1"
+						x:Name="ExitButton"
+						Content="Exit"
+						Width="100"
+						Height="35"
+						Background="#555555"
+						Foreground="White"
+						BorderBrush="#777777"
+						BorderThickness="1"
+						CornerRadius="3"/>
+			</Grid>
+		</Border>
+	</Grid>
+</Window>

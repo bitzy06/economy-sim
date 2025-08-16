@@ -39,6 +39,13 @@
 				        HorizontalAlignment="Center" 
 				        Width="400" />
 
+				<!-- Map Editor Button -->
+				<Button x:Name="MapEditorButton" 
+				        Content="Map Editor" 
+				        Classes="menu-button" 
+				        HorizontalAlignment="Center" 
+				        Width="400" />
+
 				<!-- Status Text -->
 				<TextBlock x:Name="StatusText"
 				          Text=""
