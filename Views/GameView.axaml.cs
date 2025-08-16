@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using SkiaSharp;
 using Economy_sim; // Assuming HybridMapManager is in this namespace
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -760,6 +761,9 @@ namespace Economy_sim
         // Sample game state for HUD demonstration
         private PlayerRoleManager _playerRoleManager;
         private Country _currentCountry;
+        
+        // Unified political entity renderer
+        private PoliticalEntityRenderer _politicalEntityRenderer;
 
         private void InitializeHUD()
         {
@@ -781,6 +785,11 @@ namespace Economy_sim
 
             // Set up player as Prime Minister by default
             _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
+
+            // Initialize the unified political entity renderer
+            // Use the existing political data cache from the map manager if available
+            var dataCache = _mapManager.GetPoliticalDataCache();
+            _politicalEntityRenderer = new PoliticalEntityRenderer(dataCache);
 
             // Set up HUD update timer
             var hudTimer = new DispatcherTimer
@@ -1473,6 +1482,66 @@ namespace Economy_sim
                 politicalBtn.Background = _mapManager.CurrentViewType == MapViewType.Political 
                     ? Avalonia.Media.Brushes.DarkRed 
                     : Avalonia.Media.Brushes.DarkSlateGray;
+            }
+        }
+
+        #endregion
+
+        #region Political Entity Rendering Demonstration
+
+        /// <summary>
+        /// Demonstrates the unified political entity renderer capabilities.
+        /// This method shows how both Country and State objects can be rendered
+        /// with the new PoliticalEntityRenderer class.
+        /// </summary>
+        public void DemonstratePoliticalEntityRendering()
+        {
+            if (_politicalEntityRenderer == null)
+            {
+                Debug.WriteLine("Political entity renderer not initialized");
+                return;
+            }
+
+            try
+            {
+                Debug.WriteLine("=== Political Entity Rendering Demonstration ===");
+
+                // Render the current country
+                var countryBitmap = _politicalEntityRenderer.RenderCountry(_currentCountry, 400, 300, isSelected: true);
+                if (countryBitmap != null)
+                {
+                    Debug.WriteLine($"Successfully rendered country: {_currentCountry.Name} (400x300)");
+                    // In a real application, you would display this bitmap in the UI
+                    countryBitmap.Dispose(); // Clean up for demo
+                }
+
+                // Render individual states
+                foreach (var state in _currentCountry.States)
+                {
+                    var stateBitmap = _politicalEntityRenderer.RenderState(state, 200, 150, isSelected: false);
+                    if (stateBitmap != null)
+                    {
+                        Debug.WriteLine($"Successfully rendered state: {state.Name} (200x150)");
+                        stateBitmap.Dispose(); // Clean up for demo
+                    }
+                }
+
+                // Render unified view of all political entities
+                var countries = new List<Country> { _currentCountry };
+                var unifiedBitmap = _politicalEntityRenderer.RenderPoliticalEntities(
+                    countries, 800, 600, selectedCountry: _currentCountry, selectedState: null);
+                
+                if (unifiedBitmap != null)
+                {
+                    Debug.WriteLine("Successfully rendered unified political entities view (800x600)");
+                    unifiedBitmap.Dispose(); // Clean up for demo
+                }
+
+                Debug.WriteLine("=== Political Entity Rendering Demonstration Complete ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error during political entity rendering demonstration: {ex.Message}");
             }
         }
 

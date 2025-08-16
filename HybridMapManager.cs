@@ -268,6 +268,14 @@ namespace Economy_sim
         }
 
         /// <summary>
+        /// Gets the political data cache for use by other components like renderers
+        /// </summary>
+        public PoliticalDataCache GetPoliticalDataCache()
+        {
+            return _politicalTileManager.GetDataCache();
+        }
+
+        /// <summary>
         /// Finds a country by name (case-insensitive) and returns an IndexedCountryFeature with raster code.
         /// </summary>
         public IndexedCountryFeature? FindCountryByName(string name)

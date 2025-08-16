@@ -1584,6 +1584,15 @@ namespace Economy_sim
             return new List<CachedCountryData>();
         }
 
+        /// <summary>
+        /// Gets the political data cache for external use
+        /// </summary>
+        public PoliticalDataCache GetDataCache()
+        {
+            EnsureGridInitialized();
+            return _dataCache;
+        }
+
         public IndexedCountryFeature? GetCountryFeatureByRasterCode(int rasterCode)
         {
             EnsureGridInitialized();
