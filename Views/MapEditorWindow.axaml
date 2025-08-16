@@ -42,7 +42,8 @@
 				<StackPanel Orientation="Horizontal"
 							HorizontalAlignment="Center"
 							VerticalAlignment="Center">
-					<TextBlock Text="Map Editor - Political View"
+					<TextBlock x:Name="TitleText"
+							   Text="Map Editor - Political View"
 							   Foreground="#FFD700"
 							   FontSize="24"
 							   FontWeight="Bold"/>
@@ -61,14 +62,77 @@
 					<ColumnDefinition Width="Auto"/>
 				</Grid.ColumnDefinitions>
 
-				<!-- Left side - Future expansion area -->
+				<!-- Left side - Map Editor Tools -->
 				<StackPanel Grid.Column="0" 
 							Orientation="Horizontal"
-							VerticalAlignment="Center">
-					<TextBlock Text="Map Editor Tools - Ready for Future Expansion"
-							   Foreground="#AAAAAA"
-							   FontSize="14"
-							   VerticalAlignment="Center"/>
+							VerticalAlignment="Center"
+							Spacing="15">
+					
+					<!-- Level Selector -->
+					<StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="5">
+						<TextBlock Text="Level:" 
+								   Foreground="White" 
+								   FontSize="14" 
+								   VerticalAlignment="Center"/>
+						<ComboBox x:Name="LevelSelector"
+								  Width="120"
+								  Height="30"
+								  Background="#444444"
+								  Foreground="White"
+								  BorderBrush="#666666">
+							<ComboBoxItem Content="Countries" IsSelected="True"/>
+							<ComboBoxItem Content="States"/>
+						</ComboBox>
+					</StackPanel>
+					
+					<!-- Country/State Selector -->
+					<StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="5">
+						<TextBlock x:Name="EntitySelectorLabel"
+								   Text="Country:" 
+								   Foreground="White" 
+								   FontSize="14" 
+								   VerticalAlignment="Center"/>
+						<ComboBox x:Name="EntitySelector"
+								  Width="150"
+								  Height="30"
+								  Background="#444444"
+								  Foreground="White"
+								  BorderBrush="#666666"/>
+					</StackPanel>
+					
+					<!-- Drawing Tools -->
+					<Border Background="#333333" 
+							BorderBrush="#555555" 
+							BorderThickness="1" 
+							CornerRadius="3" 
+							Padding="10,5">
+						<StackPanel Orientation="Horizontal" Spacing="10">
+							<TextBlock Text="Tools:" 
+									   Foreground="White" 
+									   FontSize="14" 
+									   VerticalAlignment="Center"/>
+							<Button x:Name="DrawToolButton"
+									Content="Draw"
+									Width="60"
+									Height="25"
+									Background="#555555"
+									Foreground="White"
+									BorderBrush="#777777"
+									BorderThickness="1"
+									CornerRadius="2"
+									FontSize="12"/>
+							<ToggleButton x:Name="DrawModeToggle"
+										  Content="Drawing Off"
+										  Width="80"
+										  Height="25"
+										  Background="#666666"
+										  Foreground="White"
+										  BorderBrush="#777777"
+										  BorderThickness="1"
+										  CornerRadius="2"
+										  FontSize="11"/>
+						</StackPanel>
+					</Border>
 				</StackPanel>
 
 				<!-- Right side - Exit button -->
