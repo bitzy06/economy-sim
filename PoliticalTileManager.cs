@@ -266,11 +266,30 @@ namespace Economy_sim
 
         public SKBitmap? AssembleView(int zoomLevel, SKRectI viewArea, Action? onTileReady = null)
         {
+            return AssembleView(zoomLevel, viewArea, onTileReady, forceSync: false);
+        }
+
+        /// <summary>
+        /// Assemble view with option to force synchronous tile generation
+        /// </summary>
+        public SKBitmap? AssembleView(int zoomLevel, SKRectI viewArea, Action? onTileReady, bool forceSync)
+        {
             var sw = Stopwatch.StartNew();
 
             try
             {
                 int cellSize = GetCellSizeForZoom(zoomLevel);
+
+                // Ensure grid is initialized before proceeding (not just inside tile generation)
+                EnsureGridInitialized();
+
+                // Periodic cleanup to prevent memory growth
+                if (_cacheAccessCounter % 100 == 0) // Every 100 tile accesses
+                {
+                    PurgeCompletedTasks();
+                    ClearLegacyMaskCache();
+                    LogCacheMetrics();
+                }
 
                 // Calculate tile boundaries for the view area
                 int tileStartX = viewArea.Left / TileSizePx;
@@ -303,8 +322,28 @@ namespace Economy_sim
                         }
                         else
                         {
-                            // Trigger async loading for next frame
-                            _ = GetTileAsync(cellSize, tileX, tileY, onTileReady);
+                            if (forceSync)
+                            {
+                                // Generate synchronously for first frame (no more blank rendering)
+                                int lodLevel = GetLodLevelForCellSize(cellSize);
+                                string cacheKey = $"lod{lodLevel}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
+                                var bitmap = GenerateTileFromGrid(cellSize, tileX, tileY, cacheKey, onTileReady);
+                                if (bitmap != null)
+                                {
+                                    // Try to get the tile again now that it's cached
+                                    using var lease2 = AcquireTileLease(cellSize, tileX, tileY);
+                                    if (lease2?.Bitmap != null && !lease2.Bitmap.IsNull && !lease2.Bitmap.IsEmpty)
+                                    {
+                                        var destRect = SKRect.Create(destX, destY, lease2.Bitmap.Width, lease2.Bitmap.Height);
+                                        canvas.DrawBitmap(lease2.Bitmap, destRect);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Trigger async loading for next frame
+                                _ = GetTileAsync(cellSize, tileX, tileY, onTileReady);
+                            }
                         }
                     }
                 }
@@ -313,7 +352,7 @@ namespace Economy_sim
                 var result = new SKBitmap(info);
                 surface.ReadPixels(result.Info, result.GetPixels(), result.RowBytes, 0, 0);
 
-                Debug.WriteLine($"Political view assembled in {sw.ElapsedMilliseconds}ms");
+                Debug.WriteLine($"Political view assembled in {sw.ElapsedMilliseconds}ms (sync: {forceSync})");
                 return result;
             }
             catch (Exception ex)
@@ -326,7 +365,8 @@ namespace Economy_sim
         // Replaces direct bitmap access with a ref-counted lease.
         private TileLease? AcquireTileLease(int cellSize, int tileX, int tileY)
         {
-            string cacheKey = $"{cellSize}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
+            int lodLevel = GetLodLevelForCellSize(cellSize);
+            string cacheKey = $"lod{lodLevel}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
 
             lock (_cacheLock)
             {
@@ -366,7 +406,8 @@ namespace Economy_sim
 
         private async Task<SKBitmap?> GetTileAsync(int cellSize, int tileX, int tileY, Action? onComplete = null)
         {
-            string cacheKey = $"{cellSize}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
+            int lodLevel = GetLodLevelForCellSize(cellSize);
+            string cacheKey = $"lod{lodLevel}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
 
             // Check if already in progress
             if (_inFlightTasks.TryGetValue(cacheKey, out var existingTask))
@@ -406,8 +447,10 @@ namespace Economy_sim
                 // Ensure grid is initialized for current date
                 EnsureGridInitialized();
 
-                // Calculate tile coordinates in grid space
-                // For now, ignore cellSize scaling and render at base resolution
+                // Calculate appropriate LOD level based on cell size
+                int lodLevel = GetLodLevelForCellSize(cellSize);
+
+                // Calculate tile coordinates in grid space (respect the LOD level)
                 int gridTileX = tileX;
                 int gridTileY = tileY;
 
@@ -418,8 +461,8 @@ namespace Economy_sim
                     selectedCountryId = _selectedRasterCode;
                 }
 
-                // Render tile using grid renderer
-                var bitmap = _gridRenderer.RenderGridTile(gridTileX, gridTileY, TileSizePx, selectedCountryId);
+                // Render tile using grid renderer with appropriate LOD
+                var bitmap = _gridRenderer.RenderGridTile(gridTileX, gridTileY, TileSizePx, selectedCountryId, lodLevel);
 
                 if (bitmap != null)
                 {
@@ -428,7 +471,7 @@ namespace Economy_sim
                     onComplete?.Invoke();
                 }
 
-                Debug.WriteLine($"Grid-based political tile ({tileX}, {tileY}) generated in {sw.ElapsedMilliseconds}ms");
+                Debug.WriteLine($"Grid-based political tile ({tileX}, {tileY}) at LOD {lodLevel} generated in {sw.ElapsedMilliseconds}ms");
                 return bitmap;
             }
             catch (Exception ex)
@@ -600,6 +643,22 @@ namespace Economy_sim
                         Debug.WriteLine("Falling back to test pattern");
                         _gridPopulator.PopulateTestPattern(_gridEngine);
                     }
+                }
+
+                // Always ensure we have some grid data before marking as initialized
+                if (_gridEngine.BaseOwnerGrid != null)
+                {
+                    // Log grid statistics for debugging
+                    var uniqueIds = new HashSet<int>();
+                    int totalCells = _gridEngine.Width * _gridEngine.Height;
+                    for (int y = 0; y < _gridEngine.Height; y++)
+                    {
+                        for (int x = 0; x < _gridEngine.Width; x++)
+                        {
+                            uniqueIds.Add(_gridEngine.BaseOwnerGrid[y, x]);
+                        }
+                    }
+                    Debug.WriteLine($"Grid populated with {uniqueIds.Count} unique country IDs from {totalCells} total cells");
                 }
 
                 _gridInitialized = true;
@@ -994,7 +1053,7 @@ namespace Economy_sim
             var entry = new CacheEntry
             {
                 Key = cacheKey,
-                Bitmap = bitmap.Copy(), // Make a copy to avoid disposal issues
+                Bitmap = bitmap, // Take ownership instead of copying
                 AccessTime = Interlocked.Increment(ref _cacheAccessCounter),
                 CreatedForDate = _politicalMapDate,
                 RefCount = 0,
@@ -1004,8 +1063,8 @@ namespace Economy_sim
 
             lock (_cacheLock)
             {
-                // Implement LRU eviction if cache is full
-                if (_tileCache.Count >= MaxCacheSize)
+                // Implement hard LRU eviction - ensure we stay under limit
+                while (_tileCache.Count >= MaxCacheSize)
                 {
                     EvictOldestCacheEntry_NoLock();
                 }
@@ -1092,6 +1151,70 @@ namespace Economy_sim
             {
                 _gridInitialized = false;
             }
+        }
+
+        /// <summary>
+        /// Purge completed tasks from in-flight tasks cache to prevent memory growth
+        /// </summary>
+        private void PurgeCompletedTasks()
+        {
+            var completedKeys = new List<string>();
+            foreach (var kvp in _inFlightTasks)
+            {
+                if (kvp.Value.IsCompleted)
+                {
+                    completedKeys.Add(kvp.Key);
+                }
+            }
+
+            foreach (var key in completedKeys)
+            {
+                _inFlightTasks.TryRemove(key, out _);
+            }
+
+            if (completedKeys.Count > 0)
+            {
+                Debug.WriteLine($"Purged {completedKeys.Count} completed tasks from in-flight cache");
+            }
+        }
+
+        /// <summary>
+        /// Clear legacy mask cache (used only for polygon-based rendering)
+        /// </summary>
+        private void ClearLegacyMaskCache()
+        {
+            int removedCount = _maskCache.Count;
+            _maskCache.Clear();
+            if (removedCount > 0)
+            {
+                Debug.WriteLine($"Cleared {removedCount} entries from legacy mask cache");
+            }
+        }
+
+        /// <summary>
+        /// Log debug metrics for cache monitoring
+        /// </summary>
+        private void LogCacheMetrics()
+        {
+            long totalBitmapBytes = 0;
+            int tileCount = 0;
+
+            lock (_cacheLock)
+            {
+                foreach (var entry in _tileCache.Values)
+                {
+                    if (!entry.Disposed)
+                    {
+                        totalBitmapBytes += entry.Bitmap.ByteCount;
+                        tileCount++;
+                    }
+                }
+            }
+
+            // Get LOD count from grid engine
+            int lodCount = _gridEngine.GetLodCount();
+
+            Debug.WriteLine($"Cache metrics - Tiles: {tileCount}, VRAM: {totalBitmapBytes / (1024 * 1024)}MB, LODs: {lodCount}, InFlight: {_inFlightTasks.Count}, Masks: {_maskCache.Count}");
         }
         
         /// <summary>
@@ -1209,6 +1332,28 @@ namespace Economy_sim
             // Use the same map size calculation as the terrain manager for alignment
             int cellSize = GetCellSizeForZoom(zoomLevel);
             return new SKSizeI(_baseWidth * cellSize, _baseHeight * cellSize);
+        }
+
+        /// <summary>
+        /// Map cell size to appropriate LOD level for grid rendering
+        /// </summary>
+        private int GetLodLevelForCellSize(int cellSize)
+        {
+            // Lower cell sizes (zoomed out) should use higher LOD levels (downsampled grids)
+            // PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80, 160, 320, 640, 1280 }
+            // We want: cellSize 3 -> LOD 3, cellSize 1280 -> LOD 0
+            var levels = MultiResolutionMapManager.PixelsPerCellLevels;
+            
+            for (int i = 0; i < levels.Length; i++)
+            {
+                if (cellSize <= levels[i])
+                {
+                    // Return a LOD that makes sense: smaller cell sizes get higher LOD (more downsampled)
+                    return Math.Min(3, levels.Length - 1 - i);
+                }
+            }
+            
+            return 0; // Highest zoom, use base resolution
         }
 
         private int GetCellSizeForZoom(int zoomLevel)

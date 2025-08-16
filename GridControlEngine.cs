@@ -70,8 +70,8 @@ namespace Economy_sim
             // Initialize control grid as copy of base
             Array.Copy(sourceGrid, ControlGrid, sourceGrid.Length);
 
-            // Invalidate all LOD levels
-            InvalidateAllLods();
+            // Clear and invalidate all LOD levels to free memory
+            ClearLods();
             MarkAllTilesDirty();
 
             GridChanged?.Invoke(this, new GridChangedEventArgs(GridChangeType.FullReset));
@@ -141,6 +141,12 @@ namespace Economy_sim
             // Invalidate affected LOD levels
             InvalidateLodsForTiles(affectedTiles);
 
+            // Clear LODs after significant control changes to free memory
+            if (cellList.Count > 1000) // For large changes
+            {
+                ClearLods();
+            }
+
             GridChanged?.Invoke(this, new GridChangedEventArgs(GridChangeType.CellUpdate, cellList));
         }
 
@@ -197,6 +203,10 @@ namespace Economy_sim
             {
                 MarkTilesDirty(affectedTiles);
                 InvalidateLodsForTiles(affectedTiles);
+                
+                // Clear LODs after flood fill operations to free memory
+                ClearLods();
+                
                 GridChanged?.Invoke(this, new GridChangedEventArgs(GridChangeType.FloodFill, affectedCells));
             }
         }
@@ -359,6 +369,28 @@ namespace Economy_sim
             lock (_lodLock)
             {
                 _lodGrids.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Clear LOD grids to free memory (called after major grid changes)
+        /// </summary>
+        public void ClearLods()
+        {
+            lock (_lodLock)
+            {
+                _lodGrids.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Get the number of cached LOD levels for debugging
+        /// </summary>
+        public int GetLodCount()
+        {
+            lock (_lodLock)
+            {
+                return _lodGrids.Count;
             }
         }
 

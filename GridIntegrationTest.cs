@@ -29,9 +29,9 @@ namespace Economy_sim
                 politicalTileManager.SetPoliticalMapDate(new DateTime(1950, 1, 1));
                 Debug.WriteLine("✓ Political map date set");
 
-                // Test generating tiles with grid system using public API
+                // Test generating tiles with grid system using synchronous mode for deterministic results
                 var viewArea = new SKRectI(0, 0, 512, 512);
-                var tileBitmap = politicalTileManager.AssembleView(0, viewArea);
+                var tileBitmap = politicalTileManager.AssembleView(0, viewArea, null, forceSync: true);
                 
                 if (tileBitmap != null)
                 {
