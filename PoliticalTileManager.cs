@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
@@ -22,14 +23,21 @@ namespace Economy_sim
         private readonly int _baseHeight;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
 
+        // Grid-based rendering system
+        private readonly GridControlEngine _gridEngine;
+        private readonly GridRenderer _gridRenderer;
+        private readonly GridPopulator _gridPopulator;
+        private bool _gridInitialized = false;
+        private readonly object _gridLock = new object();
+
         // Data source for clean, non-overlapping country data and colors for the current date.
         private PoliticalDataCache _dataCache;
 
-        // Performance optimizations with spatial indexing
+        // Performance optimizations with spatial indexing (legacy - kept for compatibility)
         private const int TileSizePx = 512;
         private const int MaxCacheSize = 100; // Increased cache size for better performance
 
-        // Spatial index for fast country lookup
+        // Spatial index for fast country lookup (legacy)
         private readonly PoliticalSpatialIndex _spatialIndex;
         private readonly OptimizedPoliticalMaskGenerator _maskGenerator;
         private bool _spatialIndexBuilt = false;
@@ -93,8 +101,13 @@ namespace Economy_sim
             _baseWidth = baseWidth;
             _baseHeight = baseHeight;
 
+            // Initialize grid-based rendering system
+            _gridEngine = new GridControlEngine(baseWidth, baseHeight, TileSizePx);
+            _gridPopulator = new GridPopulator(politicalManager);
+
             // Initialize date-specific cache for clean data and color lookup
             _dataCache = new PoliticalDataCache(_politicalMapDate);
+            _gridRenderer = new GridRenderer(_gridEngine, _dataCache);
 
             // Initialize spatial optimization components
             _spatialIndex = new PoliticalSpatialIndex();
@@ -110,9 +123,15 @@ namespace Economy_sim
                 // Recreate date-specific cache for clean country data and colors
                 _dataCache = new PoliticalDataCache(_politicalMapDate);
 
+                // Mark grid as needing reinitialization for new date
+                lock (_gridLock)
+                {
+                    _gridInitialized = false;
+                }
+
                 ClearCacheForDateChange();
 
-                // Mark spatial index as needing rebuild for new date
+                // Mark spatial index as needing rebuild for new date (legacy)
                 lock (_indexLock)
                 {
                     _spatialIndexBuilt = false;
@@ -136,6 +155,49 @@ namespace Economy_sim
         }
 
         /// <summary>
+        /// Change control of specific cells (war mechanics)
+        /// </summary>
+        public void ChangeControl(int countryId, IEnumerable<System.Drawing.Point> cells)
+        {
+            EnsureGridInitialized();
+            _gridEngine.ChangeControl(countryId, cells);
+            
+            // Clear affected tiles from cache
+            var affectedTiles = _gridEngine.GetTileCoordinates(cells);
+            ClearTilesFromCache(affectedTiles);
+        }
+
+        /// <summary>
+        /// Flood fill control from a seed point (war mechanics)
+        /// </summary>
+        public void FloodFillControl(System.Drawing.Point seed, int newCountryId, Func<int, bool> canReplace)
+        {
+            EnsureGridInitialized();
+            _gridEngine.FloodFillControl(seed, newCountryId, canReplace);
+            
+            // Clear all tiles from cache since flood fill can affect many tiles
+            ClearTileCache();
+        }
+
+        /// <summary>
+        /// Compute frontline cells (differences between base and control grids)
+        /// </summary>
+        public IReadOnlyList<System.Drawing.Point> ComputeFrontline()
+        {
+            EnsureGridInitialized();
+            return _gridEngine.ComputeFrontline();
+        }
+
+        /// <summary>
+        /// Get country at specific geographic coordinate
+        /// </summary>
+        public int GetCountryAtGeographic(double longitude, double latitude)
+        {
+            EnsureGridInitialized();
+            return _gridRenderer.GetCountryAtGeographic(longitude, latitude);
+        }
+
+        /// <summary>
         /// Clears the tile cache to force re-rendering
         /// </summary>
         private void ClearTileCache()
@@ -154,6 +216,42 @@ namespace Economy_sim
                         else
                         {
                             entry.DisposeRequested = true;
+                        }
+                    }
+                }
+            }
+
+            foreach (var e in toDispose)
+            {
+                e.Disposed = true;
+                e.Bitmap.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Clear specific tiles from cache
+        /// </summary>
+        private void ClearTilesFromCache(IEnumerable<(int tileX, int tileY)> tiles)
+        {
+            List<CacheEntry> toDispose = new();
+            lock (_cacheLock)
+            {
+                foreach (var (tileX, tileY) in tiles)
+                {
+                    var keysToRemove = _tileCache.Keys.Where(key => key.Contains($"_{tileX}_{tileY}_")).ToList();
+                    
+                    foreach (var key in keysToRemove)
+                    {
+                        if (_tileCache.TryRemove(key, out var entry))
+                        {
+                            if (entry.RefCount == 0 && !entry.Disposed)
+                            {
+                                toDispose.Add(entry);
+                            }
+                            else
+                            {
+                                entry.DisposeRequested = true;
+                            }
                         }
                     }
                 }
@@ -292,6 +390,59 @@ namespace Economy_sim
 
         private SKBitmap? GenerateTileAsync(int cellSize, int tileX, int tileY, string cacheKey, Action? onComplete)
         {
+            // Use new grid-based rendering
+            return GenerateTileFromGrid(cellSize, tileX, tileY, cacheKey, onComplete);
+        }
+
+        /// <summary>
+        /// Generate tile using the new grid-based rendering system
+        /// </summary>
+        private SKBitmap? GenerateTileFromGrid(int cellSize, int tileX, int tileY, string cacheKey, Action? onComplete)
+        {
+            var sw = Stopwatch.StartNew();
+
+            try
+            {
+                // Ensure grid is initialized for current date
+                EnsureGridInitialized();
+
+                // Calculate tile coordinates in grid space
+                // For now, ignore cellSize scaling and render at base resolution
+                int gridTileX = tileX;
+                int gridTileY = tileY;
+
+                // Get selected country raster code for border highlighting
+                int selectedCountryId = -1;
+                lock (_selectionLock)
+                {
+                    selectedCountryId = _selectedRasterCode;
+                }
+
+                // Render tile using grid renderer
+                var bitmap = _gridRenderer.RenderGridTile(gridTileX, gridTileY, TileSizePx, selectedCountryId);
+
+                if (bitmap != null)
+                {
+                    // Cache the result with LRU management
+                    CacheTile(cacheKey, bitmap);
+                    onComplete?.Invoke();
+                }
+
+                Debug.WriteLine($"Grid-based political tile ({tileX}, {tileY}) generated in {sw.ElapsedMilliseconds}ms");
+                return bitmap;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error generating grid-based political tile ({tileX}, {tileY}): {ex.Message}");
+                return CreateUnavailablePlaceholder(TileSizePx, TileSizePx);
+            }
+        }
+
+        /// <summary>
+        /// Legacy polygon-based tile generation (kept for fallback)
+        /// </summary>
+        private SKBitmap? GenerateTileAsyncLegacy(int cellSize, int tileX, int tileY, string cacheKey, Action? onComplete)
+        {
             var sw = Stopwatch.StartNew();
 
             try
@@ -328,12 +479,12 @@ namespace Economy_sim
                     onComplete?.Invoke();
                 }
 
-                Debug.WriteLine($"Political tile ({tileX}, {tileY}) generated in {sw.ElapsedMilliseconds}ms");
+                Debug.WriteLine($"Legacy political tile ({tileX}, {tileY}) generated in {sw.ElapsedMilliseconds}ms");
                 return bitmap;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error generating political tile ({tileX}, {tileY}): {ex.Message}");
+                Debug.WriteLine($"Error generating legacy political tile ({tileX}, {tileY}): {ex.Message}");
                 return CreateUnavailablePlaceholder(TileSizePx, TileSizePx);
             }
         }
@@ -417,6 +568,41 @@ namespace Economy_sim
 
                 _spatialIndexBuilt = true;
                 Debug.WriteLine($"Spatial index built with {_spatialIndex.CountryCount} countries");
+            }
+        }
+
+        /// <summary>
+        /// Ensure the grid is initialized with data for the current political map date
+        /// </summary>
+        private void EnsureGridInitialized()
+        {
+            lock (_gridLock)
+            {
+                if (_gridInitialized) return;
+
+                string? cshapesPath = FindCShapesFile();
+                if (string.IsNullOrEmpty(cshapesPath))
+                {
+                    Debug.WriteLine("CShapes file not found, using test pattern for grid");
+                    _gridPopulator.PopulateTestPattern(_gridEngine);
+                }
+                else
+                {
+                    Debug.WriteLine($"Initializing grid from shapefile for date: {_politicalMapDate:yyyy-MM-dd}");
+                    try
+                    {
+                        _gridPopulator.PopulateFromShapefile(_gridEngine, cshapesPath, _politicalMapDate);
+                        Debug.WriteLine($"Grid initialized successfully with {_gridEngine.Width}x{_gridEngine.Height} resolution");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to initialize grid from shapefile: {ex.Message}");
+                        Debug.WriteLine("Falling back to test pattern");
+                        _gridPopulator.PopulateTestPattern(_gridEngine);
+                    }
+                }
+
+                _gridInitialized = true;
             }
         }
 
@@ -900,6 +1086,12 @@ namespace Economy_sim
                 _spatialIndex.Dispose();
                 _spatialIndexBuilt = false;
             }
+
+            // Mark grid as needing reinitialization
+            lock (_gridLock)
+            {
+                _gridInitialized = false;
+            }
         }
         
         /// <summary>
@@ -1107,6 +1299,7 @@ namespace Economy_sim
             ThreadLocalRandom.Dispose();
             _maskGenerator?.Dispose();
             _spatialIndex?.Dispose();
+            _gridEngine?.Dispose();
         }
     }
 }
