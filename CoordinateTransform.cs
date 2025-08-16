@@ -87,6 +87,68 @@ namespace Economy_sim
                    bounds.MinLat >= WORLD_MIN_LAT && bounds.MaxLat <= WORLD_MAX_LAT &&
                    bounds.MinLon < bounds.MaxLon && bounds.MinLat < bounds.MaxLat;
         }
+
+        /// <summary>
+        /// Convert geographic coordinates to grid cell coordinates
+        /// </summary>
+        public static (int cellX, int cellY) GeographicToGridCell(double longitude, double latitude, int gridWidth, int gridHeight)
+        {
+            // Normalize to 0-1 range
+            double normalizedX = (longitude - WORLD_MIN_LON) / WORLD_WIDTH_DEG;
+            double normalizedY = (WORLD_MAX_LAT - latitude) / WORLD_HEIGHT_DEG; // Flip Y axis
+
+            // Convert to grid cell coordinates
+            int cellX = (int)Math.Floor(normalizedX * gridWidth);
+            int cellY = (int)Math.Floor(normalizedY * gridHeight);
+
+            // Clamp to valid range
+            cellX = Math.Clamp(cellX, 0, gridWidth - 1);
+            cellY = Math.Clamp(cellY, 0, gridHeight - 1);
+
+            return (cellX, cellY);
+        }
+
+        /// <summary>
+        /// Convert grid cell coordinates to geographic coordinates (cell center)
+        /// </summary>
+        public static (double longitude, double latitude) GridCellToGeographic(int cellX, int cellY, int gridWidth, int gridHeight)
+        {
+            // Add 0.5 to get cell center
+            double normalizedX = (cellX + 0.5) / gridWidth;
+            double normalizedY = (cellY + 0.5) / gridHeight;
+
+            // Convert to geographic coordinates
+            double longitude = WORLD_MIN_LON + (normalizedX * WORLD_WIDTH_DEG);
+            double latitude = WORLD_MAX_LAT - (normalizedY * WORLD_HEIGHT_DEG); // Flip Y axis
+
+            // Clamp to valid range
+            longitude = Math.Clamp(longitude, WORLD_MIN_LON, WORLD_MAX_LON);
+            latitude = Math.Clamp(latitude, WORLD_MIN_LAT, WORLD_MAX_LAT);
+
+            return (longitude, latitude);
+        }
+
+        /// <summary>
+        /// Calculate geographic bounds for a grid tile
+        /// </summary>
+        public static GeoBounds GetGridTileGeographicBounds(int tileX, int tileY, int tileSize, int gridWidth, int gridHeight)
+        {
+            int cellX = tileX * tileSize;
+            int cellY = tileY * tileSize;
+            int tileWidth = Math.Min(tileSize, gridWidth - cellX);
+            int tileHeight = Math.Min(tileSize, gridHeight - cellY);
+
+            var topLeft = GridCellToGeographic(cellX, cellY, gridWidth, gridHeight);
+            var bottomRight = GridCellToGeographic(cellX + tileWidth - 1, cellY + tileHeight - 1, gridWidth, gridHeight);
+
+            return new GeoBounds
+            {
+                MinLon = topLeft.longitude - (topLeft.longitude - bottomRight.longitude) / (2 * tileWidth),
+                MaxLon = bottomRight.longitude + (topLeft.longitude - bottomRight.longitude) / (2 * tileWidth),
+                MinLat = bottomRight.latitude - (topLeft.latitude - bottomRight.latitude) / (2 * tileHeight),
+                MaxLat = topLeft.latitude + (topLeft.latitude - bottomRight.latitude) / (2 * tileHeight)
+            };
+        }
     }
 
     /// <summary>

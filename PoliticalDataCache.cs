@@ -66,7 +66,15 @@ namespace Economy_sim
             {
                 return color;
             }
-            return new SKColor(128, 128, 128, 255); // A default grey color.
+
+            // Prefer water color for unknown/0 to avoid grey flashes; only countries > 0 need colors
+            if (rasterCode == 0)
+            {
+                return new SKColor(135, 206, 235, 255); // LightSkyBlue water
+            }
+
+            // If cache not loaded yet, try to keep a pleasant placeholder instead of grey
+            return new SKColor(200, 200, 200, 255);
         }
 
         /// <summary>
@@ -313,6 +321,39 @@ namespace Economy_sim
             byte g = (byte)(100 + (index * 113) % 156);
             byte b = (byte)(100 + (index * 151) % 156);
             return new SKColor(r, g, b, 255);
+        }
+
+        /// <summary>
+        /// Gets the country data for a specific raster code.
+        /// </summary>
+        public CachedCountryData? GetCountryByRasterCode(int rasterCode)
+        {
+            if (_rasterCodeToCountry.TryGetValue(rasterCode, out var countryData))
+            {
+                return countryData;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the country as an IndexedCountryFeature for compatibility with existing interfaces.
+        /// </summary>
+        public IndexedCountryFeature? GetCountryFeatureByRasterCode(int rasterCode)
+        {
+            if (_rasterCodeToCountry.TryGetValue(rasterCode, out var countryData))
+            {
+                // Create a minimal IndexedCountryFeature from cached data
+                return new IndexedCountryFeature
+                {
+                    CountryCode = countryData.CountryCode,
+                    CountryName = countryData.CountryName,
+                    RasterCode = countryData.RasterCode,
+                    // Note: Geometry and Bounds would need to be reconstructed if needed
+                    Geometry = null,
+                    Bounds = new GeoBounds()
+                };
+            }
+            return null;
         }
     }
 }

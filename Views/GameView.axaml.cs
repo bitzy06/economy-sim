@@ -433,6 +433,9 @@ namespace Economy_sim
                     
                     // Update UI feedback
                     ShowCountrySelectionFeedback(country, screenX, screenY);
+
+                    // Force immediate re-render to display white borders right away
+                    QueueRender(immediate: true);
                 }
                 else
                 {
@@ -441,6 +444,9 @@ namespace Economy_sim
                     Debug.WriteLine($"[COUNTRY SELECTION] No country found at position ({screenX}, {screenY}) - cleared selection");
                     
                     ShowCountrySelectionFeedback(null, screenX, screenY);
+
+                    // Force immediate re-render to remove any previous highlight
+                    QueueRender(immediate: true);
                 }
             }
             catch (Exception ex)
@@ -1411,12 +1417,14 @@ namespace Economy_sim
 
         private void OnPoliticalViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Political view button clicked");
+            Debug.WriteLine("Political view button clicked - switching to political view");
             _mapManager.SetViewType(MapViewType.Political);
             
             // Show instruction for country detection when switching to political view
             ShowCountryDetectionInstructions();
             
+            // Force immediate render with debugging
+            Debug.WriteLine("Forcing immediate render after switching to political view");
             QueueRender(immediate: true);
         }
 
@@ -1428,7 +1436,11 @@ namespace Economy_sim
             // CenterView(); // Removed to prevent annoying recentering
             
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
-            Dispatcher.UIThread.Post(() => QueueRender(immediate: true));
+            Dispatcher.UIThread.Post(() => 
+            {
+                Debug.WriteLine($"Queuing render for map view type change to: {viewType}");
+                QueueRender(immediate: true);
+            });
         }
         
         private void CenterView()
