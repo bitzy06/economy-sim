@@ -222,17 +222,24 @@ namespace Economy_sim
 
         private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
-            // Simple zoom functionality
-            if (e.Delta.Y > 0 && _currentZoomLevel > 1)
-            {
-                _currentZoomLevel--;
-                QueueRender();
-            }
-            else if (e.Delta.Y < 0 && _currentZoomLevel < 5)
-            {
-                _currentZoomLevel++;
-                QueueRender();
-            }
+            var mapImage = this.FindControl<Image>("MapImage");
+            if (mapImage == null) return;
+
+            var mousePos = e.GetPosition(mapImage);
+            int oldZoomLevel = _currentZoomLevel;
+
+            _currentZoomLevel = Math.Clamp(_currentZoomLevel + Math.Sign(e.Delta.Y), 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
+            if (_currentZoomLevel == oldZoomLevel) return;
+
+            int oldCellSize = _mapManager.GetCellSizeForZoom(oldZoomLevel);
+            int newCellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
+
+            int newOffsetX = (int)Math.Round((_viewOffset.X + mousePos.X) * (double)newCellSize / oldCellSize) - (int)mousePos.X;
+            int newOffsetY = (int)Math.Round((_viewOffset.Y + mousePos.Y) * (double)newCellSize / oldCellSize) - (int)mousePos.Y;
+
+            _viewOffset = new SKPointI(newOffsetX, newOffsetY);
+
+            QueueRender();
             e.Handled = true;
         }
 
