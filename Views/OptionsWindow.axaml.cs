@@ -21,6 +21,12 @@ namespace Economy_sim
                 processCountriesButton.Click += ProcessCountriesButton_Click;
             }
 
+            var mapEditorButton = this.FindControl<Button>("MapEditorButton");
+            if (mapEditorButton != null)
+            {
+                mapEditorButton.Click += MapEditorButton_Click;
+            }
+
             var backToMainMenuButton = this.FindControl<Button>("BackToMainMenuButton");
             if (backToMainMenuButton != null)
             {
@@ -87,6 +93,16 @@ namespace Economy_sim
             // Force cache generation by calling the method that actually triggers the processing
             // This will ensure the 1950 country data is generated and cached properly
             _politicalManager.GenerateCountryCacheForced(cshapesPath);
+        }
+
+        private void MapEditorButton_Click(object? sender, RoutedEventArgs e)
+        {
+            // Create and show the map editor window
+            var mapEditorWindow = new MapEditorWindow();
+            mapEditorWindow.Show();
+
+            // Close this options window
+            this.Close();
         }
 
         private void BackToMainMenuButton_Click(object? sender, RoutedEventArgs e)
