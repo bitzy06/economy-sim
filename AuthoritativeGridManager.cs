@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using SkiaSharp;
 using System.Drawing;
+using System.Collections.Concurrent;
+using System.Threading;
 
 namespace Economy_sim
 {
@@ -26,6 +28,10 @@ namespace Economy_sim
         // Tile-based storage for the authoritative grid
         private readonly Dictionary<(int x, int y), uint[,]> _loadedTiles = new();
         private readonly object _tileLock = new();
+
+        // Per-file IO locks to serialize access to tile files
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
+        private static SemaphoreSlim GetFileLock(string path) => _fileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
         
         public AuthoritativeGridManager(string dataDirectory)
         {
@@ -52,7 +58,7 @@ namespace Economy_sim
             
             foreach (var tileKey in affectedTiles)
             {
-                var tile = await GetOrLoadTileAsync(tileKey);
+                var tile = await GetOrLoadTileAsync(tileKey).ConfigureAwait(false);
                 var tileRegion = GetTileRegion(authoritativeRegion, tileKey);
                 
                 foreach (var point in EnumeratePoints(tileRegion))
@@ -76,7 +82,7 @@ namespace Economy_sim
                 }
                 
                 // Mark tile as dirty for saving
-                await SaveTileAsync(tileKey, tile);
+                await SaveTileAsync(tileKey, tile).ConfigureAwait(false);
             }
             
             // Record the edit in the delta log
@@ -90,7 +96,7 @@ namespace Economy_sim
             });
             
             // Trigger LOD rebuilds for affected areas
-            await _lodManager.EnqueueRebuildAsync(affectedTiles);
+            await _lodManager.EnqueueRebuildAsync(affectedTiles).ConfigureAwait(false);
         }
         
         /// <summary>
@@ -171,7 +177,7 @@ namespace Economy_sim
                 }
             }
             
-            var tile = await LoadTileAsync(tileKey);
+            var tile = await LoadTileAsync(tileKey).ConfigureAwait(false);
             
             lock (_tileLock)
             {
@@ -182,25 +188,32 @@ namespace Economy_sim
         }
         
         /// <summary>
-        /// Loads a tile from disk or creates a new empty one
+        /// Loads a tile from disk or creates a new empty one. Uses a shared per-file lock to avoid
+        /// concurrent write/read collisions with SaveTileAsync.
         /// </summary>
         private async Task<uint[,]> LoadTileAsync((int x, int y) tileKey)
         {
             string filePath = Path.Combine(_baseGridPath, $"{tileKey.x}_{tileKey.y}.bin");
-            
+            var sem = GetFileLock(filePath);
+
             if (File.Exists(filePath))
             {
+                await sem.WaitAsync().ConfigureAwait(false);
                 try
                 {
-                    var data = await File.ReadAllBytesAsync(filePath);
+                    // Read all at once to avoid holding the file open for long
+                    var data = await File.ReadAllBytesAsync(filePath).ConfigureAwait(false);
                     var tile = new uint[TileSize, TileSize];
-                    
                     Buffer.BlockCopy(data, 0, tile, 0, Math.Min(data.Length, TileSize * TileSize * sizeof(uint)));
                     return tile;
                 }
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Error loading tile {tileKey}: {ex.Message}");
+                }
+                finally
+                {
+                    sem.Release();
                 }
             }
             
@@ -209,22 +222,42 @@ namespace Economy_sim
         }
         
         /// <summary>
-        /// Saves a tile to disk
+        /// Saves a tile to disk using atomic write (temp file + replace) and a per-file semaphore
+        /// to prevent 'file in use' errors when multiple edits touch the same tile rapidly.
         /// </summary>
         private async Task SaveTileAsync((int x, int y) tileKey, uint[,] tile)
         {
-            string filePath = Path.Combine(_baseGridPath, $"{tileKey.x}_{tileKey.y}.bin");
-            
+            string dir = _baseGridPath;
+            Directory.CreateDirectory(dir);
+            string filePath = Path.Combine(dir, $"{tileKey.x}_{tileKey.y}.bin");
+            string tempPath = filePath + ".tmp";
+            var sem = GetFileLock(filePath);
+
+            await sem.WaitAsync().ConfigureAwait(false);
             try
             {
                 var data = new byte[TileSize * TileSize * sizeof(uint)];
                 Buffer.BlockCopy(tile, 0, data, 0, data.Length);
-                
-                await File.WriteAllBytesAsync(filePath, data);
+
+                // Write to temp file first
+                await File.WriteAllBytesAsync(tempPath, data).ConfigureAwait(false);
+
+                // Atomically replace destination
+#if NET8_0_OR_GREATER
+                File.Move(tempPath, filePath, overwrite: true);
+#else
+                if (File.Exists(filePath)) File.Delete(filePath);
+                File.Move(tempPath, filePath);
+#endif
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error saving tile {tileKey}: {ex.Message}");
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            }
+            finally
+            {
+                sem.Release();
             }
         }
         
@@ -233,7 +266,7 @@ namespace Economy_sim
         /// </summary>
         public async Task<uint[,]> GetTileForLodAsync((int x, int y) tileKey)
         {
-            return await GetOrLoadTileAsync(tileKey);
+            return await GetOrLoadTileAsync(tileKey).ConfigureAwait(false);
         }
         
         /// <summary>
@@ -250,7 +283,7 @@ namespace Economy_sim
             foreach (var (cell, previousValue) in operation.Changes)
             {
                 var tileKey = (cell.X / TileSize, cell.Y / TileSize);
-                var tile = await GetOrLoadTileAsync(tileKey);
+                var tile = await GetOrLoadTileAsync(tileKey).ConfigureAwait(false);
                 
                 int localX = cell.X % TileSize;
                 int localY = cell.Y % TileSize;
@@ -266,12 +299,12 @@ namespace Economy_sim
             {
                 if (_loadedTiles.TryGetValue(tileKey, out var tile))
                 {
-                    await SaveTileAsync(tileKey, tile);
+                    await SaveTileAsync(tileKey, tile).ConfigureAwait(false);
                 }
             }
             
             // Trigger LOD rebuilds
-            await _lodManager.EnqueueRebuildAsync(affectedTiles);
+            await _lodManager.EnqueueRebuildAsync(affectedTiles).ConfigureAwait(false);
             
             return true;
         }
@@ -285,7 +318,7 @@ namespace Economy_sim
             if (operation == null) return false;
             
             // Re-apply the edit
-            await ApplyEditAsync(1, operation.Region, operation.NewValue, operation.Policy);
+            await ApplyEditAsync(1, operation.Region, operation.NewValue, operation.Policy).ConfigureAwait(false);
             
             return true;
         }

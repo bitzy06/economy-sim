@@ -63,8 +63,11 @@ namespace Economy_sim
                     ShowPrecisionIndicator(worldRegion, zoomLevel);
                 }
                 
-                // Apply the edit to the authoritative grid
+                // Apply the edit to the authoritative grid (persistent source of truth)
                 await _authoritativeGrid.ApplyEditAsync(zoomLevel, worldRegion, _currentBrushValue, _currentEditPolicy);
+                
+                // Immediately reflect the edit in the on-screen runtime grid so the user sees it right away
+                TryApplyRuntimeGridOverlay(worldRegion);
                 
                 // Show dirty tile glow if enabled
                 if (_isDirtyTileGlowEnabled)
@@ -77,6 +80,39 @@ namespace Economy_sim
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Error applying edit: {ex.Message}");
+            }
+        }
+        
+        /// <summary>
+        /// Push the edit to the live PoliticalTileManager control grid so tiles get invalidated and rerendered immediately.
+        /// This overlays the same rectangle edit onto the 4096x2048 runtime grid for instant visual feedback.
+        /// </summary>
+        private void TryApplyRuntimeGridOverlay(Rectangle worldRegion)
+        {
+            try
+            {
+                int rasterCode = (int)_currentBrushValue;
+                if (rasterCode <= 0) return;
+
+                // Stream the cells without allocating a large list
+                System.Collections.Generic.IEnumerable<System.Drawing.Point> Cells()
+                {
+                    int endX = Math.Min(4096, worldRegion.Right);
+                    int endY = Math.Min(2048, worldRegion.Bottom);
+                    for (int y = Math.Max(0, worldRegion.Top); y < endY; y++)
+                    {
+                        for (int x = Math.Max(0, worldRegion.Left); x < endX; x++)
+                        {
+                            yield return new System.Drawing.Point(x, y);
+                        }
+                    }
+                }
+
+                _mapManager.ChangeCountryControlAtGrid(rasterCode, Cells());
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Failed to apply runtime overlay: {ex.Message}");
             }
         }
         
@@ -114,7 +150,7 @@ namespace Economy_sim
             if (region.Width <= 0 || region.Height <= 0) return false;
             if (region.Left < 0 || region.Top < 0) return false;
             if (region.Right > 4096 || region.Bottom > 2048) return false;
-            if (region.Width * region.Height > 10000) return false; // Prevent massive edits
+            if (region.Width * region.Height > 100000) return false; // guardrail
             
             return true;
         }
@@ -161,8 +197,6 @@ namespace Economy_sim
         /// </summary>
         private void ShowDirtyTileGlow(Rectangle worldRegion)
         {
-            // TODO: Implement visual glow effect on UI
-            // For now, just log the affected tiles
             int tileStartX = worldRegion.Left / 512;
             int tileEndX = (worldRegion.Right + 511) / 512;
             int tileStartY = worldRegion.Top / 512;

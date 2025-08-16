@@ -21,6 +21,10 @@ namespace Economy_sim
         
         // LOD levels (zoom levels 1-10 corresponding to PixelsPerCellLevels)
         private readonly int[] _lodLevels = MultiResolutionMapManager.PixelsPerCellLevels;
+
+        // Per-file IO locks to avoid concurrent writes/reads of the same LOD tile
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _fileLocks = new();
+        private static SemaphoreSlim GetFileLock(string path) => _fileLocks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
         
         public LodManager(string dataDirectory, AuthoritativeGridManager authoritativeGrid)
         {
@@ -109,7 +113,7 @@ namespace Economy_sim
                         if (processedJobs.Contains(jobKey))
                             continue;
                             
-                        await RebuildLodTileAsync(job);
+                        await RebuildLodTileAsync(job).ConfigureAwait(false);
                         processedJobs.Add(jobKey);
                         
                         // Clear processed jobs periodically to avoid memory buildup
@@ -119,7 +123,7 @@ namespace Economy_sim
                     else
                     {
                         // No jobs available, wait a bit
-                        await Task.Delay(100, _cancellationTokenSource.Token);
+                        await Task.Delay(100, _cancellationTokenSource.Token).ConfigureAwait(false);
                     }
                 }
                 catch (OperationCanceledException)
@@ -129,7 +133,7 @@ namespace Economy_sim
                 catch (Exception ex)
                 {
                     System.Diagnostics.Debug.WriteLine($"Error in LOD rebuild worker: {ex.Message}");
-                    await Task.Delay(1000, _cancellationTokenSource.Token);
+                    await Task.Delay(1000, _cancellationTokenSource.Token).ConfigureAwait(false);
                 }
             }
         }
@@ -154,14 +158,14 @@ namespace Economy_sim
                     for (int x = 0; x < AuthoritativeGridManager.TileSize; x++)
                     {
                         // Apply majority downsampling
-                        var authSamples = await GetAuthoritativeSamples(job.LodLevel, job.TileX, job.TileY, x, y);
+                        var authSamples = await GetAuthoritativeSamples(job.LodLevel, job.TileX, job.TileY, x, y).ConfigureAwait(false);
                         uint majorityValue = CalculateMajorityValue(authSamples);
                         lodTile[x, y] = majorityValue;
                     }
                 }
                 
                 // Save the LOD tile
-                await SaveLodTileAsync(job.LodLevel, job.TileX, job.TileY, lodTile);
+                await SaveLodTileAsync(job.LodLevel, job.TileX, job.TileY, lodTile).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -199,7 +203,7 @@ namespace Economy_sim
                         
                         try
                         {
-                            var authTile = await _authoritativeGrid.GetTileForLodAsync((authTileX, authTileY));
+                            var authTile = await _authoritativeGrid.GetTileForLodAsync((authTileX, authTileY)).ConfigureAwait(false);
                             if (localX >= 0 && localX < AuthoritativeGridManager.TileSize &&
                                 localY >= 0 && localY < AuthoritativeGridManager.TileSize)
                             {
@@ -292,7 +296,7 @@ namespace Economy_sim
         }
         
         /// <summary>
-        /// Saves a LOD tile to disk
+        /// Saves a LOD tile to disk with per-file locking and atomic write to avoid sharing violations
         /// </summary>
         private async Task SaveLodTileAsync(int lodLevel, int tileX, int tileY, uint[,] tile)
         {
@@ -300,17 +304,31 @@ namespace Economy_sim
             Directory.CreateDirectory(lodDir);
             
             string filePath = Path.Combine(lodDir, $"{tileX}_{tileY}.bin");
+            string tempPath = filePath + ".tmp";
+            var sem = GetFileLock(filePath);
             
+            await sem.WaitAsync().ConfigureAwait(false);
             try
             {
                 var data = new byte[AuthoritativeGridManager.TileSize * AuthoritativeGridManager.TileSize * sizeof(uint)];
                 Buffer.BlockCopy(tile, 0, data, 0, data.Length);
-                
-                await File.WriteAllBytesAsync(filePath, data);
+
+                await File.WriteAllBytesAsync(tempPath, data).ConfigureAwait(false);
+#if NET8_0_OR_GREATER
+                File.Move(tempPath, filePath, overwrite: true);
+#else
+                if (File.Exists(filePath)) File.Delete(filePath);
+                File.Move(tempPath, filePath);
+#endif
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Error saving LOD tile {lodLevel}/{tileX}_{tileY}: {ex.Message}");
+                try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+            }
+            finally
+            {
+                sem.Release();
             }
         }
         

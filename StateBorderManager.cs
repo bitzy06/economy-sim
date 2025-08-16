@@ -240,10 +240,9 @@ namespace Economy_sim
 
                 layer.ResetReading();
 
-                var random = new Random(42);
-                int rasterCode = 1;
                 int errorCount = 0;
                 const int maxErrors = 50; // fail-fast to avoid crash loops
+                int nextRaster = 1;
 
                 Feature? feat;
                 while ((feat = layer.GetNextFeature()) != null)
@@ -254,20 +253,27 @@ namespace Economy_sim
                         if (geom == null) { feat.Dispose(); continue; }
 
                         string stateName = GetFirstNonEmpty(feat,
-                            "name_en", "name", "name_long", "adm1name", "gns_name") ?? $"State {rasterCode}";
-                        string stateCode = GetFirstNonEmpty(feat, "postal", "adm1_code", "iso_3166_2", "sr_adm1") ?? rasterCode.ToString();
-                        string countryName = GetFirstNonEmpty(feat, "adm0_name", "sr_adm0", "su_a3") ?? string.Empty;
-                        string countryCode = GetFirstNonEmpty(feat, "iso_a2", "iso_a3", "adm0_a3") ?? string.Empty;
+                            "name_en", "name", "name_long", "adm1name", "gns_name") ?? string.Empty;
+                        string stateCode = GetFirstNonEmpty(feat, "postal", "adm1_code", "iso_3166_2", "sr_adm1") ?? string.Empty;
+                        string countryName = GetFirstNonEmpty(feat, "adm0_name", "sr_adm0", "name_0", "name_en_0") ?? string.Empty;
+                        string countryCode = GetFirstNonEmpty(feat, "iso_a2", "iso_a3", "adm0_a3", "sr_sov_a3") ?? string.Empty;
+
+                        if (string.IsNullOrWhiteSpace(stateName))
+                        {
+                            feat.Dispose();
+                            continue; // require at least a name
+                        }
 
                         var state = new StateFeature
                         {
                             StateName = stateName,
-                            StateCode = stateCode,
+                            StateCode = string.IsNullOrWhiteSpace(stateCode) ? stateName : stateCode,
                             CountryName = countryName,
                             CountryCode = countryCode,
-                            Color = new SKColor((byte)random.Next(80, 220), (byte)random.Next(80, 220), (byte)random.Next(80, 220)),
-                            RasterCode = rasterCode++
+                            RasterCode = nextRaster,
+                            Color = GenerateColor(nextRaster)
                         };
+                        nextRaster++;
 
                         var paths = ConvertGeometryToPaths(geom);
                         if (paths.Count == 0)
@@ -440,7 +446,7 @@ namespace Economy_sim
 
         private void CreateMockStateData()
         {
-            var random = new Random(42);
+            int nextRaster = 1;
             var mockStates = new[]
             {
                 new { Country = "USA", CountryCode = "US", States = new[] { "California", "Texas", "New York", "Florida", "Illinois" } },
@@ -449,7 +455,6 @@ namespace Economy_sim
                 new { Country = "Australia", CountryCode = "AU", States = new[] { "New South Wales", "Victoria", "Queensland", "Western Australia", "South Australia" } }
             };
 
-            int rasterCode = 1;
             foreach (var country in mockStates)
             {
                 foreach (var stateName in country.States)
@@ -460,9 +465,10 @@ namespace Economy_sim
                         StateCode = stateName.Substring(0, Math.Min(2, stateName.Length)).ToUpper(),
                         CountryName = country.Country,
                         CountryCode = country.CountryCode,
-                        Color = new SKColor((byte)random.Next(80, 220), (byte)random.Next(80, 220), (byte)random.Next(80, 220)),
-                        RasterCode = rasterCode++
+                        RasterCode = nextRaster,
+                        Color = GenerateColor(nextRaster)
                     };
+                    nextRaster++;
 
                     var bbox = GetMockLonLatBounds(state.CountryCode, state.StateName);
                     if (bbox != null)
@@ -544,6 +550,14 @@ namespace Economy_sim
             return (x, y);
         }
 
+        private static SKColor GenerateColor(int index)
+        {
+            byte r = (byte)(120 + (index * 47) % 136);
+            byte g = (byte)(120 + (index * 73) % 136);
+            byte b = (byte)(120 + (index * 101) % 136);
+            return new SKColor(r, g, b, 255);
+        }
+
         public List<StateFeature> GetStatesForCountry(string countryCode)
         {
             if (!_dataLoaded) LoadStateData();
@@ -611,7 +625,8 @@ namespace Economy_sim
 
                         if (!_stateColorsByCode.TryGetValue(code, out var color))
                         {
-                            color = SKColors.Gray;
+                            color = GenerateColor(code);
+                            _stateColorsByCode[code] = color;
                         }
                         uint packed = (uint)(0xFF000000 | (color.Red << 16) | (color.Green << 8) | color.Blue);
                         pixels[y * stride + x] = packed;
@@ -789,6 +804,23 @@ namespace Economy_sim
                 if (cell.X >= 0 && cell.X < BaseWidth && cell.Y >= 0 && cell.Y < BaseHeight)
                 {
                     _stateGrid[cell.Y, cell.X] = rasterCode;
+                }
+            }
+        }
+
+        public void ChangeControlRect(int rasterCode, System.Drawing.Rectangle region)
+        {
+            EnsureStateGridBuilt();
+            if (_stateGrid == null) return;
+            int x0 = Math.Max(0, region.Left);
+            int y0 = Math.Max(0, region.Top);
+            int x1 = Math.Min(BaseWidth, region.Right);
+            int y1 = Math.Min(BaseHeight, region.Bottom);
+            for (int y = y0; y < y1; y++)
+            {
+                for (int x = x0; x < x1; x++)
+                {
+                    _stateGrid[y, x] = rasterCode;
                 }
             }
         }

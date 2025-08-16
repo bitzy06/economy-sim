@@ -18,6 +18,8 @@ namespace Economy_sim
         private readonly MultiResolutionMapManager _terrainManager;
         private readonly PoliticalBorderManager _politicalManager;
         private readonly PoliticalTileManager _politicalTileManager;
+        // Unified: manage states here
+        private readonly StateBorderManager _stateManager;
         
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
@@ -37,6 +39,7 @@ namespace Economy_sim
             _terrainManager = new MultiResolutionMapManager(baseWidth, baseHeight);
             _politicalManager = new PoliticalBorderManager();
             _politicalTileManager = new PoliticalTileManager(_politicalManager, baseWidth, baseHeight);
+            _stateManager = new StateBorderManager();
         }
         
         public void SetViewType(MapViewType viewType)
@@ -137,6 +140,31 @@ namespace Economy_sim
             }
             
             return result;
+        }
+
+        /// <summary>
+        /// Unified rendering helper to draw either Countries or States into a bitmap of the given outputSize.
+        /// </summary>
+        public SKBitmap? RenderAdminBitmap(MapViewLevel level, int zoomLevel, SKRectI viewArea, SKSizeI outputSize)
+        {
+            switch (level)
+            {
+                case MapViewLevel.Countries:
+                    return _politicalTileManager.AssembleView(zoomLevel, viewArea, null, forceSync: true);
+                case MapViewLevel.States:
+                    var bmp = new SKBitmap(outputSize.Width, outputSize.Height);
+                    using (var canvas = new SKCanvas(bmp))
+                    {
+                        canvas.Clear(new SKColor(135, 206, 235)); // water background
+                        var viewport = new SKRect(viewArea.Left, viewArea.Top, viewArea.Right, viewArea.Bottom);
+                        var mapSize = GetMapSize(zoomLevel);
+                        _stateManager.RenderStateFills(canvas, viewport, mapSize);
+                        _stateManager.RenderStateBorders(canvas, viewport, mapSize, 2.0f, SKColors.Black);
+                    }
+                    return bmp;
+                default:
+                    return null;
+            }
         }
         
         public SKSizeI GetMapSize(int zoomLevel)
@@ -260,15 +288,105 @@ namespace Economy_sim
             _politicalTileManager.ChangeControl(rasterCode, cells);
         }
 
+        // Optimized rectangle change for countries
+        public void ChangeCountryControlRect(int rasterCode, Rectangle region)
+        {
+            IEnumerable<Point> Cells()
+            {
+                int x0 = Math.Max(0, region.Left);
+                int y0 = Math.Max(0, region.Top);
+                int x1 = Math.Min(BaseWidth, region.Right);
+                int y1 = Math.Min(BaseHeight, region.Bottom);
+                for (int y = y0; y < y1; y++)
+                    for (int x = x0; x < x1; x++)
+                        yield return new Point(x, y);
+            }
+            _politicalTileManager.ChangeControl(rasterCode, Cells());
+        }
+
         // Surface ChangeControlZeroSum from PoliticalTileManager
         public List<(Point cell, int previousId)> ChangeCountryControlZeroSum(int rasterCode, IEnumerable<Point> brushCells)
         {
             return _politicalTileManager.ChangeControlZeroSum(rasterCode, brushCells);
         }
 
+        // ----- Unified State layer wrappers -----
+        public List<StateBorderManager.StateFeature> GetAllStates()
+        {
+            return _stateManager.GetAllStates();
+        }
+
+        public StateBorderManager.StateFeature? GetStateAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
+        {
+            return _stateManager.GetStateAtPixel(pixelX, pixelY, zoomLevel, viewOffset);
+        }
+
+        public void SetSelectedState(StateBorderManager.StateFeature? state)
+        {
+            _stateManager.SetSelectedState(state);
+        }
+
+        public void RenderStateFills(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize)
+        {
+            _stateManager.RenderStateFills(canvas, viewport, mapPixelSize);
+        }
+
+        public void RenderStateBorders(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize, float borderWidth = 1.0f, SKColor? borderColor = null)
+        {
+            _stateManager.RenderStateBorders(canvas, viewport, mapPixelSize, borderWidth, borderColor);
+        }
+
+        public void ChangeStateControlAtGrid(int rasterCode, IEnumerable<Point> cells)
+        {
+            _stateManager.ChangeControlAtGrid(rasterCode, cells);
+        }
+
+        public void ChangeStateControlRect(int rasterCode, Rectangle region)
+        {
+            _stateManager.ChangeControlRect(rasterCode, region);
+        }
+
+        public List<(Point cell, int previousId)> ChangeStateControlZeroSum(int rasterCode, IEnumerable<Point> brushCells)
+        {
+            return _stateManager.ChangeControlZeroSum(rasterCode, brushCells);
+        }
+
+        public List<(Point cell, int previousId)> ChangeStateControlWaterOnly(int rasterCode, IEnumerable<Point> brushCells)
+        {
+            return _stateManager.ChangeControlWaterOnly(rasterCode, brushCells);
+        }
+
+        // ----- Unified overloads for both levels -----
+        public void ChangeAdminControlAtGrid(MapViewLevel level, int rasterCode, IEnumerable<Point> cells)
+        {
+            if (level == MapViewLevel.Countries) ChangeCountryControlAtGrid(rasterCode, cells);
+            else ChangeStateControlAtGrid(rasterCode, cells);
+        }
+
+        public void ChangeAdminControlRect(MapViewLevel level, int rasterCode, Rectangle region)
+        {
+            if (level == MapViewLevel.Countries) ChangeCountryControlRect(rasterCode, region);
+            else ChangeStateControlRect(rasterCode, region);
+        }
+
+        public List<(Point cell, int previousId)> ChangeAdminControlZeroSum(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells)
+        {
+            return level == MapViewLevel.Countries
+                ? ChangeCountryControlZeroSum(rasterCode, brushCells)
+                : ChangeStateControlZeroSum(rasterCode, brushCells);
+        }
+
+        public List<(Point cell, int previousId)> ChangeAdminControlWaterOnly(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells)
+        {
+            return level == MapViewLevel.Countries
+                ? new List<(Point cell, int previousId)>() // countries don't use water-only path
+                : ChangeStateControlWaterOnly(rasterCode, brushCells);
+        }
+
         public void Dispose()
         {
             _politicalTileManager?.Dispose();
+            _stateManager?.Dispose();
             // Note: MultiResolutionMapManager doesn't implement IDisposable
             // _terrainManager?.Dispose();
         }
