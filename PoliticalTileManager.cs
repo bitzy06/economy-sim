@@ -149,8 +149,24 @@ namespace Economy_sim
                 _selectedCountry = country;
                 _selectedRasterCode = country?.RasterCode ?? -1; // Cache raster code for fast comparisons
 
-                // Clear tile cache to force re-rendering with new selection
-                ClearTileCache();
+                // Clear only tiles in view by marking them dirty via grid engine; fall back to full clear
+                try
+                {
+                    if (_gridEngine.HasDirtyTiles())
+                    {
+                        // If engine tracks dirty tiles, clear those tiles specifically
+                        var dirty = _gridEngine.GetDirtyTiles(clearAfterGet: true);
+                        ClearTilesFromCache(dirty);
+                    }
+                    else
+                    {
+                        ClearTileCache();
+                    }
+                }
+                catch
+                {
+                    ClearTileCache();
+                }
             }
         }
 
@@ -280,6 +296,8 @@ namespace Economy_sim
             {
                 int cellSize = GetCellSizeForZoom(zoomLevel);
 
+                Debug.WriteLine($"PoliticalTileManager.AssembleView: zoomLevel={zoomLevel}, cellSize={cellSize}, viewArea={viewArea}");
+
                 // Ensure grid is initialized before proceeding (not just inside tile generation)
                 EnsureGridInitialized();
 
@@ -291,33 +309,92 @@ namespace Economy_sim
                     LogCacheMetrics();
                 }
 
-                // Calculate tile boundaries for the view area
-                int tileStartX = viewArea.Left / TileSizePx;
-                int tileStartY = viewArea.Top / TileSizePx;
-                int tileEndX = (viewArea.Right + TileSizePx - 1) / TileSizePx;
-                int tileEndY = (viewArea.Bottom + TileSizePx - 1) / TileSizePx;
+                // COORDINATE SYSTEM FIX: 
+                // The viewArea is in scaled map coordinates (baseWidth * cellSize x baseHeight * cellSize)
+                // But we need to work with grid coordinates (baseWidth x baseHeight)
+                // Scale the view area down to grid coordinate system
+                
+                int scaledMapWidth = _baseWidth * cellSize;
+                int scaledMapHeight = _baseHeight * cellSize;
+                
+                // Transform viewArea from scaled map coordinates to grid coordinates
+                float scaleX = (float)_baseWidth / scaledMapWidth;
+                float scaleY = (float)_baseHeight / scaledMapHeight;
+                
+                int gridViewLeft = (int)(viewArea.Left * scaleX);
+                int gridViewTop = (int)(viewArea.Top * scaleY);
+                int gridViewRight = (int)(viewArea.Right * scaleX);
+                int gridViewBottom = (int)(viewArea.Bottom * scaleY);
+                
+                var gridViewArea = new SKRectI(gridViewLeft, gridViewTop, gridViewRight, gridViewBottom);
+                
+                Debug.WriteLine($"PoliticalTileManager.AssembleView: scaled map={scaledMapWidth}x{scaledMapHeight}, grid={_baseWidth}x{_baseHeight}");
+                Debug.WriteLine($"PoliticalTileManager.AssembleView: viewArea transform: {viewArea} -> {gridViewArea}");
 
-                // Create composite bitmap
+                // Calculate tile boundaries for the grid view area
+                int tileStartX = gridViewArea.Left / TileSizePx;
+                int tileStartY = gridViewArea.Top / TileSizePx;
+                int tileEndX = (gridViewArea.Right + TileSizePx - 1) / TileSizePx;
+                int tileEndY = (gridViewArea.Bottom + TileSizePx - 1) / TileSizePx;
+
+                Debug.WriteLine($"PoliticalTileManager.AssembleView: grid tiles from ({tileStartX},{tileStartY}) to ({tileEndX},{tileEndY})");
+
+                // Get the LOD-specific grid to check its actual dimensions
+                int lodLevel = GetLodLevelForCellSize(cellSize);
+                var controlGrid = _gridEngine.GetControlGridLod(lodLevel);
+                int gridWidth = controlGrid.GetLength(1);
+                int gridHeight = controlGrid.GetLength(0);
+                int maxTileX = (gridWidth + TileSizePx - 1) / TileSizePx;
+                int maxTileY = (gridHeight + TileSizePx - 1) / TileSizePx;
+
+                Debug.WriteLine($"PoliticalTileManager.AssembleView: LOD={lodLevel}, grid={gridWidth}x{gridHeight}, maxTiles={maxTileX}x{maxTileY}");
+
+                // Adjust view and tile ranges for the current LOD scale so we don't request out-of-bounds tiles
+                int lodScale = 1 << lodLevel; // 0->1, 1->2, 2->4, 3->8
+                var gridViewAreaLod = new SKRectI(
+                    gridViewArea.Left / lodScale,
+                    gridViewArea.Top / lodScale,
+                    gridViewArea.Right / lodScale,
+                    gridViewArea.Bottom / lodScale);
+
+                int lodTileStartX = Math.Clamp(gridViewAreaLod.Left / TileSizePx, 0, Math.Max(0, maxTileX - 1));
+                int lodTileStartY = Math.Clamp(gridViewAreaLod.Top / TileSizePx, 0, Math.Max(0, maxTileY - 1));
+                int lodTileEndX = Math.Clamp((gridViewAreaLod.Right + TileSizePx - 1) / TileSizePx, 0, maxTileX);
+                int lodTileEndY = Math.Clamp((gridViewAreaLod.Bottom + TileSizePx - 1) / TileSizePx, 0, maxTileY);
+
+                Debug.WriteLine($"PoliticalTileManager.AssembleView: adjusted for LOD -> view {gridViewAreaLod} tiles ({lodTileStartX},{lodTileStartY}) to ({lodTileEndX},{lodTileEndY})");
+
+                // Create composite bitmap at the original viewArea size
                 var info = new SKImageInfo(viewArea.Width, viewArea.Height);
                 using var surface = SKSurface.Create(info);
                 var canvas = surface.Canvas;
-                canvas.Clear(new SKColor(240, 240, 240, 255)); // Light gray background
+                canvas.Clear(new SKColor(135, 206, 235, 255)); // Light blue water background
 
-                for (int ty = tileStartY; ty < tileEndY; ty++)
+                for (int ty = lodTileStartY; ty < lodTileEndY; ty++)
                 {
-                    for (int tx = tileStartX; tx < tileEndX; tx++)
+                    for (int tx = lodTileStartX; tx < lodTileEndX; tx++)
                     {
                         int tileX = tx, tileY = ty; // Capture for closure
 
                         // Calculate tile position in the composite image
-                        int destX = tileX * TileSizePx - viewArea.Left;
-                        int destY = tileY * TileSizePx - viewArea.Top;
+                        // Convert from LOD grid coordinates back to base grid coordinates
+                        int gridTileLeftBase = tileX * TileSizePx * lodScale;
+                        int gridTileTopBase = tileY * TileSizePx * lodScale;
+                        
+                        // Then to scaled (pixel) coordinates of the full map
+                        int scaledTileLeft = (int)(gridTileLeftBase / scaleX);
+                        int scaledTileTop = (int)(gridTileTopBase / scaleY);
+                        int scaledTileWidth = (int)((TileSizePx * lodScale) / scaleX);
+                        int scaledTileHeight = (int)((TileSizePx * lodScale) / scaleY);
+                        
+                        int destX = scaledTileLeft - viewArea.Left;
+                        int destY = scaledTileTop - viewArea.Top;
 
                         // Get tile (async if not cached)
                         using var lease = AcquireTileLease(cellSize, tileX, tileY);
                         if (lease?.Bitmap != null && !lease.Bitmap.IsNull && !lease.Bitmap.IsEmpty)
                         {
-                            var destRect = SKRect.Create(destX, destY, lease.Bitmap.Width, lease.Bitmap.Height);
+                            var destRect = SKRect.Create(destX, destY, scaledTileWidth, scaledTileHeight);
                             canvas.DrawBitmap(lease.Bitmap, destRect);
                         }
                         else
@@ -325,7 +402,6 @@ namespace Economy_sim
                             if (forceSync)
                             {
                                 // Generate synchronously for first frame (no more blank rendering)
-                                int lodLevel = GetLodLevelForCellSize(cellSize);
                                 string cacheKey = $"lod{lodLevel}_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}";
                                 var bitmap = GenerateTileFromGrid(cellSize, tileX, tileY, cacheKey, onTileReady);
                                 if (bitmap != null)
@@ -334,7 +410,7 @@ namespace Economy_sim
                                     using var lease2 = AcquireTileLease(cellSize, tileX, tileY);
                                     if (lease2?.Bitmap != null && !lease2.Bitmap.IsNull && !lease2.Bitmap.IsEmpty)
                                     {
-                                        var destRect = SKRect.Create(destX, destY, lease2.Bitmap.Width, lease2.Bitmap.Height);
+                                        var destRect = SKRect.Create(destX, destY, scaledTileWidth, scaledTileHeight);
                                         canvas.DrawBitmap(lease2.Bitmap, destRect);
                                     }
                                 }
@@ -444,15 +520,38 @@ namespace Economy_sim
 
             try
             {
+                Debug.WriteLine($"GenerateTileFromGrid: Starting generation for tile ({tileX}, {tileY}) at cellSize={cellSize}");
+
                 // Ensure grid is initialized for current date
                 EnsureGridInitialized();
 
                 // Calculate appropriate LOD level based on cell size
                 int lodLevel = GetLodLevelForCellSize(cellSize);
 
-                // Calculate tile coordinates in grid space (respect the LOD level)
-                int gridTileX = tileX;
-                int gridTileY = tileY;
+                // Get the LOD-specific grid to check its actual dimensions
+                var controlGrid = _gridEngine.GetControlGridLod(lodLevel);
+                int gridWidth = controlGrid.GetLength(1);
+                int gridHeight = controlGrid.GetLength(0);
+
+                // Calculate the maximum number of tiles possible for this grid at this resolution
+                int maxTileX = (gridWidth + TileSizePx - 1) / TileSizePx;
+                int maxTileY = (gridHeight + TileSizePx - 1) / TileSizePx;
+
+                Debug.WriteLine($"GenerateTileFromGrid: LOD={lodLevel}, grid={gridWidth}x{gridHeight}, maxTiles={maxTileX}x{maxTileY}");
+
+                // Check if the requested tile is beyond the grid bounds
+                if (tileX >= maxTileX || tileY >= maxTileY)
+                {
+                    Debug.WriteLine($"GenerateTileFromGrid: Tile ({tileX}, {tileY}) is beyond grid bounds. Grid: {gridWidth}x{gridHeight}, Max tiles: {maxTileX}x{maxTileY}");
+                    
+                    // Return a water-only tile for out-of-bounds areas
+                    var waterTile = new SKBitmap(TileSizePx, TileSizePx, SKColorType.Rgba8888, SKAlphaType.Opaque);
+                    waterTile.Erase(new SKColor(135, 206, 235, 255)); // Light blue water color
+                    CacheTile(cacheKey, waterTile);
+                    onComplete?.Invoke();
+                    Debug.WriteLine($"GenerateTileFromGrid: Created water tile for out-of-bounds");
+                    return waterTile;
+                }
 
                 // Get selected country raster code for border highlighting
                 int selectedCountryId = -1;
@@ -461,22 +560,44 @@ namespace Economy_sim
                     selectedCountryId = _selectedRasterCode;
                 }
 
+                Debug.WriteLine($"GenerateTileFromGrid: Calling GridRenderer.RenderGridTile({tileX}, {tileY}, {TileSizePx}, {selectedCountryId}, {lodLevel})");
+
                 // Render tile using grid renderer with appropriate LOD
-                var bitmap = _gridRenderer.RenderGridTile(gridTileX, gridTileY, TileSizePx, selectedCountryId, lodLevel);
+                var bitmap = _gridRenderer.RenderGridTile(tileX, tileY, TileSizePx, selectedCountryId, lodLevel);
 
                 if (bitmap != null)
                 {
+                    Debug.WriteLine($"GenerateTileFromGrid: GridRenderer returned bitmap {bitmap.Width}x{bitmap.Height}");
+
+                    // Test bitmap content by sampling a few pixels
+                    var centerPixel = bitmap.GetPixel(bitmap.Width / 2, bitmap.Height / 2);
+                    var cornerPixel = bitmap.GetPixel(0, 0);
+                    Debug.WriteLine($"GenerateTileFromGrid: Bitmap pixels - center: #{centerPixel.Red:X2}{centerPixel.Green:X2}{centerPixel.Blue:X2}, corner: #{cornerPixel.Red:X2}{cornerPixel.Green:X2}{cornerPixel.Blue:X2}");
+                    
                     // Cache the result with LRU management
                     CacheTile(cacheKey, bitmap);
                     onComplete?.Invoke();
+                    Debug.WriteLine($"GenerateTileFromGrid: Cached tile successfully in {sw.ElapsedMilliseconds}ms");
+                }
+                else
+                {
+                    Debug.WriteLine($"GenerateTileFromGrid: GridRenderer returned NULL bitmap for tile ({tileX}, {tileY})");
+                    
+                    // Create a fallback water tile
+                    var fallbackTile = new SKBitmap(TileSizePx, TileSizePx, SKColorType.Rgba8888, SKAlphaType.Opaque);
+                    fallbackTile.Erase(new SKColor(135, 206, 235, 255)); // Light blue water color
+                    CacheTile(cacheKey, fallbackTile);
+                    onComplete?.Invoke();
+                    Debug.WriteLine($"GenerateTileFromGrid: Created fallback water tile");
+                    return fallbackTile;
                 }
 
-                Debug.WriteLine($"Grid-based political tile ({tileX}, {tileY}) at LOD {lodLevel} generated in {sw.ElapsedMilliseconds}ms");
                 return bitmap;
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Error generating grid-based political tile ({tileX}, {tileY}): {ex.Message}");
+                Debug.WriteLine($"GenerateTileFromGrid: ERROR generating tile ({tileX}, {tileY}): {ex.Message}");
+                Debug.WriteLine($"GenerateTileFromGrid: Stack trace: {ex.StackTrace}");
                 return CreateUnavailablePlaceholder(TileSizePx, TileSizePx);
             }
         }
@@ -621,8 +742,13 @@ namespace Economy_sim
         {
             lock (_gridLock)
             {
-                if (_gridInitialized) return;
+                if (_gridInitialized)
+                {
+                    Debug.WriteLine("Grid already initialized, skipping");
+                    return;
+                }
 
+                Debug.WriteLine("Starting grid initialization...");
                 string? cshapesPath = FindCShapesFile();
                 if (string.IsNullOrEmpty(cshapesPath))
                 {
@@ -631,7 +757,9 @@ namespace Economy_sim
                 }
                 else
                 {
+                    Debug.WriteLine($"Found CShapes file at: {cshapesPath}");
                     Debug.WriteLine($"Initializing grid from shapefile for date: {_politicalMapDate:yyyy-MM-dd}");
+                    Debug.WriteLine($"Grid engine dimensions: {_gridEngine.Width}x{_gridEngine.Height}");
                     try
                     {
                         _gridPopulator.PopulateFromShapefile(_gridEngine, cshapesPath, _politicalMapDate);
@@ -640,8 +768,20 @@ namespace Economy_sim
                     catch (Exception ex)
                     {
                         Debug.WriteLine($"Failed to initialize grid from shapefile: {ex.Message}");
+                        Debug.WriteLine($"Error stack trace: {ex.StackTrace}");
                         Debug.WriteLine("Falling back to test pattern");
                         _gridPopulator.PopulateTestPattern(_gridEngine);
+                    }
+
+                    // Preload color/cache data so first render isn't grey
+                    try
+                    {
+                        _ = _dataCache.GetOrGenerateCountryData(cshapesPath);
+                        Debug.WriteLine("Preloaded political color cache for initial render");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Warning: failed to preload political data cache: {ex.Message}");
                     }
                 }
 
@@ -651,17 +791,56 @@ namespace Economy_sim
                     // Log grid statistics for debugging
                     var uniqueIds = new HashSet<int>();
                     int totalCells = _gridEngine.Width * _gridEngine.Height;
+                    int nonWaterCells = 0;
                     for (int y = 0; y < _gridEngine.Height; y++)
                     {
                         for (int x = 0; x < _gridEngine.Width; x++)
                         {
-                            uniqueIds.Add(_gridEngine.BaseOwnerGrid[y, x]);
+                            int id = _gridEngine.BaseOwnerGrid[y, x];
+                            uniqueIds.Add(id);
+                            if (id > 0) nonWaterCells++;
                         }
                     }
                     Debug.WriteLine($"Grid populated with {uniqueIds.Count} unique country IDs from {totalCells} total cells");
+                    Debug.WriteLine($"Non-water cells: {nonWaterCells} ({(nonWaterCells * 100.0 / totalCells):F1}%)");
+                    Debug.WriteLine($"Grid data sample at (0,0): {_gridEngine.BaseOwnerGrid[0, 0]}, at center: {_gridEngine.BaseOwnerGrid[_gridEngine.Height/2, _gridEngine.Width/2]}");
+                    
+                    // Sample more strategic points for verification - test known land areas
+                    // Test Europe (around longitude 10°, latitude 50°)
+                    var (europeX, europeY) = CoordinateTransform.GeographicToGridCell(10.0, 50.0, _gridEngine.Width, _gridEngine.Height);
+                    int europeValue = _gridEngine.BaseOwnerGrid[Math.Min(europeY, _gridEngine.Height-1), Math.Min(europeX, _gridEngine.Width-1)];
+                    
+                    // Test North America (around longitude -100°, latitude 45°)
+                    var (americaX, americaY) = CoordinateTransform.GeographicToGridCell(-100.0, 45.0, _gridEngine.Width, _gridEngine.Height);
+                    int americaValue = _gridEngine.BaseOwnerGrid[Math.Min(americaY, _gridEngine.Height-1), Math.Min(americaX, _gridEngine.Width-1)];
+                    
+                    // Test Africa (around longitude 20°, latitude 0°)
+                    var (africaX, africaY) = CoordinateTransform.GeographicToGridCell(20.0, 0.0, _gridEngine.Width, _gridEngine.Height);
+                    int africaValue = _gridEngine.BaseOwnerGrid[Math.Min(africaY, _gridEngine.Height-1), Math.Min(africaX, _gridEngine.Width-1)];
+
+                    Debug.WriteLine($"Land area samples: Europe(10°,50°)={europeValue} at grid({europeX},{europeY}), " +
+                                   $"America(-100°,45°)={americaValue} at grid({americaX},{americaY}), " +
+                                   $"Africa(20°,0°)={africaValue} at grid({africaX},{africaY})");
+                    
+                    // Sample a few more points for verification
+                    Debug.WriteLine($"Grid samples: (100,100)={_gridEngine.BaseOwnerGrid[Math.Min(100, _gridEngine.Height-1), Math.Min(100, _gridEngine.Width-1)]}, " +
+                                   $"(500,500)={_gridEngine.BaseOwnerGrid[Math.Min(500, _gridEngine.Height-1), Math.Min(500, _gridEngine.Width-1)]}, " +
+                                   $"(1000,1000)={_gridEngine.BaseOwnerGrid[Math.Min(1000, _gridEngine.Height-1), Math.Min(1000, _gridEngine.Width-1)]}");
+                    
+                    // Test the corners and edges
+                    Debug.WriteLine($"Corner samples: " +
+                                   $"TopLeft(0,0)={_gridEngine.BaseOwnerGrid[0, 0]}, " +
+                                   $"TopRight(0,{_gridEngine.Width-1})={_gridEngine.BaseOwnerGrid[0, _gridEngine.Width-1]}, " +
+                                   $"BottomLeft({_gridEngine.Height-1},0)={_gridEngine.BaseOwnerGrid[_gridEngine.Height-1, 0]}, " +
+                                   $"BottomRight({_gridEngine.Height-1},{_gridEngine.Width-1})={_gridEngine.BaseOwnerGrid[_gridEngine.Height-1, _gridEngine.Width-1]}");
+                }
+                else
+                {
+                    Debug.WriteLine("ERROR: Grid BaseOwnerGrid is null after initialization!");
                 }
 
                 _gridInitialized = true;
+                Debug.WriteLine("Grid initialization completed");
             }
         }
 
@@ -894,6 +1073,7 @@ namespace Economy_sim
                         {
                             if (x >= mask.GetLength(1)) continue;
                             
+
                             // Check if this pixel belongs to the selected country
                             if (mask[y, x] == selectedCountryId)
                             {
@@ -941,7 +1121,7 @@ namespace Economy_sim
 
                 for (int y = startY; y <= endY; y++)
                 {
-                    for (int x = startX; x <= endX; x++)
+                    for (int x = startX; x <= endY; x++)
                     {
                         // Make a bright red block
                         newBitmap.SetPixel(x, y, 0xFFFF0000);
@@ -1252,19 +1432,20 @@ namespace Economy_sim
             var bitmap = new SKBitmap(width, height);
             using var canvas = new SKCanvas(bitmap);
 
-            // Fill with a light gray background
-            canvas.Clear(new SKColor(240, 240, 240, 255));
+            // Fill with ocean blue to match water color everywhere else
+            var oceanBlue = new SKColor(135, 206, 235, 255); // LightSkyBlue
+            canvas.Clear(oceanBlue);
 
-            // Draw a message indicating political data is unavailable
+            // Optional subtle label (kept unobtrusive)
             using var paint = new SKPaint
             {
-                Color = new SKColor(120, 120, 120, 255),
-                TextSize = Math.Min(width, height) / 20f,
+                Color = new SKColor(80, 120, 150, 180), // subtle darker blue text
+                TextSize = Math.Min(width, height) / 24f,
                 IsAntialias = true,
                 TextAlign = SKTextAlign.Center
             };
 
-            string message = "Political data unavailable";
+            string message = "Loading political data...";
             float x = width / 2f;
             float y = height / 2f;
 
@@ -1336,24 +1517,11 @@ namespace Economy_sim
 
         /// <summary>
         /// Map cell size to appropriate LOD level for grid rendering
+        /// Force high resolution (LOD 0) at all zoom levels.
         /// </summary>
         private int GetLodLevelForCellSize(int cellSize)
         {
-            // Lower cell sizes (zoomed out) should use higher LOD levels (downsampled grids)
-            // PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80, 160, 320, 640, 1280 }
-            // We want: cellSize 3 -> LOD 3, cellSize 1280 -> LOD 0
-            var levels = MultiResolutionMapManager.PixelsPerCellLevels;
-            
-            for (int i = 0; i < levels.Length; i++)
-            {
-                if (cellSize <= levels[i])
-                {
-                    // Return a LOD that makes sense: smaller cell sizes get higher LOD (more downsampled)
-                    return Math.Min(3, levels.Length - 1 - i);
-                }
-            }
-            
-            return 0; // Highest zoom, use base resolution
+            return 0;
         }
 
         private int GetCellSizeForZoom(int zoomLevel)
@@ -1374,67 +1542,64 @@ namespace Economy_sim
         {
             try
             {
-                // Ensure spatial index is built
-                EnsureSpatialIndexBuilt();
+                // Ensure grid is initialized
+                EnsureGridInitialized();
 
-                // Create a small search bounds around the point
-                double tolerance = 0.01; // Small tolerance for point-in-polygon tests
-                var searchBounds = new GeoBounds
+                // Get country ID from grid renderer (this is the raster code written into the grid)
+                int countryId = _gridRenderer.GetCountryAtGeographic(longitude, latitude);
+                
+                if (countryId <= 0)
                 {
-                    MinLon = longitude - tolerance,
-                    MaxLon = longitude + tolerance,
-                    MinLat = latitude - tolerance,
-                    MaxLat = latitude + tolerance
-                };
-
-                // Get countries that might contain this point
-                var candidates = _spatialIndex.GetCountriesInBounds(searchBounds);
-
-                // Test each candidate to see if it actually contains the point
-                foreach (var candidate in candidates)
-                {
-                    if (IsPointInCountry(longitude, latitude, candidate))
-                    {
-                        Debug.WriteLine($"Found country at ({longitude:F4}, {latitude:F4}): {candidate.CountryName} ({candidate.CountryCode})");
-                        return candidate;
-                    }
+                    Debug.WriteLine($"No country found at ({longitude:F4}, {latitude:F4}) - grid returned {countryId}");
+                    return null;
                 }
 
-                Debug.WriteLine($"No country found at ({longitude:F4}, {latitude:F4})");
-                return null;
+                // Ensure our local data cache is loaded so we can resolve raster code -> country
+                string? cshapesPath = FindCShapesFile();
+                if (!string.IsNullOrEmpty(cshapesPath))
+                {
+                    _ = _dataCache.GetOrGenerateCountryData(cshapesPath);
+                }
+
+                // Get country information from data cache
+                var country = _dataCache.GetCountryFeatureByRasterCode(countryId);
+                if (country != null)
+                {
+                    Debug.WriteLine($"Found country at ({longitude:F4}, {latitude:F4}): {country.CountryName} ({country.CountryCode})");
+                }
+                else
+                {
+                    Debug.WriteLine($"Grid returned country ID {countryId} but no country data found in cache. Ensuring spatial index is ready and retrying lookup.");
+
+                    // As a fallback, try the spatial index (will build from the same clean cache)
+                    try
+                    {
+                        EnsureSpatialIndexBuilt();
+                        var idxCountry = _spatialIndex.GetCountryByRasterCode(countryId);
+                        if (idxCountry != null)
+                        {
+                            country = new IndexedCountryFeature
+                            {
+                                CountryCode = idxCountry.CountryCode,
+                                CountryName = idxCountry.CountryName,
+                                RasterCode = idxCountry.RasterCode,
+                                Bounds = idxCountry.Bounds,
+                                Geometry = idxCountry.Geometry
+                            };
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Fallback spatial index lookup failed: {ex.Message}");
+                    }
+                }
+                
+                return country;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error finding country at ({longitude:F4}, {latitude:F4}): {ex.Message}");
                 return null;
-            }
-        }
-
-        /// <summary>
-        /// Tests if a geographic point is within a country's boundaries
-        /// </summary>
-        private bool IsPointInCountry(double longitude, double latitude, IndexedCountryFeature country)
-        {
-            try
-            {
-                // First check if point is within the bounding box for quick elimination
-                if (longitude < country.Bounds.MinLon || longitude > country.Bounds.MaxLon ||
-                    latitude < country.Bounds.MinLat || latitude > country.Bounds.MaxLat)
-                {
-                    return false;
-                }
-
-                // Use OGR geometry to test if point is within the country polygon
-                using var point = new OSGeo.OGR.Geometry(wkbGeometryType.wkbPoint);
-                point.AddPoint_2D(longitude, latitude);
-
-                // Test if the point is within the country geometry
-                return country.Geometry.Contains(point);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error testing point in country {country.CountryCode}: {ex.Message}");
-                return false;
             }
         }
 

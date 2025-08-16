@@ -127,8 +127,8 @@ namespace Economy_sim
                     break;
                 
                 case MapViewType.Political:
-                    // Get the base political map - selection highlighting is handled internally by the tile manager
-                    result = _politicalTileManager.AssembleView(zoomLevel, viewArea, onTileReady);
+                    // Force synchronous rendering for political tiles to ensure they appear immediately
+                    result = _politicalTileManager.AssembleView(zoomLevel, viewArea, onTileReady, forceSync: true);
                     break;
                 
                 default:
