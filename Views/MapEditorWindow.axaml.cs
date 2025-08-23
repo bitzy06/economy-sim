@@ -57,7 +57,14 @@ namespace Economy_sim
         {
             InitializeComponent();
             
-            _mapManager = new HybridMapManager(baseWidth: 4096, baseHeight: 2048);
+            int baseW = ParseEnvOrDefault("ES_BASE_WIDTH", 4096);
+            int baseH = ParseEnvOrDefault("ES_BASE_HEIGHT", 2048);
+            // Default political grid to a higher resolution than terrain unless explicitly overridden
+            int defaultPolW = checked(baseW * 2);
+            int defaultPolH = checked(baseH * 2);
+            int polW = ParseEnvOrDefault("ES_POL_BASE_WIDTH", defaultPolW);
+            int polH = ParseEnvOrDefault("ES_POL_BASE_HEIGHT", defaultPolH);
+            _mapManager = new HybridMapManager(baseWidth: baseW, baseHeight: baseH, politicalBaseWidth: polW, politicalBaseHeight: polH);
             _mapManager.SetViewType(MapViewType.Political);
             
             // Initialize enhanced editor with data directory
@@ -77,6 +84,12 @@ namespace Economy_sim
             _mapUpdateTimer.Start();
 
             SetupUIEventHandlers();
+        }
+
+        private static int ParseEnvOrDefault(string key, int def)
+        {
+            var s = Environment.GetEnvironmentVariable(key);
+            return int.TryParse(s, out var v) && v > 0 ? v : def;
         }
 
         private void SetupUIEventHandlers()
@@ -315,8 +328,8 @@ namespace Economy_sim
                 var effectiveSize = GetEffectiveRenderSize();
                 if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
 
-                var viewArea = new SKRectI(_viewOffset.X, _viewOffset.Y, 
-                    _viewOffset.X + (int)effectiveSize.Width, 
+                var viewArea = new SKRectI(_viewOffset.X, _viewOffset.Y,
+                    _viewOffset.X + (int)effectiveSize.Width,
                     _viewOffset.Y + (int)effectiveSize.Height);
 
                 SKBitmap? bitmap = null;
@@ -332,6 +345,7 @@ namespace Economy_sim
                         Dispatcher.UIThread.Post(() =>
                         {
                             mapImage.Source = writeableBitmap;
+                            _writeableBitmap = writeableBitmap; // keep reference if needed
                         });
                     }
                     bitmap.Dispose();
@@ -445,33 +459,36 @@ namespace Economy_sim
         {
             if (_useEnhancedEditor)
             {
+                // Snapshot all UI-thread state first to avoid cross-thread access and keep DIPs consistently
+                var effectiveSize = GetEffectiveRenderSize();
+                var outputSize = new SKSizeI((int)effectiveSize.Width, (int)effectiveSize.Height);
+                var viewOffsetSnapshot = _viewOffset; // DIP-based terrain pixel offset
+                var levelSnapshot = _currentLevel;
+                var zoomSnapshot = _currentZoomLevel;
+
+                uint brushValue = 0;
+                if (levelSnapshot == MapViewLevel.Countries && _selectedCountry != null)
+                {
+                    brushValue = (uint)_selectedCountry.RasterCode;
+                }
+                else if (levelSnapshot == MapViewLevel.States && _selectedState != null)
+                {
+                    brushValue = (uint)_selectedState.RasterCode;
+                }
+                if (brushValue == 0) return;
+
+                _enhancedEditor.SetBrushValue(brushValue);
+                _enhancedEditor.SetBrushSize(_brushSize);
+                _enhancedEditor.SetEditPolicy(_currentEditPolicy);
+
+                int sx = screenX;
+                int sy = screenY;
+
                 _ = Task.Run(async () =>
                 {
                     try
                     {
-                        uint brushValue = 0;
-                        if (_currentLevel == MapViewLevel.Countries && _selectedCountry != null)
-                        {
-                            brushValue = (uint)_selectedCountry.RasterCode;
-                        }
-                        else if (_currentLevel == MapViewLevel.States && _selectedState != null)
-                        {
-                            brushValue = (uint)_selectedState.RasterCode;
-                        }
-                        
-                        _enhancedEditor.SetBrushValue(brushValue);
-                        _enhancedEditor.SetBrushSize(_brushSize);
-                        _enhancedEditor.SetEditPolicy(_currentEditPolicy);
-                        
-                        await _enhancedEditor.ApplyEditAsync(screenX, screenY, _currentZoomLevel, _viewOffset);
-
-                        // Immediate live overlay for both levels via unified rect edit
-                        if (brushValue > 0)
-                        {
-                            var region = ConvertScreenToWorldRegion(screenX, screenY, _currentZoomLevel, _viewOffset);
-                            _mapManager.ChangeAdminControlRect(_currentLevel, (int)brushValue, region);
-                        }
-                        
+                        await _enhancedEditor.ApplyEditAsync(levelSnapshot, sx, sy, zoomSnapshot, viewOffsetSnapshot, outputSize);
                         Dispatcher.UIThread.Post(() => QueueRender());
                     }
                     catch (Exception ex)
@@ -485,10 +502,12 @@ namespace Economy_sim
             int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
             int mapX = screenX + _viewOffset.X;
             int mapY = screenY + _viewOffset.Y;
-            int gridX = Math.Clamp(mapX / cellSize, 0, 4096 - 1);
-            int gridY = Math.Clamp(mapY / cellSize, 0, 2048 - 1);
+            int limitW = _currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States ? _mapManager.PoliticalBaseWidth : _mapManager.BaseWidth;
+            int limitH = _currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States ? _mapManager.PoliticalBaseHeight : _mapManager.BaseHeight;
+            int gridX = Math.Clamp(mapX / cellSize, 0, limitW - 1);
+            int gridY = Math.Clamp(mapY / cellSize, 0, limitH - 1);
 
-            var brushCells = GetBrushCells(gridX, gridY, _brushSize).ToList();
+            var brushCells = GetBrushCells(gridX, gridY, _brushSize, limitW, limitH).ToList();
 
             List<(SDPoint cell, int previousId)> changes = new();
             if (_currentLevel == MapViewLevel.Countries && _selectedCountry != null)
@@ -519,7 +538,7 @@ namespace Economy_sim
             }
         }
 
-        private IEnumerable<SDPoint> GetBrushCells(int centerX, int centerY, int radius)
+        private IEnumerable<SDPoint> GetBrushCells(int centerX, int centerY, int radius, int limitW, int limitH)
         {
             for (int dy = -radius; dy <= radius; dy++)
             {
@@ -527,7 +546,7 @@ namespace Economy_sim
                 {
                     int x = centerX + dx;
                     int y = centerY + dy;
-                    if (x >= 0 && x < 4096 && y >= 0 && y < 2048)
+                    if (x >= 0 && x < limitW && y >= 0 && y < limitH)
                         yield return new SDPoint(x, y);
                 }
             }
@@ -541,10 +560,12 @@ namespace Economy_sim
             int gridX = worldX / cellSize;
             int gridY = worldY / cellSize;
             int halfBrush = _brushSize / 2;
+            int limitW = _currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States ? _mapManager.PoliticalBaseWidth : _mapManager.BaseWidth;
+            int limitH = _currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States ? _mapManager.PoliticalBaseHeight : _mapManager.BaseHeight;
             int startX = Math.Max(0, gridX - halfBrush);
             int startY = Math.Max(0, gridY - halfBrush);
-            int endX = Math.Min(4096, gridX + halfBrush + 1);
-            int endY = Math.Min(2048, gridY + halfBrush + 1);
+            int endX = Math.Min(limitW, gridX + halfBrush + 1);
+            int endY = Math.Min(limitH, gridY + halfBrush + 1);
             return new System.Drawing.Rectangle(startX, startY, endX - startX, endY - startY);
         }
 

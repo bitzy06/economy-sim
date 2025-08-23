@@ -9,11 +9,11 @@ using SkiaSharp;
 namespace Economy_sim
 {
     /// <summary>
-    /// Enhanced map editor that integrates with the AuthoritativeGridManager for precise editing
+    /// Simplified map editor that directly edits the runtime grid via HybridMapManager/PoliticalTileManager/StateBorderManager.
+    /// Works for both Countries and States using the unified admin API.
     /// </summary>
     public class EnhancedMapEditor : IDisposable
     {
-        private readonly AuthoritativeGridManager _authoritativeGrid;
         private readonly HybridMapManager _mapManager;
         private readonly string _dataDirectory;
         
@@ -21,7 +21,6 @@ namespace Economy_sim
         private EditPolicy _currentEditPolicy = EditPolicy.FillAllSubcells;
         private uint _currentBrushValue = 1;
         private int _currentBrushSize = 1;
-        private int _currentZoomLevel = 1;
         private bool _showPrecisionIndicator = true;
         
         // Edit preview
@@ -32,26 +31,46 @@ namespace Economy_sim
         {
             _dataDirectory = dataDirectory;
             _mapManager = mapManager;
-            _authoritativeGrid = new AuthoritativeGridManager(dataDirectory);
             
-            // Ensure data directories exist
+            // Keep directories optional for future persistence features
             System.IO.Directory.CreateDirectory(System.IO.Path.Combine(dataDirectory, "grids"));
             System.IO.Directory.CreateDirectory(System.IO.Path.Combine(dataDirectory, "borders"));
             System.IO.Directory.CreateDirectory(System.IO.Path.Combine(dataDirectory, "edits"));
         }
         
         /// <summary>
-        /// Applies an edit at the specified screen coordinates and zoom level
+        /// Applies an edit at the specified screen coordinates and zoom level for the given admin level.
+        /// Coordinates are in DIPs and match the render path. outputSize is the current Image size in DIPs.
         /// </summary>
-        public async Task ApplyEditAsync(int screenX, int screenY, int zoomLevel, SKPointI viewOffset)
+        public async Task ApplyEditAsync(MapViewLevel level, int screenX, int screenY, int zoomLevel, SKPointI viewOffset, SKSizeI outputSize)
         {
             try
             {
-                // Convert screen coordinates to world space
-                var worldRegion = ConvertScreenToWorldRegion(screenX, screenY, zoomLevel, viewOffset);
+                // Build terrain view rect in the same space as rendering (DIPs)
+                var terrainView = new SKRectI(viewOffset.X, viewOffset.Y, viewOffset.X + outputSize.Width, viewOffset.Y + outputSize.Height);
+                
+                // Convert terrain view to political view using the same helper as rendering
+                var polView = ConvertTerrainViewToPoliticalView(terrainView, zoomLevel);
+                
+                // Map screen DIPs to political pixel within polView (rendered bitmap was stretched to outputSize)
+                double scaleX = polView.Width / (double)Math.Max(1, outputSize.Width);
+                double scaleY = polView.Height / (double)Math.Max(1, outputSize.Height);
+                int ppx = polView.Left + (int)Math.Floor(screenX * scaleX);
+                int ppy = polView.Top + (int)Math.Floor(screenY * scaleY);
+
+                int cellSize = _mapManager.GetCellSizeForZoom(zoomLevel);
+                int gridX = Math.Clamp(ppx / cellSize, 0, _mapManager.PoliticalBaseWidth - 1);
+                int gridY = Math.Clamp(ppy / cellSize, 0, _mapManager.PoliticalBaseHeight - 1);
+
+                int halfBrush = _currentBrushSize / 2;
+                int startX = Math.Max(0, gridX - halfBrush);
+                int startY = Math.Max(0, gridY - halfBrush);
+                int endX = Math.Min(_mapManager.PoliticalBaseWidth, gridX + halfBrush + 1);
+                int endY = Math.Min(_mapManager.PoliticalBaseHeight, gridY + halfBrush + 1);
+                var worldRegion = new Rectangle(startX, startY, endX - startX, endY - startY);
                 
                 // Validate edit region
-                if (!IsValidEditRegion(worldRegion))
+                if (!IsValidEditRegion(level, worldRegion))
                 {
                     System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Invalid edit region: {worldRegion}");
                     return;
@@ -63,11 +82,9 @@ namespace Economy_sim
                     ShowPrecisionIndicator(worldRegion, zoomLevel);
                 }
                 
-                // Apply the edit to the authoritative grid (persistent source of truth)
-                await _authoritativeGrid.ApplyEditAsync(zoomLevel, worldRegion, _currentBrushValue, _currentEditPolicy);
-                
-                // Immediately reflect the edit in the on-screen runtime grid so the user sees it right away
-                TryApplyRuntimeGridOverlay(worldRegion);
+                // Apply edit to the appropriate grid (country or state)
+                int rasterCode = (int)_currentBrushValue;
+                _mapManager.ChangeAdminControlRect(level, rasterCode, worldRegion);
                 
                 // Show dirty tile glow if enabled
                 if (_isDirtyTileGlowEnabled)
@@ -75,253 +92,114 @@ namespace Economy_sim
                     ShowDirtyTileGlow(worldRegion);
                 }
                 
-                System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Applied edit at zoom {zoomLevel}, region {worldRegion}, value {_currentBrushValue}, policy {_currentEditPolicy}");
+                System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Applied edit at zoom {zoomLevel}, region {worldRegion}, value {_currentBrushValue}, policy {_currentEditPolicy}, level {level}");
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Error applying edit: {ex.Message}");
             }
+            await Task.CompletedTask;
         }
         
-        /// <summary>
-        /// Push the edit to the live PoliticalTileManager control grid so tiles get invalidated and rerendered immediately.
-        /// This overlays the same rectangle edit onto the 4096x2048 runtime grid for instant visual feedback.
-        /// </summary>
-        private void TryApplyRuntimeGridOverlay(Rectangle worldRegion)
+        private SKRectI ConvertTerrainViewToPoliticalView(SKRectI terrainView, int zoomLevel)
         {
-            try
-            {
-                int rasterCode = (int)_currentBrushValue;
-                if (rasterCode <= 0) return;
-
-                // Stream the cells without allocating a large list
-                System.Collections.Generic.IEnumerable<System.Drawing.Point> Cells()
-                {
-                    int endX = Math.Min(4096, worldRegion.Right);
-                    int endY = Math.Min(2048, worldRegion.Bottom);
-                    for (int y = Math.Max(0, worldRegion.Top); y < endY; y++)
-                    {
-                        for (int x = Math.Max(0, worldRegion.Left); x < endX; x++)
-                        {
-                            yield return new System.Drawing.Point(x, y);
-                        }
-                    }
-                }
-
-                _mapManager.ChangeCountryControlAtGrid(rasterCode, Cells());
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Failed to apply runtime overlay: {ex.Message}");
-            }
+            int cell = _mapManager.GetCellSizeForZoom(zoomLevel);
+            int tW = _mapManager.BaseWidth * cell;
+            int tH = _mapManager.BaseHeight * cell;
+            int pW = _mapManager.PoliticalBaseWidth * cell;
+            int pH = _mapManager.PoliticalBaseHeight * cell;
+            float sx = pW / (float)tW;
+            float sy = pH / (float)tH;
+            return new SKRectI(
+                (int)(terrainView.Left * sx),
+                (int)(terrainView.Top * sy),
+                (int)(terrainView.Right * sx),
+                (int)(terrainView.Bottom * sy));
         }
         
-        /// <summary>
-        /// Converts screen coordinates to a world region for editing
-        /// </summary>
-        private Rectangle ConvertScreenToWorldRegion(int screenX, int screenY, int zoomLevel, SKPointI viewOffset)
-        {
-            // Get cell size for current zoom level
-            int cellSize = _mapManager.GetCellSizeForZoom(zoomLevel);
-            
-            // Convert screen coordinates to world coordinates
-            int worldX = screenX + viewOffset.X;
-            int worldY = screenY + viewOffset.Y;
-            
-            // Convert to grid coordinates
-            int gridX = worldX / cellSize;
-            int gridY = worldY / cellSize;
-            
-            // Create brush region
-            int halfBrush = _currentBrushSize / 2;
-            int startX = Math.Max(0, gridX - halfBrush);
-            int startY = Math.Max(0, gridY - halfBrush);
-            int endX = Math.Min(4096, gridX + halfBrush + 1); // Base map is 4096x2048
-            int endY = Math.Min(2048, gridY + halfBrush + 1);
-            
-            return new Rectangle(startX, startY, endX - startX, endY - startY);
-        }
-        
-        /// <summary>
-        /// Validates that an edit region is within bounds and reasonable
-        /// </summary>
-        private bool IsValidEditRegion(Rectangle region)
+        private bool IsValidEditRegion(MapViewLevel level, Rectangle region)
         {
             if (region.Width <= 0 || region.Height <= 0) return false;
             if (region.Left < 0 || region.Top < 0) return false;
-            if (region.Right > 4096 || region.Bottom > 2048) return false;
+            if (region.Right > _mapManager.PoliticalBaseWidth || region.Bottom > _mapManager.PoliticalBaseHeight) return false;
             if (region.Width * region.Height > 100000) return false; // guardrail
             
             return true;
         }
         
-        /// <summary>
-        /// Shows a precision indicator to inform the user about edit granularity
-        /// </summary>
         private void ShowPrecisionIndicator(Rectangle worldRegion, int zoomLevel)
         {
             int cellSize = _mapManager.GetCellSizeForZoom(zoomLevel);
-            int subcellCount = CalculateSubcellCount(worldRegion, zoomLevel);
-            
-            string message = $"Editing at zoom {zoomLevel} (cell size: {cellSize}px). This will affect {subcellCount} fine grid cells.";
-            
-            if (subcellCount > 100)
-            {
-                message += " Consider zooming in for finer control.";
-            }
-            
-            if (_currentEditPolicy == EditPolicy.BorderAware)
-            {
-                message += " Border-aware mode: respects coastlines and political boundaries.";
-            }
-            
+            int subcellCount = worldRegion.Width * worldRegion.Height;
+            string message = $"Editing at zoom {zoomLevel} (cell size: {cellSize}px). This will affect {subcellCount} grid cells.";
+            if (subcellCount > 100) message += " Consider zooming in for finer control.";
+            if (_currentEditPolicy == EditPolicy.BorderAware) message += " Border-aware mode: respects coastlines and political boundaries.";
             System.Diagnostics.Debug.WriteLine($"[PRECISION INDICATOR] {message}");
         }
         
-        /// <summary>
-        /// Calculates how many fine grid subcells will be affected by an edit
-        /// </summary>
-        private int CalculateSubcellCount(Rectangle worldRegion, int zoomLevel)
-        {
-            // Calculate scaling factor from world region to authoritative grid
-            double scaleFactor = AuthoritativeGridManager.AuthoritativeWidth / 4096.0;
-            
-            int fineWidth = (int)(worldRegion.Width * scaleFactor);
-            int fineHeight = (int)(worldRegion.Height * scaleFactor);
-            
-            return fineWidth * fineHeight;
-        }
-        
-        /// <summary>
-        /// Shows a visual indication of tiles that will be regenerated
-        /// </summary>
         private void ShowDirtyTileGlow(Rectangle worldRegion)
         {
             int tileStartX = worldRegion.Left / 512;
             int tileEndX = (worldRegion.Right + 511) / 512;
             int tileStartY = worldRegion.Top / 512;
             int tileEndY = (worldRegion.Bottom + 511) / 512;
-            
             int affectedTiles = (tileEndX - tileStartX) * (tileEndY - tileStartY);
-            
             System.Diagnostics.Debug.WriteLine($"[DIRTY TILE GLOW] {affectedTiles} tiles will be regenerated");
         }
         
-        /// <summary>
-        /// Sets the edit policy for subsequent edits
-        /// </summary>
         public void SetEditPolicy(EditPolicy policy)
         {
             _currentEditPolicy = policy;
             System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Edit policy changed to: {policy}");
         }
         
-        /// <summary>
-        /// Sets the brush value (country ID, terrain type, etc.)
-        /// </summary>
         public void SetBrushValue(uint value)
         {
             _currentBrushValue = value;
             System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Brush value changed to: {value}");
         }
         
-        /// <summary>
-        /// Sets the brush size
-        /// </summary>
         public void SetBrushSize(int size)
         {
-            _currentBrushSize = Math.Max(1, Math.Min(50, size)); // Clamp to reasonable range
+            _currentBrushSize = Math.Max(1, Math.Min(50, size));
             System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Brush size changed to: {_currentBrushSize}");
         }
         
-        /// <summary>
-        /// Toggles the precision indicator
-        /// </summary>
         public void TogglePrecisionIndicator()
         {
             _showPrecisionIndicator = !_showPrecisionIndicator;
             System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Precision indicator: {(_showPrecisionIndicator ? "ON" : "OFF")}");
         }
         
-        /// <summary>
-        /// Toggles the dirty tile glow effect
-        /// </summary>
         public void ToggleDirtyTileGlow()
         {
             _isDirtyTileGlowEnabled = !_isDirtyTileGlowEnabled;
-            System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Dirty tile glow: {(_isDirtyTileGlowEnabled ? "ON" : "OFF")}");
+            System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Dirty tile glow: {(_isDirtyTileGlowEnabled ? "ON" : "OFF")}" );
         }
         
-        /// <summary>
-        /// Undoes the last edit operation
-        /// </summary>
         public async Task<bool> UndoAsync()
         {
-            try
-            {
-                bool result = await _authoritativeGrid.UndoAsync();
-                if (result)
-                {
-                    System.Diagnostics.Debug.WriteLine("[ENHANCED EDITOR] Undo operation completed");
-                }
-                return result;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Error during undo: {ex.Message}");
-                return false;
-            }
+            System.Diagnostics.Debug.WriteLine("[ENHANCED EDITOR] Undo not available without authoritative grid.");
+            await Task.CompletedTask;
+            return false;
         }
         
-        /// <summary>
-        /// Redoes the next edit operation
-        /// </summary>
         public async Task<bool> RedoAsync()
         {
-            try
-            {
-                bool result = await _authoritativeGrid.RedoAsync();
-                if (result)
-                {
-                    System.Diagnostics.Debug.WriteLine("[ENHANCED EDITOR] Redo operation completed");
-                }
-                return result;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[ENHANCED EDITOR] Error during redo: {ex.Message}");
-                return false;
-            }
+            System.Diagnostics.Debug.WriteLine("[ENHANCED EDITOR] Redo not available without authoritative grid.");
+            await Task.CompletedTask;
+            return false;
         }
         
-        /// <summary>
-        /// Gets the current edit policy
-        /// </summary>
         public EditPolicy GetEditPolicy() => _currentEditPolicy;
-        
-        /// <summary>
-        /// Gets the current brush value
-        /// </summary>
         public uint GetBrushValue() => _currentBrushValue;
-        
-        /// <summary>
-        /// Gets the current brush size
-        /// </summary>
         public int GetBrushSize() => _currentBrushSize;
-        
-        /// <summary>
-        /// Checks if undo is available
-        /// </summary>
-        public bool CanUndo() => _authoritativeGrid != null;
-        
-        /// <summary>
-        /// Checks if redo is available
-        /// </summary>
-        public bool CanRedo() => _authoritativeGrid != null;
+        public bool CanUndo() => false;
+        public bool CanRedo() => false;
         
         public void Dispose()
         {
-            _authoritativeGrid?.Dispose();
+            // Nothing to dispose in simplified mode
         }
     }
 }

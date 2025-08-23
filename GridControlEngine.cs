@@ -38,7 +38,7 @@ namespace Economy_sim
         public event EventHandler<GridChangedEventArgs>? GridChanged;
         public event EventHandler<TileChangedEventArgs>? TileChanged;
 
-        public GridControlEngine(int width = 8192, int height = 4096, int tileSize = 512)
+        public GridControlEngine(int width = 8192*10, int height = 4096*10, int tileSize = 512)
         {
             Width = width;
             Height = height;

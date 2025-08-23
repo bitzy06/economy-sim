@@ -24,6 +24,10 @@ namespace Economy_sim
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
         
+        // Distinct base size for political layer
+        public int PoliticalBaseWidth { get; }
+        public int PoliticalBaseHeight { get; }
+        
         // Selected country tracking for white border highlighting
         private IndexedCountryFeature? _selectedCountry = null;
         
@@ -34,12 +38,24 @@ namespace Economy_sim
         public event EventHandler<MapViewType>? ViewTypeChanged;
         public event EventHandler<IndexedCountryFeature?>? SelectedCountryChanged;
         
-        public HybridMapManager(int baseWidth = 4096, int baseHeight = 2048)
+        public HybridMapManager(int baseWidth = (4096*4), int baseHeight = (2048*4), int? politicalBaseWidth = null, int? politicalBaseHeight = null)
         {
             _terrainManager = new MultiResolutionMapManager(baseWidth, baseHeight);
             _politicalManager = new PoliticalBorderManager();
-            _politicalTileManager = new PoliticalTileManager(_politicalManager, baseWidth, baseHeight);
-            _stateManager = new StateBorderManager();
+
+            int polW = politicalBaseWidth ?? ParseEnvOrDefault("ES_POL_BASE_WIDTH", baseWidth);
+            int polH = politicalBaseHeight ?? ParseEnvOrDefault("ES_POL_BASE_HEIGHT", baseHeight);
+            PoliticalBaseWidth = polW;
+            PoliticalBaseHeight = polH;
+
+            _politicalTileManager = new PoliticalTileManager(_politicalManager, PoliticalBaseWidth, PoliticalBaseHeight);
+            _stateManager = new StateBorderManager(PoliticalBaseWidth, PoliticalBaseHeight);
+        }
+        
+        private static int ParseEnvOrDefault(string key, int def)
+        {
+            var s = Environment.GetEnvironmentVariable(key);
+            return int.TryParse(s, out var v) && v > 0 ? v : def;
         }
         
         public void SetViewType(MapViewType viewType)
@@ -69,6 +85,11 @@ namespace Economy_sim
         }
         
         /// <summary>
+        /// Expose effective scale used by terrain at a given zoom (accounts for extra min-zoom FOV)
+        /// </summary>
+        public float GetEffectiveScaleForZoom(int zoomLevel) => 1.0f;
+        
+        /// <summary>
         /// Highlights a country border at the specified mouse position
         /// </summary>
         /// <param name="mousePosition">The mouse position in map coordinates</param>
@@ -79,33 +100,24 @@ namespace Economy_sim
             {
                 try
                 {
-                    // Convert screen pixel to map pixel (accounting for view offset)
-                    int mapPixelX = mousePosition.X;
-                    int mapPixelY = mousePosition.Y;
-                    
-                    // Get current map dimensions for this zoom level
                     int cellSize = GetCellSizeForZoom(zoomLevel);
-                    int mapWidth = BaseWidth * cellSize;
-                    int mapHeight = BaseHeight * cellSize;
-                    
-                    // Check bounds
-                    if (mapPixelX < 0 || mapPixelX >= mapWidth || mapPixelY < 0 || mapPixelY >= mapHeight)
-                    {
-                        Debug.WriteLine($"Point ({mapPixelX}, {mapPixelY}) is outside map bounds ({mapWidth}x{mapHeight})");
+                    // Terrain map pixels
+                    int tMapWidth = BaseWidth * cellSize;
+                    int tMapHeight = BaseHeight * cellSize;
+                    if (mousePosition.X < 0 || mousePosition.X >= tMapWidth || mousePosition.Y < 0 || mousePosition.Y >= tMapHeight)
                         return;
-                    }
-                    
-                    // Convert map pixel to geographic coordinates
-                    var (longitude, latitude) = CoordinateTransform.PixelToGeographic(mapPixelX, mapPixelY, mapWidth, mapHeight);
-                    
-                    Debug.WriteLine($"Highlight: Map ({mapPixelX},{mapPixelY}) -> Geo ({longitude:F4},{latitude:F4})");
-                    
-                    // Find country at this geographic location and select it directly
-                    // This is better than using visual highlighting with red blocks/crosshairs
-                    var country = _politicalTileManager.GetCountryAtGeographicPoint(longitude, latitude);
+
+                    // Convert terrain pixel -> normalized -> political pixel
+                    var (px, py) = TerrainPixelToPoliticalPixel(mousePosition.X, mousePosition.Y, zoomLevel);
+                    int pMapWidth = PoliticalBaseWidth * cellSize;
+                    int pMapHeight = PoliticalBaseHeight * cellSize;
+                    px = Math.Clamp(px, 0, pMapWidth - 1);
+                    py = Math.Clamp(py, 0, pMapHeight - 1);
+
+                    var (lon, lat) = CoordinateTransform.PixelToGeographic(px, py, pMapWidth, pMapHeight);
+                    var country = _politicalTileManager.GetCountryAtGeographicPoint(lon, lat);
                     if (country != null)
                     {
-                        // We won't call SelectCountry here as that will be done by the caller if needed
                         Debug.WriteLine($"Found country at highlight position: {country.CountryName} ({country.CountryCode})");
                     }
                 }
@@ -130,8 +142,19 @@ namespace Economy_sim
                     break;
                 
                 case MapViewType.Political:
-                    // Force synchronous rendering for political tiles to ensure they appear immediately
-                    result = _politicalTileManager.AssembleView(zoomLevel, viewArea, onTileReady, forceSync: true);
+                    // Convert terrain viewArea to political pixel space and apply min-zoom FOV expansion
+                    var polView = ConvertTerrainViewToPoliticalView(viewArea, zoomLevel);
+                    var polBmp = _politicalTileManager.AssembleView(zoomLevel, polView, onTileReady, forceSync: true);
+                    if (polBmp != null && (polBmp.Width != viewArea.Width || polBmp.Height != viewArea.Height))
+                    {
+                        var resized = ResizeBitmap(polBmp, viewArea.Width, viewArea.Height);
+                        polBmp.Dispose();
+                        result = resized;
+                    }
+                    else
+                    {
+                        result = polBmp;
+                    }
                     break;
                 
                 default:
@@ -142,6 +165,44 @@ namespace Economy_sim
             return result;
         }
 
+        private static SKBitmap ResizeBitmap(SKBitmap source, int width, int height)
+        {
+            var resized = new SKBitmap(width, height, source.ColorType, source.AlphaType);
+            using var canvas = new SKCanvas(resized);
+            canvas.Clear(SKColors.Transparent);
+            canvas.DrawBitmap(source, new SKRect(0, 0, width, height));
+            canvas.Flush();
+            return resized;
+        }
+
+        private SKRectI ConvertTerrainViewToPoliticalView(SKRectI terrainView, int zoomLevel)
+        {
+            int cell = GetCellSizeForZoom(zoomLevel);
+            int tW = BaseWidth * cell;
+            int tH = BaseHeight * cell;
+            int pW = PoliticalBaseWidth * cell;
+            int pH = PoliticalBaseHeight * cell;
+            float sx = pW / (float)tW;
+            float sy = pH / (float)tH;
+            return new SKRectI(
+                (int)(terrainView.Left * sx),
+                (int)(terrainView.Top * sy),
+                (int)(terrainView.Right * sx),
+                (int)(terrainView.Bottom * sy));
+        }
+
+        private (int px, int py) TerrainPixelToPoliticalPixel(int terrainX, int terrainY, int zoomLevel)
+        {
+            int cell = GetCellSizeForZoom(zoomLevel);
+            int tW = BaseWidth * cell;
+            int tH = BaseHeight * cell;
+            int pW = PoliticalBaseWidth * cell;
+            int pH = PoliticalBaseHeight * cell;
+            int px = (int)Math.Round(terrainX * (pW / (double)tW));
+            int py = (int)Math.Round(terrainY * (pH / (double)tH));
+            return (px, py);
+        }
+
         /// <summary>
         /// Unified rendering helper to draw either Countries or States into a bitmap of the given outputSize.
         /// </summary>
@@ -150,16 +211,29 @@ namespace Economy_sim
             switch (level)
             {
                 case MapViewLevel.Countries:
-                    return _politicalTileManager.AssembleView(zoomLevel, viewArea, null, forceSync: true);
+                    var polView = ConvertTerrainViewToPoliticalView(viewArea, zoomLevel);
+                    var polBmp = _politicalTileManager.AssembleView(zoomLevel, polView, null, forceSync: true);
+                    if (polBmp == null) return null;
+                    var composed = new SKBitmap(outputSize.Width, outputSize.Height, polBmp.ColorType, polBmp.AlphaType);
+                    using (var canvas = new SKCanvas(composed))
+                    {
+                        canvas.Clear(SKColors.Transparent);
+                        canvas.DrawBitmap(polBmp, new SKRect(0, 0, outputSize.Width, outputSize.Height));
+                    }
+                    polBmp.Dispose();
+                    return composed;
                 case MapViewLevel.States:
+                    // IMPORTANT: use political pixel space for states as well so selection math aligns with rendering
+                    var polViewport = ConvertTerrainViewToPoliticalView(viewArea, zoomLevel);
+                    int cell = GetCellSizeForZoom(zoomLevel);
+                    var politicalPixelSize = new SKSizeI(PoliticalBaseWidth * cell, PoliticalBaseHeight * cell);
+
                     var bmp = new SKBitmap(outputSize.Width, outputSize.Height);
                     using (var canvas = new SKCanvas(bmp))
                     {
                         canvas.Clear(new SKColor(135, 206, 235)); // water background
-                        var viewport = new SKRect(viewArea.Left, viewArea.Top, viewArea.Right, viewArea.Bottom);
-                        var mapSize = GetMapSize(zoomLevel);
-                        _stateManager.RenderStateFills(canvas, viewport, mapSize);
-                        _stateManager.RenderStateBorders(canvas, viewport, mapSize, 2.0f, SKColors.Black);
+                        _stateManager.RenderStateFills(canvas, polViewport, politicalPixelSize);
+                        _stateManager.RenderStateBorders(canvas, polViewport, politicalPixelSize, 2.0f, SKColors.Black);
                     }
                     return bmp;
                 default:
@@ -183,56 +257,54 @@ namespace Economy_sim
         /// <summary>
         /// Gets the country at a specific pixel position (accounting for zoom and pan).
         /// Includes a relaxed search radius around the cursor to make selection easier.
+        /// Corrects for extra min-zoom scaling so mouse picks align in both views.
         /// </summary>
-        public IndexedCountryFeature? GetCountryAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
+        public IndexedCountryFeature? GetCountryAtPixel(int pixelX, int pixelY, int zoomLevel, int viewOffsetX, int viewOffsetY)
         {
             try
             {
-                // Validate inputs
-                if (pixelX < 0 || pixelY < 0 || zoomLevel < 1)
-                {
-                    Debug.WriteLine($"Invalid input to GetCountryAtPixel: pixel=({pixelX},{pixelY}), zoom={zoomLevel}");
-                    return null;
-                }
+                if (pixelX < 0 || pixelY < 0 || zoomLevel < 1) return null;
 
                 int cellSize = GetCellSizeForZoom(zoomLevel);
-                int mapWidth = BaseWidth * cellSize;
-                int mapHeight = BaseHeight * cellSize;
+                int tMapWidth = BaseWidth * cellSize;
+                int tMapHeight = BaseHeight * cellSize;
 
-                // relaxed spiral search around the pointer
-                const int radius = 5; // pixels
-                foreach (var (dx, dy) in GetSpiralOffsets(radius))
+                // Terrain space -> apply view offset
+                int tpx = pixelX + viewOffsetX;
+                int tpy = pixelY + viewOffsetY;
+
+                // Convert to political pixel space
+                var (ppx, ppy) = TerrainPixelToPoliticalPixel(tpx, tpy, zoomLevel);
+
+                // Spiral around to make picking robust
+                const int radius = 5;
+                for (int r = 0; r <= radius; r++)
                 {
-                    int mapPixelX = pixelX + viewOffset.X + dx;
-                    int mapPixelY = pixelY + viewOffset.Y + dy;
-
-                    if (mapPixelX < 0 || mapPixelX >= mapWidth || mapPixelY < 0 || mapPixelY >= mapHeight)
-                        continue;
-
-                    // Convert map pixel to geographic coordinates
-                    var (longitude, latitude) = CoordinateTransform.PixelToGeographic(mapPixelX, mapPixelY, mapWidth, mapHeight);
-                    
-                    // Find country at this geographic location
-                    var country = _politicalTileManager.GetCountryAtGeographicPoint(longitude, latitude);
-                    if (country != null)
+                    foreach (var (dx, dy) in GetSpiralOffsets(r))
                     {
-                        return country;
+                        int sx = ppx + dx;
+                        int sy = ppy + dy;
+                        var c = _politicalTileManager.GetCountryAtPoliticalPixel(sx, sy, zoomLevel);
+                        if (c != null) return c;
                     }
                 }
-
                 return null;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Error detecting country at pixel ({pixelX}, {pixelY}): {ex.Message}");
-                Debug.WriteLine($"Stack trace: {ex.StackTrace}");
                 return null;
             }
         }
 
-        /// <summary>
-        /// Selects a country for highlighting with white borders
-        /// </summary>
+        // Back-compat overloads for callers passing SKPointI offset
+        public IndexedCountryFeature? GetCountryAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
+            => GetCountryAtPixel(pixelX, pixelY, zoomLevel, viewOffset.X, viewOffset.Y);
+
+        // Optional overload taking only X offset (Y=0)
+        public IndexedCountryFeature? GetCountryAtPixel(int pixelX, int pixelY, int zoomLevel, int viewOffsetX)
+            => GetCountryAtPixel(pixelX, pixelY, zoomLevel, viewOffsetX, 0);
+
         public void SelectCountry(IndexedCountryFeature? country)
         {
             if (_selectedCountry != country)
@@ -249,35 +321,23 @@ namespace Economy_sim
             }
         }
 
-        /// <summary>
-        /// Clears the current country selection
-        /// </summary>
         public void ClearCountrySelection()
         {
             SelectCountry(null);
         }
 
-        // ----- New helpers for editor integration -----
+        // ----- New helpers for editor integration ----
 
-        /// <summary>
-        /// Returns all available country data (names, codes, raster codes) for the current date.
-        /// </summary>
         public List<CachedCountryData> GetAllCountryData()
         {
             return _politicalTileManager.GetAllCountryData();
         }
 
-        /// <summary>
-        /// Gets the political data cache for use by other components like renderers
-        /// </summary>
         public PoliticalDataCache GetPoliticalDataCache()
         {
             return _politicalTileManager.GetDataCache();
         }
 
-        /// <summary>
-        /// Finds a country by name (case-insensitive) and returns an IndexedCountryFeature with raster code.
-        /// </summary>
         public IndexedCountryFeature? FindCountryByName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return null;
@@ -288,9 +348,6 @@ namespace Economy_sim
             return _politicalTileManager.GetCountryFeatureByRasterCode(match.RasterCode);
         }
 
-        /// <summary>
-        /// Change control of specific grid cells to a given country raster code.
-        /// </summary>
         public void ChangeCountryControlAtGrid(int rasterCode, IEnumerable<Point> cells)
         {
             _politicalTileManager.ChangeControl(rasterCode, cells);
@@ -303,8 +360,8 @@ namespace Economy_sim
             {
                 int x0 = Math.Max(0, region.Left);
                 int y0 = Math.Max(0, region.Top);
-                int x1 = Math.Min(BaseWidth, region.Right);
-                int y1 = Math.Min(BaseHeight, region.Bottom);
+                int x1 = Math.Min(PoliticalBaseWidth, region.Right);
+                int y1 = Math.Min(PoliticalBaseHeight, region.Bottom);
                 for (int y = y0; y < y1; y++)
                     for (int x = x0; x < x1; x++)
                         yield return new Point(x, y);
@@ -326,7 +383,38 @@ namespace Economy_sim
 
         public StateBorderManager.StateFeature? GetStateAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
         {
-            return _stateManager.GetStateAtPixel(pixelX, pixelY, zoomLevel, viewOffset);
+            try
+            {
+                if (pixelX < 0 || pixelY < 0 || zoomLevel < 1) return null;
+
+                int cellSize = GetCellSizeForZoom(zoomLevel);
+
+                // Convert terrain screen pixel + pan into terrain map pixel, then to political grid coords directly
+                int tpx = pixelX + viewOffset.X;
+                int tpy = pixelY + viewOffset.Y;
+
+                // Map from terrain pixel to political pixel
+                var (ppx, ppy) = TerrainPixelToPoliticalPixel(tpx, tpy, zoomLevel);
+
+                // Convert political pixel to political grid coordinate
+                int gx = ppx / cellSize;
+                int gy = ppy / cellSize;
+
+                // Spiral sample a few neighboring cells for robustness
+                const int radius = 3;
+                foreach (var (dx, dy) in GetSpiralOffsets(radius))
+                {
+                    var st = _stateManager.GetStateAtGrid(gx + dx, gy + dy);
+                    if (st != null) return st;
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error detecting state at pixel ({pixelX}, {pixelY}): {ex.Message}");
+                return null;
+            }
         }
 
         public void SetSelectedState(StateBorderManager.StateFeature? state)
@@ -395,8 +483,6 @@ namespace Economy_sim
         {
             _politicalTileManager?.Dispose();
             _stateManager?.Dispose();
-            // Note: MultiResolutionMapManager doesn't implement IDisposable
-            // _terrainManager?.Dispose();
         }
 
         private static IEnumerable<(int dx, int dy)> GetSpiralOffsets(int radius)

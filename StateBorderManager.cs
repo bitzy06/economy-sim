@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
 using MaxRev.Gdal.Core;
 using OSGeo.GDAL;
 using OSGeo.OGR;
 using SkiaSharp;
-using System.Drawing;
 
 namespace Economy_sim
 {
@@ -25,9 +25,11 @@ namespace Economy_sim
         private static readonly bool _optInEnableShp =
             string.Equals(Environment.GetEnvironmentVariable("ES_ENABLE_STATE_SHP"), "1", StringComparison.Ordinal);
 
-        // Base map size used by the grid/political systems
-        private const int BaseWidth = 4096;
-        private const int BaseHeight = 2048;
+        // Base map size used by the grid/political systems (configurable)
+        private readonly int _baseWidth;
+        private readonly int _baseHeight;
+        public int BaseWidth => _baseWidth;
+        public int BaseHeight => _baseHeight;
 
         private readonly string _stateDataPath;
         private readonly string _colorMappingPath;
@@ -53,9 +55,12 @@ namespace Economy_sim
             public int RasterCode { get; set; }
         }
 
-        public StateBorderManager(string stateDataPath = "data/country_borders/states/ne_10m_admin_1_states_provinces.shp",
+        public StateBorderManager(int baseWidth = 4096, int baseHeight = 2048,
+                                  string stateDataPath = "data/country_borders/states/ne_10m_admin_1_states_provinces.shp",
                                   string colorMappingPath = "data/country_borders/state_colors.json")
         {
+            _baseWidth = Math.Max(1, baseWidth);
+            _baseHeight = Math.Max(1, baseHeight);
             _stateDataPath = stateDataPath;
             _colorMappingPath = colorMappingPath;
             EnsureGdalRegistered();
@@ -872,6 +877,17 @@ namespace Economy_sim
             }
 
             return _stateFeatures.Find(s => s.RasterCode == bestCode);
+        }
+
+        // --- Quick lookup helpers for selection ---
+        public StateFeature? GetStateAtGrid(int gridX, int gridY)
+        {
+            EnsureStateGridBuilt();
+            if (_stateGrid == null) return null;
+            if (gridX < 0 || gridY < 0 || gridX >= BaseWidth || gridY >= BaseHeight) return null;
+            int code = _stateGrid[gridY, gridX];
+            if (code <= 0) return null;
+            return _stateFeatures.Find(s => s.RasterCode == code);
         }
 
         public void Dispose()

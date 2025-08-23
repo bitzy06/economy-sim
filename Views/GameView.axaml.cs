@@ -42,10 +42,22 @@ namespace Economy_sim
         private readonly TimeSpan _refreshInterval = TimeSpan.FromMilliseconds(100); // 10 FPS continuous refresh
         public Point mousepoint;
 
+        // Track baseline base size to compute normalization if env changes
+        private readonly int _baselineWidth = 4096 * 4;
+        private readonly int _baselineHeight = 2048 * 4;
+
         public GameView()
         {
             InitializeComponent();
-            _mapManager = new HybridMapManager(baseWidth: 4096, baseHeight: 2048);
+            
+            int baseW = ParseEnvOrDefault("ES_BASE_WIDTH", _baselineWidth);
+            int baseH = ParseEnvOrDefault("ES_BASE_HEIGHT", _baselineHeight);
+            int defaultPolW = checked(baseW * 2);
+            int defaultPolH = checked(baseH * 2);
+            int polW = ParseEnvOrDefault("ES_POL_BASE_WIDTH", defaultPolW);
+            int polH = ParseEnvOrDefault("ES_POL_BASE_HEIGHT", defaultPolH);
+            _mapManager = new HybridMapManager(baseWidth: baseW, baseHeight: baseH, politicalBaseWidth: polW, politicalBaseHeight: polH);
+            
             this.Loaded += OnWindowLoaded;
             this.SizeChanged += OnSizeChanged;
 
@@ -70,8 +82,28 @@ namespace Economy_sim
             _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
             UpdateMapViewButtons();
             
+            // Maintain perceived zoom if base sizes differ from baseline
+            NormalizeInitialViewOffset(baseW, baseH);
+            
             // Run basic integration test for political borders (commented out for production)
             // Economy_sim.Testing.PoliticalBorderIntegrationTest.RunBasicTests();
+        }
+
+        private void NormalizeInitialViewOffset(int baseW, int baseH)
+        {
+            // If base size differs from baseline, scale the view offset so FOV stays roughly the same
+            if (baseW != _baselineWidth || baseH != _baselineHeight)
+            {
+                double sx = (double)baseW / Math.Max(1, _baselineWidth);
+                double sy = (double)baseH / Math.Max(1, _baselineHeight);
+                _viewOffset = new SKPointI((int)Math.Round(_viewOffset.X * sx), (int)Math.Round(_viewOffset.Y * sy));
+            }
+        }
+
+        private static int ParseEnvOrDefault(string key, int def)
+        {
+            var s = Environment.GetEnvironmentVariable(key);
+            return int.TryParse(s, out var v) && v > 0 ? v : def;
         }
 
         private void OnWindowLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -1445,7 +1477,7 @@ namespace Economy_sim
             // CenterView(); // Removed to prevent annoying recentering
             
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
-            Dispatcher.UIThread.Post(() => 
+            Dispatcher.UIThread.Post(() =>
             {
                 Debug.WriteLine($"Queuing render for map view type change to: {viewType}");
                 QueueRender(immediate: true);
