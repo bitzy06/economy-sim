@@ -61,7 +61,7 @@ namespace Economy_sim
             lock (GdalLock)
             {
                 bounds ??= new[] { -180.0, -90.0, 180.0, 90.0 };
-
+                    
                 // Get cached per-country data for 1950 (generated once, then reused)
                 var countryData = _dataCache.GetOrGenerateCountryData(cshapesPath);
                 Debug.WriteLine($"Using cached country data: {countryData.Count} countries for 1950");

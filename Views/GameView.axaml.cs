@@ -7,6 +7,7 @@ using Avalonia.Threading;
 using SkiaSharp;
 using Economy_sim; // Assuming HybridMapManager is in this namespace
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
@@ -41,10 +42,22 @@ namespace Economy_sim
         private readonly TimeSpan _refreshInterval = TimeSpan.FromMilliseconds(100); // 10 FPS continuous refresh
         public Point mousepoint;
 
+        // Track baseline base size to compute normalization if env changes
+        private readonly int _baselineWidth = 4096 * 4;
+        private readonly int _baselineHeight = 2048 * 4;
+
         public GameView()
         {
             InitializeComponent();
-            _mapManager = new HybridMapManager(baseWidth: 4096, baseHeight: 2048);
+            
+            int baseW = ParseEnvOrDefault("ES_BASE_WIDTH", _baselineWidth);
+            int baseH = ParseEnvOrDefault("ES_BASE_HEIGHT", _baselineHeight);
+            int defaultPolW = checked(baseW * 2);
+            int defaultPolH = checked(baseH * 2);
+            int polW = ParseEnvOrDefault("ES_POL_BASE_WIDTH", defaultPolW);
+            int polH = ParseEnvOrDefault("ES_POL_BASE_HEIGHT", defaultPolH);
+            _mapManager = new HybridMapManager(baseWidth: baseW, baseHeight: baseH, politicalBaseWidth: polW, politicalBaseHeight: polH);
+            
             this.Loaded += OnWindowLoaded;
             this.SizeChanged += OnSizeChanged;
 
@@ -69,8 +82,28 @@ namespace Economy_sim
             _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
             UpdateMapViewButtons();
             
+            // Maintain perceived zoom if base sizes differ from baseline
+            NormalizeInitialViewOffset(baseW, baseH);
+            
             // Run basic integration test for political borders (commented out for production)
             // Economy_sim.Testing.PoliticalBorderIntegrationTest.RunBasicTests();
+        }
+
+        private void NormalizeInitialViewOffset(int baseW, int baseH)
+        {
+            // If base size differs from baseline, scale the view offset so FOV stays roughly the same
+            if (baseW != _baselineWidth || baseH != _baselineHeight)
+            {
+                double sx = (double)baseW / Math.Max(1, _baselineWidth);
+                double sy = (double)baseH / Math.Max(1, _baselineHeight);
+                _viewOffset = new SKPointI((int)Math.Round(_viewOffset.X * sx), (int)Math.Round(_viewOffset.Y * sy));
+            }
+        }
+
+        private static int ParseEnvOrDefault(string key, int def)
+        {
+            var s = Environment.GetEnvironmentVariable(key);
+            return int.TryParse(s, out var v) && v > 0 ? v : def;
         }
 
         private void OnWindowLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -760,6 +793,9 @@ namespace Economy_sim
         // Sample game state for HUD demonstration
         private PlayerRoleManager _playerRoleManager;
         private Country _currentCountry;
+        
+        // Unified political entity renderer
+        private PoliticalEntityRenderer _politicalEntityRenderer;
 
         private void InitializeHUD()
         {
@@ -781,6 +817,11 @@ namespace Economy_sim
 
             // Set up player as Prime Minister by default
             _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
+
+            // Initialize the unified political entity renderer
+            // Use the existing political data cache from the map manager if available
+            var dataCache = _mapManager.GetPoliticalDataCache();
+            _politicalEntityRenderer = new PoliticalEntityRenderer(dataCache);
 
             // Set up HUD update timer
             var hudTimer = new DispatcherTimer
@@ -1436,7 +1477,7 @@ namespace Economy_sim
             // CenterView(); // Removed to prevent annoying recentering
             
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
-            Dispatcher.UIThread.Post(() => 
+            Dispatcher.UIThread.Post(() =>
             {
                 Debug.WriteLine($"Queuing render for map view type change to: {viewType}");
                 QueueRender(immediate: true);
@@ -1473,6 +1514,66 @@ namespace Economy_sim
                 politicalBtn.Background = _mapManager.CurrentViewType == MapViewType.Political 
                     ? Avalonia.Media.Brushes.DarkRed 
                     : Avalonia.Media.Brushes.DarkSlateGray;
+            }
+        }
+
+        #endregion
+
+        #region Political Entity Rendering Demonstration
+
+        /// <summary>
+        /// Demonstrates the unified political entity renderer capabilities.
+        /// This method shows how both Country and State objects can be rendered
+        /// with the new PoliticalEntityRenderer class.
+        /// </summary>
+        public void DemonstratePoliticalEntityRendering()
+        {
+            if (_politicalEntityRenderer == null)
+            {
+                Debug.WriteLine("Political entity renderer not initialized");
+                return;
+            }
+
+            try
+            {
+                Debug.WriteLine("=== Political Entity Rendering Demonstration ===");
+
+                // Render the current country
+                var countryBitmap = _politicalEntityRenderer.RenderCountry(_currentCountry, 400, 300, isSelected: true);
+                if (countryBitmap != null)
+                {
+                    Debug.WriteLine($"Successfully rendered country: {_currentCountry.Name} (400x300)");
+                    // In a real application, you would display this bitmap in the UI
+                    countryBitmap.Dispose(); // Clean up for demo
+                }
+
+                // Render individual states
+                foreach (var state in _currentCountry.States)
+                {
+                    var stateBitmap = _politicalEntityRenderer.RenderState(state, 200, 150, isSelected: false);
+                    if (stateBitmap != null)
+                    {
+                        Debug.WriteLine($"Successfully rendered state: {state.Name} (200x150)");
+                        stateBitmap.Dispose(); // Clean up for demo
+                    }
+                }
+
+                // Render unified view of all political entities
+                var countries = new List<Country> { _currentCountry };
+                var unifiedBitmap = _politicalEntityRenderer.RenderPoliticalEntities(
+                    countries, 800, 600, selectedCountry: _currentCountry, selectedState: null);
+                
+                if (unifiedBitmap != null)
+                {
+                    Debug.WriteLine("Successfully rendered unified political entities view (800x600)");
+                    unifiedBitmap.Dispose(); // Clean up for demo
+                }
+
+                Debug.WriteLine("=== Political Entity Rendering Demonstration Complete ===");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error during political entity rendering demonstration: {ex.Message}");
             }
         }
 

@@ -230,8 +230,10 @@ namespace Economy_sim
 
         /// <summary>
         /// Generate a terrain tile and overlay country borders.
+        /// Uses unified equirectangular transform for consistent tiling.
         /// </summary>
-        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32> GenerateTileWithCountriesLarge(
+        public static SixLabors.ImageSharp.Image<SixLabors.ImageSharp.PixelFormats.Rgba32>
+ GenerateTileWithCountriesLarge(
      int mapWidth, int mapHeight, int cellSize, int tileX, int tileY, int tileSizePx = 512)
         {
             int fullW = mapWidth * cellSize;
@@ -244,33 +246,23 @@ namespace Economy_sim
 
             try
             {
-                // Try to generate with real data
-                int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, tileWidth, tileHeight);
-                var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
-                DrawBordersLarge(img, mask);
-
-                // Use standardized coordinate transformation for consistent positioning
+                // Compute geographic bounds based on pixel-space tile offsets
                 var bounds = CoordinateTransform.GetTileGeographicBounds(tileX, tileY, tileSizePx, fullW, fullH);
-                
-                var factory = NetTopologySuite.Geometries.GeometryFactory.Default;
-                var tilePoly = factory.CreatePolygon(new[]
-                {
-                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat),
-                    new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MinLat),
-                    new NetTopologySuite.Geometries.Coordinate(bounds.MaxLon, bounds.MaxLat),
-                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MaxLat),
-                    new NetTopologySuite.Geometries.Coordinate(bounds.MinLon, bounds.MinLat)
-                });
+
+                // Build country mask for the tile area in pixel space
+                int[,] mask = CreateCountryMaskTile(fullW, fullH, offsetX, offsetY, tileWidth, tileHeight);
+
+                // Render terrain for this tile area using same sampling window
+                var img = GenerateTerrainTileLarge(mapWidth, mapHeight, cellSize, tileX, tileY, tileSizePx, mask);
+
+                // Draw borders on top
+                DrawBordersLarge(img, mask);
 
                 return img;
             }
             catch (Exception ex)
             {
-                // If data files are missing or there's any error, generate a fallback tile
-                Console.WriteLine($"Using fallback tile generation for tile ({tileX}, {tileY}) - data files may be missing: {ex.Message}");
-                Console.WriteLine("To use real terrain data, place the following files in ~/Documents/data/:");
-                Console.WriteLine("  - NE1_HR_LC.tif (Natural Earth raster)");
-                Console.WriteLine("  - ne_10m_admin_0_countries.shp (Natural Earth country boundaries)");
+                Debug.WriteLine($"[TERRAIN TILE FALLBACK] ({tileX},{tileY}) - {ex.Message}");
                 return GenerateFallbackTile(tileWidth, tileHeight, tileX, tileY, cellSize);
             }
         }

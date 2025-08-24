@@ -15,6 +15,9 @@ class Program
     public static void Main(string[] args)
     {
         GdalInit.Ensure();
+        
+        // Optional test mode removed to eliminate unused test dependencies
+        
         BuildAvaloniaApp()
         .StartWithClassicDesktopLifetime(args);
     }
@@ -26,11 +29,7 @@ class Program
             .WithInterFont()
             .LogToTrace();
 
-
-
-
 }
-
 
 
 static class GdalInit

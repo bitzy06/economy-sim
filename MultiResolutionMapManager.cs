@@ -71,7 +71,8 @@ namespace Economy_sim
         /// </summary>
         public const int TileSizePx = 512;
 
-        public static readonly int[] PixelsPerCellLevels = { 3, 4, 6, 10, 40, 80, 160, 320, 640, 1280 };
+        // New zoom ladder: larger FOV at lowest zoom, still supports deep zoom
+        public static readonly int[] PixelsPerCellLevels = { 1, 2, 3, 5, 10, 20, 40, 80, 160, 320 };
         private static readonly Dictionary<string, SemaphoreSlim> _fileLocks = new();
         private static readonly object _fileLockDictLock = new();
         
@@ -98,28 +99,47 @@ namespace Economy_sim
 
         private readonly int _baseWidth;
         private readonly int _baseHeight;
+        private readonly string _instanceTileCacheRoot;
         
         public int BaseWidth => _baseWidth;
         public int BaseHeight => _baseHeight;
+
+        // Baseline used to keep perceived zoom constant across base sizes (matches GameView defaults)
+        private const int BaselineBaseWidth = 4096 * 4;   // 16384
+        private const int BaselineBaseHeight = 2048 * 4;  // 8192
+
+        // Extra zoom-out factor applied only at minimum zoom (level 1) to show more world area.
+        // 0.66 shows ~1.5x area. Tweakable via env var ES_MIN_ZOOM_SCALE (0.3 - 1.0)
+        private readonly float _minZoomScale;
 
         public MultiResolutionMapManager(int baseWidth, int baseHeight)
         {
             _baseWidth = baseWidth;
             _baseHeight = baseHeight;
+            // Namespace cache by base grid size to avoid cross-configuration collisions
+            _instanceTileCacheRoot = Path.Combine(TileCacheDir, $"{_baseWidth}x{_baseHeight}");
+
+            // Read optional override for min zoom scale
+            var s = Environment.GetEnvironmentVariable("ES_MIN_ZOOM_SCALE");
+            if (float.TryParse(s, out var v))
+                _minZoomScale = Math.Clamp(v, 0.3f, 1.0f);
+            else
+                _minZoomScale = 0.66f; // default: show ~50% more area
         }
 
         /// <summary>
-        /// Gets the cell size for a given integer zoom level.
+        /// Gets the cell size for a given integer zoom level, normalized so perceived zoom
+        /// does not change when the base grid size changes.
         /// </summary>
         public int GetCellSizeForZoom(int zoomLevel)
         {
-            // `zoomLevel` is 1-based (e.g., 1, 2, 3...), but array indices are 0-based.
             int index = zoomLevel - 1;
-
-            // Clamp the index to ensure it's always within the valid bounds of the array.
             index = Math.Clamp(index, 0, PixelsPerCellLevels.Length - 1);
 
-            return PixelsPerCellLevels[index];
+            // Normalize by width (height has same ratio in our 2:1 world grid)
+            double scale = (double)BaselineBaseWidth / Math.Max(1, _baseWidth);
+            int normalized = (int)Math.Round(PixelsPerCellLevels[index] * scale);
+            return Math.Max(1, normalized);
         }
 
         /// <summary>
@@ -179,7 +199,7 @@ namespace Economy_sim
                 }
             }
 
-            string dir = Path.Combine(TileCacheDir, cellSize.ToString());
+            string dir = Path.Combine(_instanceTileCacheRoot, cellSize.ToString());
             string path = Path.Combine(dir, $"{tileX}_{tileY}.png");
 
             if (File.Exists(path))
@@ -271,7 +291,6 @@ namespace Economy_sim
         {
             int cellSize = GetCellSizeForZoom(zoomLevel);
             int tileSize = TileSizePx;
-
             if (viewArea.Width <= 0 || viewArea.Height <= 0 || cellSize <= 0)
                 return new SKBitmap(1, 1);
 
@@ -291,23 +310,17 @@ namespace Economy_sim
                 for (int tx = tileStartX; tx < tileEndX; tx++)
                 {
                     var key = (cellSize, tx, ty);
-                    var rect = new SKRect(
-                        tx * tileSize - viewArea.Left,
-                        ty * tileSize - viewArea.Top,
-                        tx * tileSize - viewArea.Left + tileSize,
-                        ty * tileSize - viewArea.Top + tileSize
-                    );
 
-                    if (rect.Width <= 0 || rect.Height <= 0)
-                        continue;
+                    int dx = tx * tileSize - viewArea.Left;
+                    int dy = ty * tileSize - viewArea.Top;
+                    var rect = new SKRect(dx, dy, dx + tileSize, dy + tileSize);
+                    if (rect.Width <= 0 || rect.Height <= 0) continue;
 
                     SKBitmap textureCopy = null;
                     lock (_masterCacheLock)
                     {
                         if (_tileTextures.TryGetValue(key, out var texture))
-                        {
                             textureCopy = texture.Copy();
-                        }
                     }
 
                     if (textureCopy != null)
@@ -324,14 +337,11 @@ namespace Economy_sim
                             if (!_tilesBeingLoaded.Contains(key))
                             {
                                 _tilesBeingLoaded.Add(key);
-                                var ttx = tx;
-                                var tty = ty;
-                                var tileKey = key;
+                                var ttx = tx; var tty = ty; var tileKey = key;
                                 _ = Task.Run(async () =>
                                 {
                                     try
                                     {
-                                        // CORRECTED: Pass the correct integer zoomLevel to the async loader.
                                         await GetTileAsync(zoomLevel, ttx, tty, CancellationToken.None);
                                         triggerRefresh?.Invoke();
                                     }
@@ -393,11 +403,11 @@ namespace Economy_sim
         }
         public string GetTilePath(int cellSize, int tileX, int tileY)
         {
-            string tileFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data", "tile_cache", $"{cellSize}");
+            string tileFolder = Path.Combine(_instanceTileCacheRoot, $"{cellSize}");
             return Path.Combine(tileFolder, $"{tileX}_{tileY}.png");
         }
 
-       
+        
 
         /// <summary>
         /// Safely converts an ImageSharp image to a new, independent SKBitmap by copying pixel data.
@@ -427,7 +437,7 @@ namespace Economy_sim
             return bmp;
         }
 
-       
+        
 
         public async Task PreloadTilesAsync(int zoomLevel, SKRectI view, int radius = 1, CancellationToken token = default)
         {
@@ -475,7 +485,7 @@ namespace Economy_sim
 
         private async Task SaveTileToDiskAsync(int cellSize, int tileX, int tileY, SKBitmap bmp, CancellationToken token)
         {
-            string dir = Path.Combine(TileCacheDir, cellSize.ToString());
+            string dir = Path.Combine(_instanceTileCacheRoot, cellSize.ToString());
             string path = Path.Combine(dir, $"{tileX}_{tileY}.png");
 
             try
@@ -529,6 +539,12 @@ namespace Economy_sim
             SKBitmap bmp = ImageSharpToSkBitmap(imageSharpImage);
 
             return bmp;
+        }
+
+        public float GetEffectiveScaleForZoom(int zoomLevel)
+        {
+            // Keep a constant scale for all zoom levels to avoid dramatic first step
+            return 1.0f;
         }
     }
 }
