@@ -24,6 +24,9 @@ namespace Economy_sim
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
         
+        // Population density cache
+        private SKBitmap? _populationDensityMap = null;
+        
         // Distinct base size for political layer
         public int PoliticalBaseWidth { get; }
         public int PoliticalBaseHeight { get; }
@@ -157,6 +160,10 @@ namespace Economy_sim
                     }
                     break;
                 
+                case MapViewType.PopulationDensity:
+                    result = GetPopulationDensityView(viewArea);
+                    break;
+                
                 default:
                     result = null;
                     break;
@@ -173,6 +180,45 @@ namespace Economy_sim
             canvas.DrawBitmap(source, new SKRect(0, 0, width, height));
             canvas.Flush();
             return resized;
+        }
+
+        private SKBitmap? GetPopulationDensityView(SKRectI viewArea)
+        {
+            // Generate or get cached population density map
+            if (_populationDensityMap == null)
+            {
+                _populationDensityMap = PopulationDensityRenderer.GeneratePopulationDensityMap();
+                if (_populationDensityMap == null)
+                    return null;
+            }
+
+            // Extract the requested view area from the full population density map
+            var sourceRect = new SKRectI(
+                viewArea.Left,
+                viewArea.Top,
+                Math.Min(viewArea.Right, _populationDensityMap.Width),
+                Math.Min(viewArea.Bottom, _populationDensityMap.Height)
+            );
+
+            // Clamp source rectangle to valid bounds
+            sourceRect.Left = Math.Max(0, sourceRect.Left);
+            sourceRect.Top = Math.Max(0, sourceRect.Top);
+            sourceRect.Right = Math.Min(_populationDensityMap.Width, sourceRect.Right);
+            sourceRect.Bottom = Math.Min(_populationDensityMap.Height, sourceRect.Bottom);
+
+            if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
+                return null;
+
+            // Create the result bitmap
+            var result = new SKBitmap(viewArea.Width, viewArea.Height);
+            using var canvas = new SKCanvas(result);
+            canvas.Clear(new SKColor(139, 0, 0)); // Dark red background for areas with no data
+
+            // Draw the population density map section
+            var destRect = new SKRect(0, 0, sourceRect.Width, sourceRect.Height);
+            canvas.DrawBitmap(_populationDensityMap, sourceRect, destRect);
+
+            return result;
         }
 
         private SKRectI ConvertTerrainViewToPoliticalView(SKRectI terrainView, int zoomLevel)
@@ -483,6 +529,8 @@ namespace Economy_sim
         {
             _politicalTileManager?.Dispose();
             _stateManager?.Dispose();
+            _populationDensityMap?.Dispose();
+            _populationDensityMap = null;
         }
 
         private static IEnumerable<(int dx, int dy)> GetSpiralOffsets(int radius)

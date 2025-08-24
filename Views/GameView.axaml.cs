@@ -866,6 +866,9 @@ namespace Economy_sim
             if (this.FindControl<Button>("PoliticalViewButton") is Button politicalBtn)
                 politicalBtn.Click += OnPoliticalViewClicked;
 
+            if (this.FindControl<Button>("PlaceHolder1Button") is Button populationBtn)
+                populationBtn.Click += OnPopulationDensityViewClicked;
+
             if (this.FindControl<Button>("MenuButton") is Button menuBtn)
                 menuBtn.Click += OnMenuClicked;
 
@@ -1469,6 +1472,13 @@ namespace Economy_sim
             QueueRender(immediate: true);
         }
 
+        private void OnPopulationDensityViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Population density view button clicked - switching to population density view");
+            _mapManager.SetViewType(MapViewType.PopulationDensity);
+            QueueRender(immediate: true);
+        }
+
         private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
         {
             Debug.WriteLine($"Map view type changed to: {viewType}");
@@ -1513,6 +1523,13 @@ namespace Economy_sim
             {
                 politicalBtn.Background = _mapManager.CurrentViewType == MapViewType.Political 
                     ? Avalonia.Media.Brushes.DarkRed 
+                    : Avalonia.Media.Brushes.DarkSlateGray;
+            }
+
+            if (this.FindControl<Button>("PlaceHolder1Button") is Button populationBtn)
+            {
+                populationBtn.Background = _mapManager.CurrentViewType == MapViewType.PopulationDensity
+                    ? Avalonia.Media.Brushes.DarkGreen
                     : Avalonia.Media.Brushes.DarkSlateGray;
             }
         }
