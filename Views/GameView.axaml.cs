@@ -309,7 +309,7 @@ namespace Economy_sim
                 if (!_hasPanned && _mapManager.CurrentViewType == MapViewType.Political)
                 {
                     var mousePos = e.GetPosition(this.MapImage);
-                    SelectCountryAtPosition((int)mousePos.X, (int)mousePos.Y);
+                    HandleSelectionAtPosition((int)mousePos.X, (int)mousePos.Y);
                 }
                 
                 _hasPanned = false;
@@ -434,58 +434,90 @@ namespace Economy_sim
         }
 
         /// <summary>
-        /// Selects a country at the specified screen position (left-click)
+        /// Handles selection at the specified screen position (left-click)
+        /// Selects countries or states based on current selection state
         /// </summary>
-        private void SelectCountryAtPosition(int screenX, int screenY)
+        private void HandleSelectionAtPosition(int screenX, int screenY)
         {
             try
             {
                 // Validate inputs
                 if (screenX < 0 || screenY < 0 || _mapManager == null)
                 {
-                    Debug.WriteLine($"[COUNTRY SELECTION] Invalid input: screenX={screenX}, screenY={screenY}, mapManager={_mapManager != null}");
+                    Debug.WriteLine($"[SELECTION] Invalid input: screenX={screenX}, screenY={screenY}, mapManager={_mapManager != null}");
                     return;
                 }
 
-                // Only select countries when in political view mode
+                // Only handle selection when in political view mode
                 if (_mapManager.CurrentViewType != MapViewType.Political)
                 {
-                    Debug.WriteLine($"[COUNTRY SELECTION] Country selection only available in political view mode (current: {_mapManager.CurrentViewType})");
+                    Debug.WriteLine($"[SELECTION] Selection only available in political view mode (current: {_mapManager.CurrentViewType})");
                     return;
                 }
 
                 var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                var currentSelectedCountry = _mapManager.SelectedCountry;
                 
                 if (country != null)
                 {
-                    // Select the country (will show white borders)
-                    _mapManager.SelectCountry(country);
-                    
-                    string message = $"Selected: {country.CountryName} ({country.CountryCode})";
-                    Debug.WriteLine($"[COUNTRY SELECTED] {message}");
-                    
-                    // Update UI feedback
-                    ShowCountrySelectionFeedback(country, screenX, screenY);
+                    // If no country is currently selected, or clicking on a different country
+                    if (currentSelectedCountry == null || currentSelectedCountry.CountryCode != country.CountryCode)
+                    {
+                        // Select the new country (this will clear any state selection)
+                        _mapManager.SelectCountry(country);
+                        
+                        string message = $"Selected country: {country.CountryName} ({country.CountryCode})";
+                        Debug.WriteLine($"[COUNTRY SELECTED] {message}");
+                        
+                        // Update UI feedback
+                        ShowCountrySelectionFeedback(country, screenX, screenY);
+                    }
+                    else
+                    {
+                        // Same country is selected, try to select a state within it
+                        var state = _mapManager.GetStateAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                        
+                        if (state != null && state.CountryCode.Equals(country.CountryCode, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _mapManager.SelectState(state);
+                            
+                            string message = $"Selected state: {state.StateName} in {state.CountryName}";
+                            Debug.WriteLine($"[STATE SELECTED] {message}");
+                            
+                            // Update UI feedback for state selection
+                            ShowStateSelectionFeedback(state, screenX, screenY);
+                        }
+                        else
+                        {
+                            // Clear state selection if clicking on a different state or no state found
+                            _mapManager.ClearStateSelection();
+                            Debug.WriteLine($"[STATE SELECTION] No valid state found at position ({screenX}, {screenY}) - cleared state selection");
+                            
+                            // Show country feedback since country is still selected
+                            ShowCountrySelectionFeedback(country, screenX, screenY);
+                        }
+                    }
 
-                    // Force immediate re-render to display white borders right away
+                    // Force immediate re-render to display borders
                     QueueRender(immediate: true);
                 }
                 else
                 {
-                    // Clear selection if clicking on water/empty area
+                    // Clear all selections if clicking on water/empty area
                     _mapManager.ClearCountrySelection();
-                    Debug.WriteLine($"[COUNTRY SELECTION] No country found at position ({screenX}, {screenY}) - cleared selection");
+                    _mapManager.ClearStateSelection();
+                    Debug.WriteLine($"[SELECTION] No country found at position ({screenX}, {screenY}) - cleared all selections");
                     
                     ShowCountrySelectionFeedback(null, screenX, screenY);
 
-                    // Force immediate re-render to remove any previous highlight
+                    // Force immediate re-render to remove any previous highlights
                     QueueRender(immediate: true);
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[COUNTRY SELECTION ERROR] {ex.Message}");
-                Debug.WriteLine($"[COUNTRY SELECTION ERROR] Stack trace: {ex.StackTrace}");
+                Debug.WriteLine($"[SELECTION ERROR] {ex.Message}");
+                Debug.WriteLine($"[SELECTION ERROR] Stack trace: {ex.StackTrace}");
             }
         }
         
@@ -507,6 +539,33 @@ namespace Economy_sim
                     {
                         this.Title = "Economy Sim - No country selected";
                         Debug.WriteLine("[SELECTION FEEDBACK] No country selected");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[SELECTION FEEDBACK ERROR] {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// Shows visual feedback for state selection
+        /// </summary>
+        private void ShowStateSelectionFeedback(StateBorderManager.StateFeature? state, int screenX, int screenY)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (state != null)
+                    {
+                        this.Title = $"Economy Sim - STATE: {state.StateName}, {state.CountryName} ({state.CountryCode})";
+                        Debug.WriteLine($"[SELECTION FEEDBACK] State selected: {state.StateName} in {state.CountryName}");
+                    }
+                    else
+                    {
+                        this.Title = "Economy Sim - No state selected";
+                        Debug.WriteLine("[SELECTION FEEDBACK] No state selected");
                     }
                 }
                 catch (Exception ex)

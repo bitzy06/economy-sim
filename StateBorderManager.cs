@@ -592,6 +592,21 @@ namespace Economy_sim
             _selectedStateCode = state?.RasterCode ?? -1;
         }
 
+        /// <summary>
+        /// Gets the state grid for rendering state borders
+        /// </summary>
+        public int[,]? GetStateGrid()
+        {
+            if (!_dataLoaded) LoadStateData();
+            EnsureStateGridBuilt();
+            return _stateGrid;
+        }
+
+        /// <summary>
+        /// Gets the currently selected state raster code
+        /// </summary>
+        public int GetSelectedStateCode() => _selectedStateCode;
+
         public void RenderStateFills(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize)
         {
             if (!_dataLoaded) LoadStateData();

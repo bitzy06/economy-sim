@@ -52,6 +52,10 @@ namespace Economy_sim
         private IndexedCountryFeature? _selectedCountry = null;
         private readonly object _selectionLock = new object();
         private int _selectedRasterCode = -1;
+        
+        // State management
+        private StateBorderManager? _stateManager = null;
+        private int _selectedStateCode = -1;
 
         // Caches
         private readonly ConcurrentDictionary<string, CacheEntry> _tileCache = new();
@@ -152,6 +156,32 @@ namespace Economy_sim
             {
                 _selectedCountry = country;
                 _selectedRasterCode = country?.RasterCode ?? -1;
+                try
+                {
+                    if (_gridEngine.HasDirtyTiles())
+                    {
+                        var dirty = _gridEngine.GetDirtyTiles(clearAfterGet: true);
+                        ClearTilesFromCache(dirty);
+                    }
+                    else
+                    {
+                        ClearTileCache();
+                    }
+                }
+                catch { ClearTileCache(); }
+            }
+        }
+
+        public void SetStateManager(StateBorderManager? stateManager)
+        {
+            _stateManager = stateManager;
+        }
+
+        public void SetSelectedState(StateBorderManager.StateFeature? state)
+        {
+            lock (_selectionLock)
+            {
+                _selectedStateCode = state?.RasterCode ?? -1;
                 try
                 {
                     if (_gridEngine.HasDirtyTiles())
@@ -507,7 +537,10 @@ namespace Economy_sim
                     await _tileGenSemaphore.WaitAsync().ConfigureAwait(false);
                     try
                     {
-                        var bmpInner = _gridRenderer.RenderGridTile(tileX, tileY, TileSizePx, _selectedRasterCode, 0);
+                        var stateGrid = _stateManager?.GetStateGrid();
+                        var selectedCountryCode = _selectedCountry?.CountryCode;
+                        var bmpInner = _gridRenderer.RenderGridTile(tileX, tileY, TileSizePx, _selectedRasterCode, 0,
+                            selectedCountryCode, stateGrid, _selectedStateCode);
                         if (bmpInner != null) CacheTile(cacheKey, bmpInner);
                         onComplete?.Invoke();
                         return bmpInner;
@@ -551,7 +584,10 @@ namespace Economy_sim
                         onComplete?.Invoke();
                         return water;
                     }
-                    var bmp = _gridRenderer.RenderGridTile(tileX, tileY, TileSizePx, _selectedRasterCode, 0);
+                    var stateGrid = _stateManager?.GetStateGrid();
+                    var selectedCountryCode = _selectedCountry?.CountryCode;
+                    var bmp = _gridRenderer.RenderGridTile(tileX, tileY, TileSizePx, _selectedRasterCode, 0,
+                        selectedCountryCode, stateGrid, _selectedStateCode);
                     if (bmp != null)
                     {
                         CacheTile($"tile_{tileX}_{tileY}_{_politicalMapDate:yyyyMMdd}", bmp);

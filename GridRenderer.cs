@@ -19,8 +19,10 @@ namespace Economy_sim
         
         // Border rendering settings
         private const uint WaterColor = 0xFF87CEEB; // LightSkyBlue
-        private const uint WhiteBorderColor = 0xFFFFFFFF;
-        private const uint BlackBorderColor = 0xFF000000;
+        private const uint WhiteBorderColor = 0xFFFFFFFF; // Country selection border
+        private const uint BlackBorderColor = 0xFF000000; // Regular country border
+        private const uint YellowBorderColor = 0xFFFFFF00; // State border
+        private const uint BlueBorderColor = 0xFF0080FF; // State selection border
 
         // Thread-safe random for visual variation
         private static readonly ThreadLocal<Random> ThreadLocalRandom = new ThreadLocal<Random>(
@@ -35,7 +37,8 @@ namespace Economy_sim
         /// <summary>
         /// Render a tile from the grid to a bitmap (tileSize = output pixels and grid cells span).
         /// </summary>
-        public SKBitmap? RenderGridTile(int tileX, int tileY, int tileSize, int selectedCountryId = -1, int lodLevel = 0)
+        public SKBitmap? RenderGridTile(int tileX, int tileY, int tileSize, int selectedCountryId = -1, int lodLevel = 0, 
+            string? selectedCountryCode = null, int[,]? stateGrid = null, int selectedStateId = -1)
         {
             try
             {
@@ -66,7 +69,8 @@ namespace Economy_sim
                 bitmap.Erase(new SKColor(WaterColor));
 
                 RenderColorsToTile(bitmap, controlGrid, startX, startY, actualWidth, actualHeight, tileSize);
-                RenderBordersToTile(bitmap, controlGrid, startX, startY, actualWidth, actualHeight, tileSize, selectedCountryId);
+                RenderBordersToTile(bitmap, controlGrid, startX, startY, actualWidth, actualHeight, tileSize, 
+                    selectedCountryId, selectedCountryCode, stateGrid, selectedStateId);
 
                 return bitmap;
             }
@@ -83,7 +87,8 @@ namespace Economy_sim
         /// tileGridSize defines the span in grid cells for this tile (typically 512).
         /// outputTilePixels defines the bitmap size to render (e.g., 512 * pixelsPerCell).
         /// </summary>
-        public SKBitmap? RenderGridTileScaled(int tileX, int tileY, int tileGridSize, int outputTilePixels, int selectedCountryId = -1, int lodLevel = 0)
+        public SKBitmap? RenderGridTileScaled(int tileX, int tileY, int tileGridSize, int outputTilePixels, int selectedCountryId = -1, int lodLevel = 0,
+            string? selectedCountryCode = null, int[,]? stateGrid = null, int selectedStateId = -1)
         {
             try
             {
@@ -112,7 +117,8 @@ namespace Economy_sim
                 bitmap.Erase(new SKColor(WaterColor));
 
                 RenderColorsToTile(bitmap, controlGrid, startX, startY, actualWidth, actualHeight, outputTilePixels);
-                RenderBordersToTile(bitmap, controlGrid, startX, startY, actualWidth, actualHeight, outputTilePixels, selectedCountryId);
+                RenderBordersToTile(bitmap, controlGrid, startX, startY, actualWidth, actualHeight, outputTilePixels, 
+                    selectedCountryId, selectedCountryCode, stateGrid, selectedStateId);
 
                 return bitmap;
             }
@@ -180,7 +186,8 @@ namespace Economy_sim
         /// <summary>
         /// Render borders to a tile bitmap, properly mapping grid to tile coordinates
         /// </summary>
-        private void RenderBordersToTile(SKBitmap bitmap, int[,] controlGrid, int gridStartX, int gridStartY, int gridWidth, int gridHeight, int tilePixels, int selectedCountryId)
+        private void RenderBordersToTile(SKBitmap bitmap, int[,] controlGrid, int gridStartX, int gridStartY, int gridWidth, int gridHeight, int tilePixels, 
+            int selectedCountryId, string? selectedCountryCode = null, int[,]? stateGrid = null, int selectedStateId = -1)
         {
             unsafe
             {
@@ -188,6 +195,12 @@ namespace Economy_sim
                 int stride = bitmap.RowBytes / 4;
                 int gridFullWidth = controlGrid.GetLength(1);
                 int gridFullHeight = controlGrid.GetLength(0);
+
+                // Get state grid dimensions (should match control grid)
+                int stateGridWidth = stateGrid?.GetLength(1) ?? 0;
+                int stateGridHeight = stateGrid?.GetLength(0) ?? 0;
+                bool hasValidStateGrid = stateGrid != null && 
+                    stateGridWidth == gridFullWidth && stateGridHeight == gridFullHeight;
 
                 Parallel.For(0, tilePixels, y =>
                 {
@@ -199,12 +212,17 @@ namespace Economy_sim
                         if (gridX >= gridFullWidth || gridY >= gridFullHeight || gridX < 0 || gridY < 0)
                             continue;
 
-                        int currentId = controlGrid[gridY, gridX];
-                        if (currentId == 0)
+                        int currentCountryId = controlGrid[gridY, gridX];
+                        if (currentCountryId == 0)
                             continue;
 
-                        bool isBorder = false;
-                        bool hasSelectedNeighbor = false;
+                        // Get current state id if state grid is available
+                        int currentStateId = hasValidStateGrid ? stateGrid![gridY, gridX] : 0;
+
+                        bool isCountryBorder = false;
+                        bool isStateBorder = false;
+                        bool hasSelectedCountryNeighbor = false;
+                        bool hasSelectedStateNeighbor = false;
 
                         var neighbors = new[]
                         {
@@ -216,26 +234,60 @@ namespace Economy_sim
 
                         foreach (var (nx, ny) in neighbors)
                         {
-                            int neighborId = 0; 
+                            int neighborCountryId = 0;
+                            int neighborStateId = 0;
+                            
                             if (nx >= 0 && nx < gridFullWidth && ny >= 0 && ny < gridFullHeight)
                             {
-                                neighborId = controlGrid[ny, nx];
+                                neighborCountryId = controlGrid[ny, nx];
+                                if (hasValidStateGrid)
+                                    neighborStateId = stateGrid![ny, nx];
                             }
-                            if (neighborId != currentId)
+
+                            // Check for country borders
+                            if (neighborCountryId != currentCountryId)
                             {
-                                isBorder = true;
+                                isCountryBorder = true;
                             }
+
+                            // Check for state borders (only within the same country)
+                            if (hasValidStateGrid && neighborCountryId == currentCountryId && 
+                                neighborStateId != currentStateId && currentStateId != 0 && neighborStateId != 0)
+                            {
+                                isStateBorder = true;
+                            }
+
+                            // Check for selected country neighbors
                             if (selectedCountryId != -1 && 
-                                (currentId == selectedCountryId || neighborId == selectedCountryId))
+                                (currentCountryId == selectedCountryId || neighborCountryId == selectedCountryId))
                             {
-                                hasSelectedNeighbor = true;
+                                hasSelectedCountryNeighbor = true;
+                            }
+
+                            // Check for selected state neighbors
+                            if (selectedStateId != -1 && hasValidStateGrid &&
+                                (currentStateId == selectedStateId || neighborStateId == selectedStateId))
+                            {
+                                hasSelectedStateNeighbor = true;
                             }
                         }
 
-                        if (isBorder)
+                        // Priority order: State selection > Country selection > State border > Country border
+                        if (hasSelectedStateNeighbor && isStateBorder)
                         {
-                            uint borderColor = hasSelectedNeighbor ? WhiteBorderColor : BlackBorderColor;
-                            pixelPtr[y * stride + x] = borderColor;
+                            pixelPtr[y * stride + x] = BlueBorderColor; // Blue for selected state
+                        }
+                        else if (hasSelectedCountryNeighbor && isCountryBorder)
+                        {
+                            pixelPtr[y * stride + x] = WhiteBorderColor; // White for selected country
+                        }
+                        else if (isStateBorder && selectedCountryId != -1 && currentCountryId == selectedCountryId)
+                        {
+                            pixelPtr[y * stride + x] = YellowBorderColor; // Yellow for state borders in selected country
+                        }
+                        else if (isCountryBorder)
+                        {
+                            pixelPtr[y * stride + x] = BlackBorderColor; // Black for regular country borders
                         }
                     }
                 });

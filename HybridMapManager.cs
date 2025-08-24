@@ -30,13 +30,16 @@ namespace Economy_sim
         public int PoliticalBaseHeight { get; }
         
         private IndexedCountryFeature? _selectedCountry = null;
+        private StateBorderManager.StateFeature? _selectedState = null;
         
         public MapViewType CurrentViewType => _currentViewType;
         public DateTime PoliticalMapDate => _politicalMapDate;
         public IndexedCountryFeature? SelectedCountry => _selectedCountry;
+        public StateBorderManager.StateFeature? SelectedState => _selectedState;
         
         public event EventHandler<MapViewType>? ViewTypeChanged;
         public event EventHandler<IndexedCountryFeature?>? SelectedCountryChanged;
+        public event EventHandler<StateBorderManager.StateFeature?>? SelectedStateChanged;
         
         public HybridMapManager(int baseWidth = (4096*4), int baseHeight = (2048*4), int? politicalBaseWidth = null, int? politicalBaseHeight = null)
         {
@@ -50,6 +53,9 @@ namespace Economy_sim
 
             _politicalTileManager = new PoliticalTileManager(_politicalManager, PoliticalBaseWidth, PoliticalBaseHeight);
             _stateManager = new StateBorderManager(PoliticalBaseWidth, PoliticalBaseHeight);
+            
+            // Connect state manager to political tile manager
+            _politicalTileManager.SetStateManager(_stateManager);
         }
         
         private static int ParseEnvOrDefault(string key, int def)
@@ -378,11 +384,35 @@ namespace Economy_sim
             {
                 _selectedCountry = country;
                 _politicalTileManager.SetSelectedCountry(country);
+                
+                // Clear state selection when selecting a different country
+                if (_selectedState != null)
+                {
+                    _selectedState = null;
+                    _stateManager.SetSelectedState(null);
+                    _politicalTileManager.SetSelectedState(null);
+                    SelectedStateChanged?.Invoke(this, null);
+                }
+                
                 SelectedCountryChanged?.Invoke(this, country);
                 Debug.WriteLine($"Country selection changed: {(country != null ? $"{country.CountryName} ({country.CountryCode})" : "None")}");
             }
         }
+        
+        public void SelectState(StateBorderManager.StateFeature? state)
+        {
+            if (_selectedState != state)
+            {
+                _selectedState = state;
+                _stateManager.SetSelectedState(state);
+                _politicalTileManager.SetSelectedState(state);
+                SelectedStateChanged?.Invoke(this, state);
+                Debug.WriteLine($"State selection changed: {(state != null ? $"{state.StateName} in {state.CountryName}" : "None")}");
+            }
+        }
+        
         public void ClearCountrySelection() => SelectCountry(null);
+        public void ClearStateSelection() => SelectState(null);
 
         public List<CachedCountryData> GetAllCountryData() => _politicalTileManager.GetAllCountryData();
         public PoliticalDataCache GetPoliticalDataCache() => _politicalTileManager.GetDataCache();
@@ -408,7 +438,7 @@ namespace Economy_sim
             }
             catch (Exception ex) { Debug.WriteLine($"Error detecting state at pixel ({pixelX}, {pixelY}): {ex.Message}"); return null; }
         }
-        public void SetSelectedState(StateBorderManager.StateFeature? state) => _stateManager.SetSelectedState(state);
+        public void SetSelectedState(StateBorderManager.StateFeature? state) => SelectState(state);
         public void RenderStateFills(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize) => _stateManager.RenderStateFills(canvas, viewport, mapPixelSize);
         public void RenderStateBorders(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize, float borderWidth = 1.0f, SKColor? borderColor = null) => _stateManager.RenderStateBorders(canvas, viewport, mapPixelSize, borderWidth, borderColor);
         public void ChangeStateControlAtGrid(int rasterCode, IEnumerable<Point> cells) => _stateManager.ChangeControlAtGrid(rasterCode, cells);
