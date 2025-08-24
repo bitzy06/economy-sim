@@ -18,20 +18,17 @@ namespace Economy_sim
         private readonly MultiResolutionMapManager _terrainManager;
         private readonly PoliticalBorderManager _politicalManager;
         private readonly PoliticalTileManager _politicalTileManager;
-        // Unified: manage states here
         private readonly StateBorderManager _stateManager;
         
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
         
-        // Population density cache
         private SKBitmap? _populationDensityMap = null;
+        private bool _populationLoadAttempted = false; 
         
-        // Distinct base size for political layer
         public int PoliticalBaseWidth { get; }
         public int PoliticalBaseHeight { get; }
         
-        // Selected country tracking for white border highlighting
         private IndexedCountryFeature? _selectedCountry = null;
         
         public MapViewType CurrentViewType => _currentViewType;
@@ -66,14 +63,32 @@ namespace Economy_sim
             if (_currentViewType != viewType)
             {
                 _currentViewType = viewType;
-                ViewTypeChanged?.Invoke(this, viewType);
                 
-                // Clear terrain cache when switching to political to save memory
                 if (viewType == MapViewType.Political)
                 {
-                    // Force garbage collection of terrain tiles to free memory
                     GC.Collect();
                 }
+                else if (viewType == MapViewType.PopulationDensity)
+                {
+                    // Synchronous generation on first switch so base zoom shows real data immediately
+                    if (!_populationLoadAttempted || _populationDensityMap == null)
+                    {
+                        _populationLoadAttempted = true;
+                        try
+                        {
+                            _populationDensityMap = PopulationDensityRenderer.GeneratePopulationDensityMap();
+                            Debug.WriteLine(_populationDensityMap != null
+                                ? "[PopulationDensity] Generated synchronously on view switch."
+                                : "[PopulationDensity] Generation returned null; will use fallback.");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[PopulationDensity] Synchronous generation failed: {ex.Message}");
+                        }
+                    }
+                }
+                
+                ViewTypeChanged?.Invoke(this, viewType);
             }
         }
         
@@ -161,7 +176,20 @@ namespace Economy_sim
                     break;
                 
                 case MapViewType.PopulationDensity:
-                    result = GetPopulationDensityView(viewArea);
+                    // Ensure map exists synchronously if not already
+                    if (_populationDensityMap == null && !_populationLoadAttempted)
+                    {
+                        _populationLoadAttempted = true;
+                        try
+                        {
+                            _populationDensityMap = PopulationDensityRenderer.GeneratePopulationDensityMap();
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[PopulationDensity] Late synchronous generation failed: {ex.Message}");
+                        }
+                    }
+                    result = GetPopulationDensityView(viewArea, zoomLevel) ?? CreatePopulationFallback(viewArea.Width, viewArea.Height, "Null view");
                     break;
                 
                 default:
@@ -182,43 +210,58 @@ namespace Economy_sim
             return resized;
         }
 
-        private SKBitmap? GetPopulationDensityView(SKRectI viewArea)
+        private SKBitmap? GetPopulationDensityView(SKRectI viewArea, int zoomLevel)
         {
-            // Generate or get cached population density map
-            if (_populationDensityMap == null)
+            try
             {
-                _populationDensityMap = PopulationDensityRenderer.GeneratePopulationDensityMap();
                 if (_populationDensityMap == null)
-                    return null;
+                {
+                    return CreatePopulationFallback(viewArea.Width, viewArea.Height, "No data (still null)");
+                }
+                int cellSize = GetCellSizeForZoom(zoomLevel);
+                int terrainPixelWidth = BaseWidth * cellSize;
+                int terrainPixelHeight = BaseHeight * cellSize;
+                double sx = _populationDensityMap.Width / (double)terrainPixelWidth;
+                double sy = _populationDensityMap.Height / (double)terrainPixelHeight;
+                var sourceRect = new SKRectI(
+                    (int)(viewArea.Left * sx),
+                    (int)(viewArea.Top * sy),
+                    (int)(viewArea.Right * sx),
+                    (int)(viewArea.Bottom * sy));
+                sourceRect.Left = Math.Max(0, sourceRect.Left);
+                sourceRect.Top = Math.Max(0, sourceRect.Top);
+                sourceRect.Right = Math.Min(_populationDensityMap.Width, sourceRect.Right);
+                sourceRect.Bottom = Math.Min(_populationDensityMap.Height, sourceRect.Bottom);
+                if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
+                    return CreatePopulationFallback(viewArea.Width, viewArea.Height, "Empty rect");
+                var result = new SKBitmap(viewArea.Width, viewArea.Height);
+                using var canvas = new SKCanvas(result);
+                canvas.Clear(new SKColor(15, 15, 15));
+                canvas.DrawBitmap(_populationDensityMap, sourceRect, new SKRect(0,0, viewArea.Width, viewArea.Height));
+                return result;
             }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Population density view error: {ex.Message}");
+                return CreatePopulationFallback(viewArea.Width, viewArea.Height, ex.GetType().Name);
+            }
+        }
 
-            // Extract the requested view area from the full population density map
-            var sourceRect = new SKRectI(
-                viewArea.Left,
-                viewArea.Top,
-                Math.Min(viewArea.Right, _populationDensityMap.Width),
-                Math.Min(viewArea.Bottom, _populationDensityMap.Height)
-            );
-
-            // Clamp source rectangle to valid bounds
-            sourceRect.Left = Math.Max(0, sourceRect.Left);
-            sourceRect.Top = Math.Max(0, sourceRect.Top);
-            sourceRect.Right = Math.Min(_populationDensityMap.Width, sourceRect.Right);
-            sourceRect.Bottom = Math.Min(_populationDensityMap.Height, sourceRect.Bottom);
-
-            if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
-                return null;
-
-            // Create the result bitmap
-            var result = new SKBitmap(viewArea.Width, viewArea.Height);
-            using var canvas = new SKCanvas(result);
-            canvas.Clear(new SKColor(139, 0, 0)); // Dark red background for areas with no data
-
-            // Draw the population density map section
-            var destRect = new SKRect(0, 0, sourceRect.Width, sourceRect.Height);
-            canvas.DrawBitmap(_populationDensityMap, sourceRect, destRect);
-
-            return result;
+        private SKBitmap CreatePopulationFallback(int width, int height, string reason)
+        {
+            var bmp = new SKBitmap(Math.Max(1, width), Math.Max(1, height));
+            using var canvas = new SKCanvas(bmp);
+            using var paint = new SKPaint { IsAntialias = true };
+            for (int y = 0; y < height; y += 4)
+            {
+                float t = height > 1 ? (float)y / (height - 1) : 0f;
+                var color = SKColor.FromHsl(120f * t, 70, (byte)(20 + 40 * t));
+                paint.Color = color;
+                canvas.DrawRect(new SKRect(0, y, width, y + 4), paint);
+            }
+            using var textPaint = new SKPaint { Color = SKColors.White, TextSize = 12, IsAntialias = true };
+            canvas.DrawText(reason, 6, 16, textPaint);
+            return bmp;
         }
 
         private SKRectI ConvertTerrainViewToPoliticalView(SKRectI terrainView, int zoomLevel)
@@ -269,15 +312,13 @@ namespace Economy_sim
                     polBmp.Dispose();
                     return composed;
                 case MapViewLevel.States:
-                    // IMPORTANT: use political pixel space for states as well so selection math aligns with rendering
                     var polViewport = ConvertTerrainViewToPoliticalView(viewArea, zoomLevel);
                     int cell = GetCellSizeForZoom(zoomLevel);
                     var politicalPixelSize = new SKSizeI(PoliticalBaseWidth * cell, PoliticalBaseHeight * cell);
-
                     var bmp = new SKBitmap(outputSize.Width, outputSize.Height);
                     using (var canvas = new SKCanvas(bmp))
                     {
-                        canvas.Clear(new SKColor(135, 206, 235)); // water background
+                        canvas.Clear(new SKColor(135, 206, 235));
                         _stateManager.RenderStateFills(canvas, polViewport, politicalPixelSize);
                         _stateManager.RenderStateBorders(canvas, polViewport, politicalPixelSize, 2.0f, SKColors.Black);
                     }
@@ -287,42 +328,22 @@ namespace Economy_sim
             }
         }
         
-        public SKSizeI GetMapSize(int zoomLevel)
-        {
-            return _terrainManager.GetMapSize(zoomLevel);
-        }
-        
-        public int GetCellSizeForZoom(int zoomLevel)
-        {
-            return _terrainManager.GetCellSizeForZoom(zoomLevel);
-        }
-        
+        public SKSizeI GetMapSize(int zoomLevel) => _terrainManager.GetMapSize(zoomLevel);
+        public int GetCellSizeForZoom(int zoomLevel) => _terrainManager.GetCellSizeForZoom(zoomLevel);
         public int BaseWidth => _terrainManager.BaseWidth;
         public int BaseHeight => _terrainManager.BaseHeight;
 
-        /// <summary>
-        /// Gets the country at a specific pixel position (accounting for zoom and pan).
-        /// Includes a relaxed search radius around the cursor to make selection easier.
-        /// Corrects for extra min-zoom scaling so mouse picks align in both views.
-        /// </summary>
         public IndexedCountryFeature? GetCountryAtPixel(int pixelX, int pixelY, int zoomLevel, int viewOffsetX, int viewOffsetY)
         {
             try
             {
                 if (pixelX < 0 || pixelY < 0 || zoomLevel < 1) return null;
-
                 int cellSize = GetCellSizeForZoom(zoomLevel);
                 int tMapWidth = BaseWidth * cellSize;
                 int tMapHeight = BaseHeight * cellSize;
-
-                // Terrain space -> apply view offset
                 int tpx = pixelX + viewOffsetX;
                 int tpy = pixelY + viewOffsetY;
-
-                // Convert to political pixel space
                 var (ppx, ppy) = TerrainPixelToPoliticalPixel(tpx, tpy, zoomLevel);
-
-                // Spiral around to make picking robust
                 const int radius = 5;
                 for (int r = 0; r <= radius; r++)
                 {
@@ -356,208 +377,58 @@ namespace Economy_sim
             if (_selectedCountry != country)
             {
                 _selectedCountry = country;
-                
-                // Notify the political tile manager about the selection change
                 _politicalTileManager.SetSelectedCountry(country);
-                
-                // Notify listeners about the selection change
                 SelectedCountryChanged?.Invoke(this, country);
-                
                 Debug.WriteLine($"Country selection changed: {(country != null ? $"{country.CountryName} ({country.CountryCode})" : "None")}");
             }
         }
+        public void ClearCountrySelection() => SelectCountry(null);
 
-        public void ClearCountrySelection()
-        {
-            SelectCountry(null);
-        }
-
-        // ----- New helpers for editor integration ----
-
-        public List<CachedCountryData> GetAllCountryData()
-        {
-            return _politicalTileManager.GetAllCountryData();
-        }
-
-        public PoliticalDataCache GetPoliticalDataCache()
-        {
-            return _politicalTileManager.GetDataCache();
-        }
-
+        public List<CachedCountryData> GetAllCountryData() => _politicalTileManager.GetAllCountryData();
+        public PoliticalDataCache GetPoliticalDataCache() => _politicalTileManager.GetDataCache();
         public IndexedCountryFeature? FindCountryByName(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return null;
-            var all = _politicalTileManager.GetAllCountryData();
-            var match = all.Find(c => string.Equals(c.CountryName, name, StringComparison.OrdinalIgnoreCase));
-            if (match == null) return null;
-            // Convert to feature using political manager helper
-            return _politicalTileManager.GetCountryFeatureByRasterCode(match.RasterCode);
-        }
-
-        public void ChangeCountryControlAtGrid(int rasterCode, IEnumerable<Point> cells)
-        {
-            _politicalTileManager.ChangeControl(rasterCode, cells);
-        }
-
-        // Optimized rectangle change for countries
+        { if (string.IsNullOrWhiteSpace(name)) return null; var all = _politicalTileManager.GetAllCountryData(); var match = all.Find(c => string.Equals(c.CountryName, name, StringComparison.OrdinalIgnoreCase)); return match == null ? null : _politicalTileManager.GetCountryFeatureByRasterCode(match.RasterCode); }
+        public void ChangeCountryControlAtGrid(int rasterCode, IEnumerable<Point> cells) => _politicalTileManager.ChangeControl(rasterCode, cells);
         public void ChangeCountryControlRect(int rasterCode, Rectangle region)
-        {
-            IEnumerable<Point> Cells()
-            {
-                int x0 = Math.Max(0, region.Left);
-                int y0 = Math.Max(0, region.Top);
-                int x1 = Math.Min(PoliticalBaseWidth, region.Right);
-                int y1 = Math.Min(PoliticalBaseHeight, region.Bottom);
-                for (int y = y0; y < y1; y++)
-                    for (int x = x0; x < x1; x++)
-                        yield return new Point(x, y);
-            }
-            _politicalTileManager.ChangeControl(rasterCode, Cells());
-        }
-
-        // Surface ChangeControlZeroSum from PoliticalTileManager
-        public List<(Point cell, int previousId)> ChangeCountryControlZeroSum(int rasterCode, IEnumerable<Point> brushCells)
-        {
-            return _politicalTileManager.ChangeControlZeroSum(rasterCode, brushCells);
-        }
-
-        // ----- Unified State layer wrappers -----
-        public List<StateBorderManager.StateFeature> GetAllStates()
-        {
-            return _stateManager.GetAllStates();
-        }
-
+        { IEnumerable<Point> Cells() { int x0 = Math.Max(0, region.Left); int y0 = Math.Max(0, region.Top); int x1 = Math.Min(PoliticalBaseWidth, region.Right); int y1 = Math.Min(PoliticalBaseHeight, region.Bottom); for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) yield return new Point(x, y); } _politicalTileManager.ChangeControl(rasterCode, Cells()); }
+        public List<(Point cell, int previousId)> ChangeCountryControlZeroSum(int rasterCode, IEnumerable<Point> brushCells) => _politicalTileManager.ChangeControlZeroSum(rasterCode, brushCells);
+        public List<StateBorderManager.StateFeature> GetAllStates() => _stateManager.GetAllStates();
         public StateBorderManager.StateFeature? GetStateAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
         {
             try
             {
                 if (pixelX < 0 || pixelY < 0 || zoomLevel < 1) return null;
-
                 int cellSize = GetCellSizeForZoom(zoomLevel);
-
-                // Convert terrain screen pixel + pan into terrain map pixel, then to political grid coords directly
                 int tpx = pixelX + viewOffset.X;
                 int tpy = pixelY + viewOffset.Y;
-
-                // Map from terrain pixel to political pixel
                 var (ppx, ppy) = TerrainPixelToPoliticalPixel(tpx, tpy, zoomLevel);
-
-                // Convert political pixel to political grid coordinate
-                int gx = ppx / cellSize;
-                int gy = ppy / cellSize;
-
-                // Spiral sample a few neighboring cells for robustness
-                const int radius = 3;
-                foreach (var (dx, dy) in GetSpiralOffsets(radius))
-                {
-                    var st = _stateManager.GetStateAtGrid(gx + dx, gy + dy);
-                    if (st != null) return st;
-                }
-
+                int gx = ppx / cellSize; int gy = ppy / cellSize; const int radius = 3;
+                foreach (var (dx, dy) in GetSpiralOffsets(radius)) { var st = _stateManager.GetStateAtGrid(gx + dx, gy + dy); if (st != null) return st; }
                 return null;
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error detecting state at pixel ({pixelX}, {pixelY}): {ex.Message}");
-                return null;
-            }
+            catch (Exception ex) { Debug.WriteLine($"Error detecting state at pixel ({pixelX}, {pixelY}): {ex.Message}"); return null; }
         }
-
-        public void SetSelectedState(StateBorderManager.StateFeature? state)
-        {
-            _stateManager.SetSelectedState(state);
-        }
-
-        public void RenderStateFills(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize)
-        {
-            _stateManager.RenderStateFills(canvas, viewport, mapPixelSize);
-        }
-
-        public void RenderStateBorders(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize, float borderWidth = 1.0f, SKColor? borderColor = null)
-        {
-            _stateManager.RenderStateBorders(canvas, viewport, mapPixelSize, borderWidth, borderColor);
-        }
-
-        public void ChangeStateControlAtGrid(int rasterCode, IEnumerable<Point> cells)
-        {
-            _stateManager.ChangeControlAtGrid(rasterCode, cells);
-        }
-
-        public void ChangeStateControlRect(int rasterCode, Rectangle region)
-        {
-            _stateManager.ChangeControlRect(rasterCode, region);
-        }
-
-        public List<(Point cell, int previousId)> ChangeStateControlZeroSum(int rasterCode, IEnumerable<Point> brushCells)
-        {
-            return _stateManager.ChangeControlZeroSum(rasterCode, brushCells);
-        }
-
-        public List<(Point cell, int previousId)> ChangeStateControlWaterOnly(int rasterCode, IEnumerable<Point> brushCells)
-        {
-            return _stateManager.ChangeControlWaterOnly(rasterCode, brushCells);
-        }
-
-        // ----- Unified overloads for both levels -----
-        public void ChangeAdminControlAtGrid(MapViewLevel level, int rasterCode, IEnumerable<Point> cells)
-        {
-            if (level == MapViewLevel.Countries) ChangeCountryControlAtGrid(rasterCode, cells);
-            else ChangeStateControlAtGrid(rasterCode, cells);
-        }
-
-        public void ChangeAdminControlRect(MapViewLevel level, int rasterCode, Rectangle region)
-        {
-            if (level == MapViewLevel.Countries) ChangeCountryControlRect(rasterCode, region);
-            else ChangeStateControlRect(rasterCode, region);
-        }
-
-        public List<(Point cell, int previousId)> ChangeAdminControlZeroSum(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells)
-        {
-            return level == MapViewLevel.Countries
-                ? ChangeCountryControlZeroSum(rasterCode, brushCells)
-                : ChangeStateControlZeroSum(rasterCode, brushCells);
-        }
-
-        public List<(Point cell, int previousId)> ChangeAdminControlWaterOnly(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells)
-        {
-            return level == MapViewLevel.Countries
-                ? new List<(Point cell, int previousId)>() // countries don't use water-only path
-                : ChangeStateControlWaterOnly(rasterCode, brushCells);
-        }
-
-        public void Dispose()
-        {
-            _politicalTileManager?.Dispose();
-            _stateManager?.Dispose();
-            _populationDensityMap?.Dispose();
-            _populationDensityMap = null;
-        }
-
+        public void SetSelectedState(StateBorderManager.StateFeature? state) => _stateManager.SetSelectedState(state);
+        public void RenderStateFills(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize) => _stateManager.RenderStateFills(canvas, viewport, mapPixelSize);
+        public void RenderStateBorders(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize, float borderWidth = 1.0f, SKColor? borderColor = null) => _stateManager.RenderStateBorders(canvas, viewport, mapPixelSize, borderWidth, borderColor);
+        public void ChangeStateControlAtGrid(int rasterCode, IEnumerable<Point> cells) => _stateManager.ChangeControlAtGrid(rasterCode, cells);
+        public void ChangeStateControlRect(int rasterCode, Rectangle region) => _stateManager.ChangeControlRect(rasterCode, region);
+        public List<(Point cell, int previousId)> ChangeStateControlZeroSum(int rasterCode, IEnumerable<Point> brushCells) => _stateManager.ChangeControlZeroSum(rasterCode, brushCells);
+        public List<(Point cell, int previousId)> ChangeStateControlWaterOnly(int rasterCode, IEnumerable<Point> brushCells) => _stateManager.ChangeControlWaterOnly(rasterCode, brushCells);
+        public void ChangeAdminControlAtGrid(MapViewLevel level, int rasterCode, IEnumerable<Point> cells) { if (level == MapViewLevel.Countries) ChangeCountryControlAtGrid(rasterCode, cells); else ChangeStateControlAtGrid(rasterCode, cells); }
+        public void ChangeAdminControlRect(MapViewLevel level, int rasterCode, Rectangle region) { if (level == MapViewLevel.Countries) ChangeCountryControlRect(rasterCode, region); else ChangeStateControlRect(rasterCode, region); }
+        public List<(Point cell, int previousId)> ChangeAdminControlZeroSum(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells) => level == MapViewLevel.Countries ? ChangeCountryControlZeroSum(rasterCode, brushCells) : ChangeStateControlZeroSum(rasterCode, brushCells);
+        public List<(Point cell, int previousId)> ChangeAdminControlWaterOnly(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells) => level == MapViewLevel.Countries ? new List<(Point cell, int previousId)>() : ChangeStateControlWaterOnly(rasterCode, brushCells);
+        public void Dispose() { _politicalTileManager?.Dispose(); _stateManager?.Dispose(); _populationDensityMap?.Dispose(); _populationDensityMap = null; }
         private static IEnumerable<(int dx, int dy)> GetSpiralOffsets(int radius)
         {
             yield return (0, 0);
             for (int r = 1; r <= radius; r++)
             {
-                for (int dy = -r; dy <= r; dy++)
-                {
-                    int dx = -r;
-                    yield return (dx, dy);
-                }
-                for (int dx = -r + 1; dx <= r; dx++)
-                {
-                    int dy = r;
-                    yield return (dx, dy);
-                }
-                for (int dy = r - 1; dy >= -r; dy--)
-                {
-                    int dx = r;
-                    yield return (dx, dy);
-                }
-                for (int dx = r - 1; dx >= -r + 1; dx--)
-                {
-                    int dy = -r;
-                    yield return (dx, dy);
-                }
+                for (int dy = -r; dy <= r; dy++) { int dx = -r; yield return (dx, dy); }
+                for (int dx = -r + 1; dx <= r; dx++) { int dy = r; yield return (dx, dy); }
+                for (int dy = r - 1; dy >= -r; dy--) { int dx = r; yield return (dx, dy); }
+                for (int dx = r - 1; dx >= -r + 1; dx--) { int dy = -r; yield return (dx, dy); }
             }
         }
     }
