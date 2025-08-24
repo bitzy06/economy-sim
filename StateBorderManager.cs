@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using MaxRev.Gdal.Core;
 using OSGeo.GDAL;
@@ -1016,6 +1017,229 @@ namespace Economy_sim
             if (!_stateGridBuilt)
             {
                 BuildStateGrid();
+            }
+        }
+
+        /// <summary>
+        /// Handles state/country border mismatches by splitting states across countries
+        /// and merging small fragments into neighboring states
+        /// </summary>
+        public void ProcessStateSplittingAndMerging(int[,] countryGrid)
+        {
+            if (!_dataLoaded) LoadStateData();
+            EnsureStateGridBuilt();
+            
+            if (_stateGrid == null || countryGrid == null)
+            {
+                Debug.WriteLine("[STATE SPLITTING] Missing required grids for processing");
+                return;
+            }
+
+            Debug.WriteLine("[STATE SPLITTING] Starting state splitting and merging process...");
+            
+            try
+            {
+                var stateCountryAnalysis = AnalyzeStateCountryOverlaps(countryGrid);
+                ProcessStateSplits(stateCountryAnalysis, countryGrid);
+                
+                Debug.WriteLine("[STATE SPLITTING] State splitting and merging completed");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[STATE SPLITTING] Error during processing: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Analyzes which states overlap with which countries and calculates sizes
+        /// </summary>
+        private Dictionary<int, Dictionary<int, int>> AnalyzeStateCountryOverlaps(int[,] countryGrid)
+        {
+            var stateCountryPixels = new Dictionary<int, Dictionary<int, int>>();
+            
+            int height = _stateGrid!.GetLength(0);
+            int width = _stateGrid.GetLength(1);
+            
+            // Count pixels for each state-country combination
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int stateCode = _stateGrid[y, x];
+                    int countryCode = y < countryGrid.GetLength(0) && x < countryGrid.GetLength(1) 
+                        ? countryGrid[y, x] : 0;
+                    
+                    if (stateCode > 0 && countryCode > 0)
+                    {
+                        if (!stateCountryPixels.ContainsKey(stateCode))
+                            stateCountryPixels[stateCode] = new Dictionary<int, int>();
+                        
+                        if (!stateCountryPixels[stateCode].ContainsKey(countryCode))
+                            stateCountryPixels[stateCode][countryCode] = 0;
+                        
+                        stateCountryPixels[stateCode][countryCode]++;
+                    }
+                }
+            }
+            
+            return stateCountryPixels;
+        }
+
+        /// <summary>
+        /// Processes state splits and merges small fragments
+        /// </summary>
+        private void ProcessStateSplits(Dictionary<int, Dictionary<int, int>> stateCountryAnalysis, int[,] countryGrid)
+        {
+            var statesToProcess = new List<int>();
+            
+            // Identify states that span multiple countries
+            foreach (var kvp in stateCountryAnalysis)
+            {
+                int stateCode = kvp.Key;
+                var countryPixels = kvp.Value;
+                
+                if (countryPixels.Count > 1)
+                {
+                    statesToProcess.Add(stateCode);
+                    
+                    int totalPixels = countryPixels.Values.Sum();
+                    Debug.WriteLine($"[STATE SPLITTING] State {stateCode} spans {countryPixels.Count} countries, total pixels: {totalPixels}");
+                    
+                    foreach (var countryKvp in countryPixels)
+                    {
+                        double percentage = (double)countryKvp.Value / totalPixels * 100;
+                        Debug.WriteLine($"  - Country {countryKvp.Key}: {countryKvp.Value} pixels ({percentage:F1}%)");
+                    }
+                }
+            }
+            
+            // Process each multi-country state
+            foreach (int stateCode in statesToProcess)
+            {
+                ProcessSingleStateSplit(stateCode, stateCountryAnalysis[stateCode], countryGrid);
+            }
+        }
+
+        /// <summary>
+        /// Processes a single state that spans multiple countries
+        /// </summary>
+        private void ProcessSingleStateSplit(int stateCode, Dictionary<int, int> countryPixels, int[,] countryGrid)
+        {
+            int totalPixels = countryPixels.Values.Sum();
+            const double mergeThreshold = 0.6; // 60% threshold
+            
+            var smallFragments = new List<int>();
+            var largeFragments = new List<int>();
+            
+            // Categorize fragments by size
+            foreach (var kvp in countryPixels)
+            {
+                double percentage = (double)kvp.Value / totalPixels;
+                if (percentage < mergeThreshold)
+                {
+                    smallFragments.Add(kvp.Key);
+                }
+                else
+                {
+                    largeFragments.Add(kvp.Key);
+                }
+            }
+            
+            Debug.WriteLine($"[STATE SPLITTING] State {stateCode}: {smallFragments.Count} small fragments, {largeFragments.Count} large fragments");
+            
+            // Merge small fragments into neighboring states
+            foreach (int countryCode in smallFragments)
+            {
+                MergeStateFragmentIntoNeighbors(stateCode, countryCode, countryGrid);
+            }
+        }
+
+        /// <summary>
+        /// Merges a small state fragment into neighboring states within the same country
+        /// </summary>
+        private void MergeStateFragmentIntoNeighbors(int stateCode, int countryCode, int[,] countryGrid)
+        {
+            if (_stateGrid == null) return;
+            
+            int height = _stateGrid.GetLength(0);
+            int width = _stateGrid.GetLength(1);
+            
+            // Find all pixels of this state fragment
+            var fragmentPixels = new List<(int x, int y)>();
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (_stateGrid[y, x] == stateCode && 
+                        y < countryGrid.GetLength(0) && x < countryGrid.GetLength(1) &&
+                        countryGrid[y, x] == countryCode)
+                    {
+                        fragmentPixels.Add((x, y));
+                    }
+                }
+            }
+            
+            Debug.WriteLine($"[STATE SPLITTING] Merging {fragmentPixels.Count} pixels of state {stateCode} in country {countryCode}");
+            
+            // For each pixel in the fragment, find the most common neighboring state in the same country
+            var neighboringStates = new Dictionary<int, int>();
+            
+            foreach (var (px, py) in fragmentPixels)
+            {
+                // Check 8-connected neighbors
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+                        
+                        int nx = px + dx;
+                        int ny = py + dy;
+                        
+                        if (nx >= 0 && nx < width && ny >= 0 && ny < height)
+                        {
+                            int neighborState = _stateGrid[ny, nx];
+                            int neighborCountry = ny < countryGrid.GetLength(0) && nx < countryGrid.GetLength(1) 
+                                ? countryGrid[ny, nx] : 0;
+                            
+                            // Only consider neighbors in the same country that are different states
+                            if (neighborState != stateCode && neighborState > 0 && 
+                                neighborCountry == countryCode)
+                            {
+                                if (!neighboringStates.ContainsKey(neighborState))
+                                    neighboringStates[neighborState] = 0;
+                                neighboringStates[neighborState]++;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Find the most common neighboring state to merge into
+            if (neighboringStates.Count > 0)
+            {
+                int targetState = neighboringStates.OrderByDescending(kvp => kvp.Value).First().Key;
+                
+                Debug.WriteLine($"[STATE SPLITTING] Merging state {stateCode} fragment into state {targetState} (country {countryCode})");
+                
+                // Update all pixels in this fragment to the target state
+                foreach (var (px, py) in fragmentPixels)
+                {
+                    _stateGrid[py, px] = targetState;
+                }
+                
+                // Update the state feature's country code if needed
+                var stateFeature = _stateFeatures.Find(s => s.RasterCode == stateCode);
+                var targetFeature = _stateFeatures.Find(s => s.RasterCode == targetState);
+                
+                if (stateFeature != null && targetFeature != null)
+                {
+                    Debug.WriteLine($"[STATE SPLITTING] Fragment of {stateFeature.StateName} merged into {targetFeature.StateName}");
+                }
+            }
+            else
+            {
+                Debug.WriteLine($"[STATE SPLITTING] No neighboring states found for state {stateCode} fragment in country {countryCode}");
             }
         }
     }

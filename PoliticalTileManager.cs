@@ -198,6 +198,15 @@ namespace Economy_sim
             }
         }
 
+        /// <summary>
+        /// Gets the country control grid for state processing
+        /// </summary>
+        public int[,]? GetControlGrid()
+        {
+            EnsureGridInitialized();
+            return _gridEngine.ControlGrid;
+        }
+
         public void ChangeControl(int countryId, IEnumerable<System.Drawing.Point> cells)
         {
             EnsureGridInitialized();

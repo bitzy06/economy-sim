@@ -31,6 +31,7 @@ namespace Economy_sim
         
         private IndexedCountryFeature? _selectedCountry = null;
         private StateBorderManager.StateFeature? _selectedState = null;
+        private bool _stateSplittingProcessed = false;
         
         public MapViewType CurrentViewType => _currentViewType;
         public DateTime PoliticalMapDate => _politicalMapDate;
@@ -385,6 +386,12 @@ namespace Economy_sim
                 _selectedCountry = country;
                 _politicalTileManager.SetSelectedCountry(country);
                 
+                // Process state splitting when first country is selected
+                if (country != null && !_stateSplittingProcessed)
+                {
+                    Task.Run(() => ProcessStateSplittingAndMerging());
+                }
+                
                 // Clear state selection when selecting a different country
                 if (_selectedState != null)
                 {
@@ -449,6 +456,41 @@ namespace Economy_sim
         public void ChangeAdminControlRect(MapViewLevel level, int rasterCode, Rectangle region) { if (level == MapViewLevel.Countries) ChangeCountryControlRect(rasterCode, region); else ChangeStateControlRect(rasterCode, region); }
         public List<(Point cell, int previousId)> ChangeAdminControlZeroSum(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells) => level == MapViewLevel.Countries ? ChangeCountryControlZeroSum(rasterCode, brushCells) : ChangeStateControlZeroSum(rasterCode, brushCells);
         public List<(Point cell, int previousId)> ChangeAdminControlWaterOnly(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells) => level == MapViewLevel.Countries ? new List<(Point cell, int previousId)>() : ChangeStateControlWaterOnly(rasterCode, brushCells);
+        
+        /// <summary>
+        /// Processes state/country border mismatches by splitting states and merging small fragments
+        /// </summary>
+        public void ProcessStateSplittingAndMerging()
+        {
+            if (_stateSplittingProcessed)
+            {
+                Debug.WriteLine("[HYBRID MANAGER] State splitting already processed");
+                return;
+            }
+            
+            try
+            {
+                Debug.WriteLine("[HYBRID MANAGER] Starting state splitting and merging process...");
+                
+                // Get the country grid from the political tile manager
+                var countryGrid = _politicalTileManager.GetControlGrid();
+                if (countryGrid != null)
+                {
+                    _stateManager.ProcessStateSplittingAndMerging(countryGrid);
+                    _stateSplittingProcessed = true;
+                    Debug.WriteLine("[HYBRID MANAGER] State splitting and merging completed");
+                }
+                else
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] Could not get country grid for state processing");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HYBRID MANAGER] Error during state splitting: {ex.Message}");
+            }
+        }
+        
         public void Dispose() { _politicalTileManager?.Dispose(); _stateManager?.Dispose(); _populationDensityMap?.Dispose(); _populationDensityMap = null; }
         private static IEnumerable<(int dx, int dy)> GetSpiralOffsets(int radius)
         {
