@@ -281,7 +281,7 @@ namespace Economy_sim
             {
                 mapImage.PointerPressed += OnPointerPressed;
                 mapImage.PointerMoved += OnPointerMoved;
-                mapImage.PointerReleased += OnPointerReleased;
+                mapImage.PointerReleased += OnPointerReleased; // signature matches (object?, PointerReleasedEventArgs)
                 mapImage.PointerWheelChanged += OnPointerWheelChanged;
 
                 _isInitialized = true;
@@ -328,15 +328,14 @@ namespace Economy_sim
                 var effectiveSize = GetEffectiveRenderSize();
                 if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
 
-                var viewArea = new SKRectI(_viewOffset.X, _viewOffset.Y,
+                // viewOffset and size are in SCREEN (scaled) pixels
+                var viewArea = new SKRectI(
+                    _viewOffset.X,
+                    _viewOffset.Y,
                     _viewOffset.X + (int)effectiveSize.Width,
                     _viewOffset.Y + (int)effectiveSize.Height);
 
-                SKBitmap? bitmap = null;
-
-                // Unified admin rendering for countries/states
-                bitmap = _mapManager.RenderAdminBitmap(_currentLevel, _currentZoomLevel, viewArea, new SKSizeI((int)effectiveSize.Width, (int)effectiveSize.Height));
-                
+                SKBitmap? bitmap = _mapManager.RenderAdminBitmap(_currentLevel, _currentZoomLevel, viewArea, new SKSizeI((int)effectiveSize.Width, (int)effectiveSize.Height));
                 if (bitmap != null)
                 {
                     var writeableBitmap = SKBitmapToWriteableBitmap(bitmap);
@@ -345,7 +344,7 @@ namespace Economy_sim
                         Dispatcher.UIThread.Post(() =>
                         {
                             mapImage.Source = writeableBitmap;
-                            _writeableBitmap = writeableBitmap; // keep reference if needed
+                            _writeableBitmap = writeableBitmap;
                         });
                     }
                     bitmap.Dispose();
@@ -357,10 +356,7 @@ namespace Economy_sim
             }
             finally
             {
-                lock (_renderLock)
-                {
-                    _renderInProgress = false;
-                }
+                lock (_renderLock) _renderInProgress = false;
             }
         }
 
@@ -444,12 +440,9 @@ namespace Economy_sim
                 var currentPoint = e.GetCurrentPoint(null).Position;
                 var deltaX = currentPoint.X - _panStartPoint.X;
                 var deltaY = currentPoint.Y - _panStartPoint.Y;
-
                 _viewOffset.X = Math.Max(0, _viewOffset.X - (int)deltaX);
                 _viewOffset.Y = Math.Max(0, _viewOffset.Y - (int)deltaY);
-
                 _panStartPoint = currentPoint;
-
                 QueueRender();
                 e.Handled = true;
             }
@@ -459,74 +452,68 @@ namespace Economy_sim
         {
             if (_useEnhancedEditor)
             {
-                // Snapshot all UI-thread state first to avoid cross-thread access and keep DIPs consistently
                 var effectiveSize = GetEffectiveRenderSize();
                 var outputSize = new SKSizeI((int)effectiveSize.Width, (int)effectiveSize.Height);
-                var viewOffsetSnapshot = _viewOffset; // DIP-based terrain pixel offset
+                var viewOffsetSnapshot = _viewOffset; // screen pixel offset
                 var levelSnapshot = _currentLevel;
                 var zoomSnapshot = _currentZoomLevel;
 
                 uint brushValue = 0;
-                if (levelSnapshot == MapViewLevel.Countries && _selectedCountry != null)
-                {
-                    brushValue = (uint)_selectedCountry.RasterCode;
-                }
-                else if (levelSnapshot == MapViewLevel.States && _selectedState != null)
-                {
-                    brushValue = (uint)_selectedState.RasterCode;
-                }
+                if (levelSnapshot == MapViewLevel.Countries && _selectedCountry != null) brushValue = (uint)_selectedCountry.RasterCode;
+                else if (levelSnapshot == MapViewLevel.States && _selectedState != null) brushValue = (uint)_selectedState.RasterCode;
                 if (brushValue == 0) return;
 
                 _enhancedEditor.SetBrushValue(brushValue);
                 _enhancedEditor.SetBrushSize(_brushSize);
                 _enhancedEditor.SetEditPolicy(_currentEditPolicy);
 
-                int sx = screenX;
-                int sy = screenY;
-
+                int sx = screenX; int sy = screenY;
                 _ = Task.Run(async () =>
                 {
                     try
                     {
                         await _enhancedEditor.ApplyEditAsync(levelSnapshot, sx, sy, zoomSnapshot, viewOffsetSnapshot, outputSize);
-                        Dispatcher.UIThread.Post(() => QueueRender());
+                        Dispatcher.UIThread.Post(QueueRender);
                     }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"[MAP EDITOR] Error in enhanced drawing: {ex.Message}");
-                    }
+                    catch (Exception ex) { Debug.WriteLine($"[MAP EDITOR] Error in enhanced drawing: {ex.Message}"); }
                 });
                 return;
             }
-            
-            int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
-            int mapX = screenX + _viewOffset.X;
-            int mapY = screenY + _viewOffset.Y;
+
             int limitW = _currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States ? _mapManager.PoliticalBaseWidth : _mapManager.BaseWidth;
             int limitH = _currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States ? _mapManager.PoliticalBaseHeight : _mapManager.BaseHeight;
-            int gridX = Math.Clamp(mapX / cellSize, 0, limitW - 1);
-            int gridY = Math.Clamp(mapY / cellSize, 0, limitH - 1);
+
+            int gridX, gridY;
+            if (_currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States)
+            {
+                var (gx, gy) = _mapManager.ScreenToPoliticalGrid(screenX, screenY, _currentZoomLevel, _viewOffset);
+                gridX = Math.Clamp(gx, 0, limitW - 1);
+                gridY = Math.Clamp(gy, 0, limitH - 1);
+            }
+            else
+            {
+                int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
+                int mapX = _viewOffset.X + screenX;
+                int mapY = _viewOffset.Y + screenY;
+                gridX = Math.Clamp(mapX / cellSize, 0, limitW - 1);
+                gridY = Math.Clamp(mapY / cellSize, 0, limitH - 1);
+            }
 
             var brushCells = GetBrushCells(gridX, gridY, _brushSize, limitW, limitH).ToList();
 
             List<(SDPoint cell, int previousId)> changes = new();
             if (_currentLevel == MapViewLevel.Countries && _selectedCountry != null)
             {
-                int rasterCode = _selectedCountry.RasterCode;
-                var zero = _mapManager.ChangeAdminControlZeroSum(_currentLevel, rasterCode, brushCells);
-                if (zero.Count > 0)
-                    changes.AddRange(zero);
+                var zero = _mapManager.ChangeAdminControlZeroSum(_currentLevel, _selectedCountry.RasterCode, brushCells);
+                if (zero.Count > 0) changes.AddRange(zero);
             }
             else if (_currentLevel == MapViewLevel.States && _selectedState != null)
             {
-                int rasterCode = _selectedState.RasterCode;
-                var zero = _mapManager.ChangeAdminControlZeroSum(_currentLevel, rasterCode, brushCells);
-                if (zero.Count > 0)
-                    changes.AddRange(zero);
-
+                var zero = _mapManager.ChangeAdminControlZeroSum(_currentLevel, _selectedState.RasterCode, brushCells);
+                if (zero.Count > 0) changes.AddRange(zero);
                 if (_allowWaterPaint)
                 {
-                    var waterOnly = _mapManager.ChangeAdminControlWaterOnly(_currentLevel, rasterCode, brushCells);
+                    var waterOnly = _mapManager.ChangeAdminControlWaterOnly(_currentLevel, _selectedState.RasterCode, brushCells);
                     if (waterOnly.Count > 0) changes.AddRange(waterOnly);
                 }
             }
@@ -535,169 +522,6 @@ namespace Economy_sim
             {
                 _currentStrokeChanges.AddRange(changes);
                 QueueRender();
-            }
-        }
-
-        private IEnumerable<SDPoint> GetBrushCells(int centerX, int centerY, int radius, int limitW, int limitH)
-        {
-            for (int dy = -radius; dy <= radius; dy++)
-            {
-                for (int dx = -radius; dx <= radius; dx++)
-                {
-                    int x = centerX + dx;
-                    int y = centerY + dy;
-                    if (x >= 0 && x < limitW && y >= 0 && y < limitH)
-                        yield return new SDPoint(x, y);
-                }
-            }
-        }
-
-        private System.Drawing.Rectangle ConvertScreenToWorldRegion(int screenX, int screenY, int zoomLevel, SKPointI viewOffset)
-        {
-            int cellSize = _mapManager.GetCellSizeForZoom(zoomLevel);
-            int worldX = screenX + viewOffset.X;
-            int worldY = screenY + viewOffset.Y;
-            int gridX = worldX / cellSize;
-            int gridY = worldY / cellSize;
-            int halfBrush = _brushSize / 2;
-            int limitW = _currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States ? _mapManager.PoliticalBaseWidth : _mapManager.BaseWidth;
-            int limitH = _currentLevel == MapViewLevel.Countries || _currentLevel == MapViewLevel.States ? _mapManager.PoliticalBaseHeight : _mapManager.BaseHeight;
-            int startX = Math.Max(0, gridX - halfBrush);
-            int startY = Math.Max(0, gridY - halfBrush);
-            int endX = Math.Min(limitW, gridX + halfBrush + 1);
-            int endY = Math.Min(limitH, gridY + halfBrush + 1);
-            return new System.Drawing.Rectangle(startX, startY, endX - startX, endY - startY);
-        }
-
-        private void PushUndo(EditorAction action)
-        {
-            _undoStack.AddFirst(action);
-            while (_undoStack.Count > MaxUndo)
-                _undoStack.RemoveLast();
-        }
-
-        private void UndoLastAction()
-        {
-            if (_undoStack.First == null) return;
-            var action = _undoStack.First.Value;
-            _undoStack.RemoveFirst();
-
-            switch (action.Level)
-            {
-                case MapViewLevel.Countries:
-                    foreach (var (cell, prev) in action.Changes)
-                    {
-                        if (prev >= 0)
-                            _mapManager.ChangeCountryControlAtGrid(prev, new[] { cell });
-                    }
-                    break;
-                case MapViewLevel.States:
-                    foreach (var (cell, prev) in action.Changes)
-                    {
-                        if (prev >= 0)
-                            _mapManager.ChangeStateControlAtGrid(prev, new[] { cell });
-                    }
-                    break;
-            }
-            QueueRender();
-        }
-
-        protected override void OnKeyDown(KeyEventArgs e)
-        {
-            base.OnKeyDown(e);
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.Z)
-            {
-                if (_useEnhancedEditor)
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            bool result = await _enhancedEditor.UndoAsync();
-                            if (result)
-                            {
-                                Dispatcher.UIThread.Post(() => QueueRender());
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[MAP EDITOR] Error during enhanced undo: {ex.Message}");
-                        }
-                    });
-                }
-                else
-                {
-                    UndoLastAction();
-                }
-                e.Handled = true;
-            }
-            else if (e.KeyModifiers.HasFlag(KeyModifiers.Control) && e.Key == Key.Y)
-            {
-                if (_useEnhancedEditor)
-                {
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            bool result = await _enhancedEditor.RedoAsync();
-                            if (result)
-                            {
-                                Dispatcher.UIThread.Post(() => QueueRender());
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[MAP EDITOR] Error during enhanced redo: {ex.Message}");
-                        }
-                    });
-                }
-                e.Handled = true;
-            }
-            else if (e.Key == Key.B)
-            {
-                // Toggle border-aware editing
-                _currentEditPolicy = _currentEditPolicy == EditPolicy.FillAllSubcells 
-                    ? EditPolicy.BorderAware 
-                    : EditPolicy.FillAllSubcells;
-                
-                Debug.WriteLine($"[MAP EDITOR] Edit policy changed to: {_currentEditPolicy}");
-                e.Handled = true;
-            }
-            else if (e.Key == Key.P)
-            {
-                // Toggle precision indicator
-                _enhancedEditor.TogglePrecisionIndicator();
-                e.Handled = true;
-            }
-            else if (e.Key == Key.G)
-            {
-                // Toggle dirty tile glow
-                _enhancedEditor.ToggleDirtyTileGlow();
-                e.Handled = true;
-            }
-            else if (e.Key == Key.E)
-            {
-                // Toggle enhanced editor
-                _useEnhancedEditor = !_useEnhancedEditor;
-                Debug.WriteLine($"[MAP EDITOR] Enhanced editor: {(_useEnhancedEditor ? "ON" : "OFF")}");
-                e.Handled = true;
-            }
-        }
-
-        private void UpdateEntitySelectorToSelection(string entityName)
-        {
-            var entitySelector = this.FindControl<ComboBox>("EntitySelector");
-            if (entitySelector != null)
-            {
-                for (int i = 0; i < entitySelector.Items.Count; i++)
-                {
-                    if (entitySelector.Items[i] is ComboBoxItem item && 
-                        item.Content?.ToString() == entityName)
-                    {
-                        entitySelector.SelectedIndex = i;
-                        break;
-                    }
-                }
             }
         }
 
@@ -724,49 +548,23 @@ namespace Economy_sim
                     UpdateEntitySelectorToSelection(state.StateName);
                     QueueRender();
                 }
-                else
-                {
-                    Debug.WriteLine("[MAP EDITOR] No state at clicked position");
-                }
+                else Debug.WriteLine("[MAP EDITOR] No state at clicked position");
             }
-        }
-
-        private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
-        {
-            if (_isDrawingStrokeActive)
-            {
-                // finalize stroke as a single undo action
-                if (_currentStrokeChanges.Count > 0)
-                {
-                    var targetId = _currentLevel == MapViewLevel.Countries ? (_selectedCountry?.RasterCode ?? -1) : (_selectedState?.RasterCode ?? -1);
-                    PushUndo(new EditorAction(EditorActionType.ZeroSumAssign, _currentLevel, targetId, new List<(SDPoint cell, int previousId)>(_currentStrokeChanges)));
-                }
-                _currentStrokeChanges.Clear();
-                _isDrawingStrokeActive = false;
-            }
-            _isPanning = false;
-            e.Handled = true;
         }
 
         private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
         {
             var mapImage = this.FindControl<Image>("MapImage");
             if (mapImage == null) return;
-
             var mousePos = e.GetPosition(mapImage);
             int oldZoomLevel = _currentZoomLevel;
-
             _currentZoomLevel = Math.Clamp(_currentZoomLevel + Math.Sign(e.Delta.Y), 1, MultiResolutionMapManager.PixelsPerCellLevels.Length);
             if (_currentZoomLevel == oldZoomLevel) return;
-
             int oldCellSize = _mapManager.GetCellSizeForZoom(oldZoomLevel);
             int newCellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
-
             int newOffsetX = (int)Math.Round((_viewOffset.X + mousePos.X) * (double)newCellSize / oldCellSize) - (int)mousePos.X;
             int newOffsetY = (int)Math.Round((_viewOffset.Y + mousePos.Y) * (double)newCellSize / oldCellSize) - (int)mousePos.Y;
-
-            _viewOffset = new SKPointI(newOffsetX, newOffsetY);
-
+            _viewOffset = new SKPointI(Math.Max(0, newOffsetX), Math.Max(0, newOffsetY));
             QueueRender();
             e.Handled = true;
         }
@@ -784,6 +582,56 @@ namespace Economy_sim
             _mapManager?.Dispose();
             _enhancedEditor?.Dispose();
             base.OnClosed(e);
+        }
+
+        // Re-introduced helper for brush cells (lost after refactor)
+        private IEnumerable<SDPoint> GetBrushCells(int centerX, int centerY, int radius, int limitW, int limitH)
+        {
+            for (int dy = -radius; dy <= radius; dy++)
+            {
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    int x = centerX + dx;
+                    int y = centerY + dy;
+                    if (x >= 0 && x < limitW && y >= 0 && y < limitH)
+                        yield return new SDPoint(x, y);
+                }
+            }
+        }
+
+        // Re-introduced selector update helper
+        private void UpdateEntitySelectorToSelection(string entityName)
+        {
+            var entitySelector = this.FindControl<ComboBox>("EntitySelector");
+            if (entitySelector != null)
+            {
+                for (int i = 0; i < entitySelector.Items.Count; i++)
+                {
+                    if (entitySelector.Items[i] is ComboBoxItem item && item.Content?.ToString() == entityName)
+                    {
+                        entitySelector.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Add pointer released handler (removed earlier by accident)
+        private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            if (_isDrawingStrokeActive)
+            {
+                if (_currentStrokeChanges.Count > 0)
+                {
+                    var targetId = _currentLevel == MapViewLevel.Countries ? (_selectedCountry?.RasterCode ?? -1) : (_selectedState?.RasterCode ?? -1);
+                    _undoStack.AddFirst(new EditorAction(EditorActionType.ZeroSumAssign, _currentLevel, targetId, new List<(SDPoint cell, int previousId)>(_currentStrokeChanges)));
+                    while (_undoStack.Count > MaxUndo) _undoStack.RemoveLast();
+                }
+                _currentStrokeChanges.Clear();
+                _isDrawingStrokeActive = false;
+            }
+            _isPanning = false;
+            e.Handled = true;
         }
     }
 }

@@ -170,4 +170,34 @@
 		<Setter Property="BorderThickness" Value="3"/>
 		<Setter Property="Padding" Value="12"/>
 	</Style>
+
+	<!-- Tab styles to ensure readable white text -->
+	<Style Selector="TabControl">
+		<Setter Property="Background" Value="#2D2D30"/>
+	</Style>
+	<Style Selector="TabItem">
+		<Setter Property="Foreground" Value="White"/>
+		<Setter Property="FontWeight" Value="Bold"/>
+	</Style>
+	<Style Selector="TabItem:selected">
+		<Setter Property="Foreground" Value="White"/>
+		<Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+	</Style>
+	<Style Selector="TabItem:pointerover">
+		<Setter Property="Foreground" Value="#FFD700"/>
+	</Style>
+
+	<!-- Side menu specific text overrides -->
+	<Style Selector="#RightSideMenu TextBlock">
+		<Setter Property="Foreground" Value="White"/>
+	</Style>
+
+	<Style Selector="#RightSideMenu ListBox">
+		<Setter Property="Foreground" Value="White"/>
+		<Setter Property="Background" Value="#1A1A1A"/>
+	</Style>
+
+	<Style Selector="#RightSideMenu ListBoxItem">
+		<Setter Property="Foreground" Value="White"/>
+	</Style>
 </Styles>

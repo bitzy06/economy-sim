@@ -1,3 +1,4 @@
+
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Economy_sim.GameView"
@@ -161,7 +162,7 @@
 						Height="50"
 						IsHitTestVisible="True"/>
 				<Button x:Name="PlaceHolder1Button"
-						Content="Place Holder"
+						Content="Population"
 						Width="130"
 						Height="50"
 						IsHitTestVisible="True"/>
