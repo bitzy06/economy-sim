@@ -174,11 +174,32 @@ namespace Economy_sim
                     {
                         var resized = ResizeBitmap(polBmp, viewArea.Width, viewArea.Height);
                         polBmp.Dispose();
-                        result = resized;
+                        polBmp = resized; // now matches viewArea
+                    }
+
+                    if (polBmp != null)
+                    {
+                        // Removed state fill overlay (was producing blocky square artifacts).
+                        // Optionally draw thin state borders only if a state is selected for context.
+                        try
+                        {
+                            if (_selectedState != null)
+                            {
+                                int cellSize = GetCellSizeForZoom(zoomLevel);
+                                var politicalPixelSize = new SKSizeI(PoliticalBaseWidth * cellSize, PoliticalBaseHeight * cellSize);
+                                using var canvas = new SKCanvas(polBmp);
+                                _stateManager.RenderStateBorders(canvas, polView, politicalPixelSize, 1.0f, new SKColor(0, 0, 0, 160));
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[POLITICAL VIEW] State border overlay failed: {ex.Message}");
+                        }
+                        result = polBmp;
                     }
                     else
                     {
-                        result = polBmp;
+                        result = null;
                     }
                     break;
                 
@@ -287,7 +308,8 @@ namespace Economy_sim
                 (int)(terrainView.Bottom * sy));
         }
 
-        private (int px, int py) TerrainPixelToPoliticalPixel(int terrainX, int terrainY, int zoomLevel)
+        // NOTE: Was private; exposed publicly so editor can correctly map to higher resolution political grid.
+        public (int px, int py) TerrainPixelToPoliticalPixel(int terrainX, int terrainY, int zoomLevel)
         {
             int cell = GetCellSizeForZoom(zoomLevel);
             int tW = BaseWidth * cell;
@@ -297,6 +319,21 @@ namespace Economy_sim
             int px = (int)Math.Round(terrainX * (pW / (double)tW));
             int py = (int)Math.Round(terrainY * (pH / (double)tH));
             return (px, py);
+        }
+
+        /// <summary>
+        /// Helper to convert a screen (image) coordinate plus current view offset into political grid cell coordinates.
+        /// Accounts for political grid being higher resolution than terrain.
+        /// </summary>
+        public (int gridX, int gridY) ScreenToPoliticalGrid(int screenX, int screenY, int zoomLevel, SKPointI viewOffset)
+        {
+            int cellSize = GetCellSizeForZoom(zoomLevel);
+            int terrainX = screenX + viewOffset.X; // terrain pixel in current zoom
+            int terrainY = screenY + viewOffset.Y;
+            var (ppx, ppy) = TerrainPixelToPoliticalPixel(terrainX, terrainY, zoomLevel);
+            int gridX = ppx / cellSize;
+            int gridY = ppy / cellSize;
+            return (gridX, gridY);
         }
 
         /// <summary>
@@ -440,7 +477,7 @@ namespace Economy_sim
                 int tpy = pixelY + viewOffset.Y;
                 var (ppx, ppy) = TerrainPixelToPoliticalPixel(tpx, tpy, zoomLevel);
                 int gx = ppx / cellSize; int gy = ppy / cellSize; const int radius = 3;
-                foreach (var (dx, dy) in GetSpiralOffsets(radius)) { var st = _stateManager.GetStateAtGrid(gx + dx, gy + dy); if (st != null) return st; }
+                foreach (var (dx, dy) in GetSpiralOffsets(radius)) { var st = _stateManager.GetStateAtGridScaled(gx + dx, gy + dy); if (st != null) return st; }
                 return null;
             }
             catch (Exception ex) { Debug.WriteLine($"Error detecting state at pixel ({pixelX}, {pixelY}): {ex.Message}"); return null; }
@@ -448,14 +485,23 @@ namespace Economy_sim
         public void SetSelectedState(StateBorderManager.StateFeature? state) => SelectState(state);
         public void RenderStateFills(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize) => _stateManager.RenderStateFills(canvas, viewport, mapPixelSize);
         public void RenderStateBorders(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize, float borderWidth = 1.0f, SKColor? borderColor = null) => _stateManager.RenderStateBorders(canvas, viewport, mapPixelSize, borderWidth, borderColor);
-        public void ChangeStateControlAtGrid(int rasterCode, IEnumerable<Point> cells) => _stateManager.ChangeControlAtGrid(rasterCode, cells);
-        public void ChangeStateControlRect(int rasterCode, Rectangle region) => _stateManager.ChangeControlRect(rasterCode, region);
-        public List<(Point cell, int previousId)> ChangeStateControlZeroSum(int rasterCode, IEnumerable<Point> brushCells) => _stateManager.ChangeControlZeroSum(rasterCode, brushCells);
-        public List<(Point cell, int previousId)> ChangeStateControlWaterOnly(int rasterCode, IEnumerable<Point> brushCells) => _stateManager.ChangeControlWaterOnly(rasterCode, brushCells);
-        public void ChangeAdminControlAtGrid(MapViewLevel level, int rasterCode, IEnumerable<Point> cells) { if (level == MapViewLevel.Countries) ChangeCountryControlAtGrid(rasterCode, cells); else ChangeStateControlAtGrid(rasterCode, cells); }
-        public void ChangeAdminControlRect(MapViewLevel level, int rasterCode, Rectangle region) { if (level == MapViewLevel.Countries) ChangeCountryControlRect(rasterCode, region); else ChangeStateControlRect(rasterCode, region); }
-        public List<(Point cell, int previousId)> ChangeAdminControlZeroSum(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells) => level == MapViewLevel.Countries ? ChangeCountryControlZeroSum(rasterCode, brushCells) : ChangeStateControlZeroSum(rasterCode, brushCells);
-        public List<(Point cell, int previousId)> ChangeAdminControlWaterOnly(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells) => level == MapViewLevel.Countries ? new List<(Point cell, int previousId)>() : ChangeStateControlWaterOnly(rasterCode, brushCells);
+        public void ChangeStateControlAtGrid(int rasterCode, IEnumerable<Point> cells) { /* state editing disabled due to scaled grid */ }
+        public void ChangeStateControlRect(int rasterCode, Rectangle region) { /* state editing disabled due to scaled grid */ }
+        public List<(Point cell, int previousId)> ChangeStateControlZeroSum(int rasterCode, IEnumerable<Point> brushCells) => new List<(Point cell, int previousId)>();
+        public List<(Point cell, int previousId)> ChangeStateControlWaterOnly(int rasterCode, IEnumerable<Point> brushCells) => new List<(Point cell, int previousId)>();
+        public List<(Point cell, int previousId)> ChangeAdminControlZeroSum(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells) => level == MapViewLevel.Countries ? ChangeCountryControlZeroSum(rasterCode, brushCells) : new List<(Point cell, int previousId)>();
+        public List<(Point cell, int previousId)> ChangeAdminControlWaterOnly(MapViewLevel level, int rasterCode, IEnumerable<Point> brushCells) => level == MapViewLevel.Countries ? new List<(Point cell, int previousId)>() : new List<(Point cell, int previousId)>();
+        public void ChangeAdminControlRect(MapViewLevel level, int rasterCode, Rectangle region)
+        {
+            if (level == MapViewLevel.Countries)
+            {
+                ChangeCountryControlRect(rasterCode, region);
+            }
+            else
+            {
+                // State editing disabled with scaled grid; no-op
+            }
+        }
         
         /// <summary>
         /// Processes state/country border mismatches by splitting states and merging small fragments
