@@ -46,29 +46,43 @@ namespace Economy_sim
         {
             try
             {
-                // Build terrain view rect in the same space as rendering (DIPs)
-                var terrainView = new SKRectI(viewOffset.X, viewOffset.Y, viewOffset.X + outputSize.Width, viewOffset.Y + outputSize.Height);
-                
-                // Convert terrain view to political view using the same helper as rendering
-                var polView = ConvertTerrainViewToPoliticalView(terrainView, zoomLevel);
-                
-                // Map screen DIPs to political pixel within polView (rendered bitmap was stretched to outputSize)
-                double scaleX = polView.Width / (double)Math.Max(1, outputSize.Width);
-                double scaleY = polView.Height / (double)Math.Max(1, outputSize.Height);
-                int ppx = polView.Left + (int)Math.Floor(screenX * scaleX);
-                int ppy = polView.Top + (int)Math.Floor(screenY * scaleY);
+                if (screenX < 0 || screenY < 0 || screenX >= outputSize.Width || screenY >= outputSize.Height)
+                {
+                    return;
+                }
 
-                int cellSize = _mapManager.GetCellSizeForZoom(zoomLevel);
-                int gridX = Math.Clamp(ppx / cellSize, 0, _mapManager.PoliticalBaseWidth - 1);
-                int gridY = Math.Clamp(ppy / cellSize, 0, _mapManager.PoliticalBaseHeight - 1);
+                int gridX;
+                int gridY;
+                int limitW;
+                int limitH;
 
+                if (level == MapViewLevel.Countries || level == MapViewLevel.States)
+                {
+                    var (gx, gy) = _mapManager.ScreenToPoliticalGrid(screenX, screenY, zoomLevel, viewOffset);
+                    limitW = _mapManager.PoliticalBaseWidth;
+                    limitH = _mapManager.PoliticalBaseHeight;
+                    gridX = Math.Clamp(gx, 0, limitW - 1);
+                    gridY = Math.Clamp(gy, 0, limitH - 1);
+                }
+                else
+                {
+                    int cellSize = _mapManager.GetCellSizeForZoom(zoomLevel);
+                    int mapX = viewOffset.X + screenX;
+                    int mapY = viewOffset.Y + screenY;
+                    limitW = _mapManager.BaseWidth;
+                    limitH = _mapManager.BaseHeight;
+                    gridX = Math.Clamp(mapX / cellSize, 0, limitW - 1);
+                    gridY = Math.Clamp(mapY / cellSize, 0, limitH - 1);
+                }
+
+                int cellSizeForIndicator = _mapManager.GetCellSizeForZoom(zoomLevel);
                 int halfBrush = _currentBrushSize / 2;
                 int startX = Math.Max(0, gridX - halfBrush);
                 int startY = Math.Max(0, gridY - halfBrush);
-                int endX = Math.Min(_mapManager.PoliticalBaseWidth, gridX + halfBrush + 1);
-                int endY = Math.Min(_mapManager.PoliticalBaseHeight, gridY + halfBrush + 1);
+                int endX = Math.Min(limitW, gridX + halfBrush + 1);
+                int endY = Math.Min(limitH, gridY + halfBrush + 1);
                 var worldRegion = new Rectangle(startX, startY, endX - startX, endY - startY);
-                
+
                 // Validate edit region
                 if (!IsValidEditRegion(level, worldRegion))
                 {
@@ -79,7 +93,7 @@ namespace Economy_sim
                 // Show precision indicator before edit
                 if (_showPrecisionIndicator)
                 {
-                    ShowPrecisionIndicator(worldRegion, zoomLevel);
+                    ShowPrecisionIndicator(worldRegion, zoomLevel, cellSizeForIndicator);
                 }
                 
                 // Apply edit to the appropriate grid (country or state)
@@ -101,35 +115,24 @@ namespace Economy_sim
             await Task.CompletedTask;
         }
         
-        private SKRectI ConvertTerrainViewToPoliticalView(SKRectI terrainView, int zoomLevel)
-        {
-            int cell = _mapManager.GetCellSizeForZoom(zoomLevel);
-            int tW = _mapManager.BaseWidth * cell;
-            int tH = _mapManager.BaseHeight * cell;
-            int pW = _mapManager.PoliticalBaseWidth * cell;
-            int pH = _mapManager.PoliticalBaseHeight * cell;
-            float sx = pW / (float)tW;
-            float sy = pH / (float)tH;
-            return new SKRectI(
-                (int)(terrainView.Left * sx),
-                (int)(terrainView.Top * sy),
-                (int)(terrainView.Right * sx),
-                (int)(terrainView.Bottom * sy));
-        }
-        
         private bool IsValidEditRegion(MapViewLevel level, Rectangle region)
         {
             if (region.Width <= 0 || region.Height <= 0) return false;
             if (region.Left < 0 || region.Top < 0) return false;
-            if (region.Right > _mapManager.PoliticalBaseWidth || region.Bottom > _mapManager.PoliticalBaseHeight) return false;
+            int limitW = (level == MapViewLevel.Countries || level == MapViewLevel.States)
+                ? _mapManager.PoliticalBaseWidth
+                : _mapManager.BaseWidth;
+            int limitH = (level == MapViewLevel.Countries || level == MapViewLevel.States)
+                ? _mapManager.PoliticalBaseHeight
+                : _mapManager.BaseHeight;
+            if (region.Right > limitW || region.Bottom > limitH) return false;
             if (region.Width * region.Height > 100000) return false; // guardrail
-            
+
             return true;
         }
         
-        private void ShowPrecisionIndicator(Rectangle worldRegion, int zoomLevel)
+        private void ShowPrecisionIndicator(Rectangle worldRegion, int zoomLevel, int cellSize)
         {
-            int cellSize = _mapManager.GetCellSizeForZoom(zoomLevel);
             int subcellCount = worldRegion.Width * worldRegion.Height;
             string message = $"Editing at zoom {zoomLevel} (cell size: {cellSize}px). This will affect {subcellCount} grid cells.";
             if (subcellCount > 100) message += " Consider zooming in for finer control.";
