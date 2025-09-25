@@ -134,6 +134,11 @@ namespace Economy_sim
                 };
             }
 
+            if (this.FindControl<Button>("EquilibrateStatesButton") is Button equilibrateButton)
+            {
+                equilibrateButton.Click += EquilibrateStatesButton_Click;
+            }
+
             // Setup brush size slider
             var brushSizeSlider = this.FindControl<Slider>("BrushSizeSlider");
             var brushSizeLabel = this.FindControl<TextBlock>("BrushSizeLabel");
@@ -160,6 +165,7 @@ namespace Economy_sim
             if (comboBox?.SelectedIndex >= 0)
             {
                 _currentLevel = comboBox.SelectedIndex == 0 ? MapViewLevel.Countries : MapViewLevel.States;
+                _mapManager.SetViewType(_currentLevel == MapViewLevel.Countries ? MapViewType.Political : MapViewType.States);
                 UpdateEntitySelector();
                 UpdateTitle();
                 QueueRender();
@@ -201,11 +207,31 @@ namespace Economy_sim
             {
                 _isDrawingMode = toggle.IsChecked == true;
                 toggle.Content = _isDrawingMode ? "Drawing On" : "Drawing Off";
-                toggle.Background = _isDrawingMode ? 
+                toggle.Background = _isDrawingMode ?
                     new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(100, 150, 100)) :
                     new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(102, 102, 102));
-                
+
                 Debug.WriteLine($"[MAP EDITOR] Drawing mode: {(_isDrawingMode ? "ON" : "OFF")}");
+            }
+        }
+
+        private void EquilibrateStatesButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_currentLevel != MapViewLevel.States)
+            {
+                Debug.WriteLine("[MAP EDITOR] Equilibrate states command ignored when not in States level");
+                return;
+            }
+
+            try
+            {
+                Debug.WriteLine("[MAP EDITOR] Equilibrating state borders for visual balance");
+                _mapManager.EquilibrateStateBorders(3);
+                QueueRender();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MAP EDITOR] Failed to equilibrate state borders: {ex.Message}");
             }
         }
 
@@ -266,9 +292,15 @@ namespace Economy_sim
             var titleText = this.FindControl<TextBlock>("TitleText");
             if (titleText != null)
             {
-                titleText.Text = _currentLevel == MapViewLevel.Countries ? 
-                    "Map Editor - Countries View" : 
+                titleText.Text = _currentLevel == MapViewLevel.Countries ?
+                    "Map Editor - Countries View" :
                     "Map Editor - States View";
+            }
+
+            if (this.FindControl<Button>("EquilibrateStatesButton") is Button equilibrateButton)
+            {
+                equilibrateButton.IsEnabled = _currentLevel == MapViewLevel.States;
+                equilibrateButton.Opacity = equilibrateButton.IsEnabled ? 1.0 : 0.5;
             }
         }
 

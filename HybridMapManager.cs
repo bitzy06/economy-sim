@@ -75,6 +75,18 @@ namespace Economy_sim
                 {
                     GC.Collect();
                 }
+                else if (viewType == MapViewType.States)
+                {
+                    try
+                    {
+                        _stateManager.LoadStateData();
+                        ProcessStateSplittingAndMerging();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[HYBRID MANAGER] Failed preparing states view: {ex.Message}");
+                    }
+                }
                 else if (viewType == MapViewType.PopulationDensity)
                 {
                     // Synchronous generation on first switch so base zoom shows real data immediately
@@ -202,7 +214,28 @@ namespace Economy_sim
                         result = null;
                     }
                     break;
-                
+
+                case MapViewType.States:
+                    var stateViewport = ConvertTerrainViewToPoliticalView(viewArea, zoomLevel);
+                    int stateCell = GetCellSizeForZoom(zoomLevel);
+                    var statePixelSize = new SKSizeI(PoliticalBaseWidth * stateCell, PoliticalBaseHeight * stateCell);
+                    var stateBitmap = new SKBitmap(viewArea.Width, viewArea.Height);
+                    using (var canvas = new SKCanvas(stateBitmap))
+                    {
+                        canvas.Clear(new SKColor(135, 206, 235));
+                        try
+                        {
+                            _stateManager.RenderStateFills(canvas, stateViewport, statePixelSize);
+                            _stateManager.RenderStateBorders(canvas, stateViewport, statePixelSize, 2.0f, new SKColor(0, 0, 0, 200));
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[STATE VIEW] Failed to render states: {ex.Message}");
+                        }
+                    }
+                    result = stateBitmap;
+                    break;
+
                 case MapViewType.PopulationDensity:
                     // Ensure map exists synchronously if not already
                     if (_populationDensityMap == null && !_populationLoadAttempted)
@@ -476,10 +509,42 @@ namespace Economy_sim
         public PoliticalDataCache GetPoliticalDataCache() => _politicalTileManager.GetDataCache();
         public IndexedCountryFeature? FindCountryByName(string name)
         { if (string.IsNullOrWhiteSpace(name)) return null; var all = _politicalTileManager.GetAllCountryData(); var match = all.Find(c => string.Equals(c.CountryName, name, StringComparison.OrdinalIgnoreCase)); return match == null ? null : _politicalTileManager.GetCountryFeatureByRasterCode(match.RasterCode); }
-        public void ChangeCountryControlAtGrid(int rasterCode, IEnumerable<Point> cells) => _politicalTileManager.ChangeControl(rasterCode, cells);
+        public void ChangeCountryControlAtGrid(int rasterCode, IEnumerable<Point> cells)
+        {
+            _politicalTileManager.ChangeControl(rasterCode, cells);
+            _stateSplittingProcessed = false;
+        }
+
         public void ChangeCountryControlRect(int rasterCode, Rectangle region)
-        { IEnumerable<Point> Cells() { int x0 = Math.Max(0, region.Left); int y0 = Math.Max(0, region.Top); int x1 = Math.Min(PoliticalBaseWidth, region.Right); int y1 = Math.Min(PoliticalBaseHeight, region.Bottom); for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) yield return new Point(x, y); } _politicalTileManager.ChangeControl(rasterCode, Cells()); }
-        public List<(Point cell, int previousId)> ChangeCountryControlZeroSum(int rasterCode, IEnumerable<Point> brushCells) => _politicalTileManager.ChangeControlZeroSum(rasterCode, brushCells);
+        {
+            IEnumerable<Point> Cells()
+            {
+                int x0 = Math.Max(0, region.Left);
+                int y0 = Math.Max(0, region.Top);
+                int x1 = Math.Min(PoliticalBaseWidth, region.Right);
+                int y1 = Math.Min(PoliticalBaseHeight, region.Bottom);
+                for (int y = y0; y < y1; y++)
+                {
+                    for (int x = x0; x < x1; x++)
+                    {
+                        yield return new Point(x, y);
+                    }
+                }
+            }
+
+            _politicalTileManager.ChangeControl(rasterCode, Cells());
+            _stateSplittingProcessed = false;
+        }
+
+        public List<(Point cell, int previousId)> ChangeCountryControlZeroSum(int rasterCode, IEnumerable<Point> brushCells)
+        {
+            var changes = _politicalTileManager.ChangeControlZeroSum(rasterCode, brushCells);
+            if (changes.Count > 0)
+            {
+                _stateSplittingProcessed = false;
+            }
+            return changes;
+        }
         public List<StateBorderManager.StateFeature> GetAllStates() => _stateManager.GetAllStates();
         public StateBorderManager.StateFeature? GetStateAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
         {
@@ -520,20 +585,20 @@ namespace Economy_sim
         /// <summary>
         /// Processes state/country border mismatches by splitting states and merging small fragments
         /// </summary>
-        public void ProcessStateSplittingAndMerging()
+        public void ProcessStateSplittingAndMerging(bool force = false, int[,]? providedCountryGrid = null)
         {
-            if (_stateSplittingProcessed)
+            if (_stateSplittingProcessed && !force)
             {
                 Debug.WriteLine("[HYBRID MANAGER] State splitting already processed");
                 return;
             }
-            
+
             try
             {
                 Debug.WriteLine("[HYBRID MANAGER] Starting state splitting and merging process...");
-                
+
                 // Get the country grid from the political tile manager
-                var countryGrid = _politicalTileManager.GetControlGrid();
+                var countryGrid = providedCountryGrid ?? _politicalTileManager.GetControlGrid();
                 if (countryGrid != null)
                 {
                     _stateManager.ProcessStateSplittingAndMerging(countryGrid);
@@ -548,6 +613,28 @@ namespace Economy_sim
             catch (Exception ex)
             {
                 Debug.WriteLine($"[HYBRID MANAGER] Error during state splitting: {ex.Message}");
+            }
+        }
+
+        public void EquilibrateStateBorders(int iterations = 2)
+        {
+            try
+            {
+                var countryGrid = _politicalTileManager.GetControlGrid();
+                if (countryGrid == null)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] Cannot equilibrate states without a country grid");
+                    return;
+                }
+
+                ProcessStateSplittingAndMerging(force: true, providedCountryGrid: countryGrid);
+                iterations = Math.Clamp(iterations, 1, 8);
+                _stateManager.RelaxStateBorders(countryGrid, iterations);
+                Debug.WriteLine($"[HYBRID MANAGER] Equilibrated state borders with {iterations} relaxation pass(es)");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HYBRID MANAGER] Failed to equilibrate state borders: {ex.Message}");
             }
         }
         

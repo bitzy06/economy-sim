@@ -910,7 +910,7 @@ namespace Economy_sim
         {
             if (!_dataLoaded) LoadStateData();
             EnsureStateGridBuilt();
-            
+
             if (_stateGrid == null || countryGrid == null)
             {
                 Debug.WriteLine("[STATE SPLITTING] Missing required grids for processing");
@@ -918,17 +918,140 @@ namespace Economy_sim
             }
 
             Debug.WriteLine("[STATE SPLITTING] Starting state splitting and merging process...");
-            
+
             try
             {
                 var stateCountryAnalysis = AnalyzeStateCountryOverlaps(countryGrid);
                 ProcessStateSplits(stateCountryAnalysis, countryGrid);
-                
+
                 Debug.WriteLine("[STATE SPLITTING] State splitting and merging completed");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[STATE SPLITTING] Error during processing: {ex.Message}");
+            }
+        }
+
+        public void RelaxStateBorders(int[,] countryGrid, int iterations = 2)
+        {
+            if (!_dataLoaded) LoadStateData();
+            EnsureStateGridBuilt();
+            if (_stateGrid == null)
+            {
+                Debug.WriteLine("[STATE RELAX] State grid is not available for relaxation");
+                return;
+            }
+
+            if (countryGrid == null)
+            {
+                Debug.WriteLine("[STATE RELAX] Country grid is not available for relaxation");
+                return;
+            }
+
+            iterations = Math.Clamp(iterations, 1, 8);
+            int height = Math.Min(_stateGrid.GetLength(0), countryGrid.GetLength(0));
+            int width = Math.Min(_stateGrid.GetLength(1), countryGrid.GetLength(1));
+            bool anyChange = false;
+
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                bool iterationChanged = false;
+                var nextGrid = (int[,])_stateGrid.Clone();
+
+                for (int y = 1; y < height - 1; y++)
+                {
+                    for (int x = 1; x < width - 1; x++)
+                    {
+                        int countryCode = countryGrid[y, x];
+                        if (countryCode <= 0)
+                            continue;
+
+                        int currentState = _stateGrid[y, x];
+                        Span<int> neighborStates = stackalloc int[8];
+                        Span<int> neighborCounts = stackalloc int[8];
+                        int trackedStates = 0;
+                        int bestState = currentState;
+                        int bestCount = 0;
+
+                        for (int dy = -1; dy <= 1; dy++)
+                        {
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                if (dx == 0 && dy == 0)
+                                    continue;
+
+                                int nx = x + dx;
+                                int ny = y + dy;
+                                if (nx < 0 || ny < 0 || nx >= width || ny >= height)
+                                    continue;
+
+                                if (countryGrid[ny, nx] != countryCode)
+                                    continue;
+
+                                int neighborState = _stateGrid[ny, nx];
+                                if (neighborState <= 0)
+                                    continue;
+
+                                bool recorded = false;
+                                for (int i = 0; i < trackedStates; i++)
+                                {
+                                    if (neighborStates[i] == neighborState)
+                                    {
+                                        int newCount = ++neighborCounts[i];
+                                        if (newCount > bestCount)
+                                        {
+                                            bestCount = newCount;
+                                            bestState = neighborState;
+                                        }
+                                        recorded = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!recorded && trackedStates < neighborStates.Length)
+                                {
+                                    neighborStates[trackedStates] = neighborState;
+                                    neighborCounts[trackedStates] = 1;
+                                    if (bestCount < 1)
+                                    {
+                                        bestCount = 1;
+                                        bestState = neighborState;
+                                    }
+                                    trackedStates++;
+                                }
+                            }
+                        }
+
+                        if (bestCount == 0)
+                            continue;
+
+                        if (bestState != currentState && bestCount >= 3)
+                        {
+                            nextGrid[y, x] = bestState;
+                            iterationChanged = true;
+                        }
+                        else if (currentState <= 0 && bestCount >= 2)
+                        {
+                            nextGrid[y, x] = bestState;
+                            iterationChanged = true;
+                        }
+                    }
+                }
+
+                if (!iterationChanged)
+                    break;
+
+                _stateGrid = nextGrid;
+                anyChange = true;
+            }
+
+            if (anyChange)
+            {
+                Debug.WriteLine("[STATE RELAX] State borders relaxed to better fit country outlines");
+            }
+            else
+            {
+                Debug.WriteLine("[STATE RELAX] No state border adjustments were necessary");
             }
         }
 

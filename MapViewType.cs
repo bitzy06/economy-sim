@@ -4,6 +4,7 @@ namespace Economy_sim
     {
         Terrain,
         Political,
+        States,
         PopulationDensity
     }
 }

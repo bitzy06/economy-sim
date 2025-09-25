@@ -166,11 +166,11 @@
 						Width="130"
 						Height="50"
 						IsHitTestVisible="True"/>
-				<Button x:Name="PlaceHolder2Button"
-						Content="Place Holder"
-						Width="130"
-						Height="50"
-						IsHitTestVisible="True"/>
+                                <Button x:Name="StatesViewButton"
+                                                Content="States"
+                                                Width="130"
+                                                Height="50"
+                                                IsHitTestVisible="True"/>
 			</StackPanel>
 
 			<!-- Bottom HUD Bar -->

@@ -131,45 +131,56 @@
 										  BorderThickness="1"
 										  CornerRadius="2"
 										  FontSize="11"/>
-							<ToggleButton x:Name="AllowWaterToggle"
-										  Content="Paint Water"
-										  Width="110"
-										  Height="25"
-										  Background="#666666"
-										  Foreground="White"
-										  BorderBrush="#777777"
-										  BorderThickness="1"
-										  CornerRadius="2"
-										  FontSize="11"/>
-							
-							<!-- Brush Size Slider -->
-							<StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="5" Margin="10,0,0,0">
-								<TextBlock Text="Brush:" 
-										   Foreground="White" 
-										   FontSize="12" 
-										   VerticalAlignment="Center"/>
-								<Slider x:Name="BrushSizeSlider"
-										Width="80"
-										Height="25"
-										Minimum="1"
-										Maximum="10"
-										Value="2"
-										TickFrequency="1"
-										IsSnapToTickEnabled="True"
-										Background="#555555"
-										Foreground="#FFD700"/>
-								<TextBlock x:Name="BrushSizeLabel"
-										   Text="2"
-										   Foreground="#FFD700" 
-										   FontSize="12" 
-										   FontWeight="Bold"
-										   VerticalAlignment="Center"
-										   Width="20"
-										   TextAlignment="Center"/>
-							</StackPanel>
-						</StackPanel>
-					</Border>
-				</StackPanel>
+                                                        <ToggleButton x:Name="AllowWaterToggle"
+                                                                                  Content="Paint Water"
+                                                                                  Width="110"
+                                                                                  Height="25"
+                                                                                  Background="#666666"
+                                                                                  Foreground="White"
+                                                                                  BorderBrush="#777777"
+                                                                                  BorderThickness="1"
+                                                                                  CornerRadius="2"
+                                                                                  FontSize="11"/>
+
+                                                        <!-- Brush Size Slider -->
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="5" Margin="10,0,0,0">
+                                                                <TextBlock Text="Brush:"
+                                                                                   Foreground="White"
+                                                                                   FontSize="12"
+                                                                                   VerticalAlignment="Center"/>
+                                                                <Slider x:Name="BrushSizeSlider"
+                                                                                Width="80"
+                                                                                Height="25"
+                                                                                Minimum="1"
+                                                                                Maximum="10"
+                                                                                Value="2"
+                                                                                TickFrequency="1"
+                                                                                IsSnapToTickEnabled="True"
+                                                                                Background="#555555"
+                                                                                Foreground="#FFD700"/>
+                                                                <TextBlock x:Name="BrushSizeLabel"
+                                                                                   Text="2"
+                                                                                   Foreground="#FFD700"
+                                                                                   FontSize="12"
+                                                                                   FontWeight="Bold"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Width="20"
+                                                                                   TextAlignment="Center"/>
+                                                        </StackPanel>
+
+                                                        <Button x:Name="EquilibrateStatesButton"
+                                                                        Content="Equilibrate States"
+                                                                        Width="140"
+                                                                        Height="25"
+                                                                        Background="#555555"
+                                                                        Foreground="White"
+                                                                        BorderBrush="#777777"
+                                                                        BorderThickness="1"
+                                                                        CornerRadius="2"
+                                                                        FontSize="11"/>
+                                                </StackPanel>
+                                        </Border>
+                                </StackPanel>
 
 				<!-- Right side - Exit button -->
 				<Button Grid.Column="1"
