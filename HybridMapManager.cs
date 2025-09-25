@@ -328,11 +328,25 @@ namespace Economy_sim
         public (int gridX, int gridY) ScreenToPoliticalGrid(int screenX, int screenY, int zoomLevel, SKPointI viewOffset)
         {
             int cellSize = GetCellSizeForZoom(zoomLevel);
-            int terrainX = screenX + viewOffset.X; // terrain pixel in current zoom
-            int terrainY = screenY + viewOffset.Y;
-            var (ppx, ppy) = TerrainPixelToPoliticalPixel(terrainX, terrainY, zoomLevel);
-            int gridX = ppx / cellSize;
-            int gridY = ppy / cellSize;
+
+            // Translate the screen coordinate into terrain pixel space for the active zoom level.
+            double terrainPixelX = screenX + viewOffset.X;
+            double terrainPixelY = screenY + viewOffset.Y;
+
+            // Convert terrain pixel offsets into terrain grid coordinates so we can scale them into
+            // the higher resolution political grid without rounding bias.
+            double terrainGridX = terrainPixelX / cellSize;
+            double terrainGridY = terrainPixelY / cellSize;
+
+            double scaleX = PoliticalBaseWidth / (double)BaseWidth;
+            double scaleY = PoliticalBaseHeight / (double)BaseHeight;
+
+            int gridX = (int)Math.Floor(terrainGridX * scaleX);
+            int gridY = (int)Math.Floor(terrainGridY * scaleY);
+
+            gridX = Math.Clamp(gridX, 0, PoliticalBaseWidth - 1);
+            gridY = Math.Clamp(gridY, 0, PoliticalBaseHeight - 1);
+
             return (gridX, gridY);
         }
 
