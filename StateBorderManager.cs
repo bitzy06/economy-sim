@@ -1174,20 +1174,18 @@ namespace Economy_sim
                     if (path == null || path.IsEmpty)
                         continue;
 
-                    var approx = path.Approximate(0.5f);
-                    if (approx == null || approx.Length < 3)
+                    var points = path.Points;
+                    if (points == null || points.Length < 3)
                         continue;
 
-                    var points = new List<PersistedPoint>();
-                    for (int i = 0; i < approx.Length; i += 3)
+                    var persistedPoints = new List<PersistedPoint>();
+                    foreach (var pt in points)
                     {
-                        float x = approx[i];
-                        float y = approx[i + 1];
-                        points.Add(new PersistedPoint { X = x, Y = y });
+                        persistedPoints.Add(new PersistedPoint { X = pt.X, Y = pt.Y });
                     }
 
-                    if (points.Count > 0)
-                        persisted.Geometry.Add(points);
+                    if (persistedPoints.Count > 0)
+                        persisted.Geometry.Add(persistedPoints);
                 }
 
                 return persisted;
