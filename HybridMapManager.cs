@@ -196,17 +196,19 @@ namespace Economy_sim
                         // Optionally draw thin state borders only if a state is selected for context.
                         try
                         {
+                            using var canvas = new SKCanvas(polBmp);
                             if (_selectedState != null)
                             {
                                 int cellSize = GetCellSizeForZoom(zoomLevel);
                                 var politicalPixelSize = new SKSizeI(PoliticalBaseWidth * cellSize, PoliticalBaseHeight * cellSize);
-                                using var canvas = new SKCanvas(polBmp);
                                 _stateManager.RenderStateBorders(canvas, polView, politicalPixelSize, 1.0f, new SKColor(0, 0, 0, 160));
                             }
+
+                            RenderCitiesOverlay(canvas, viewArea, new SKSizeI(polBmp.Width, polBmp.Height), zoomLevel);
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[POLITICAL VIEW] State border overlay failed: {ex.Message}");
+                            Debug.WriteLine($"[POLITICAL VIEW] Overlay failed: {ex.Message}");
                         }
                         result = polBmp;
                     }
@@ -401,68 +403,7 @@ namespace Economy_sim
                         canvas.Clear(SKColors.Transparent);
                         canvas.DrawBitmap(polBmp, new SKRect(0, 0, outputSize.Width, outputSize.Height));
 
-                        // --- City overlay (revised transform) ---
-                        try
-                        {
-                            EnsureCitiesLoaded();
-                            if (_cityPoints != null && _cityPoints.Count > 0)
-                            {
-                                int cellSize = GetCellSizeForZoom(zoomLevel);
-                                double terrainTotalWidthPx = BaseWidth * (double)cellSize;   // full terrain pixel width at this zoom
-                                double terrainTotalHeightPx = BaseHeight * (double)cellSize;
-                                double politiToTerrainScaleX = (terrainTotalWidthPx) / PoliticalBaseWidth;  // convert political pixel -> terrain pixel
-                                double politiToTerrainScaleY = (terrainTotalHeightPx) / PoliticalBaseHeight;
-
-                                using var fillPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
-                                using var outlinePaint = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = SKColors.Black, IsAntialias = true };
-
-                                int targetRaster = _selectedCountry?.RasterCode ?? -1;
-                                string iso = _selectedCountry?.CountryCode?.ToUpperInvariant() ?? string.Empty;
-                                int drawn = 0; int considered = 0;
-                                foreach (var c in _cityPoints)
-                                {
-                                    // Filter by selected country if any (ISO OR raster fallback). If none selected draw nothing.
-                                    if (_selectedCountry != null)
-                                    {
-                                        if (!string.Equals(c.IsoCode, iso, StringComparison.OrdinalIgnoreCase) && c.RasterCode != targetRaster)
-                                            continue;
-                                    }
-                                    else continue; // require selection per requirements
-                                    considered++;
-
-                                    // Convert political pixel to terrain pixel (global), then to screen pixel relative to viewArea
-                                    double terrainPx = c.PixelX * politiToTerrainScaleX;
-                                    double terrainPy = c.PixelY * politiToTerrainScaleY;
-
-                                    // Screen pixel in current view
-                                    double screenX = terrainPx - viewArea.Left;
-                                    double screenY = terrainPy - viewArea.Top;
-                                    if (screenX < 0 || screenY < 0 || screenX >= outputSize.Width || screenY >= outputSize.Height)
-                                        continue;
-
-                                    float r = 2f;
-                                    if (c.ScaleRank <= 2) r = 4f; else if (c.ScaleRank <= 4) r = 3f;
-                                    if (c.PopMax > 5_000_000) r += 2f; else if (c.PopMax > 1_000_000) r += 1f;
-                                    fillPaint.Color = c.ScaleRank <= 2 ? new SKColor(255, 220, 0, 220) : new SKColor(255, 255, 255, 200);
-                                    canvas.DrawCircle((float)screenX, (float)screenY, r, fillPaint);
-                                    canvas.DrawCircle((float)screenX, (float)screenY, r, outlinePaint);
-                                    drawn++;
-                                }
-                                if (drawn == 0 && _selectedCountry != null)
-                                {
-                                    Debug.WriteLine($"[CITIES] No cities drawn for {iso} (raster {targetRaster}). Considered {considered} candidates. ViewArea={viewArea} cellSize={cellSize}");
-                                }
-                                else if (drawn > 0)
-                                {
-                                    Debug.WriteLine($"[CITIES] Drew {drawn} city dots for {iso} at zoom {zoomLevel}.");
-                                }
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Debug.WriteLine($"[CITIES] Overlay (revised) failed: {ex.Message}");
-                        }
-                        // --- end city overlay ---
+                        RenderCitiesOverlay(canvas, viewArea, outputSize, zoomLevel);
                     }
                     polBmp.Dispose();
                     return composed;
@@ -720,6 +661,89 @@ namespace Economy_sim
         private readonly object _cityLock = new();
 
         private record CityPoint(string IsoCode, float Lon, float Lat, int PopMax, int ScaleRank, int PixelX, int PixelY, int RasterCode);
+
+        private void RenderCitiesOverlay(SKCanvas canvas, SKRectI terrainView, SKSizeI outputSize, int zoomLevel)
+        {
+            if (canvas == null) return;
+
+            try
+            {
+                if (_selectedCountry == null)
+                    return;
+
+                EnsureCitiesLoaded();
+                if (_cityPoints == null || _cityPoints.Count == 0)
+                    return;
+
+                if (outputSize.Width <= 0 || outputSize.Height <= 0)
+                    return;
+
+                int cellSize = GetCellSizeForZoom(zoomLevel);
+                double terrainTotalWidthPx = BaseWidth * (double)cellSize;
+                double terrainTotalHeightPx = BaseHeight * (double)cellSize;
+                if (terrainTotalWidthPx <= 0 || terrainTotalHeightPx <= 0)
+                    return;
+
+                double politiToTerrainScaleX = terrainTotalWidthPx / PoliticalBaseWidth;
+                double politiToTerrainScaleY = terrainTotalHeightPx / PoliticalBaseHeight;
+
+                using var fillPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+                using var outlinePaint = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = SKColors.Black, IsAntialias = true };
+
+                int targetRaster = _selectedCountry?.RasterCode ?? -1;
+                string iso = _selectedCountry?.CountryCode?.ToUpperInvariant() ?? string.Empty;
+                int drawn = 0;
+                int considered = 0;
+
+                foreach (var city in _cityPoints)
+                {
+                    if (!string.Equals(city.IsoCode, iso, StringComparison.OrdinalIgnoreCase) && city.RasterCode != targetRaster)
+                        continue;
+
+                    considered++;
+
+                    double terrainPx = city.PixelX * politiToTerrainScaleX;
+                    double terrainPy = city.PixelY * politiToTerrainScaleY;
+
+                    double screenX = terrainPx - terrainView.Left;
+                    double screenY = terrainPy - terrainView.Top;
+                    if (screenX < 0 || screenY < 0 || screenX >= outputSize.Width || screenY >= outputSize.Height)
+                        continue;
+
+                    float radius = 2f;
+                    if (city.ScaleRank <= 2)
+                        radius = 4f;
+                    else if (city.ScaleRank <= 4)
+                        radius = 3f;
+
+                    if (city.PopMax > 5_000_000)
+                        radius += 2f;
+                    else if (city.PopMax > 1_000_000)
+                        radius += 1f;
+
+                    fillPaint.Color = city.ScaleRank <= 2
+                        ? new SKColor(255, 220, 0, 220)
+                        : new SKColor(255, 255, 255, 200);
+
+                    canvas.DrawCircle((float)screenX, (float)screenY, radius, fillPaint);
+                    canvas.DrawCircle((float)screenX, (float)screenY, radius, outlinePaint);
+                    drawn++;
+                }
+
+                if (drawn == 0 && considered > 0)
+                {
+                    Debug.WriteLine($"[CITIES] No cities drawn for {iso} (raster {targetRaster}). Considered {considered} candidates. ViewArea={terrainView} cellSize={cellSize}");
+                }
+                else if (drawn > 0)
+                {
+                    Debug.WriteLine($"[CITIES] Drew {drawn} city dots for {iso} at zoom {zoomLevel}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CITIES] Overlay failed: {ex.Message}");
+            }
+        }
 
         private void EnsureCitiesLoaded()
         {
