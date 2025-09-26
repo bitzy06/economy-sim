@@ -20,10 +20,10 @@ namespace Economy_sim
         private readonly HybridMapManager _mapManager;
 
         // --- Optimized Rendering Fields ---
-        private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
-        private WriteableBitmap _backBufferBitmap; // Back buffer for double buffering
-        private SKBitmap _currentFrameBuffer; // Current frame in SkBitmap format
-        private SKBitmap _nextFrameBuffer; // Next frame being rendered
+        private WriteableBitmap? _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
+        private WriteableBitmap? _backBufferBitmap; // Back buffer for double buffering
+        private SKBitmap? _currentFrameBuffer; // Current frame in SkBitmap format
+        private SKBitmap? _nextFrameBuffer; // Next frame being rendered
         private int _currentZoomLevel = 1; // Start at the lowest zoom level so user doesn't have to zoom out
         private SKPointI _viewOffset = SKPointI.Empty;
         private bool _isPanning = false;
@@ -33,8 +33,9 @@ namespace Economy_sim
         private bool _isInitialized = false;
 
         private readonly DispatcherTimer _mapUpdateTimer;
-        private DispatcherTimer _initialRenderTimer; // Timer to poll for initial size.
-        private DispatcherTimer _continuousRenderTimer; // Timer for continuous refreshing
+        private DispatcherTimer? _initialRenderTimer; // Timer to poll for initial size.
+        private DispatcherTimer? _continuousRenderTimer; // Timer for continuous refreshing
+        private DispatcherTimer? _hudTimer;
         private bool _pendingMapUpdate = false;
         private readonly object _renderLock = new object();
         private readonly object _bufferSwapLock = new object();
@@ -133,11 +134,120 @@ namespace Economy_sim
             }
         }
 
+        protected override void OnClosed(EventArgs e)
+        {
+            try
+            {
+                this.Loaded -= OnWindowLoaded;
+                this.SizeChanged -= OnSizeChanged;
+
+                CancelStateCulling();
+
+                if (_mapUpdateTimer != null)
+                {
+                    _mapUpdateTimer.Stop();
+                    _mapUpdateTimer.Tick -= MapUpdateTimer_Tick;
+                }
+
+                if (_continuousRenderTimer != null)
+                {
+                    _continuousRenderTimer.Stop();
+                    _continuousRenderTimer.Tick -= ContinuousRenderTimer_Tick;
+                    _continuousRenderTimer = null;
+                }
+
+                if (_initialRenderTimer != null)
+                {
+                    _initialRenderTimer.Stop();
+                    _initialRenderTimer.Tick -= InitialRenderTimer_Tick;
+                    _initialRenderTimer = null;
+                }
+
+                if (_hudTimer != null)
+                {
+                    _hudTimer.Stop();
+                    _hudTimer.Tick -= UpdateHUDDisplay;
+                    _hudTimer = null;
+                }
+
+                DetachMapImageHandlers();
+                DisposeRenderResources();
+
+                _mapManager.ViewTypeChanged -= OnMapViewTypeChanged;
+                _mapManager.Dispose();
+            }
+            finally
+            {
+                base.OnClosed(e);
+            }
+        }
+
         private void MapImage_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
         {
             if (e.Property == BoundsProperty)
             {
                 OnMapBoundsChanged();
+            }
+        }
+
+        private void CancelStateCulling()
+        {
+            var cts = Interlocked.Exchange(ref _cullStatesCts, null);
+            if (cts != null)
+            {
+                try
+                {
+                    cts.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Ignore; the CTS was already disposed after completion.
+                }
+                finally
+                {
+                    cts.Dispose();
+                }
+            }
+        }
+
+        private void DetachMapImageHandlers()
+        {
+            if (this.MapImage != null)
+            {
+                this.MapImage.PointerPressed -= OnPointerPressed;
+                this.MapImage.PointerMoved -= OnPointerMoved;
+                this.MapImage.PointerReleased -= OnPointerReleased;
+                this.MapImage.PointerWheelChanged -= OnPointerWheelChanged;
+                this.MapImage.PropertyChanged -= MapImage_PropertyChanged;
+            }
+        }
+
+        private void DisposeRenderResources()
+        {
+            lock (_bufferSwapLock)
+            {
+                _writeableBitmap?.Dispose();
+                _writeableBitmap = null;
+
+                _backBufferBitmap?.Dispose();
+                _backBufferBitmap = null;
+            }
+
+            lock (_renderLock)
+            {
+                _currentFrameBuffer?.Dispose();
+                _currentFrameBuffer = null;
+
+                _nextFrameBuffer?.Dispose();
+                _nextFrameBuffer = null;
+
+                _frameReady = false;
+                _renderInProgress = false;
+            }
+
+            if (this.MapImage != null)
+            {
+                this.MapImage.Source = null;
             }
         }
 
@@ -887,12 +997,17 @@ namespace Economy_sim
             _politicalEntityRenderer = new PoliticalEntityRenderer(dataCache);
 
             // Set up HUD update timer
-            var hudTimer = new DispatcherTimer
+            _hudTimer ??= new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(1) // Update every second
             };
-            hudTimer.Tick += UpdateHUDDisplay;
-            hudTimer.Start();
+
+            _hudTimer.Tick -= UpdateHUDDisplay;
+            _hudTimer.Tick += UpdateHUDDisplay;
+            if (!_hudTimer.IsEnabled)
+            {
+                _hudTimer.Start();
+            }
 
             // Initialize HUD button event handlers
             SetupHUDEventHandlers();
