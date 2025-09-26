@@ -665,6 +665,19 @@
                                                                         Content="Cull states without cities"
                                                                         HorizontalAlignment="Left"
                                                                         Width="220"/>
+                                                        <StackPanel x:Name="CullProgressPanel"
+                                                                    Orientation="Vertical"
+                                                                    Spacing="6"
+                                                                    IsVisible="False">
+                                                                <TextBlock x:Name="CullProgressLabel"
+                                                                           Text="Culling states…"
+                                                                           Foreground="#DDDDDD"
+                                                                           FontSize="12"/>
+                                                                <ProgressBar x:Name="CullProgressBar"
+                                                                             Minimum="0"
+                                                                             Maximum="100"
+                                                                             Height="10"/>
+                                                        </StackPanel>
                                                 </StackPanel>
                                         </Grid>
                                 </Border>

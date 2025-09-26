@@ -621,7 +621,24 @@ namespace Economy_sim
             }
         }
 
+        public Task<int> CullStatesWithoutCitiesAsync(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => CullStatesWithoutCitiesInternal(progress, cancellationToken), cancellationToken);
+        }
+
         public int CullStatesWithoutCities()
+        {
+            return CullStatesWithoutCitiesInternal(progress: null, cancellationToken: CancellationToken.None);
+        }
+
+        private sealed class StateGridStats
+        {
+            public long SumX;
+            public long SumY;
+            public int CellCount;
+        }
+
+        private int CullStatesWithoutCitiesInternal(IProgress<double>? progress, CancellationToken cancellationToken)
         {
             try
             {
@@ -641,15 +658,29 @@ namespace Economy_sim
                     return 0;
                 }
 
+                var stateGrid = _stateManager.GetStateGrid();
+                if (stateGrid == null)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] State grid unavailable; skipping cull");
+                    return 0;
+                }
+
+                var stateByCode = states
+                    .Where(s => s.RasterCode > 0)
+                    .GroupBy(s => s.RasterCode)
+                    .ToDictionary(g => g.Key, g => g.First());
+
                 var cityCounts = new Dictionary<int, int>();
                 foreach (var city in _cityPoints)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     var state = _stateManager.GetStateAtGridScaled(city.PixelX, city.PixelY);
                     if (state == null)
                         continue;
 
-                    if (cityCounts.ContainsKey(state.RasterCode))
-                        cityCounts[state.RasterCode]++;
+                    if (cityCounts.TryGetValue(state.RasterCode, out var count))
+                        cityCounts[state.RasterCode] = count + 1;
                     else
                         cityCounts[state.RasterCode] = 1;
                 }
@@ -668,20 +699,102 @@ namespace Economy_sim
                     return 0;
                 }
 
-                int culled = 0;
-                foreach (var emptyState in emptyStates)
+                var gridStats = new Dictionary<int, StateGridStats>();
+                var adjacency = new Dictionary<int, HashSet<int>>();
+                int height = stateGrid.GetLength(0);
+                int width = stateGrid.GetLength(1);
+
+                for (int y = 0; y < height; y++)
                 {
-                    var target = FindBestCullTarget(emptyState, candidateStates, cityCounts);
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    for (int x = 0; x < width; x++)
+                    {
+                        int code = stateGrid[y, x];
+                        if (code <= 0)
+                            continue;
+
+                        if (!gridStats.TryGetValue(code, out var stats))
+                        {
+                            stats = new StateGridStats();
+                            gridStats[code] = stats;
+                        }
+
+                        stats.CellCount++;
+                        stats.SumX += x;
+                        stats.SumY += y;
+
+                        if (!adjacency.ContainsKey(code))
+                        {
+                            adjacency[code] = new HashSet<int>();
+                        }
+
+                        if (x + 1 < width)
+                        {
+                            int right = stateGrid[y, x + 1];
+                            if (right > 0 && right != code)
+                            {
+                                AddAdjacency(adjacency, code, right);
+                            }
+                        }
+
+                        if (y + 1 < height)
+                        {
+                            int down = stateGrid[y + 1, x];
+                            if (down > 0 && down != code)
+                            {
+                                AddAdjacency(adjacency, code, down);
+                            }
+                        }
+                    }
+                }
+
+                foreach (var state in stateByCode.Keys)
+                {
+                    if (!adjacency.ContainsKey(state))
+                        adjacency[state] = new HashSet<int>();
+                }
+
+                int maxCityCount = cityCounts.Count > 0 ? cityCounts.Values.Max() : 0;
+                int totalEmptyStates = emptyStates.Count;
+                int processed = 0;
+                int culled = 0;
+
+                var orderedEmptyStates = emptyStates
+                    .OrderBy(s => gridStats.TryGetValue(s.RasterCode, out var stats) ? stats.CellCount : int.MaxValue)
+                    .ToList();
+
+                foreach (var emptyState in orderedEmptyStates)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var target = FindWeightedCullTarget(
+                        emptyState,
+                        candidateStates,
+                        cityCounts,
+                        adjacency,
+                        gridStats,
+                        stateByCode,
+                        maxCityCount);
+
                     if (target == null)
                     {
                         Debug.WriteLine($"[HYBRID MANAGER] No merge target found for {emptyState.StateName} ({emptyState.CountryCode})");
-                        continue;
                     }
-
-                    if (_stateManager.MergeStateInto(emptyState, target))
+                    else if (_stateManager.MergeStateInto(emptyState, target))
                     {
                         culled++;
                         Debug.WriteLine($"[HYBRID MANAGER] Merged {emptyState.StateName} into {target.StateName}");
+
+                        UpdateAdjacencyAfterMerge(adjacency, emptyState.RasterCode, target.RasterCode);
+                        UpdateGridStatsAfterMerge(gridStats, emptyState.RasterCode, target.RasterCode);
+                        stateByCode.Remove(emptyState.RasterCode);
+                    }
+
+                    processed++;
+                    if (totalEmptyStates > 0)
+                    {
+                        progress?.Report(processed / (double)totalEmptyStates);
                     }
                 }
 
@@ -692,6 +805,11 @@ namespace Economy_sim
 
                 return culled;
             }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("[HYBRID MANAGER] State cull cancelled");
+                throw;
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[HYBRID MANAGER] Failed to cull empty states: {ex.Message}");
@@ -699,50 +817,217 @@ namespace Economy_sim
             }
         }
 
-        private static StateBorderManager.StateFeature? FindBestCullTarget(
+        private static void AddAdjacency(Dictionary<int, HashSet<int>> adjacency, int a, int b)
+        {
+            if (!adjacency.TryGetValue(a, out var setA))
+            {
+                setA = new HashSet<int>();
+                adjacency[a] = setA;
+            }
+            setA.Add(b);
+
+            if (!adjacency.TryGetValue(b, out var setB))
+            {
+                setB = new HashSet<int>();
+                adjacency[b] = setB;
+            }
+            setB.Add(a);
+        }
+
+        private static void UpdateAdjacencyAfterMerge(Dictionary<int, HashSet<int>> adjacency, int sourceCode, int targetCode)
+        {
+            if (!adjacency.TryGetValue(targetCode, out var targetNeighbors))
+            {
+                targetNeighbors = new HashSet<int>();
+                adjacency[targetCode] = targetNeighbors;
+            }
+
+            if (adjacency.TryGetValue(sourceCode, out var sourceNeighbors))
+            {
+                foreach (var neighbor in sourceNeighbors)
+                {
+                    if (neighbor == targetCode)
+                        continue;
+
+                    targetNeighbors.Add(neighbor);
+                    if (adjacency.TryGetValue(neighbor, out var neighborSet))
+                    {
+                        neighborSet.Remove(sourceCode);
+                        if (neighbor != targetCode)
+                        {
+                            neighborSet.Add(targetCode);
+                        }
+                    }
+                }
+
+                adjacency.Remove(sourceCode);
+            }
+
+            targetNeighbors.Remove(targetCode);
+        }
+
+        private static void UpdateGridStatsAfterMerge(Dictionary<int, StateGridStats> gridStats, int sourceCode, int targetCode)
+        {
+            if (!gridStats.TryGetValue(targetCode, out var targetStats))
+            {
+                targetStats = new StateGridStats();
+                gridStats[targetCode] = targetStats;
+            }
+
+            if (gridStats.TryGetValue(sourceCode, out var sourceStats))
+            {
+                targetStats.SumX += sourceStats.SumX;
+                targetStats.SumY += sourceStats.SumY;
+                targetStats.CellCount += sourceStats.CellCount;
+                gridStats.Remove(sourceCode);
+            }
+        }
+
+        private StateBorderManager.StateFeature? FindWeightedCullTarget(
             StateBorderManager.StateFeature source,
             List<StateBorderManager.StateFeature> candidates,
-            Dictionary<int, int> cityCounts)
+            Dictionary<int, int> cityCounts,
+            Dictionary<int, HashSet<int>> adjacency,
+            Dictionary<int, StateGridStats> gridStats,
+            Dictionary<int, StateBorderManager.StateFeature> stateByCode,
+            int maxCityCount)
         {
-            List<StateBorderManager.StateFeature> scopedCandidates;
-            if (!string.IsNullOrWhiteSpace(source.CountryCode))
+            if (source == null)
+                return null;
+
+            var neighborCodes = adjacency.TryGetValue(source.RasterCode, out var neighbors)
+                ? neighbors.Where(code => code != source.RasterCode && cityCounts.ContainsKey(code) && stateByCode.ContainsKey(code)).ToList()
+                : new List<int>();
+
+            if (neighborCodes.Count == 0)
             {
-                scopedCandidates = candidates
-                    .Where(c => string.Equals(c.CountryCode, source.CountryCode, StringComparison.OrdinalIgnoreCase))
+                neighborCodes = candidates
+                    .Where(c => c.RasterCode != source.RasterCode && cityCounts.ContainsKey(c.RasterCode))
+                    .Select(c => c.RasterCode)
+                    .Distinct()
+                    .Where(code => stateByCode.ContainsKey(code))
                     .ToList();
             }
-            else
-            {
-                scopedCandidates = new List<StateBorderManager.StateFeature>();
-            }
 
-            if (scopedCandidates.Count == 0)
-            {
-                scopedCandidates = candidates;
-            }
+            if (neighborCodes.Count == 0)
+                return null;
+
+            gridStats.TryGetValue(source.RasterCode, out var sourceStats);
 
             StateBorderManager.StateFeature? best = null;
-            int bestCityCount = -1;
-            float bestArea = -1f;
+            double bestScore = double.MinValue;
 
-            foreach (var candidate in scopedCandidates)
+            foreach (var neighborCode in neighborCodes)
             {
-                if (candidate.RasterCode == source.RasterCode)
+                if (!stateByCode.TryGetValue(neighborCode, out var candidate))
                     continue;
 
-                int candidateCityCount = cityCounts.TryGetValue(candidate.RasterCode, out var count) ? count : 0;
-                float candidateArea = candidate.Bounds.Width * candidate.Bounds.Height;
+                gridStats.TryGetValue(neighborCode, out var candidateStats);
 
-                if (candidateCityCount > bestCityCount ||
-                    (candidateCityCount == bestCityCount && candidateArea > bestArea))
+                double cityScore = 0.0;
+                if (cityCounts.TryGetValue(neighborCode, out var count))
                 {
+                    cityScore = maxCityCount > 0 ? count / (double)maxCityCount : 0.0;
+                }
+
+                double distanceScore = CalculateDistanceScore(source, candidate, sourceStats, candidateStats);
+                double areaScore = CalculateAreaSimilarityScore(sourceStats, candidateStats, source, candidate);
+                double adjacencyBonus = adjacency.TryGetValue(source.RasterCode, out var set) && set.Contains(neighborCode) ? 0.1 : 0.0;
+
+                double score = (cityScore * 0.4) + (distanceScore * 0.4) + (areaScore * 0.1) + adjacencyBonus;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
                     best = candidate;
-                    bestCityCount = candidateCityCount;
-                    bestArea = candidateArea;
                 }
             }
 
             return best;
+        }
+
+        private static double CalculateDistanceScore(
+            StateBorderManager.StateFeature source,
+            StateBorderManager.StateFeature candidate,
+            StateGridStats? sourceStats,
+            StateGridStats? candidateStats)
+        {
+            double sx;
+            double sy;
+
+            if (sourceStats != null && sourceStats.CellCount > 0)
+            {
+                sx = sourceStats.SumX / (double)sourceStats.CellCount;
+                sy = sourceStats.SumY / (double)sourceStats.CellCount;
+            }
+            else
+            {
+                sx = source.Bounds.MidX;
+                sy = source.Bounds.MidY;
+            }
+
+            double tx;
+            double ty;
+
+            if (candidateStats != null && candidateStats.CellCount > 0)
+            {
+                tx = candidateStats.SumX / (double)candidateStats.CellCount;
+                ty = candidateStats.SumY / (double)candidateStats.CellCount;
+            }
+            else
+            {
+                tx = candidate.Bounds.MidX;
+                ty = candidate.Bounds.MidY;
+            }
+
+            double dx = sx - tx;
+            double dy = sy - ty;
+            double distance = Math.Sqrt((dx * dx) + (dy * dy));
+
+            return 1.0 / (1.0 + distance);
+        }
+
+        private static double CalculateAreaSimilarityScore(
+            StateGridStats? sourceStats,
+            StateGridStats? candidateStats,
+            StateBorderManager.StateFeature source,
+            StateBorderManager.StateFeature candidate)
+        {
+            double sourceArea;
+            double candidateArea;
+
+            if (sourceStats != null && sourceStats.CellCount > 0)
+            {
+                sourceArea = sourceStats.CellCount;
+            }
+            else
+            {
+                sourceArea = Math.Max(1.0, source.Bounds.Width * source.Bounds.Height);
+            }
+
+            if (candidateStats != null && candidateStats.CellCount > 0)
+            {
+                candidateArea = candidateStats.CellCount;
+            }
+            else
+            {
+                candidateArea = Math.Max(1.0, candidate.Bounds.Width * candidate.Bounds.Height);
+            }
+
+            double maxArea = Math.Max(sourceArea, candidateArea);
+            if (maxArea <= 0)
+                return 0.0;
+
+            double minArea = Math.Min(sourceArea, candidateArea);
+            double similarity = minArea / maxArea;
+
+            // Penalize extremely large disparities to discourage merging into massive states
+            if (similarity < 0.1)
+            {
+                similarity *= 0.5;
+            }
+
+            return similarity;
         }
 
         public void EquilibrateStateBorders(int iterations = 2)

@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Economy_sim
@@ -41,6 +42,9 @@ namespace Economy_sim
         private bool _frameReady = false;
         private readonly TimeSpan _refreshInterval = TimeSpan.FromMilliseconds(100); // 10 FPS continuous refresh
         public Point mousepoint;
+
+        private bool _isCullingStates;
+        private CancellationTokenSource? _cullStatesCts;
 
         // Track baseline base size to compute normalization if env changes
         private readonly int _baselineWidth = 4096 * 4;
@@ -1569,9 +1573,20 @@ namespace Economy_sim
             QueueRender(immediate: true);
         }
 
-        private void OnCullEmptyStatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private async void OnCullEmptyStatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
+            if (_isCullingStates)
+            {
+                Debug.WriteLine("[DEBUG MENU] State culling already in progress");
+                return;
+            }
+
             Debug.WriteLine("[DEBUG MENU] Cull empty states requested");
+
+            var cullButton = this.FindControl<Button>("CullEmptyStatesButton");
+            var progressPanel = this.FindControl<StackPanel>("CullProgressPanel");
+            var progressBar = this.FindControl<ProgressBar>("CullProgressBar");
+            var progressLabel = this.FindControl<TextBlock>("CullProgressLabel");
 
             try
             {
@@ -1581,18 +1596,96 @@ namespace Economy_sim
                     return;
                 }
 
-                int culled = _mapManager.CullStatesWithoutCities();
+                _isCullingStates = true;
+                _cullStatesCts = new CancellationTokenSource();
+
+                ShowCullProgressUI(cullButton, progressPanel, progressBar, progressLabel, 0.0);
+
+                var progress = new Progress<double>(value =>
+                {
+                    Dispatcher.UIThread.Post(
+                        () => UpdateCullProgressUI(progressBar, progressLabel, value),
+                        DispatcherPriority.Background);
+                });
+
+                int culled = await _mapManager.CullStatesWithoutCitiesAsync(progress, _cullStatesCts.Token);
                 Debug.WriteLine($"[DEBUG MENU] Culled {culled} state(s) without cities");
 
                 if (culled > 0)
                 {
+                    UpdateCullProgressUI(progressBar, progressLabel, 1.0);
                     QueueRender(immediate: true);
                     HideAllPopups();
                 }
             }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("[DEBUG MENU] State culling cancelled");
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[DEBUG MENU] Failed to cull empty states: {ex.Message}");
+            }
+            finally
+            {
+                _isCullingStates = false;
+                _cullStatesCts?.Dispose();
+                _cullStatesCts = null;
+
+                Dispatcher.UIThread.Post(() => ResetCullProgressUI(cullButton, progressPanel, progressBar, progressLabel));
+            }
+        }
+
+        private static void ShowCullProgressUI(Button? button, StackPanel? panel, ProgressBar? bar, TextBlock? label, double progressValue)
+        {
+            if (button != null)
+            {
+                button.IsEnabled = false;
+            }
+
+            if (panel != null)
+            {
+                panel.IsVisible = true;
+            }
+
+            UpdateCullProgressUI(bar, label, progressValue);
+        }
+
+        private static void UpdateCullProgressUI(ProgressBar? bar, TextBlock? label, double progressValue)
+        {
+            double clamped = Math.Clamp(progressValue, 0.0, 1.0);
+
+            if (bar != null)
+            {
+                bar.Value = clamped * 100.0;
+            }
+
+            if (label != null)
+            {
+                label.Text = $"Culling states… {Math.Round(clamped * 100)}%";
+            }
+        }
+
+        private static void ResetCullProgressUI(Button? button, StackPanel? panel, ProgressBar? bar, TextBlock? label)
+        {
+            if (button != null)
+            {
+                button.IsEnabled = true;
+            }
+
+            if (panel != null)
+            {
+                panel.IsVisible = false;
+            }
+
+            if (bar != null)
+            {
+                bar.Value = 0;
+            }
+
+            if (label != null)
+            {
+                label.Text = "Culling states…";
             }
         }
 
