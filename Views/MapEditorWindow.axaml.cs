@@ -469,14 +469,57 @@ namespace Economy_sim
             }
             else if (_isPanning)
             {
-                var currentPoint = e.GetCurrentPoint(null).Position;
-                var deltaX = currentPoint.X - _panStartPoint.X;
-                var deltaY = currentPoint.Y - _panStartPoint.Y;
-                _viewOffset.X = Math.Max(0, _viewOffset.X - (int)deltaX);
-                _viewOffset.Y = Math.Max(0, _viewOffset.Y - (int)deltaY);
+                // FIX: Previous logic inverted the direction (subtracting raw delta) which caused viewOffset to remain near 0
+                // resulting in edits always mapping to the top-left of the underlying political grid.
+                var mapImage = this.FindControl<Image>("MapImage");
+                var currentPoint = e.GetPosition(mapImage);
+                var previousPoint = _panStartPoint;
+                var delta = previousPoint - currentPoint; // movement since last event
                 _panStartPoint = currentPoint;
+
+                _viewOffset.X += (int)delta.X;
+                _viewOffset.Y += (int)delta.Y;
+
+                ClampViewOffset();
                 QueueRender();
                 e.Handled = true;
+            }
+        }
+
+        private void ClampViewOffset()
+        {
+            // Ensure we don't scroll outside the map bounds (terrain-space; political view scales internally)
+            try
+            {
+                var effectiveSize = GetEffectiveRenderSize();
+                if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
+                var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
+
+                if (mapSize.Width > (int)effectiveSize.Width)
+                {
+                    if (_viewOffset.X < 0) _viewOffset.X = 0;
+                    else if (_viewOffset.X > mapSize.Width - (int)effectiveSize.Width)
+                        _viewOffset.X = mapSize.Width - (int)effectiveSize.Width;
+                }
+                else
+                {
+                    _viewOffset.X = Math.Max(0, (mapSize.Width - (int)effectiveSize.Width) / 2);
+                }
+
+                if (mapSize.Height > (int)effectiveSize.Height)
+                {
+                    if (_viewOffset.Y < 0) _viewOffset.Y = 0;
+                    else if (_viewOffset.Y > mapSize.Height - (int)effectiveSize.Height)
+                        _viewOffset.Y = mapSize.Height - (int)effectiveSize.Height;
+                }
+                else
+                {
+                    _viewOffset.Y = Math.Max(0, (mapSize.Height - (int)effectiveSize.Height) / 2);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MAP EDITOR] ClampViewOffset error: {ex.Message}");
             }
         }
 
