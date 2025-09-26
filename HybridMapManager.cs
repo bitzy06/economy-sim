@@ -621,6 +621,130 @@ namespace Economy_sim
             }
         }
 
+        public int CullStatesWithoutCities()
+        {
+            try
+            {
+                _stateManager.LoadStateData();
+                EnsureCitiesLoaded();
+
+                if (_cityPoints == null || _cityPoints.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] City data unavailable; skipping state cull");
+                    return 0;
+                }
+
+                var states = _stateManager.GetAllStates();
+                if (states == null || states.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] No states available for culling");
+                    return 0;
+                }
+
+                var cityCounts = new Dictionary<int, int>();
+                foreach (var city in _cityPoints)
+                {
+                    var state = _stateManager.GetStateAtGridScaled(city.PixelX, city.PixelY);
+                    if (state == null)
+                        continue;
+
+                    if (cityCounts.ContainsKey(state.RasterCode))
+                        cityCounts[state.RasterCode]++;
+                    else
+                        cityCounts[state.RasterCode] = 1;
+                }
+
+                var candidateStates = states.Where(s => cityCounts.ContainsKey(s.RasterCode)).ToList();
+                if (candidateStates.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] No states with city assignments found; skipping cull");
+                    return 0;
+                }
+
+                var emptyStates = states.Where(s => !cityCounts.ContainsKey(s.RasterCode)).ToList();
+                if (emptyStates.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] No states without cities detected");
+                    return 0;
+                }
+
+                int culled = 0;
+                foreach (var emptyState in emptyStates)
+                {
+                    var target = FindBestCullTarget(emptyState, candidateStates, cityCounts);
+                    if (target == null)
+                    {
+                        Debug.WriteLine($"[HYBRID MANAGER] No merge target found for {emptyState.StateName} ({emptyState.CountryCode})");
+                        continue;
+                    }
+
+                    if (_stateManager.MergeStateInto(emptyState, target))
+                    {
+                        culled++;
+                        Debug.WriteLine($"[HYBRID MANAGER] Merged {emptyState.StateName} into {target.StateName}");
+                    }
+                }
+
+                if (culled > 0)
+                {
+                    _stateSplittingProcessed = false;
+                }
+
+                return culled;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HYBRID MANAGER] Failed to cull empty states: {ex.Message}");
+                return 0;
+            }
+        }
+
+        private static StateBorderManager.StateFeature? FindBestCullTarget(
+            StateBorderManager.StateFeature source,
+            List<StateBorderManager.StateFeature> candidates,
+            Dictionary<int, int> cityCounts)
+        {
+            List<StateBorderManager.StateFeature> scopedCandidates;
+            if (!string.IsNullOrWhiteSpace(source.CountryCode))
+            {
+                scopedCandidates = candidates
+                    .Where(c => string.Equals(c.CountryCode, source.CountryCode, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            else
+            {
+                scopedCandidates = new List<StateBorderManager.StateFeature>();
+            }
+
+            if (scopedCandidates.Count == 0)
+            {
+                scopedCandidates = candidates;
+            }
+
+            StateBorderManager.StateFeature? best = null;
+            int bestCityCount = -1;
+            float bestArea = -1f;
+
+            foreach (var candidate in scopedCandidates)
+            {
+                if (candidate.RasterCode == source.RasterCode)
+                    continue;
+
+                int candidateCityCount = cityCounts.TryGetValue(candidate.RasterCode, out var count) ? count : 0;
+                float candidateArea = candidate.Bounds.Width * candidate.Bounds.Height;
+
+                if (candidateCityCount > bestCityCount ||
+                    (candidateCityCount == bestCityCount && candidateArea > bestArea))
+                {
+                    best = candidate;
+                    bestCityCount = candidateCityCount;
+                    bestArea = candidateArea;
+                }
+            }
+
+            return best;
+        }
+
         public void EquilibrateStateBorders(int iterations = 2)
         {
             try

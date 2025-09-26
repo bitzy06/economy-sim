@@ -918,6 +918,9 @@ namespace Economy_sim
             if (this.FindControl<Button>("StatsButton") is Button statsBtn)
                 statsBtn.Click += OnStatsClicked;
 
+            if (this.FindControl<Button>("DebugButton") is Button debugBtn)
+                debugBtn.Click += OnDebugClicked;
+
             // Map view toggle buttons
             if (this.FindControl<Button>("TerrainViewButton") is Button terrainBtn)
                 terrainBtn.Click += OnTerrainViewClicked;
@@ -950,6 +953,9 @@ namespace Economy_sim
             if (this.FindControl<Button>("StatsCloseButton") is Button statsCloseBtn)
                 statsCloseBtn.Click += (s, e) => HideAllPopups();
 
+            if (this.FindControl<Button>("DebugCloseButton") is Button debugCloseBtn)
+                debugCloseBtn.Click += (s, e) => HideAllPopups();
+
             // Setup overlay click handlers to close popups when clicking outside
             if (this.FindControl<Border>("DiplomacyMenuOverlay") is Border diplomacyOverlay)
                 diplomacyOverlay.PointerPressed += OnOverlayClicked;
@@ -965,6 +971,9 @@ namespace Economy_sim
 
             if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
                 statsOverlay.PointerPressed += OnOverlayClicked;
+
+            if (this.FindControl<Border>("DebugMenuOverlay") is Border debugOverlay)
+                debugOverlay.PointerPressed += OnOverlayClicked;
 
             // Side menu close button
             if (this.FindControl<Button>("SideMenuCloseButton") is Button sideCloseBtn)
@@ -1066,6 +1075,9 @@ namespace Economy_sim
 
             if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
                 statsOverlay.IsVisible = false;
+
+            if (this.FindControl<Border>("DebugMenuOverlay") is Border debugOverlay)
+                debugOverlay.IsVisible = false;
         }
 
         private void ShowPopup(String popupName)
@@ -1191,6 +1203,9 @@ namespace Economy_sim
                     statsList.Items.Add(stat);
                 }
             }
+
+            if (this.FindControl<Button>("CullEmptyStatesButton") is Button cullButton)
+                cullButton.Click += OnCullEmptyStatesClicked;
         }
 
         private void InitializeSideMenus()
@@ -1499,6 +1514,12 @@ namespace Economy_sim
             ShowRightSidePanel("Game Statistics", "SideStatsPanel");
         }
 
+        private void OnDebugClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Debug button clicked - showing debug menu");
+            ShowPopup("DebugMenuOverlay");
+        }
+
         private void OnMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Menu button clicked - returning to main menu");
@@ -1546,6 +1567,33 @@ namespace Economy_sim
             Debug.WriteLine("States view button clicked - switching to states view");
             _mapManager.SetViewType(MapViewType.States);
             QueueRender(immediate: true);
+        }
+
+        private void OnCullEmptyStatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("[DEBUG MENU] Cull empty states requested");
+
+            try
+            {
+                if (_mapManager == null)
+                {
+                    Debug.WriteLine("[DEBUG MENU] Map manager unavailable; cannot cull states");
+                    return;
+                }
+
+                int culled = _mapManager.CullStatesWithoutCities();
+                Debug.WriteLine($"[DEBUG MENU] Culled {culled} state(s) without cities");
+
+                if (culled > 0)
+                {
+                    QueueRender(immediate: true);
+                    HideAllPopups();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[DEBUG MENU] Failed to cull empty states: {ex.Message}");
+            }
         }
 
         private void OnMapViewTypeChanged(object? sender, MapViewType viewType)

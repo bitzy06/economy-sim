@@ -824,6 +824,73 @@ namespace Economy_sim
             return _stateFeatures.Find(s => s.RasterCode == code);
         }
 
+        public bool MergeStateInto(StateFeature? sourceState, StateFeature? targetState)
+        {
+            if (sourceState == null || targetState == null)
+                return false;
+
+            if (sourceState.RasterCode <= 0 || targetState.RasterCode <= 0)
+                return false;
+
+            if (sourceState.RasterCode == targetState.RasterCode)
+                return false;
+
+            EnsureStateGridBuilt();
+            if (_stateGrid == null)
+                return false;
+
+            int replacements = 0;
+            int height = _stateGrid.GetLength(0);
+            int width = _stateGrid.GetLength(1);
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (_stateGrid[y, x] == sourceState.RasterCode)
+                    {
+                        _stateGrid[y, x] = targetState.RasterCode;
+                        replacements++;
+                    }
+                }
+            }
+
+            if (replacements == 0)
+            {
+                _stateFeatures.Remove(sourceState);
+                _stateColorsByCode.Remove(sourceState.RasterCode);
+                return false;
+            }
+
+            if (sourceState.Geometry != null && sourceState.Geometry.Count > 0)
+            {
+                foreach (var path in sourceState.Geometry)
+                {
+                    if (path != null)
+                        targetState.Geometry.Add(path);
+                }
+                sourceState.Geometry.Clear();
+            }
+
+            if (!sourceState.Bounds.IsEmpty)
+            {
+                if (targetState.Bounds.IsEmpty)
+                    targetState.Bounds = sourceState.Bounds;
+                else
+                    targetState.Bounds = SKRect.Union(targetState.Bounds, sourceState.Bounds);
+            }
+
+            _stateFeatures.Remove(sourceState);
+            _stateColorsByCode.Remove(sourceState.RasterCode);
+
+            if (_selectedStateCode == sourceState.RasterCode)
+            {
+                _selectedStateCode = targetState.RasterCode;
+            }
+
+            return true;
+        }
+
         public void Dispose()
         {
             foreach (var state in _stateFeatures)
