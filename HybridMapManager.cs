@@ -784,78 +784,20 @@ namespace Economy_sim
                 PopulateEffectiveCountryAssignments(states, coverageByStateKey, effectiveCountryByState, foreignMergeTargets);
 
                 var stateAreas = new Dictionary<int, double>();
-                var countryTotals = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-                var countryCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                var countryMaxAreas = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-
                 foreach (var state in states)
                 {
                     double area = CalculateStateArea(state, gridStats);
                     stateAreas[state.RasterCode] = area;
-
-                    string countryKey = GetEffectiveCountryKey(state, effectiveCountryByState);
-                    if (countryTotals.TryGetValue(countryKey, out var total))
-                        countryTotals[countryKey] = total + area;
-                    else
-                        countryTotals[countryKey] = area;
-
-                    if (countryCounts.TryGetValue(countryKey, out var count))
-                        countryCounts[countryKey] = count + 1;
-                    else
-                        countryCounts[countryKey] = 1;
-
-                    if (!countryMaxAreas.TryGetValue(countryKey, out var maxArea) || area > maxArea)
-                        countryMaxAreas[countryKey] = area;
                 }
 
-                var averageAreaByCountry = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-                foreach (var kvp in countryTotals)
-                {
-                    string key = kvp.Key;
-                    int count = countryCounts.TryGetValue(key, out var c) ? Math.Max(1, c) : 1;
-                    averageAreaByCountry[key] = kvp.Value / count;
-                }
-
-                var maxAllowedAreaByCountry = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-                foreach (var kvp in averageAreaByCountry)
-                {
-                    string key = kvp.Key;
-                    double avg = Math.Max(1.0, kvp.Value);
-                    double baselineMax = countryMaxAreas.TryGetValue(key, out var maxArea) ? Math.Max(1.0, maxArea) : avg;
-                    // Allow a modest growth beyond the original largest state to keep borders natural
-                    maxAllowedAreaByCountry[key] = Math.Max(baselineMax, avg * 1.5);
-                }
-
-                var filteredEmptyStates = emptyStates
-                    .Where(state =>
-                    {
-                        string countryKey = GetEffectiveCountryKey(state, effectiveCountryByState);
-                        double area = GetOrCalculateStateArea(state, stateAreas, gridStats);
-                        if (averageAreaByCountry.TryGetValue(countryKey, out var averageArea) && averageArea > 0)
-                        {
-                            double threshold = averageArea * 1.2;
-                            if (area >= threshold)
-                            {
-                                Debug.WriteLine($"[HYBRID MANAGER] Skipping cull for {state.StateName} ({state.CountryCode}) due to area {area:F0} >= threshold {threshold:F0}");
-                                return false;
-                            }
-                        }
-                        return true;
-                    })
-                    .ToList();
-
-                if (filteredEmptyStates.Count == 0)
-                {
-                    Debug.WriteLine("[HYBRID MANAGER] All empty states meet or exceed country averages; no culling performed");
-                    return 0;
-                }
+                var mergeableEmptyStates = emptyStates;
 
                 int maxCityCount = cityCounts.Count > 0 ? cityCounts.Values.Max() : 0;
-                int totalEmptyStates = filteredEmptyStates.Count;
+                int totalEmptyStates = mergeableEmptyStates.Count;
                 int processed = 0;
                 int culled = 0;
 
-                var orderedEmptyStates = filteredEmptyStates
+                var orderedEmptyStates = mergeableEmptyStates
                     .OrderBy(s => gridStats.TryGetValue(s.RasterCode, out var stats) ? stats.CellCount : int.MaxValue)
                     .ToList();
 
@@ -901,7 +843,6 @@ namespace Economy_sim
                                     stateByCode,
                                     maxCityCount,
                                     stateAreas,
-                                    maxAllowedAreaByCountry,
                                     effectiveCountryByState,
                                     foreignMergeTargets);
 
@@ -1128,7 +1069,6 @@ namespace Economy_sim
             Dictionary<int, StateBorderManager.StateFeature> stateByCode,
             int maxCityCount,
             Dictionary<int, double> stateAreas,
-            Dictionary<string, double> maxAllowedAreaByCountry,
             Dictionary<int, string> effectiveCountryByState,
             Dictionary<int, HashSet<string>> foreignMergeTargets)
         {
@@ -1139,22 +1079,6 @@ namespace Economy_sim
                 ? neighbors.Where(code => code != source.RasterCode && cityCounts.ContainsKey(code) && stateByCode.ContainsKey(code)).ToList()
                 : new List<int>();
 
-            string sourceCountry = GetEffectiveCountryKey(source, effectiveCountryByState);
-
-            var sameCountryNeighbors = neighborCodes
-                .Where(code => stateByCode.TryGetValue(code, out var neighbor) && GetEffectiveCountryKey(neighbor, effectiveCountryByState) == sourceCountry)
-                .ToList();
-            if (sameCountryNeighbors.Count > 0)
-            {
-                neighborCodes = sameCountryNeighbors;
-            }
-            else if (foreignMergeTargets.TryGetValue(source.RasterCode, out var allowedForeign) && allowedForeign.Count > 0)
-            {
-                neighborCodes = neighborCodes
-                    .Where(code => stateByCode.TryGetValue(code, out var neighbor) && allowedForeign.Contains(GetEffectiveCountryKey(neighbor, effectiveCountryByState)))
-                    .ToList();
-            }
-
             if (neighborCodes.Count == 0)
             {
                 neighborCodes = candidates
@@ -1162,13 +1086,6 @@ namespace Economy_sim
                     .Select(c => c.RasterCode)
                     .Distinct()
                     .Where(code => stateByCode.ContainsKey(code))
-                    .Where(code =>
-                    {
-                        var effectiveCountry = GetEffectiveCountryKey(code, effectiveCountryByState, stateByCode);
-                        if (string.Equals(effectiveCountry, sourceCountry, StringComparison.OrdinalIgnoreCase))
-                            return true;
-                        return foreignMergeTargets.TryGetValue(source.RasterCode, out var allowed) && allowed.Contains(effectiveCountry);
-                    })
                     .ToList();
             }
 
@@ -1176,7 +1093,10 @@ namespace Economy_sim
                 return null;
 
             gridStats.TryGetValue(source.RasterCode, out var sourceStats);
-            double sourceArea = GetOrCalculateStateArea(source, stateAreas, gridStats);
+            _ = GetOrCalculateStateArea(source, stateAreas, gridStats);
+
+            string sourceCountry = GetEffectiveCountryKey(source, effectiveCountryByState);
+            foreignMergeTargets.TryGetValue(source.RasterCode, out var foreignCandidates);
 
             StateBorderManager.StateFeature? best = null;
             double bestScore = double.MinValue;
@@ -1187,19 +1107,7 @@ namespace Economy_sim
                     continue;
 
                 gridStats.TryGetValue(neighborCode, out var candidateStats);
-                double candidateArea = GetOrCalculateStateArea(candidate, stateAreas, gridStats);
-
-                string candidateCountry = GetEffectiveCountryKey(candidate, effectiveCountryByState);
-                string limitKey = candidateCountry;
-                if (maxAllowedAreaByCountry.TryGetValue(limitKey, out var maxAllowed))
-                {
-                    double combinedArea = candidateArea + sourceArea;
-                    if (combinedArea > maxAllowed)
-                    {
-                        Debug.WriteLine($"[HYBRID MANAGER] Rejecting merge of {source.StateName} into {candidate.StateName}: {combinedArea:F0} > limit {maxAllowed:F0}");
-                        continue;
-                    }
-                }
+                _ = GetOrCalculateStateArea(candidate, stateAreas, gridStats);
 
                 double cityScore = 0.0;
                 if (cityCounts.TryGetValue(neighborCode, out var count))
@@ -1209,9 +1117,21 @@ namespace Economy_sim
 
                 double distanceScore = CalculateDistanceScore(source, candidate, sourceStats, candidateStats);
                 double areaScore = CalculateAreaSimilarityScore(sourceStats, candidateStats, source, candidate);
-                double adjacencyBonus = adjacency.TryGetValue(source.RasterCode, out var set) && set.Contains(neighborCode) ? 0.1 : 0.0;
+                bool adjacent = adjacency.TryGetValue(source.RasterCode, out var set) && set.Contains(neighborCode);
+                double adjacencyScore = adjacent ? 1.0 : 0.0;
 
-                double score = (cityScore * 0.4) + (distanceScore * 0.4) + (areaScore * 0.1) + adjacencyBonus;
+                string candidateCountry = GetEffectiveCountryKey(candidate, effectiveCountryByState);
+                double countryAffinity = string.Equals(candidateCountry, sourceCountry, StringComparison.OrdinalIgnoreCase)
+                    ? 1.0
+                    : (foreignCandidates != null && foreignCandidates.Contains(candidateCountry) ? 0.6 : 0.2);
+
+                double closenessScore = distanceScore;
+                if (adjacent)
+                {
+                    closenessScore = Math.Min(1.0, closenessScore + 0.25);
+                }
+
+                double score = (closenessScore * 0.6) + (adjacencyScore * 0.2) + (countryAffinity * 0.1) + (cityScore * 0.05) + (areaScore * 0.05);
 
                 if (score > bestScore)
                 {
