@@ -840,25 +840,22 @@ namespace Economy_sim
                 using (var canvas = new SKCanvas(codeBitmap))
                 using (var paint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = false, BlendMode = SKBlendMode.Src })
                 {
+                    var scale = 1f / _gridScaleFactor;
+                    var scaleMatrix = SKMatrix.CreateScale(scale, scale);
                     foreach (var state in _stateFeatures)
                     {
-                        // Rebuild temporary scaled paths from geographic polygons to avoid storing two copies
+                        byte r = (byte)(state.RasterCode & 0xFF);
+                        byte g = (byte)((state.RasterCode >> 8) & 0xFF);
+                        byte b = (byte)((state.RasterCode >> 16) & 0xFF);
+                        paint.Color = new SKColor(r, g, b, 0xFF);
+
                         foreach (var geoPath in state.Geometry)
                         {
-                            // geoPath currently holds base-pixel coords; we skip reusing it for scaled drawing due to complexity
-                            // Instead rely on re-conversion not available here -> simple bbox fill fallback
-                            // For accuracy we approximate by filling the bounding box scaled
-                            var b = geoPath.Bounds;
-                            var scaledRect = SKRect.Create(
-                                (float)(b.Left / _gridScaleFactor),
-                                (float)(b.Top / _gridScaleFactor),
-                                (float)(b.Width / _gridScaleFactor),
-                                (float)(b.Height / _gridScaleFactor));
-                            byte r = (byte)(state.RasterCode & 0xFF);
-                            byte g = (byte)((state.RasterCode >> 8) & 0xFF);
-                            byte bch = (byte)((state.RasterCode >> 16) & 0xFF);
-                            paint.Color = new SKColor(r, g, bch, 0xFF);
-                            canvas.DrawRect(scaledRect, paint);
+                            if (geoPath == null || geoPath.IsEmpty) continue;
+
+                            using var scaledPath = new SKPath(geoPath);
+                            scaledPath.Transform(scaleMatrix);
+                            canvas.DrawPath(scaledPath, paint);
                         }
                     }
                 }
