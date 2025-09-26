@@ -1069,7 +1069,7 @@ namespace Economy_sim
         private bool _citiesLoadAttempted = false;
         private readonly object _cityLock = new();
 
-        private record CityPoint(string IsoCode, float Lon, float Lat, int PopMax, int ScaleRank, int PixelX, int PixelY, int RasterCode);
+        private record CityPoint(string IsoCode, float Lon, float Lat, int PopMax, int ScaleRank, int PixelX, int PixelY, int RasterCode, string Name);
 
         private void RenderCitiesOverlay(SKCanvas canvas, SKRectI terrainView, SKSizeI outputSize, int zoomLevel)
         {
@@ -1098,11 +1098,17 @@ namespace Economy_sim
 
                 using var fillPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
                 using var outlinePaint = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = SKColors.Black, IsAntialias = true };
+                using var textPaint = new SKPaint { IsAntialias = true, Typeface = SKTypeface.FromFamilyName("Arial"), Color = SKColors.White };
+                using var textBgPaint = new SKPaint { IsAntialias = true, Color = new SKColor(0, 0, 0, 160), Style = SKPaintStyle.Fill };
 
                 int targetRaster = _selectedCountry?.RasterCode ?? -1;
                 string iso = _selectedCountry?.CountryCode?.ToUpperInvariant() ?? string.Empty;
                 int drawn = 0;
                 int considered = 0;
+                int labeled = 0;
+
+                // Simple collision list for labels
+                List<SKRect> placedLabels = new();
 
                 foreach (var city in _cityPoints)
                 {
@@ -1137,6 +1143,75 @@ namespace Economy_sim
                     canvas.DrawCircle((float)screenX, (float)screenY, radius, fillPaint);
                     canvas.DrawCircle((float)screenX, (float)screenY, radius, outlinePaint);
                     drawn++;
+
+                    // Decide if we draw a label
+                    if (!string.IsNullOrWhiteSpace(city.Name) && ShouldDrawCityLabel(city, zoomLevel))
+                    {
+                        float baseTextSize = zoomLevel switch
+                        {
+                            <= 1 => 10f,
+                            2 => 11f,
+                            3 => 12f,
+                            4 => 13f,
+                            5 => 14f,
+                            6 => 16f,
+                            _ => 18f
+                        };
+                        // Adjust by population lightly
+                        if (city.PopMax > 10_000_000) baseTextSize += 3f;
+                        else if (city.PopMax > 5_000_000) baseTextSize += 2f;
+                        else if (city.PopMax > 1_000_000) baseTextSize += 1f;
+
+                        textPaint.TextSize = baseTextSize;
+                        var bounds = new SKRect();
+                        textPaint.MeasureText(city.Name, ref bounds);
+                        float labelPadX = 4f;
+                        float labelPadY = 2f;
+                        float offsetX = radius + 4f; // place label to right of dot
+                        float labelX = (float)screenX + offsetX;
+                        float labelY = (float)screenY - bounds.MidY; // vertically center
+                        var bgRect = new SKRect(labelX - labelPadX, labelY + bounds.Top - labelPadY, labelX + bounds.Width + labelPadX, labelY + bounds.Bottom + labelPadY);
+
+                        // Keep label fully in view (shift left if overflow)
+                        if (bgRect.Right > outputSize.Width)
+                        {
+                            float shift = bgRect.Right - outputSize.Width;
+                            bgRect.Offset(-shift, 0);
+                            labelX -= shift;
+                        }
+                        if (bgRect.Left < 0)
+                        {
+                            float shift = -bgRect.Left;
+                            bgRect.Offset(shift, 0);
+                            labelX += shift;
+                        }
+                        if (bgRect.Top < 0)
+                        {
+                            float shift = -bgRect.Top;
+                            bgRect.Offset(0, shift);
+                            labelY += shift;
+                        }
+                        if (bgRect.Bottom > outputSize.Height)
+                        {
+                            float shift = bgRect.Bottom - outputSize.Height;
+                            bgRect.Offset(0, -shift);
+                            labelY -= shift;
+                        }
+
+                        // Collision check (allow tiny overlaps < 2px area ignored)
+                        bool collides = placedLabels.Any(r => r.IntersectsWith(bgRect));
+                        if (!collides)
+                        {
+                            canvas.DrawRect(bgRect, textBgPaint);
+                            // Light shadow for readability
+                            using var shadowPaint = textPaint.Clone();
+                            shadowPaint.Color = new SKColor(0, 0, 0, 200);
+                            canvas.DrawText(city.Name, labelX + 1, labelY + 1, shadowPaint);
+                            canvas.DrawText(city.Name, labelX, labelY, textPaint);
+                            placedLabels.Add(bgRect);
+                            labeled++;
+                        }
+                    }
                 }
 
                 if (drawn == 0 && considered > 0)
@@ -1145,7 +1220,7 @@ namespace Economy_sim
                 }
                 else if (drawn > 0)
                 {
-                    Debug.WriteLine($"[CITIES] Drew {drawn} city dots for {iso} at zoom {zoomLevel}.");
+                    Debug.WriteLine($"[CITIES] Drew {drawn} city dots (+{labeled} labels) for {iso} at zoom {zoomLevel}.");
                 }
             }
             catch (Exception ex)
@@ -1202,13 +1277,16 @@ namespace Economy_sim
                             if (string.IsNullOrWhiteSpace(iso)) continue;
                             int pop = SafeInt(feat, "POP_MAX");
                             int scalerank = SafeInt(feat, "SCALERANK");
+                            string name = SafeString(feat, "NAMEASCII");
+                            if (string.IsNullOrWhiteSpace(name)) name = SafeString(feat, "NAME_EN");
+                            if (string.IsNullOrWhiteSpace(name)) name = SafeString(feat, "NAME");
                             int px = (int)Math.Round((lon + 180.0) / 360.0 * (PoliticalBaseWidth - 1));
                             int py = (int)Math.Round((90.0 - lat) / 180.0 * (PoliticalBaseHeight - 1));
                             if (px < 0 || py < 0 || px >= PoliticalBaseWidth || py >= PoliticalBaseHeight) continue;
                             int rasterCode = -1;
                             if (controlGrid != null && py >= 0 && py < controlGrid.GetLength(0) && px >= 0 && px < controlGrid.GetLength(1))
                                 rasterCode = controlGrid[py, px];
-                            list.Add(new CityPoint(iso.ToUpperInvariant(), (float)lon, (float)lat, pop, scalerank, px, py, rasterCode));
+                            list.Add(new CityPoint(iso.ToUpperInvariant(), (float)lon, (float)lat, pop, scalerank, px, py, rasterCode, name));
                         }
                         catch (Exception ex)
                         {
@@ -1241,5 +1319,21 @@ namespace Economy_sim
         { try { int idx = f.GetFieldIndex(field); return idx >= 0 ? f.GetFieldAsString(idx) ?? string.Empty : string.Empty; } catch { return string.Empty; } }
         private static int SafeInt(OSGeo.OGR.Feature f, string field)
         { try { int idx = f.GetFieldIndex(field); return idx >= 0 ? f.GetFieldAsInteger(idx) : 0; } catch { return 0; } }
+        
+        private static bool ShouldDrawCityLabel(CityPoint city, int zoomLevel)
+        {
+            // Basic heuristic: show only largest cities at low zoom; more as you zoom in
+            // ScaleRank: lower is more important
+            if (zoomLevel <= 1)
+                return city.ScaleRank <= 1 || city.PopMax >= 3_000_000;
+            if (zoomLevel == 2)
+                return city.ScaleRank <= 2 || city.PopMax >= 2_000_000;
+            if (zoomLevel == 3)
+                return city.ScaleRank <= 4 || city.PopMax >= 1_000_000;
+            if (zoomLevel == 4)
+                return city.ScaleRank <= 6 || city.PopMax >= 500_000;
+            // high zoom: show almost everything but avoid very small settlements
+            return city.PopMax >= 50_000 || city.ScaleRank <= 8;
+        }
     }
 }
