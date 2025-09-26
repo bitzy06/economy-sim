@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using MaxRev.Gdal.Core;
 using OSGeo.GDAL;
@@ -41,8 +43,11 @@ namespace Economy_sim
 
         private readonly string _stateDataPath;
         private readonly string _colorMappingPath;
+        private readonly string _persistedStateMapPath;
         private readonly List<StateFeature> _stateFeatures = new();
         private bool _dataLoaded = false;
+
+        private bool _usePersistedStateMap;
 
         // Grid-based state rendering
         private volatile bool _stateGridBuilt = false;
@@ -65,7 +70,8 @@ namespace Economy_sim
 
         public StateBorderManager(int baseWidth = 4096, int baseHeight = 2048,
                                   string stateDataPath = "data/country_borders/states/ne_10m_admin_1_states_provinces.shp",
-                                  string colorMappingPath = "data/country_borders/state_colors.json")
+                                  string colorMappingPath = "data/country_borders/state_colors.json",
+                                  string? persistedStateMapPath = null)
         {
             _baseWidth = Math.Max(1, baseWidth);
             _baseHeight = Math.Max(1, baseHeight);
@@ -87,6 +93,8 @@ namespace Economy_sim
 
             _stateDataPath = stateDataPath;
             _colorMappingPath = colorMappingPath;
+            string baseDir = AppContext.BaseDirectory ?? Environment.CurrentDirectory;
+            _persistedStateMapPath = persistedStateMapPath ?? Path.Combine(baseDir, "data", "state_maps", "saved_state_map.json");
             EnsureGdalRegistered();
             
             // Reset the disable flag for new instances unless opt-in is disabled
@@ -171,6 +179,19 @@ namespace Economy_sim
 
             try
             {
+                if (_usePersistedStateMap)
+                {
+                    if (TryLoadPersistedStateMap(_persistedStateMapPath))
+                    {
+                        _dataLoaded = true;
+                        Debug.WriteLine($"[STATE MANAGER] Loaded persisted state map from {_persistedStateMapPath}");
+                        return;
+                    }
+
+                    Debug.WriteLine($"[STATE MANAGER] Failed to load persisted state map at {_persistedStateMapPath}; falling back to default sources");
+                    _usePersistedStateMap = false;
+                }
+
                 // Only use the disable flag if opt-in is not enabled and we've had multiple failures
                 if (_disableShapefileLoading && !_optInEnableShp && _shpLoadAttempts > 2)
                 {
@@ -214,6 +235,137 @@ namespace Economy_sim
                 CreateMockStateData();
                 _dataLoaded = true;
                 BuildStateGrid();
+            }
+        }
+
+        public bool UsePersistedStateMap
+        {
+            get => _usePersistedStateMap;
+            set
+            {
+                if (_usePersistedStateMap == value)
+                    return;
+
+                _usePersistedStateMap = value;
+                ReloadStateData();
+            }
+        }
+
+        public bool SaveStateDataToFile(string? filePath = null)
+        {
+            if (!_dataLoaded)
+                LoadStateData();
+
+            EnsureStateGridBuilt();
+
+            if (_stateGrid == null)
+            {
+                Debug.WriteLine("[STATE MANAGER] Cannot save state data because the grid is unavailable");
+                return false;
+            }
+
+            string targetPath = filePath ?? _persistedStateMapPath;
+
+            try
+            {
+                string? dir = Path.GetDirectoryName(targetPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                var payload = new PersistedStateMap
+                {
+                    BaseWidth = _baseWidth,
+                    BaseHeight = _baseHeight,
+                    GridWidth = _gridWidth,
+                    GridHeight = _gridHeight,
+                    GridScaleFactor = _gridScaleFactor,
+                    StateGrid = SerializeGrid(_stateGrid),
+                    States = _stateFeatures.Select(f => PersistedStateFeature.FromFeature(f)).ToList()
+                };
+
+                var options = new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                };
+
+                string json = JsonSerializer.Serialize(payload, options);
+                File.WriteAllText(targetPath, json);
+
+                Debug.WriteLine($"[STATE MANAGER] Saved state map to {targetPath}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[STATE MANAGER] Failed to save state map: {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool TryLoadPersistedStateMap(string filePath)
+        {
+            try
+            {
+                if (!File.Exists(filePath))
+                {
+                    Debug.WriteLine($"[STATE MANAGER] Persisted state map not found at {filePath}");
+                    return false;
+                }
+
+                string json = File.ReadAllText(filePath);
+                var payload = JsonSerializer.Deserialize<PersistedStateMap>(json);
+                if (payload == null)
+                {
+                    Debug.WriteLine("[STATE MANAGER] Persisted state map payload was null");
+                    return false;
+                }
+
+                if (payload.GridWidth != _gridWidth || payload.GridHeight != _gridHeight)
+                {
+                    Debug.WriteLine($"[STATE MANAGER] Persisted state map dimensions {payload.GridWidth}x{payload.GridHeight} do not match expected {_gridWidth}x{_gridHeight}");
+                    return false;
+                }
+
+                if (payload.BaseWidth != _baseWidth || payload.BaseHeight != _baseHeight)
+                {
+                    Debug.WriteLine($"[STATE MANAGER] Persisted state base size {payload.BaseWidth}x{payload.BaseHeight} does not match manager {_baseWidth}x{_baseHeight}");
+                    return false;
+                }
+
+                if (payload.GridScaleFactor != _gridScaleFactor)
+                {
+                    Debug.WriteLine($"[STATE MANAGER] Persisted state grid scale {payload.GridScaleFactor} does not match expected {_gridScaleFactor}");
+                    return false;
+                }
+
+                foreach (var state in _stateFeatures)
+                {
+                    state.DisposePaths();
+                }
+                _stateFeatures.Clear();
+                _stateColorsByCode.Clear();
+
+                foreach (var savedFeature in payload.States)
+                {
+                    var feature = savedFeature.ToFeature();
+                    _stateFeatures.Add(feature);
+                    if (feature.RasterCode > 0)
+                    {
+                        _stateColorsByCode[feature.RasterCode] = feature.Color;
+                    }
+                }
+
+                _stateGrid = DeserializeGrid(payload.StateGrid, payload.GridWidth, payload.GridHeight);
+                _stateGridBuilt = true;
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[STATE MANAGER] Failed to load persisted state map: {ex.Message}");
+                return false;
             }
         }
 
@@ -910,7 +1062,7 @@ namespace Economy_sim
         public void ReloadStateData()
         {
             Debug.WriteLine("[STATE MANAGER] Force reloading state data");
-            
+
             // Clear existing data
             foreach (var state in _stateFeatures)
             {
@@ -921,13 +1073,186 @@ namespace Economy_sim
             _stateGridBuilt = false;
             _stateColorsByCode.Clear();
             _dataLoaded = false;
-            
+
             // Reset loading flags
             _disableShapefileLoading = false;
             _shpLoadAttempts = 0;
-            
+
             // Reload
             LoadStateData();
+        }
+
+        private static int[] SerializeGrid(int[,] grid)
+        {
+            int height = grid.GetLength(0);
+            int width = grid.GetLength(1);
+            var flat = new int[width * height];
+            int index = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    flat[index++] = grid[y, x];
+                }
+            }
+
+            return flat;
+        }
+
+        private static int[,] DeserializeGrid(int[]? flat, int width, int height)
+        {
+            var grid = new int[height, width];
+            if (flat == null || flat.Length != width * height)
+            {
+                Debug.WriteLine("[STATE MANAGER] Persisted state grid data missing or malformed; initializing empty grid");
+                return grid;
+            }
+
+            int index = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    grid[y, x] = flat[index++];
+                }
+            }
+
+            return grid;
+        }
+
+        private static uint EncodeColor(SKColor color)
+        {
+            return ((uint)color.Alpha << 24) | ((uint)color.Red << 16) | ((uint)color.Green << 8) | color.Blue;
+        }
+
+        private static SKColor DecodeColor(uint encoded)
+        {
+            byte a = (byte)((encoded >> 24) & 0xFF);
+            byte r = (byte)((encoded >> 16) & 0xFF);
+            byte g = (byte)((encoded >> 8) & 0xFF);
+            byte b = (byte)(encoded & 0xFF);
+            return new SKColor(r, g, b, a);
+        }
+
+        private sealed class PersistedStateMap
+        {
+            public int BaseWidth { get; set; }
+            public int BaseHeight { get; set; }
+            public int GridScaleFactor { get; set; }
+            public int GridWidth { get; set; }
+            public int GridHeight { get; set; }
+            public int[]? StateGrid { get; set; }
+            public List<PersistedStateFeature> States { get; set; } = new();
+        }
+
+        private sealed class PersistedStateFeature
+        {
+            public string StateName { get; set; } = string.Empty;
+            public string StateCode { get; set; } = string.Empty;
+            public string CountryName { get; set; } = string.Empty;
+            public string CountryCode { get; set; } = string.Empty;
+            public uint Color { get; set; }
+            public int RasterCode { get; set; }
+            public PersistedRect Bounds { get; set; }
+            public List<List<PersistedPoint>> Geometry { get; set; } = new();
+
+            public static PersistedStateFeature FromFeature(StateFeature feature)
+            {
+                var persisted = new PersistedStateFeature
+                {
+                    StateName = feature.StateName,
+                    StateCode = feature.StateCode,
+                    CountryName = feature.CountryName,
+                    CountryCode = feature.CountryCode,
+                    Color = EncodeColor(feature.Color),
+                    RasterCode = feature.RasterCode,
+                    Bounds = PersistedRect.FromRect(feature.Bounds)
+                };
+
+                foreach (var path in feature.Geometry)
+                {
+                    if (path == null || path.IsEmpty)
+                        continue;
+
+                    var approx = path.Approximate(0.5f);
+                    if (approx == null || approx.Length < 3)
+                        continue;
+
+                    var points = new List<PersistedPoint>();
+                    for (int i = 0; i < approx.Length; i += 3)
+                    {
+                        float x = approx[i];
+                        float y = approx[i + 1];
+                        points.Add(new PersistedPoint { X = x, Y = y });
+                    }
+
+                    if (points.Count > 0)
+                        persisted.Geometry.Add(points);
+                }
+
+                return persisted;
+            }
+
+            public StateFeature ToFeature()
+            {
+                var feature = new StateFeature
+                {
+                    StateName = StateName,
+                    StateCode = StateCode,
+                    CountryName = CountryName,
+                    CountryCode = CountryCode,
+                    Color = DecodeColor(Color),
+                    RasterCode = RasterCode,
+                    Bounds = Bounds.ToRect()
+                };
+
+                foreach (var polygon in Geometry)
+                {
+                    if (polygon == null || polygon.Count == 0)
+                        continue;
+
+                    var path = new SKPath { FillType = SKPathFillType.Winding };
+                    path.MoveTo(polygon[0].X, polygon[0].Y);
+                    for (int i = 1; i < polygon.Count; i++)
+                    {
+                        path.LineTo(polygon[i].X, polygon[i].Y);
+                    }
+                    path.Close();
+                    feature.Geometry.Add(path);
+                }
+
+                return feature;
+            }
+        }
+
+        private struct PersistedPoint
+        {
+            public float X { get; set; }
+            public float Y { get; set; }
+        }
+
+        private struct PersistedRect
+        {
+            public float Left { get; set; }
+            public float Top { get; set; }
+            public float Right { get; set; }
+            public float Bottom { get; set; }
+
+            public static PersistedRect FromRect(SKRect rect)
+            {
+                return new PersistedRect
+                {
+                    Left = rect.Left,
+                    Top = rect.Top,
+                    Right = rect.Right,
+                    Bottom = rect.Bottom
+                };
+            }
+
+            public SKRect ToRect()
+            {
+                return new SKRect(Left, Top, Right, Bottom);
+            }
         }
 
         private void BuildStateGrid()

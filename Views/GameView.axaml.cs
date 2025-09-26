@@ -925,6 +925,23 @@ namespace Economy_sim
             if (this.FindControl<Button>("DebugButton") is Button debugBtn)
                 debugBtn.Click += OnDebugClicked;
 
+            if (this.FindControl<CheckBox>("MergeSmallCityStatesCheckBox") is CheckBox mergeSmallCheck)
+            {
+                mergeSmallCheck.IsChecked = _mapManager.MergeSmallStatesWithCities;
+                mergeSmallCheck.Checked += OnMergeSmallCityStatesToggled;
+                mergeSmallCheck.Unchecked += OnMergeSmallCityStatesToggled;
+            }
+
+            if (this.FindControl<CheckBox>("UseSavedStateMapCheckBox") is CheckBox useSavedCheck)
+            {
+                useSavedCheck.IsChecked = _mapManager.UsePersistedStateMap;
+                useSavedCheck.Checked += OnUseSavedStateMapToggled;
+                useSavedCheck.Unchecked += OnUseSavedStateMapToggled;
+            }
+
+            if (this.FindControl<Button>("SaveStateMapButton") is Button saveStateMapBtn)
+                saveStateMapBtn.Click += OnSaveStateMapClicked;
+
             // Map view toggle buttons
             if (this.FindControl<Button>("TerrainViewButton") is Button terrainBtn)
                 terrainBtn.Click += OnTerrainViewClicked;
@@ -1633,6 +1650,87 @@ namespace Economy_sim
                 _cullStatesCts = null;
 
                 Dispatcher.UIThread.Post(() => ResetCullProgressUI(cullButton, progressPanel, progressBar, progressLabel));
+            }
+        }
+
+        private void OnMergeSmallCityStatesToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_mapManager == null)
+                return;
+
+            if (sender is CheckBox checkBox)
+            {
+                bool enabled = checkBox.IsChecked ?? false;
+                _mapManager.MergeSmallStatesWithCities = enabled;
+                Debug.WriteLine($"[DEBUG MENU] Merge small city states {(enabled ? "enabled" : "disabled")}");
+            }
+        }
+
+        private async void OnUseSavedStateMapToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_mapManager == null)
+                return;
+
+            if (sender is CheckBox checkBox)
+            {
+                bool requested = checkBox.IsChecked ?? false;
+                Debug.WriteLine($"[DEBUG MENU] {(requested ? "Enabling" : "Disabling")} persisted state map usage");
+
+                checkBox.IsEnabled = false;
+                bool succeeded = false;
+                try
+                {
+                    await Task.Run(() => _mapManager.UsePersistedStateMap = requested);
+                    succeeded = _mapManager.UsePersistedStateMap == requested;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[DEBUG MENU] Failed to toggle persisted state map: {ex.Message}");
+                }
+                finally
+                {
+                    checkBox.IsEnabled = true;
+                }
+
+                if (!succeeded)
+                {
+                    checkBox.IsChecked = _mapManager.UsePersistedStateMap;
+                    return;
+                }
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    QueueRender(immediate: true);
+                });
+            }
+        }
+
+        private async void OnSaveStateMapClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_mapManager == null)
+                return;
+
+            if (sender is Button button)
+            {
+                Debug.WriteLine("[DEBUG MENU] Saving current state map to data folder");
+                button.IsEnabled = false;
+                bool saved = false;
+                try
+                {
+                    saved = await Task.Run(() => _mapManager.SaveStateMapToDisk());
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[DEBUG MENU] Failed to save state map: {ex.Message}");
+                }
+                finally
+                {
+                    button.IsEnabled = true;
+                }
+
+                Debug.WriteLine(saved
+                    ? "[DEBUG MENU] State map saved to data folder"
+                    : "[DEBUG MENU] State map save unsuccessful");
             }
         }
 

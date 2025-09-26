@@ -20,7 +20,7 @@ namespace Economy_sim
         private readonly PoliticalBorderManager _politicalManager;
         private readonly PoliticalTileManager _politicalTileManager;
         private readonly StateBorderManager _stateManager;
-        
+
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
         
@@ -33,12 +33,30 @@ namespace Economy_sim
         private IndexedCountryFeature? _selectedCountry = null;
         private StateBorderManager.StateFeature? _selectedState = null;
         private bool _stateSplittingProcessed = false;
+        private bool _mergeSmallStatesWithCities = false;
         
         public MapViewType CurrentViewType => _currentViewType;
         public DateTime PoliticalMapDate => _politicalMapDate;
         public IndexedCountryFeature? SelectedCountry => _selectedCountry;
         public StateBorderManager.StateFeature? SelectedState => _selectedState;
-        
+        public bool MergeSmallStatesWithCities
+        {
+            get => _mergeSmallStatesWithCities;
+            set => _mergeSmallStatesWithCities = value;
+        }
+        public bool UsePersistedStateMap
+        {
+            get => _stateManager.UsePersistedStateMap;
+            set
+            {
+                if (_stateManager.UsePersistedStateMap == value)
+                    return;
+
+                _stateManager.UsePersistedStateMap = value;
+                _stateSplittingProcessed = false;
+            }
+        }
+
         public event EventHandler<MapViewType>? ViewTypeChanged;
         public event EventHandler<IndexedCountryFeature?>? SelectedCountryChanged;
         public event EventHandler<StateBorderManager.StateFeature?>? SelectedStateChanged;
@@ -631,6 +649,11 @@ namespace Economy_sim
             return CullStatesWithoutCitiesInternal(progress: null, cancellationToken: CancellationToken.None);
         }
 
+        public bool SaveStateMapToDisk(string? filePath = null)
+        {
+            return _stateManager.SaveStateDataToFile(filePath);
+        }
+
         private sealed class StateGridStats
         {
             public long SumX;
@@ -693,7 +716,7 @@ namespace Economy_sim
                 }
 
                 var emptyStates = states.Where(s => !cityCounts.ContainsKey(s.RasterCode)).ToList();
-                if (emptyStates.Count == 0)
+                if (emptyStates.Count == 0 && !_mergeSmallStatesWithCities)
                 {
                     Debug.WriteLine("[HYBRID MANAGER] No states without cities detected");
                     return 0;
@@ -790,27 +813,64 @@ namespace Economy_sim
                     stateAreas[state.RasterCode] = area;
                 }
 
-                var mergeableEmptyStates = emptyStates;
+                var smallCityStates = new List<StateBorderManager.StateFeature>();
+                if (_mergeSmallStatesWithCities && candidateStates.Count > 0)
+                {
+                    var sampleSizes = candidateStates
+                        .Select(c => gridStats.TryGetValue(c.RasterCode, out var stats) ? stats.CellCount : 0)
+                        .Where(count => count > 0)
+                        .ToList();
+
+                    if (sampleSizes.Count > 0)
+                    {
+                        double average = sampleSizes.Average();
+                        int dynamicThreshold = (int)Math.Max(32, Math.Round(average * 0.35));
+                        foreach (var candidate in candidateStates)
+                        {
+                            if (gridStats.TryGetValue(candidate.RasterCode, out var stats) && stats.CellCount > 0 && stats.CellCount <= dynamicThreshold)
+                            {
+                                smallCityStates.Add(candidate);
+                            }
+                        }
+
+                        if (smallCityStates.Count > 0)
+                        {
+                            Debug.WriteLine($"[HYBRID MANAGER] Identified {smallCityStates.Count} small city state(s) (threshold {dynamicThreshold} cells) for merging");
+                        }
+                    }
+                }
+
+                var mergeableStates = new List<StateBorderManager.StateFeature>();
+                if (emptyStates.Count > 0)
+                    mergeableStates.AddRange(emptyStates);
+                if (smallCityStates.Count > 0)
+                    mergeableStates.AddRange(smallCityStates);
+
+                if (mergeableStates.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] No eligible states found for merging");
+                    return 0;
+                }
 
                 int maxCityCount = cityCounts.Count > 0 ? cityCounts.Values.Max() : 0;
-                int totalEmptyStates = mergeableEmptyStates.Count;
+                int totalMergeSources = mergeableStates.Count;
                 int processed = 0;
                 int culled = 0;
 
-                var orderedEmptyStates = mergeableEmptyStates
+                var orderedMergeableStates = mergeableStates
                     .OrderBy(s => gridStats.TryGetValue(s.RasterCode, out var stats) ? stats.CellCount : int.MaxValue)
                     .ToList();
 
                 var perCountryQueues = new Dictionary<string, ConcurrentQueue<StateBorderManager.StateFeature>>(StringComparer.OrdinalIgnoreCase);
-                foreach (var emptyState in orderedEmptyStates)
+                foreach (var mergeSource in orderedMergeableStates)
                 {
-                    string countryKey = GetEffectiveCountryKey(emptyState, effectiveCountryByState);
+                    string countryKey = GetEffectiveCountryKey(mergeSource, effectiveCountryByState);
                     if (!perCountryQueues.TryGetValue(countryKey, out var queue))
                     {
                         queue = new ConcurrentQueue<StateBorderManager.StateFeature>();
                         perCountryQueues[countryKey] = queue;
                     }
-                    queue.Enqueue(emptyState);
+                    queue.Enqueue(mergeSource);
                 }
 
                 using var cullDataLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
@@ -824,18 +884,18 @@ namespace Economy_sim
                     var queue = kvp.Value;
                     tasks.Add(Task.Run(() =>
                     {
-                        while (!cancellationToken.IsCancellationRequested && queue.TryDequeue(out var emptyState))
+                        while (!cancellationToken.IsCancellationRequested && queue.TryDequeue(out var mergeState))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
 
                             cullDataLock.EnterUpgradeableReadLock();
                             try
                             {
-                                if (!stateByCode.ContainsKey(emptyState.RasterCode))
+                                if (!stateByCode.ContainsKey(mergeState.RasterCode))
                                     continue;
 
                                 var target = FindWeightedCullTarget(
-                                    emptyState,
+                                    mergeState,
                                     candidateStates,
                                     cityCounts,
                                     adjacency,
@@ -848,14 +908,14 @@ namespace Economy_sim
 
                                 if (target == null)
                                 {
-                                    Debug.WriteLine($"[HYBRID MANAGER] No merge target found for {emptyState.StateName} ({emptyState.CountryCode})");
+                                    Debug.WriteLine($"[HYBRID MANAGER] No merge target found for {mergeState.StateName} ({mergeState.CountryCode})");
                                 }
                                 else
                                 {
                                     cullDataLock.EnterWriteLock();
                                     try
                                     {
-                                        if (!stateByCode.TryGetValue(emptyState.RasterCode, out var refreshedSource))
+                                        if (!stateByCode.TryGetValue(mergeState.RasterCode, out var refreshedSource))
                                             continue;
 
                                         if (!stateByCode.TryGetValue(target.RasterCode, out var refreshedTarget))
@@ -876,6 +936,21 @@ namespace Economy_sim
                                             stateByCode.Remove(refreshedSource.RasterCode);
                                             effectiveCountryByState.Remove(refreshedSource.RasterCode);
                                             foreignMergeTargets.Remove(refreshedSource.RasterCode);
+
+                                            if (cityCounts.TryGetValue(refreshedSource.RasterCode, out var transferredCities))
+                                            {
+                                                cityCounts.Remove(refreshedSource.RasterCode);
+                                                if (transferredCities > 0)
+                                                {
+                                                    if (cityCounts.TryGetValue(refreshedTarget.RasterCode, out var targetCities))
+                                                        cityCounts[refreshedTarget.RasterCode] = targetCities + transferredCities;
+                                                    else
+                                                        cityCounts[refreshedTarget.RasterCode] = transferredCities;
+
+                                                    if (cityCounts[refreshedTarget.RasterCode] > maxCityCount)
+                                                        maxCityCount = cityCounts[refreshedTarget.RasterCode];
+                                                }
+                                            }
                                         }
                                     }
                                     finally
@@ -891,9 +966,9 @@ namespace Economy_sim
                                     cullDataLock.ExitUpgradeableReadLock();
 
                                 int processedValue = Interlocked.Increment(ref processed);
-                                if (totalEmptyStates > 0)
+                                if (totalMergeSources > 0)
                                 {
-                                    progress?.Report(processedValue / (double)totalEmptyStates);
+                                    progress?.Report(processedValue / (double)totalMergeSources);
                                 }
                             }
                         }
