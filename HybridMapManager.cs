@@ -728,6 +728,24 @@ namespace Economy_sim
                 int height = stateGrid.GetLength(0);
                 int width = stateGrid.GetLength(1);
                 var countryGrid = _politicalTileManager.GetControlGrid();
+
+                if (countryGrid != null)
+                {
+                    // Reduce cross-border fragments before we start evaluating full-state merges so only the
+                    // mismatched pieces are considered for reassignment.
+                    ProcessStateSplittingAndMerging(force: true, providedCountryGrid: countryGrid);
+
+                    stateGrid = _stateManager.GetStateGrid();
+                    if (stateGrid == null)
+                    {
+                        Debug.WriteLine("[HYBRID MANAGER] State grid unavailable after splitting");
+                        return 0;
+                    }
+
+                    height = stateGrid.GetLength(0);
+                    width = stateGrid.GetLength(1);
+                }
+
                 int countryHeight = countryGrid?.GetLength(0) ?? 0;
                 int countryWidth = countryGrid?.GetLength(1) ?? 0;
 
@@ -803,7 +821,7 @@ namespace Economy_sim
                 var countryKeyCache = new Dictionary<int, string>();
                 var coverageByStateKey = ConvertCoverageToCountryKeys(coverageByState, countryKeyCache);
                 var effectiveCountryByState = new Dictionary<int, string>();
-                var foreignMergeTargets = new Dictionary<int, HashSet<string>>();
+                var foreignMergeTargets = new Dictionary<int, Dictionary<string, double>>();
                 PopulateEffectiveCountryAssignments(states, coverageByStateKey, effectiveCountryByState, foreignMergeTargets);
 
                 var stateAreas = new Dictionary<int, double>();
@@ -1145,7 +1163,7 @@ namespace Economy_sim
             int maxCityCount,
             Dictionary<int, double> stateAreas,
             Dictionary<int, string> effectiveCountryByState,
-            Dictionary<int, HashSet<string>> foreignMergeTargets)
+            Dictionary<int, Dictionary<string, double>> foreignMergeTargets)
         {
             if (source == null)
                 return null;
@@ -1196,9 +1214,29 @@ namespace Economy_sim
                 double adjacencyScore = adjacent ? 1.0 : 0.0;
 
                 string candidateCountry = GetEffectiveCountryKey(candidate, effectiveCountryByState);
-                double countryAffinity = string.Equals(candidateCountry, sourceCountry, StringComparison.OrdinalIgnoreCase)
-                    ? 1.0
-                    : (foreignCandidates != null && foreignCandidates.Contains(candidateCountry) ? 0.6 : 0.2);
+                bool sameCountry = string.Equals(candidateCountry, sourceCountry, StringComparison.OrdinalIgnoreCase);
+                double countryAffinity;
+
+                if (sameCountry)
+                {
+                    countryAffinity = 1.0;
+                }
+                else
+                {
+                    double foreignShare = 0.0;
+                    bool hasForeignShare = foreignCandidates != null && foreignCandidates.TryGetValue(candidateCountry, out foreignShare);
+
+                    if (!hasForeignShare || foreignShare < 0.5)
+                    {
+                        // Only allow full-state merges into another country when the majority of the state's
+                        // political coverage already lies with that country. Smaller overlaps should be handled
+                        // by the fragment splitter instead of absorbing the entire state here.
+                        continue;
+                    }
+
+                    // Weight affinity by how dominant the foreign country is for this state's coverage.
+                    countryAffinity = 0.4 + Math.Min(0.5, foreignShare);
+                }
 
                 double closenessScore = distanceScore;
                 if (adjacent)
@@ -1260,7 +1298,7 @@ namespace Economy_sim
             IEnumerable<StateBorderManager.StateFeature> states,
             Dictionary<int, Dictionary<string, int>> coverageByState,
             Dictionary<int, string> effectiveCountryByState,
-            Dictionary<int, HashSet<string>> foreignMergeTargets)
+            Dictionary<int, Dictionary<string, double>> foreignMergeTargets)
         {
             foreach (var state in states)
             {
@@ -1295,16 +1333,16 @@ namespace Economy_sim
 
                 effectiveCountryByState[state.RasterCode] = effectiveKey;
 
-                var foreignTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var foreignTargets = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
                 foreach (var kv in sorted)
                 {
                     if (string.Equals(kv.Key, effectiveKey, StringComparison.OrdinalIgnoreCase))
                         continue;
 
                     double share = kv.Value / (double)totalCells;
-                    if (share >= 0.15 || fallbackCount == 0)
+                    if (share >= 0.15 || (fallbackCount == 0 && share >= 0.05))
                     {
-                        foreignTargets.Add(kv.Key);
+                        foreignTargets[kv.Key] = share;
                     }
                 }
 
