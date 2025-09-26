@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Collections.Concurrent;
 using System.Drawing;
+using System.Linq;
 
 namespace Economy_sim
 {
@@ -399,6 +400,69 @@ namespace Economy_sim
                     {
                         canvas.Clear(SKColors.Transparent);
                         canvas.DrawBitmap(polBmp, new SKRect(0, 0, outputSize.Width, outputSize.Height));
+
+                        // --- City overlay (revised transform) ---
+                        try
+                        {
+                            EnsureCitiesLoaded();
+                            if (_cityPoints != null && _cityPoints.Count > 0)
+                            {
+                                int cellSize = GetCellSizeForZoom(zoomLevel);
+                                double terrainTotalWidthPx = BaseWidth * (double)cellSize;   // full terrain pixel width at this zoom
+                                double terrainTotalHeightPx = BaseHeight * (double)cellSize;
+                                double politiToTerrainScaleX = (terrainTotalWidthPx) / PoliticalBaseWidth;  // convert political pixel -> terrain pixel
+                                double politiToTerrainScaleY = (terrainTotalHeightPx) / PoliticalBaseHeight;
+
+                                using var fillPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+                                using var outlinePaint = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = SKColors.Black, IsAntialias = true };
+
+                                int targetRaster = _selectedCountry?.RasterCode ?? -1;
+                                string iso = _selectedCountry?.CountryCode?.ToUpperInvariant() ?? string.Empty;
+                                int drawn = 0; int considered = 0;
+                                foreach (var c in _cityPoints)
+                                {
+                                    // Filter by selected country if any (ISO OR raster fallback). If none selected draw nothing.
+                                    if (_selectedCountry != null)
+                                    {
+                                        if (!string.Equals(c.IsoCode, iso, StringComparison.OrdinalIgnoreCase) && c.RasterCode != targetRaster)
+                                            continue;
+                                    }
+                                    else continue; // require selection per requirements
+                                    considered++;
+
+                                    // Convert political pixel to terrain pixel (global), then to screen pixel relative to viewArea
+                                    double terrainPx = c.PixelX * politiToTerrainScaleX;
+                                    double terrainPy = c.PixelY * politiToTerrainScaleY;
+
+                                    // Screen pixel in current view
+                                    double screenX = terrainPx - viewArea.Left;
+                                    double screenY = terrainPy - viewArea.Top;
+                                    if (screenX < 0 || screenY < 0 || screenX >= outputSize.Width || screenY >= outputSize.Height)
+                                        continue;
+
+                                    float r = 2f;
+                                    if (c.ScaleRank <= 2) r = 4f; else if (c.ScaleRank <= 4) r = 3f;
+                                    if (c.PopMax > 5_000_000) r += 2f; else if (c.PopMax > 1_000_000) r += 1f;
+                                    fillPaint.Color = c.ScaleRank <= 2 ? new SKColor(255, 220, 0, 220) : new SKColor(255, 255, 255, 200);
+                                    canvas.DrawCircle((float)screenX, (float)screenY, r, fillPaint);
+                                    canvas.DrawCircle((float)screenX, (float)screenY, r, outlinePaint);
+                                    drawn++;
+                                }
+                                if (drawn == 0 && _selectedCountry != null)
+                                {
+                                    Debug.WriteLine($"[CITIES] No cities drawn for {iso} (raster {targetRaster}). Considered {considered} candidates. ViewArea={viewArea} cellSize={cellSize}");
+                                }
+                                else if (drawn > 0)
+                                {
+                                    Debug.WriteLine($"[CITIES] Drew {drawn} city dots for {iso} at zoom {zoomLevel}.");
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[CITIES] Overlay (revised) failed: {ex.Message}");
+                        }
+                        // --- end city overlay ---
                     }
                     polBmp.Dispose();
                     return composed;
@@ -650,5 +714,99 @@ namespace Economy_sim
                 for (int dx = r - 1; dx >= -r + 1; dx--) { int dy = -r; yield return (dx, dy); }
             }
         }
+
+        private List<CityPoint>? _cityPoints;
+        private bool _citiesLoadAttempted = false;
+        private readonly object _cityLock = new();
+
+        private record CityPoint(string IsoCode, float Lon, float Lat, int PopMax, int ScaleRank, int PixelX, int PixelY, int RasterCode);
+
+        private void EnsureCitiesLoaded()
+        {
+            if (_citiesLoadAttempted) return;
+            lock (_cityLock)
+            {
+                if (_citiesLoadAttempted) return;
+                _citiesLoadAttempted = true;
+                try
+                {
+                    string baseDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    string dataDir = Path.Combine(baseDir, "data");
+                    string shp = Path.Combine(dataDir, "ne_10m_populated_places.shp");
+                    if (!File.Exists(shp))
+                    {
+                        shp = FindFileRecursive(dataDir, "ne_10m_populated_places.shp") ?? shp;
+                    }
+                    if (!File.Exists(shp))
+                    {
+                        Debug.WriteLine($"[CITIES] Populated places shapefile not found at {shp}");
+                        return;
+                    }
+                    // Configure OGR only (we avoid GDAL raster pieces to prevent missing symbol errors)
+                    try { OSGeo.OGR.Ogr.RegisterAll(); } catch { }
+                    using var ds = OSGeo.OGR.Ogr.Open(shp, 0);
+                    if (ds == null) { Debug.WriteLine("[CITIES] Failed to open shapefile"); return; }
+                    var layer = ds.GetLayerByIndex(0);
+                    if (layer == null) { Debug.WriteLine("[CITIES] Layer missing"); return; }
+                    var list = new List<CityPoint>(5000);
+                    int[,]? controlGrid = null;
+                    try { controlGrid = _politicalTileManager.GetControlGrid(); } catch { }
+                    layer.ResetReading();
+                    OSGeo.OGR.Feature feat;
+                    while ((feat = layer.GetNextFeature()) != null)
+                    {
+                        try
+                        {
+                            var geom = feat.GetGeometryRef();
+                            if (geom == null) continue;
+                            var gType = geom.GetGeometryType();
+                            if (gType != OSGeo.OGR.wkbGeometryType.wkbPoint && gType != OSGeo.OGR.wkbGeometryType.wkbPoint25D)
+                                continue;
+                            double lon = geom.GetX(0);
+                            double lat = geom.GetY(0);
+                            string iso = SafeString(feat, "ADM0_A3");
+                            if (string.IsNullOrWhiteSpace(iso)) iso = SafeString(feat, "ISO_A3");
+                            if (string.IsNullOrWhiteSpace(iso)) continue;
+                            int pop = SafeInt(feat, "POP_MAX");
+                            int scalerank = SafeInt(feat, "SCALERANK");
+                            int px = (int)Math.Round((lon + 180.0) / 360.0 * (PoliticalBaseWidth - 1));
+                            int py = (int)Math.Round((90.0 - lat) / 180.0 * (PoliticalBaseHeight - 1));
+                            if (px < 0 || py < 0 || px >= PoliticalBaseWidth || py >= PoliticalBaseHeight) continue;
+                            int rasterCode = -1;
+                            if (controlGrid != null && py >= 0 && py < controlGrid.GetLength(0) && px >= 0 && px < controlGrid.GetLength(1))
+                                rasterCode = controlGrid[py, px];
+                            list.Add(new CityPoint(iso.ToUpperInvariant(), (float)lon, (float)lat, pop, scalerank, px, py, rasterCode));
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[CITIES] Feature error: {ex.Message}");
+                        }
+                        finally { feat.Dispose(); }
+                    }
+                    _cityPoints = list;
+                    Debug.WriteLine($"[CITIES] Loaded {list.Count} populated places (with raster sampling {(controlGrid!=null ? "enabled" : "disabled")})");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[CITIES] Load failed: {ex.Message}");
+                }
+            }
+        }
+
+        private static string? FindFileRecursive(string root, string targetName)
+        {
+            try
+            {
+                if (!Directory.Exists(root)) return null;
+                return Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                    .FirstOrDefault(f => string.Equals(Path.GetFileName(f), targetName, StringComparison.OrdinalIgnoreCase));
+            }
+            catch { return null; }
+        }
+
+        private static string SafeString(OSGeo.OGR.Feature f, string field)
+        { try { int idx = f.GetFieldIndex(field); return idx >= 0 ? f.GetFieldAsString(idx) ?? string.Empty : string.Empty; } catch { return string.Empty; } }
+        private static int SafeInt(OSGeo.OGR.Feature f, string field)
+        { try { int idx = f.GetFieldIndex(field); return idx >= 0 ? f.GetFieldAsInteger(idx) : 0; } catch { return 0; } }
     }
 }

@@ -749,11 +749,9 @@ namespace Economy_sim
                 StrokeCap = SKStrokeCap.Round
             };
 
-            using var selectedPaint = new SKPaint(normalPaint)
-            {
-                Color = SKColors.White,
-                StrokeWidth = selectedStrokeInBase
-            };
+            using var selectedPaint = normalPaint.Clone();
+            selectedPaint.Color = SKColors.White;
+            selectedPaint.StrokeWidth = selectedStrokeInBase;
 
             var translate = SKMatrix.CreateTranslation(-baseViewport.Left, -baseViewport.Top);
             var scale = SKMatrix.CreateScale(scaleToViewX, scaleToViewY);

@@ -49,6 +49,7 @@ namespace Economy_sim
 
         private bool _isDrawingStrokeActive = false;
         private List<(SDPoint cell, int previousId)> _currentStrokeChanges = new();
+        private Avalonia.Point? _lastDrawPoint = null; // last point for stroke interpolation
 
         private record EditorAction(EditorActionType Type, MapViewLevel Level, int TargetId, List<(SDPoint cell, int previousId)> Changes);
         private enum EditorActionType { ZeroSumAssign, DirectAssign }
@@ -440,20 +441,25 @@ namespace Economy_sim
                 {
                     _isDrawingStrokeActive = true;
                     _currentStrokeChanges.Clear();
-                    var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
+                    var mapImg = this.FindControl<Image>("MapImage");
+                    var mousePos = e.GetCurrentPoint(mapImg);
+                    _lastDrawPoint = mousePos.Position; // initialize stroke path
                     HandleDrawing((int)mousePos.Position.X, (int)mousePos.Position.Y);
                     e.Handled = true;
                 }
                 else
                 {
+                    // Use map image coordinate space for consistent delta math
+                    var mapImg = this.FindControl<Image>("MapImage");
                     _isPanning = true;
-                    _panStartPoint = e.GetCurrentPoint(null).Position;
+                    _panStartPoint = e.GetPosition(mapImg);
                     e.Handled = true;
                 }
             }
             else if (e.GetCurrentPoint(null).Properties.IsRightButtonPressed)
             {
-                var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
+                var mapImage = this.FindControl<Image>("MapImage");
+                var mousePos = e.GetCurrentPoint(mapImage);
                 HandleSelection((int)mousePos.Position.X, (int)mousePos.Position.Y);
                 e.Handled = true;
             }
@@ -463,14 +469,34 @@ namespace Economy_sim
         {
             if (_isDrawingMode && e.GetCurrentPoint(null).Properties.IsLeftButtonPressed)
             {
-                var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
-                HandleDrawing((int)mousePos.Position.X, (int)mousePos.Position.Y);
+                var mapImage = this.FindControl<Image>("MapImage");
+                var mousePoint = e.GetCurrentPoint(mapImage).Position;
+
+                if (_lastDrawPoint is Avalonia.Point last)
+                {
+                    // Interpolate along the line to avoid gaps (especially with async enhanced editor)
+                    double dx = mousePoint.X - last.X;
+                    double dy = mousePoint.Y - last.Y;
+                    double dist = Math.Sqrt(dx * dx + dy * dy);
+                    int steps = (int)Math.Ceiling(dist / Math.Max(1, _brushSize));
+                    if (steps < 1) steps = 1;
+                    for (int i = 1; i <= steps; i++)
+                    {
+                        double t = (double)i / steps;
+                        int ix = (int)Math.Round(last.X + dx * t);
+                        int iy = (int)Math.Round(last.Y + dy * t);
+                        HandleDrawing(ix, iy);
+                    }
+                }
+                else
+                {
+                    HandleDrawing((int)mousePoint.X, (int)mousePoint.Y);
+                }
+                _lastDrawPoint = mousePoint;
                 e.Handled = true;
             }
             else if (_isPanning)
             {
-                // FIX: Previous logic inverted the direction (subtracting raw delta) which caused viewOffset to remain near 0
-                // resulting in edits always mapping to the top-left of the underlying political grid.
                 var mapImage = this.FindControl<Image>("MapImage");
                 var currentPoint = e.GetPosition(mapImage);
                 var previousPoint = _panStartPoint;
@@ -528,11 +554,10 @@ namespace Economy_sim
             if (_useEnhancedEditor)
             {
                 var effectiveSize = GetEffectiveRenderSize();
-                var outputSize = new SKSizeI((int)effectiveSize.Width, (int)effectiveSize.Height);
-                var viewOffsetSnapshot = _viewOffset; // screen pixel offset
-                var levelSnapshot = _currentLevel;
-                var zoomSnapshot = _currentZoomLevel;
+                if (screenX < 0 || screenY < 0 || screenX >= effectiveSize.Width || screenY >= effectiveSize.Height)
+                    return;
 
+                var levelSnapshot = _currentLevel;
                 uint brushValue = 0;
                 if (levelSnapshot == MapViewLevel.Countries && _selectedCountry != null) brushValue = (uint)_selectedCountry.RasterCode;
                 else if (levelSnapshot == MapViewLevel.States && _selectedState != null) brushValue = (uint)_selectedState.RasterCode;
@@ -542,15 +567,26 @@ namespace Economy_sim
                 _enhancedEditor.SetBrushSize(_brushSize);
                 _enhancedEditor.SetEditPolicy(_currentEditPolicy);
 
-                int sx = screenX; int sy = screenY;
+                // Compute political grid coordinate here (single scaling) to avoid double-scaled top-left restriction
+                int eGridX, eGridY;
+                if (levelSnapshot == MapViewLevel.Countries || levelSnapshot == MapViewLevel.States)
+                {
+                    var (gx, gy) = _mapManager.ScreenToPoliticalGrid(screenX, screenY, _currentZoomLevel, _viewOffset);
+                    eGridX = gx; eGridY = gy;
+                }
+                else
+                {
+                    int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
+                    int mapX = _viewOffset.X + screenX;
+                    int mapY = _viewOffset.Y + screenY;
+                    eGridX = mapX / cellSize;
+                    eGridY = mapY / cellSize;
+                }
+
                 _ = Task.Run(async () =>
                 {
-                    try
-                    {
-                        await _enhancedEditor.ApplyEditAsync(levelSnapshot, sx, sy, zoomSnapshot, viewOffsetSnapshot, outputSize);
-                        Dispatcher.UIThread.Post(QueueRender);
-                    }
-                    catch (Exception ex) { Debug.WriteLine($"[MAP EDITOR] Error in enhanced drawing: {ex.Message}"); }
+                    await _enhancedEditor.ApplyEditAtGridAsync(levelSnapshot, eGridX, eGridY, _currentZoomLevel);
+                    Dispatcher.UIThread.Post(QueueRender);
                 });
                 return;
             }
@@ -705,6 +741,7 @@ namespace Economy_sim
                 _currentStrokeChanges.Clear();
                 _isDrawingStrokeActive = false;
             }
+            _lastDrawPoint = null; // reset stroke path
             _isPanning = false;
             e.Handled = true;
         }
