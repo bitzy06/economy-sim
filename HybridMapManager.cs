@@ -701,8 +701,12 @@ namespace Economy_sim
 
                 var gridStats = new Dictionary<int, StateGridStats>();
                 var adjacency = new Dictionary<int, HashSet<int>>();
+                var coverageByState = new Dictionary<int, Dictionary<int, int>>();
                 int height = stateGrid.GetLength(0);
                 int width = stateGrid.GetLength(1);
+                var countryGrid = _politicalTileManager.GetControlGrid();
+                int countryHeight = countryGrid?.GetLength(0) ?? 0;
+                int countryWidth = countryGrid?.GetLength(1) ?? 0;
 
                 for (int y = 0; y < height; y++)
                 {
@@ -723,6 +727,24 @@ namespace Economy_sim
                         stats.CellCount++;
                         stats.SumX += x;
                         stats.SumY += y;
+
+                        if (countryGrid != null && y < countryHeight && x < countryWidth)
+                        {
+                            int countryCode = countryGrid[y, x];
+                            if (countryCode > 0)
+                            {
+                                if (!coverageByState.TryGetValue(code, out var coverage))
+                                {
+                                    coverage = new Dictionary<int, int>();
+                                    coverageByState[code] = coverage;
+                                }
+
+                                if (coverage.TryGetValue(countryCode, out var count))
+                                    coverage[countryCode] = count + 1;
+                                else
+                                    coverage[countryCode] = 1;
+                            }
+                        }
 
                         if (!adjacency.ContainsKey(code))
                         {
@@ -755,6 +777,12 @@ namespace Economy_sim
                         adjacency[state] = new HashSet<int>();
                 }
 
+                var countryKeyCache = new Dictionary<int, string>();
+                var coverageByStateKey = ConvertCoverageToCountryKeys(coverageByState, countryKeyCache);
+                var effectiveCountryByState = new Dictionary<int, string>();
+                var foreignMergeTargets = new Dictionary<int, HashSet<string>>();
+                PopulateEffectiveCountryAssignments(states, coverageByStateKey, effectiveCountryByState, foreignMergeTargets);
+
                 var stateAreas = new Dictionary<int, double>();
                 var countryTotals = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
                 var countryCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -765,7 +793,7 @@ namespace Economy_sim
                     double area = CalculateStateArea(state, gridStats);
                     stateAreas[state.RasterCode] = area;
 
-                    string countryKey = NormalizeCountryKey(state);
+                    string countryKey = GetEffectiveCountryKey(state, effectiveCountryByState);
                     if (countryTotals.TryGetValue(countryKey, out var total))
                         countryTotals[countryKey] = total + area;
                     else
@@ -801,13 +829,14 @@ namespace Economy_sim
                 var filteredEmptyStates = emptyStates
                     .Where(state =>
                     {
-                        string countryKey = NormalizeCountryKey(state);
+                        string countryKey = GetEffectiveCountryKey(state, effectiveCountryByState);
                         double area = GetOrCalculateStateArea(state, stateAreas, gridStats);
                         if (averageAreaByCountry.TryGetValue(countryKey, out var averageArea) && averageArea > 0)
                         {
-                            if (area >= averageArea)
+                            double threshold = averageArea * 1.2;
+                            if (area >= threshold)
                             {
-                                Debug.WriteLine($"[HYBRID MANAGER] Skipping cull for {state.StateName} ({state.CountryCode}) due to area {area:F0} >= avg {averageArea:F0}");
+                                Debug.WriteLine($"[HYBRID MANAGER] Skipping cull for {state.StateName} ({state.CountryCode}) due to area {area:F0} >= threshold {threshold:F0}");
                                 return false;
                             }
                         }
@@ -830,49 +859,120 @@ namespace Economy_sim
                     .OrderBy(s => gridStats.TryGetValue(s.RasterCode, out var stats) ? stats.CellCount : int.MaxValue)
                     .ToList();
 
+                var perCountryQueues = new Dictionary<string, ConcurrentQueue<StateBorderManager.StateFeature>>(StringComparer.OrdinalIgnoreCase);
                 foreach (var emptyState in orderedEmptyStates)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-
-                    var target = FindWeightedCullTarget(
-                        emptyState,
-                        candidateStates,
-                        cityCounts,
-                        adjacency,
-                        gridStats,
-                        stateByCode,
-                        maxCityCount,
-                        stateAreas,
-                        maxAllowedAreaByCountry);
-
-                    if (target == null)
+                    string countryKey = GetEffectiveCountryKey(emptyState, effectiveCountryByState);
+                    if (!perCountryQueues.TryGetValue(countryKey, out var queue))
                     {
-                        Debug.WriteLine($"[HYBRID MANAGER] No merge target found for {emptyState.StateName} ({emptyState.CountryCode})");
+                        queue = new ConcurrentQueue<StateBorderManager.StateFeature>();
+                        perCountryQueues[countryKey] = queue;
                     }
-                    else
-                    {
-                        double sourceAreaBefore = GetOrCalculateStateArea(emptyState, stateAreas, gridStats);
-                        double targetAreaBefore = GetOrCalculateStateArea(target, stateAreas, gridStats);
-
-                        if (_stateManager.MergeStateInto(emptyState, target))
-                        {
-                            culled++;
-                            Debug.WriteLine($"[HYBRID MANAGER] Merged {emptyState.StateName} into {target.StateName}");
-
-                            UpdateAdjacencyAfterMerge(adjacency, emptyState.RasterCode, target.RasterCode);
-                            UpdateGridStatsAfterMerge(gridStats, emptyState.RasterCode, target.RasterCode);
-                            stateAreas[target.RasterCode] = targetAreaBefore + sourceAreaBefore;
-                            stateAreas.Remove(emptyState.RasterCode);
-                            stateByCode.Remove(emptyState.RasterCode);
-                        }
-                    }
-
-                    processed++;
-                    if (totalEmptyStates > 0)
-                    {
-                        progress?.Report(processed / (double)totalEmptyStates);
-                    }
+                    queue.Enqueue(emptyState);
                 }
+
+                using var cullDataLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+                var tasks = new List<Task>();
+
+                foreach (var kvp in perCountryQueues)
+                {
+                    if (kvp.Value.IsEmpty)
+                        continue;
+
+                    var queue = kvp.Value;
+                    tasks.Add(Task.Run(() =>
+                    {
+                        while (!cancellationToken.IsCancellationRequested && queue.TryDequeue(out var emptyState))
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                            cullDataLock.EnterUpgradeableReadLock();
+                            try
+                            {
+                                if (!stateByCode.ContainsKey(emptyState.RasterCode))
+                                    continue;
+
+                                var target = FindWeightedCullTarget(
+                                    emptyState,
+                                    candidateStates,
+                                    cityCounts,
+                                    adjacency,
+                                    gridStats,
+                                    stateByCode,
+                                    maxCityCount,
+                                    stateAreas,
+                                    maxAllowedAreaByCountry,
+                                    effectiveCountryByState,
+                                    foreignMergeTargets);
+
+                                if (target == null)
+                                {
+                                    Debug.WriteLine($"[HYBRID MANAGER] No merge target found for {emptyState.StateName} ({emptyState.CountryCode})");
+                                }
+                                else
+                                {
+                                    cullDataLock.EnterWriteLock();
+                                    try
+                                    {
+                                        if (!stateByCode.TryGetValue(emptyState.RasterCode, out var refreshedSource))
+                                            continue;
+
+                                        if (!stateByCode.TryGetValue(target.RasterCode, out var refreshedTarget))
+                                            continue;
+
+                                        double sourceAreaBefore = GetOrCalculateStateArea(refreshedSource, stateAreas, gridStats);
+                                        double targetAreaBefore = GetOrCalculateStateArea(refreshedTarget, stateAreas, gridStats);
+
+                                        if (_stateManager.MergeStateInto(refreshedSource, refreshedTarget))
+                                        {
+                                            Interlocked.Increment(ref culled);
+                                            Debug.WriteLine($"[HYBRID MANAGER] Merged {refreshedSource.StateName} into {refreshedTarget.StateName}");
+
+                                            UpdateAdjacencyAfterMerge(adjacency, refreshedSource.RasterCode, refreshedTarget.RasterCode);
+                                            UpdateGridStatsAfterMerge(gridStats, refreshedSource.RasterCode, refreshedTarget.RasterCode);
+                                            stateAreas[refreshedTarget.RasterCode] = targetAreaBefore + sourceAreaBefore;
+                                            stateAreas.Remove(refreshedSource.RasterCode);
+                                            stateByCode.Remove(refreshedSource.RasterCode);
+                                            effectiveCountryByState.Remove(refreshedSource.RasterCode);
+                                            foreignMergeTargets.Remove(refreshedSource.RasterCode);
+                                        }
+                                    }
+                                    finally
+                                    {
+                                        if (cullDataLock.IsWriteLockHeld)
+                                            cullDataLock.ExitWriteLock();
+                                    }
+                                }
+                            }
+                            finally
+                            {
+                                if (cullDataLock.IsUpgradeableReadLockHeld)
+                                    cullDataLock.ExitUpgradeableReadLock();
+
+                                int processedValue = Interlocked.Increment(ref processed);
+                                if (totalEmptyStates > 0)
+                                {
+                                    progress?.Report(processedValue / (double)totalEmptyStates);
+                                }
+                            }
+                        }
+                    }, cancellationToken));
+                }
+
+                try
+                {
+                    Task.WaitAll(tasks.ToArray());
+                }
+                catch (AggregateException aex)
+                {
+                    aex.Handle(ex => ex is OperationCanceledException);
+                    if (aex.InnerExceptions.Any(ex => ex is OperationCanceledException))
+                        throw new OperationCanceledException(cancellationToken);
+                    throw;
+                }
+
+                if (cancellationToken.IsCancellationRequested)
+                    cancellationToken.ThrowIfCancellationRequested();
 
                 if (culled > 0)
                 {
@@ -971,6 +1071,28 @@ namespace Economy_sim
             return code.Trim().ToUpperInvariant();
         }
 
+        private static string GetEffectiveCountryKey(StateBorderManager.StateFeature? state, Dictionary<int, string> overrides)
+        {
+            if (state == null)
+                return "__UNKNOWN__";
+
+            if (overrides.TryGetValue(state.RasterCode, out var value) && !string.IsNullOrWhiteSpace(value))
+                return value;
+
+            return NormalizeCountryKey(state);
+        }
+
+        private static string GetEffectiveCountryKey(int stateCode, Dictionary<int, string> overrides, Dictionary<int, StateBorderManager.StateFeature> stateByCode)
+        {
+            if (overrides.TryGetValue(stateCode, out var value) && !string.IsNullOrWhiteSpace(value))
+                return value;
+
+            if (stateByCode.TryGetValue(stateCode, out var state))
+                return NormalizeCountryKey(state);
+
+            return "__UNKNOWN__";
+        }
+
         private static double CalculateStateArea(StateBorderManager.StateFeature state, Dictionary<int, StateGridStats> gridStats)
         {
             if (gridStats.TryGetValue(state.RasterCode, out var stats) && stats.CellCount > 0)
@@ -1006,7 +1128,9 @@ namespace Economy_sim
             Dictionary<int, StateBorderManager.StateFeature> stateByCode,
             int maxCityCount,
             Dictionary<int, double> stateAreas,
-            Dictionary<string, double> maxAllowedAreaByCountry)
+            Dictionary<string, double> maxAllowedAreaByCountry,
+            Dictionary<int, string> effectiveCountryByState,
+            Dictionary<int, HashSet<string>> foreignMergeTargets)
         {
             if (source == null)
                 return null;
@@ -1015,14 +1139,20 @@ namespace Economy_sim
                 ? neighbors.Where(code => code != source.RasterCode && cityCounts.ContainsKey(code) && stateByCode.ContainsKey(code)).ToList()
                 : new List<int>();
 
-            string sourceCountry = NormalizeCountryKey(source);
+            string sourceCountry = GetEffectiveCountryKey(source, effectiveCountryByState);
 
             var sameCountryNeighbors = neighborCodes
-                .Where(code => stateByCode.TryGetValue(code, out var neighbor) && NormalizeCountryKey(neighbor) == sourceCountry)
+                .Where(code => stateByCode.TryGetValue(code, out var neighbor) && GetEffectiveCountryKey(neighbor, effectiveCountryByState) == sourceCountry)
                 .ToList();
             if (sameCountryNeighbors.Count > 0)
             {
                 neighborCodes = sameCountryNeighbors;
+            }
+            else if (foreignMergeTargets.TryGetValue(source.RasterCode, out var allowedForeign) && allowedForeign.Count > 0)
+            {
+                neighborCodes = neighborCodes
+                    .Where(code => stateByCode.TryGetValue(code, out var neighbor) && allowedForeign.Contains(GetEffectiveCountryKey(neighbor, effectiveCountryByState)))
+                    .ToList();
             }
 
             if (neighborCodes.Count == 0)
@@ -1032,6 +1162,13 @@ namespace Economy_sim
                     .Select(c => c.RasterCode)
                     .Distinct()
                     .Where(code => stateByCode.ContainsKey(code))
+                    .Where(code =>
+                    {
+                        var effectiveCountry = GetEffectiveCountryKey(code, effectiveCountryByState, stateByCode);
+                        if (string.Equals(effectiveCountry, sourceCountry, StringComparison.OrdinalIgnoreCase))
+                            return true;
+                        return foreignMergeTargets.TryGetValue(source.RasterCode, out var allowed) && allowed.Contains(effectiveCountry);
+                    })
                     .ToList();
             }
 
@@ -1052,7 +1189,7 @@ namespace Economy_sim
                 gridStats.TryGetValue(neighborCode, out var candidateStats);
                 double candidateArea = GetOrCalculateStateArea(candidate, stateAreas, gridStats);
 
-                string candidateCountry = NormalizeCountryKey(candidate);
+                string candidateCountry = GetEffectiveCountryKey(candidate, effectiveCountryByState);
                 string limitKey = candidateCountry;
                 if (maxAllowedAreaByCountry.TryGetValue(limitKey, out var maxAllowed))
                 {
@@ -1084,6 +1221,101 @@ namespace Economy_sim
             }
 
             return best;
+        }
+
+        private Dictionary<int, Dictionary<string, int>> ConvertCoverageToCountryKeys(
+            Dictionary<int, Dictionary<int, int>> coverageByState,
+            Dictionary<int, string> cache)
+        {
+            var result = new Dictionary<int, Dictionary<string, int>>();
+
+            foreach (var kvp in coverageByState)
+            {
+                var stringCoverage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var inner in kvp.Value)
+                {
+                    int countryCode = inner.Key;
+                    int count = inner.Value;
+                    if (count <= 0 || countryCode <= 0)
+                        continue;
+
+                    if (!cache.TryGetValue(countryCode, out var key))
+                    {
+                        var feature = _politicalTileManager.GetCountryFeatureByRasterCode(countryCode);
+                        key = feature?.CountryCode?.Trim().ToUpperInvariant();
+                        if (string.IsNullOrWhiteSpace(key))
+                            key = "__UNKNOWN__";
+                        cache[countryCode] = key;
+                    }
+
+                    if (stringCoverage.TryGetValue(key, out var total))
+                        stringCoverage[key] = total + count;
+                    else
+                        stringCoverage[key] = count;
+                }
+
+                if (stringCoverage.Count > 0)
+                    result[kvp.Key] = stringCoverage;
+            }
+
+            return result;
+        }
+
+        private static void PopulateEffectiveCountryAssignments(
+            IEnumerable<StateBorderManager.StateFeature> states,
+            Dictionary<int, Dictionary<string, int>> coverageByState,
+            Dictionary<int, string> effectiveCountryByState,
+            Dictionary<int, HashSet<string>> foreignMergeTargets)
+        {
+            foreach (var state in states)
+            {
+                string fallback = NormalizeCountryKey(state);
+                if (!coverageByState.TryGetValue(state.RasterCode, out var coverage) || coverage.Count == 0)
+                {
+                    effectiveCountryByState[state.RasterCode] = fallback;
+                    continue;
+                }
+
+                int totalCells = coverage.Values.Sum();
+                if (totalCells <= 0)
+                {
+                    effectiveCountryByState[state.RasterCode] = fallback;
+                    continue;
+                }
+
+                string effectiveKey = fallback;
+                var sorted = coverage.OrderByDescending(k => k.Value).ToList();
+                var top = sorted[0];
+                double topShare = top.Value / (double)totalCells;
+                coverage.TryGetValue(fallback, out var fallbackCount);
+
+                if (string.Equals(fallback, "__UNKNOWN__", StringComparison.OrdinalIgnoreCase) || fallbackCount == 0 || topShare >= 0.6)
+                {
+                    effectiveKey = top.Key;
+                }
+                else if (!string.Equals(fallback, top.Key, StringComparison.OrdinalIgnoreCase) && topShare >= 0.45 && top.Value >= Math.Max(1, fallbackCount) * 1.2)
+                {
+                    effectiveKey = top.Key;
+                }
+
+                effectiveCountryByState[state.RasterCode] = effectiveKey;
+
+                var foreignTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in sorted)
+                {
+                    if (string.Equals(kv.Key, effectiveKey, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    double share = kv.Value / (double)totalCells;
+                    if (share >= 0.15 || fallbackCount == 0)
+                    {
+                        foreignTargets.Add(kv.Key);
+                    }
+                }
+
+                if (foreignTargets.Count > 0)
+                    foreignMergeTargets[state.RasterCode] = foreignTargets;
+            }
         }
 
         private static double CalculateDistanceScore(
