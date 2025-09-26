@@ -713,51 +713,95 @@ namespace Economy_sim
         {
             if (!_dataLoaded) LoadStateData();
             EnsureStateGridBuilt();
-            if (_stateGrid == null) return;
+            if (_stateFeatures.Count == 0) return;
+
             float scaleX = mapPixelSize.Width / (float)_baseWidth;
             float scaleY = mapPixelSize.Height / (float)_baseHeight;
+            if (scaleX <= 0 || scaleY <= 0)
+                return;
+
             var baseViewport = new SKRect(viewport.Left / scaleX, viewport.Top / scaleY, viewport.Right / scaleX, viewport.Bottom / scaleY);
+            if (baseViewport.Width <= 0 || baseViewport.Height <= 0)
+                return;
+
             var clip = canvas.DeviceClipBounds;
-            int outW = Math.Max(1, clip.Width);
-            int outH = Math.Max(1, clip.Height);
-            using var overlay = new SKBitmap(outW, outH, SKColorType.Rgba8888, SKAlphaType.Premul);
-            overlay.Erase(SKColors.Transparent);
-            unsafe
+            if (clip.Width <= 0 || clip.Height <= 0)
+                return;
+
+            float viewWidth = clip.Width;
+            float viewHeight = clip.Height;
+            float scaleToViewX = viewWidth / baseViewport.Width;
+            float scaleToViewY = viewHeight / baseViewport.Height;
+            float avgScale = Math.Max(0.0001f, (scaleToViewX + scaleToViewY) * 0.5f);
+
+            float desiredScreenWidth = Math.Max(1f, borderWidth);
+            float selectedScreenWidth = desiredScreenWidth * 1.5f;
+            float strokeInBase = desiredScreenWidth / avgScale;
+            float selectedStrokeInBase = selectedScreenWidth / avgScale;
+
+            using var normalPaint = new SKPaint
             {
-                uint* pixels = (uint*)overlay.GetPixels().ToPointer();
-                int stride = overlay.RowBytes / 4;
-                int gridW = _gridWidth;
-                int gridH = _gridHeight;
-                var bc = borderColor ?? SKColors.Black;
-                uint borderPacked = (uint)(0xFF000000 | (bc.Red << 16) | (bc.Green << 8) | bc.Blue);
-                uint white = 0xFFFFFFFF;
-                Parallel.For(0, outH, y =>
+                Style = SKPaintStyle.Stroke,
+                Color = (borderColor ?? SKColors.Black).WithAlpha(255),
+                StrokeWidth = strokeInBase,
+                IsAntialias = true,
+                StrokeJoin = SKStrokeJoin.Round,
+                StrokeCap = SKStrokeCap.Round
+            };
+
+            using var selectedPaint = new SKPaint(normalPaint)
+            {
+                Color = SKColors.White,
+                StrokeWidth = selectedStrokeInBase
+            };
+
+            var translate = SKMatrix.CreateTranslation(-baseViewport.Left, -baseViewport.Top);
+            var scale = SKMatrix.CreateScale(scaleToViewX, scaleToViewY);
+            var matrix = SKMatrix.Concat(scale, translate);
+
+            canvas.Save();
+            canvas.Concat(ref matrix);
+
+            try
+            {
+                var viewportClip = new SKRect(baseViewport.Left, baseViewport.Top, baseViewport.Right, baseViewport.Bottom);
+                canvas.ClipRect(viewportClip);
+
+                foreach (var state in _stateFeatures)
                 {
-                    for (int x = 0; x < outW; x++)
+                    if (state.Geometry == null || state.Geometry.Count == 0)
+                        continue;
+
+                    if (!RectsIntersect(state.Bounds, baseViewport))
+                        continue;
+
+                    bool isSelected = _selectedStateCode > 0 && state.RasterCode == _selectedStateCode;
+                    var paint = isSelected ? selectedPaint : normalPaint;
+
+                    foreach (var path in state.Geometry)
                     {
-                        int logicalX = (int)(baseViewport.Left + (x * baseViewport.Width) / outW);
-                        int logicalY = (int)(baseViewport.Top + (y * baseViewport.Height) / outH);
-                        int gridX = logicalX / _gridScaleFactor;
-                        int gridY = logicalY / _gridScaleFactor;
-                        if (gridX < 0 || gridY < 0 || gridX >= gridW || gridY >= gridH) continue;
-                        int current = _stateGrid![gridY, gridX];
-                        if (current <= 0) continue;
-                        int nx0 = gridX + 1 < gridW ? _stateGrid[gridY, gridX + 1] : 0;
-                        int nx1 = gridX - 1 >= 0 ? _stateGrid[gridY, gridX - 1] : 0;
-                        int ny0 = gridY + 1 < gridH ? _stateGrid[gridY + 1, gridX] : 0;
-                        int ny1 = gridY - 1 >= 0 ? _stateGrid[gridY - 1, gridX] : 0;
-                        bool isBorder = nx0 != current || nx1 != current || ny0 != current || ny1 != current;
-                        if (!isBorder) continue;
-                        bool selectedAdj = _selectedStateCode > 0 && (current == _selectedStateCode || nx0 == _selectedStateCode || nx1 == _selectedStateCode || ny0 == _selectedStateCode || ny1 == _selectedStateCode);
-                        pixels[y * stride + x] = selectedAdj ? white : borderPacked;
+                        if (path == null || path.IsEmpty)
+                            continue;
+
+                        canvas.DrawPath(path, paint);
                     }
-                });
+                }
             }
-            using var paint = new SKPaint { FilterQuality = SKFilterQuality.None, IsAntialias = false };
-            canvas.DrawBitmap(overlay, new SKPoint(0, 0), paint);
+            finally
+            {
+                canvas.Restore();
+            }
         }
 
         // --- Quick lookup helpers for selection ---
+        private static bool RectsIntersect(SKRect a, SKRect b)
+        {
+            if (a.IsEmpty || b.IsEmpty)
+                return false;
+
+            return a.Left < b.Right && a.Right > b.Left && a.Top < b.Bottom && a.Bottom > b.Top;
+        }
+
         public StateFeature? GetStateAtGrid(int gridX, int gridY)
         {
             EnsureStateGridBuilt();
