@@ -65,6 +65,15 @@ namespace Economy_sim
         private TradeRouteManager? _tradeRouteManager;
         private EnhancedTradeManager? _enhancedTradeManager;
 
+        private static readonly IReadOnlyDictionary<string, string> _needRemapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Food"] = "Bread",
+            ["Housing"] = "Furniture",
+            ["Clothing"] = "Cloth",
+            ["Luxury"] = "Luxury Clothes",
+            ["Education"] = "Books"
+        };
+
         public GameView()
         {
             InitializeComponent();
@@ -1128,6 +1137,7 @@ namespace Economy_sim
 
                         // Seed stockpile with core goods proportionally to population
                         SeedCityStockpile(city);
+                        NormalizeCityPopulationNeeds(city);
 
                         state.Cities.Add(city);
                     }
@@ -1177,6 +1187,41 @@ namespace Economy_sim
                     _ => city.Population / 50
                 };
                 city.Stockpile[g] = new Good(g, Market.GoodDefinitions[g].BasePrice, Market.GoodDefinitions[g].Category, qty);
+            }
+        }
+
+        private void NormalizeCityPopulationNeeds(City city)
+        {
+            if (city?.PopClasses == null || !city.PopClasses.Any()) return;
+            if (!Market.GoodDefinitions.Any()) return;
+
+            foreach (var popClass in city.PopClasses)
+            {
+                var needsToReview = popClass.Needs.Keys.ToList();
+                foreach (var needName in needsToReview)
+                {
+                    if (Market.GoodDefinitions.ContainsKey(needName)) continue;
+
+                    if (_needRemapping.TryGetValue(needName, out var mappedNeed) && Market.GoodDefinitions.ContainsKey(mappedNeed))
+                    {
+                        double amount = popClass.Needs[needName];
+                        popClass.Needs.Remove(needName);
+                        if (popClass.Needs.TryGetValue(mappedNeed, out var existing))
+                        {
+                            popClass.Needs[mappedNeed] = existing + amount;
+                        }
+                        else
+                        {
+                            popClass.Needs[mappedNeed] = amount;
+                        }
+                        Debug.WriteLine($"[Economy Init] Remapped need '{needName}' to '{mappedNeed}' for {popClass.Name} in {city.Name}.");
+                    }
+                    else
+                    {
+                        popClass.Needs.Remove(needName);
+                        Debug.WriteLine($"[Economy Init] Removed unsupported need '{needName}' for {popClass.Name} in {city.Name}.");
+                    }
+                }
             }
         }
 
@@ -1266,25 +1311,32 @@ namespace Economy_sim
             losAngeles.TaxRate = 0.02;
             losAngeles.CityExpenses = 5000;
 
+            losAngeles.PopClasses.Clear();
+
             // Add some population classes with needs
             var laborers = new PopClass("Laborers", 1000000, 15.0);
             laborers.Needs["Bread"] = 2.0;   // 2 units per 1000 people
+            laborers.Needs["Furniture"] = 1.0;
             laborers.Needs["Cloth"] = 1.0;   // 1 unit per 1000 people
 
             var craftsmen = new PopClass("Craftsmen", 500000, 25.0);
             craftsmen.Needs["Bread"] = 2.0;
             craftsmen.Needs["Cloth"] = 1.5;
             craftsmen.Needs["Furniture"] = 0.5;
+            craftsmen.Needs["Luxury Clothes"] = 0.2;
 
             var engineers = new PopClass("Engineers", 200000, 50.0);
             engineers.Needs["Bread"] = 2.0;
             engineers.Needs["Cloth"] = 2.0;
             engineers.Needs["Furniture"] = 1.0;
             engineers.Needs["Books"] = 1.0;
+            engineers.Needs["Luxury Clothes"] = 0.5;
 
             losAngeles.PopClasses.Add(laborers);
             losAngeles.PopClasses.Add(craftsmen);
             losAngeles.PopClasses.Add(engineers);
+
+            NormalizeCityPopulationNeeds(losAngeles);
 
             california.Cities.Add(losAngeles);
 
@@ -1295,17 +1347,23 @@ namespace Economy_sim
             sanFrancisco.TaxRate = 0.02;
             sanFrancisco.CityExpenses = 4000;
 
+            sanFrancisco.PopClasses.Clear();
+
             var sfLaborers = new PopClass("Laborers", 300000, 18.0);
             sfLaborers.Needs["Bread"] = 2.0;
             sfLaborers.Needs["Cloth"] = 1.0;
+            sfLaborers.Needs["Furniture"] = 1.0;
 
             var sfCraftsmen = new PopClass("Craftsmen", 200000, 28.0);
             sfCraftsmen.Needs["Bread"] = 2.0;
             sfCraftsmen.Needs["Cloth"] = 1.5;
             sfCraftsmen.Needs["Furniture"] = 0.5;
+            sfCraftsmen.Needs["Luxury Clothes"] = 0.2;
 
             sanFrancisco.PopClasses.Add(sfLaborers);
             sanFrancisco.PopClasses.Add(sfCraftsmen);
+
+            NormalizeCityPopulationNeeds(sanFrancisco);
 
             california.Cities.Add(sanFrancisco);
             _currentCountry.States.Add(california);
@@ -1322,11 +1380,15 @@ namespace Economy_sim
             houston.TaxRate = 0.02;
             houston.CityExpenses = 4500;
 
+            houston.PopClasses.Clear();
+
             var houstonLaborers = new PopClass("Laborers", 800000, 16.0);
             houstonLaborers.Needs["Bread"] = 2.0;
             houstonLaborers.Needs["Cloth"] = 1.0;
+            houstonLaborers.Needs["Furniture"] = 1.0;
 
             houston.PopClasses.Add(houstonLaborers);
+            NormalizeCityPopulationNeeds(houston);
             texas.Cities.Add(houston);
 
             var dallas = new City("Dallas");
@@ -1335,11 +1397,15 @@ namespace Economy_sim
             dallas.TaxRate = 0.02;
             dallas.CityExpenses = 3500;
 
+            dallas.PopClasses.Clear();
+
             var dallasLaborers = new PopClass("Laborers", 500000, 17.0);
             dallasLaborers.Needs["Bread"] = 2.0;
             dallasLaborers.Needs["Cloth"] = 1.0;
+            dallasLaborers.Needs["Furniture"] = 1.0;
 
             dallas.PopClasses.Add(dallasLaborers);
+            NormalizeCityPopulationNeeds(dallas);
             texas.Cities.Add(dallas);
 
             _currentCountry.States.Add(texas);

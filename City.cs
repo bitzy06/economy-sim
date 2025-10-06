@@ -40,7 +40,7 @@ namespace Economy_sim
             Stockpile = new Dictionary<string, Good>();
             Happiness = 50; // Out of 100
             PopBudget = Population * 0.05; // Example: $0.05 per person per turn
-            PopClasses = new List<PopClass>();
+            PopClasses = InitializeDefaultPopClasses(Population);
             BuyOrders = new List<BuyOrder>();
             SellOrders = new List<SellOrder>();
             Suburbs = new List<Suburb>(); // Initialize suburbs
@@ -73,49 +73,57 @@ namespace Economy_sim
             }
 
             // Create population classes with names matching job types
+        }
+
+        private List<PopClass> InitializeDefaultPopClasses(int basePopulation)
+        {
             DebugLogger.Log($"[City] Creating population classes for city: {Name}", DebugLogger.LogCategory.Pop);
 
-            var laborers = new PopClass("Laborers", (int)(Population * 0.5), 0.03);
-            laborers.Needs["Food"] = 2.0;
-            laborers.Needs["Housing"] = 1.0;
-            laborers.Needs["Clothing"] = 0.5;
-            PopClasses.Add(laborers);
+            var classes = new List<PopClass>();
+
+            var laborers = new PopClass("Laborers", (int)(basePopulation * 0.5), 0.03);
+            laborers.Needs["Bread"] = 2.0;
+            laborers.Needs["Furniture"] = 1.0;
+            laborers.Needs["Cloth"] = 0.5;
+            classes.Add(laborers);
             DebugLogger.Log($"[City] Created Laborers class - Size: {laborers.Size}, Income: {laborers.IncomePerPerson}", DebugLogger.LogCategory.Pop);
 
-            var craftsmen = new PopClass("Craftsmen", (int)(Population * 0.25), 0.06);
-            craftsmen.Needs["Food"] = 3.0;
-            craftsmen.Needs["Housing"] = 1.5;
-            craftsmen.Needs["Clothing"] = 1.0;
-            craftsmen.Needs["Luxury"] = 0.2;
-            PopClasses.Add(craftsmen);
+            var craftsmen = new PopClass("Craftsmen", (int)(basePopulation * 0.25), 0.06);
+            craftsmen.Needs["Bread"] = 3.0;
+            craftsmen.Needs["Furniture"] = 1.5;
+            craftsmen.Needs["Cloth"] = 1.0;
+            craftsmen.Needs["Luxury Clothes"] = 0.2;
+            classes.Add(craftsmen);
             DebugLogger.Log($"[City] Created Craftsmen class - Size: {craftsmen.Size}, Income: {craftsmen.IncomePerPerson}", DebugLogger.LogCategory.Pop);
 
-            var engineers = new PopClass("Engineers", (int)(Population * 0.15), 0.12);
-            engineers.Needs["Food"] = 4.0;
-            engineers.Needs["Housing"] = 2.0;
-            engineers.Needs["Clothing"] = 1.5;
-            engineers.Needs["Luxury"] = 0.5;
-            engineers.Needs["Education"] = 1.0;
-            PopClasses.Add(engineers);
+            var engineers = new PopClass("Engineers", (int)(basePopulation * 0.15), 0.12);
+            engineers.Needs["Bread"] = 4.0;
+            engineers.Needs["Furniture"] = 2.0;
+            engineers.Needs["Cloth"] = 1.5;
+            engineers.Needs["Luxury Clothes"] = 0.5;
+            engineers.Needs["Books"] = 1.0;
+            classes.Add(engineers);
             DebugLogger.Log($"[City] Created Engineers class - Size: {engineers.Size}, Income: {engineers.IncomePerPerson}", DebugLogger.LogCategory.Pop);
 
-            var managers = new PopClass("Managers", (int)(Population * 0.07), 0.15);
-            managers.Needs["Food"] = 5.0;
-            managers.Needs["Housing"] = 3.0;
-            managers.Needs["Clothing"] = 2.0;
-            managers.Needs["Luxury"] = 1.0;
-            managers.Needs["Education"] = 1.5;
-            PopClasses.Add(managers);
+            var managers = new PopClass("Managers", (int)(basePopulation * 0.07), 0.15);
+            managers.Needs["Bread"] = 5.0;
+            managers.Needs["Furniture"] = 3.0;
+            managers.Needs["Cloth"] = 2.0;
+            managers.Needs["Luxury Clothes"] = 1.0;
+            managers.Needs["Books"] = 1.5;
+            classes.Add(managers);
             DebugLogger.Log($"[City] Created Managers class - Size: {managers.Size}, Income: {managers.IncomePerPerson}", DebugLogger.LogCategory.Pop);
 
-            var clerks = new PopClass("Clerks", (int)(Population * 0.03), 0.08);
-            clerks.Needs["Food"] = 3.5;
-            clerks.Needs["Housing"] = 2.0;
-            clerks.Needs["Clothing"] = 1.2;
-            clerks.Needs["Luxury"] = 0.3;
-            clerks.Needs["Education"] = 0.5;
-            PopClasses.Add(clerks);
+            var clerks = new PopClass("Clerks", (int)(basePopulation * 0.03), 0.08);
+            clerks.Needs["Bread"] = 3.5;
+            clerks.Needs["Furniture"] = 2.0;
+            clerks.Needs["Cloth"] = 1.2;
+            clerks.Needs["Luxury Clothes"] = 0.3;
+            clerks.Needs["Books"] = 0.5;
+            classes.Add(clerks);
             DebugLogger.Log($"[City] Created Clerks class - Size: {clerks.Size}, Income: {clerks.IncomePerPerson}", DebugLogger.LogCategory.Pop);
+
+            return classes;
         }
 
         public void SimulateGrowth()
