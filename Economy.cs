@@ -450,9 +450,10 @@ namespace Economy_sim
                 city.LocalSupply[goodName] = quantity;
         }
 
-        public static void ResolveInterCityTrade(List<City> allCities, double baseTradeCostPerUnit = 0.1)
+        public static void ResolveInterCityTrade(List<City> allCities, List<Country> allCountries, double baseTradeCostPerUnit = 0.1)
         {
             if (allCities == null || allCities.Count < 2) return; // Need at least two cities for trade
+            if (allCountries == null || allCountries.Count == 0) return;
 
             foreach (var goodName in GoodDefinitions.Keys) // Iterate over all defined goods
             {
@@ -524,12 +525,13 @@ namespace Economy_sim
                             // Record the trade in the global market if available
                             if (Economy_sim.GlobalMarket.Instance != null)
                             {
-                                // Use default "Unknown" for country names - the global market will handle this
+                                string exporterCountry = GetCountryNameForCity(exporter, allCountries);
+                                string importerCountry = GetCountryNameForCity(importer, allCountries);
                                 Economy_sim.GlobalMarket.Instance.RecordTrade(
-                                    goodName, 
-                                    "Unknown", // Exporter country - this should be set by the GlobalMarket based on city relationships
-                                    "Unknown", // Importer country - this should be set by the GlobalMarket based on city relationships
-                                    quantityTraded, 
+                                    goodName,
+                                    exporterCountry,
+                                    importerCountry,
+                                    quantityTraded,
                                     quantityTraded * effectiveExportPrice);
                             }
                             
