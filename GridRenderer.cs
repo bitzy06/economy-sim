@@ -199,8 +199,19 @@ namespace Economy_sim
                 // Get state grid dimensions (should match control grid)
                 int stateGridWidth = stateGrid?.GetLength(1) ?? 0;
                 int stateGridHeight = stateGrid?.GetLength(0) ?? 0;
-                bool hasValidStateGrid = stateGrid != null && 
-                    stateGridWidth == gridFullWidth && stateGridHeight == gridFullHeight;
+                bool hasStateGrid = stateGrid != null && stateGridWidth > 0 && stateGridHeight > 0;
+
+                // Many systems (e.g. the state manager) keep a lower-resolution grid to reduce
+                // memory usage. Instead of requiring an exact size match, compute a mapping from
+                // the full-resolution control grid into the state grid. This keeps borders visible
+                // while supporting aggressively downscaled state grids.
+                double stateFactorX = 1.0;
+                double stateFactorY = 1.0;
+                if (hasStateGrid)
+                {
+                    stateFactorX = stateGridWidth / (double)gridFullWidth;
+                    stateFactorY = stateGridHeight / (double)gridFullHeight;
+                }
 
                 Parallel.For(0, tilePixels, y =>
                 {
@@ -217,7 +228,13 @@ namespace Economy_sim
                             continue;
 
                         // Get current state id if state grid is available
-                        int currentStateId = hasValidStateGrid ? stateGrid![gridY, gridX] : 0;
+                        int currentStateId = 0;
+                        if (hasStateGrid)
+                        {
+                            int sx = Math.Clamp((int)(gridX * stateFactorX), 0, stateGridWidth - 1);
+                            int sy = Math.Clamp((int)(gridY * stateFactorY), 0, stateGridHeight - 1);
+                            currentStateId = stateGrid![sy, sx];
+                        }
 
                         bool isCountryBorder = false;
                         bool isStateBorder = false;
@@ -240,8 +257,12 @@ namespace Economy_sim
                             if (nx >= 0 && nx < gridFullWidth && ny >= 0 && ny < gridFullHeight)
                             {
                                 neighborCountryId = controlGrid[ny, nx];
-                                if (hasValidStateGrid)
-                                    neighborStateId = stateGrid![ny, nx];
+                                if (hasStateGrid)
+                                {
+                                    int nsx = Math.Clamp((int)(nx * stateFactorX), 0, stateGridWidth - 1);
+                                    int nsy = Math.Clamp((int)(ny * stateFactorY), 0, stateGridHeight - 1);
+                                    neighborStateId = stateGrid![nsy, nsx];
+                                }
                             }
 
                             // Check for country borders
@@ -251,7 +272,7 @@ namespace Economy_sim
                             }
 
                             // Check for state borders (only within the same country)
-                            if (hasValidStateGrid && neighborCountryId == currentCountryId && 
+                            if (hasStateGrid && neighborCountryId == currentCountryId &&
                                 neighborStateId != currentStateId && currentStateId != 0 && neighborStateId != 0)
                             {
                                 isStateBorder = true;
@@ -265,7 +286,7 @@ namespace Economy_sim
                             }
 
                             // Check for selected state neighbors
-                            if (selectedStateId != -1 && hasValidStateGrid &&
+                            if (selectedStateId != -1 && hasStateGrid &&
                                 (currentStateId == selectedStateId || neighborStateId == selectedStateId))
                             {
                                 hasSelectedStateNeighbor = true;

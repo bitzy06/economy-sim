@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Collections.Concurrent;
 using System.Drawing;
+using System.Linq;
 
 namespace Economy_sim
 {
@@ -19,7 +20,7 @@ namespace Economy_sim
         private readonly PoliticalBorderManager _politicalManager;
         private readonly PoliticalTileManager _politicalTileManager;
         private readonly StateBorderManager _stateManager;
-        
+
         private MapViewType _currentViewType = MapViewType.Terrain;
         private DateTime _politicalMapDate = new DateTime(1950, 1, 1);
         
@@ -32,12 +33,30 @@ namespace Economy_sim
         private IndexedCountryFeature? _selectedCountry = null;
         private StateBorderManager.StateFeature? _selectedState = null;
         private bool _stateSplittingProcessed = false;
+        private bool _mergeSmallStatesWithCities = false;
         
         public MapViewType CurrentViewType => _currentViewType;
         public DateTime PoliticalMapDate => _politicalMapDate;
         public IndexedCountryFeature? SelectedCountry => _selectedCountry;
         public StateBorderManager.StateFeature? SelectedState => _selectedState;
-        
+        public bool MergeSmallStatesWithCities
+        {
+            get => _mergeSmallStatesWithCities;
+            set => _mergeSmallStatesWithCities = value;
+        }
+        public bool UsePersistedStateMap
+        {
+            get => _stateManager.UsePersistedStateMap;
+            set
+            {
+                if (_stateManager.UsePersistedStateMap == value)
+                    return;
+
+                _stateManager.UsePersistedStateMap = value;
+                _stateSplittingProcessed = false;
+            }
+        }
+
         public event EventHandler<MapViewType>? ViewTypeChanged;
         public event EventHandler<IndexedCountryFeature?>? SelectedCountryChanged;
         public event EventHandler<StateBorderManager.StateFeature?>? SelectedStateChanged;
@@ -74,6 +93,18 @@ namespace Economy_sim
                 if (viewType == MapViewType.Political)
                 {
                     GC.Collect();
+                }
+                else if (viewType == MapViewType.States)
+                {
+                    try
+                    {
+                        _stateManager.LoadStateData();
+                        ProcessStateSplittingAndMerging();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[HYBRID MANAGER] Failed preparing states view: {ex.Message}");
+                    }
                 }
                 else if (viewType == MapViewType.PopulationDensity)
                 {
@@ -183,17 +214,19 @@ namespace Economy_sim
                         // Optionally draw thin state borders only if a state is selected for context.
                         try
                         {
+                            using var canvas = new SKCanvas(polBmp);
                             if (_selectedState != null)
                             {
                                 int cellSize = GetCellSizeForZoom(zoomLevel);
                                 var politicalPixelSize = new SKSizeI(PoliticalBaseWidth * cellSize, PoliticalBaseHeight * cellSize);
-                                using var canvas = new SKCanvas(polBmp);
                                 _stateManager.RenderStateBorders(canvas, polView, politicalPixelSize, 1.0f, new SKColor(0, 0, 0, 160));
                             }
+
+                            RenderCitiesOverlay(canvas, viewArea, new SKSizeI(polBmp.Width, polBmp.Height), zoomLevel);
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[POLITICAL VIEW] State border overlay failed: {ex.Message}");
+                            Debug.WriteLine($"[POLITICAL VIEW] Overlay failed: {ex.Message}");
                         }
                         result = polBmp;
                     }
@@ -202,7 +235,28 @@ namespace Economy_sim
                         result = null;
                     }
                     break;
-                
+
+                case MapViewType.States:
+                    var stateViewport = ConvertTerrainViewToPoliticalView(viewArea, zoomLevel);
+                    int stateCell = GetCellSizeForZoom(zoomLevel);
+                    var statePixelSize = new SKSizeI(PoliticalBaseWidth * stateCell, PoliticalBaseHeight * stateCell);
+                    var stateBitmap = new SKBitmap(viewArea.Width, viewArea.Height);
+                    using (var canvas = new SKCanvas(stateBitmap))
+                    {
+                        canvas.Clear(new SKColor(135, 206, 235));
+                        try
+                        {
+                            _stateManager.RenderStateFills(canvas, stateViewport, statePixelSize);
+                            _stateManager.RenderStateBorders(canvas, stateViewport, statePixelSize, 2.0f, new SKColor(0, 0, 0, 200));
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[STATE VIEW] Failed to render states: {ex.Message}");
+                        }
+                    }
+                    result = stateBitmap;
+                    break;
+
                 case MapViewType.PopulationDensity:
                     // Ensure map exists synchronously if not already
                     if (_populationDensityMap == null && !_populationLoadAttempted)
@@ -328,11 +382,25 @@ namespace Economy_sim
         public (int gridX, int gridY) ScreenToPoliticalGrid(int screenX, int screenY, int zoomLevel, SKPointI viewOffset)
         {
             int cellSize = GetCellSizeForZoom(zoomLevel);
-            int terrainX = screenX + viewOffset.X; // terrain pixel in current zoom
-            int terrainY = screenY + viewOffset.Y;
-            var (ppx, ppy) = TerrainPixelToPoliticalPixel(terrainX, terrainY, zoomLevel);
-            int gridX = ppx / cellSize;
-            int gridY = ppy / cellSize;
+
+            // Translate the screen coordinate into terrain pixel space for the active zoom level.
+            double terrainPixelX = screenX + viewOffset.X;
+            double terrainPixelY = screenY + viewOffset.Y;
+
+            // Convert terrain pixel offsets into terrain grid coordinates so we can scale them into
+            // the higher resolution political grid without rounding bias.
+            double terrainGridX = terrainPixelX / cellSize;
+            double terrainGridY = terrainPixelY / cellSize;
+
+            double scaleX = PoliticalBaseWidth / (double)BaseWidth;
+            double scaleY = PoliticalBaseHeight / (double)BaseHeight;
+
+            int gridX = (int)Math.Floor(terrainGridX * scaleX);
+            int gridY = (int)Math.Floor(terrainGridY * scaleY);
+
+            gridX = Math.Clamp(gridX, 0, PoliticalBaseWidth - 1);
+            gridY = Math.Clamp(gridY, 0, PoliticalBaseHeight - 1);
+
             return (gridX, gridY);
         }
 
@@ -352,6 +420,8 @@ namespace Economy_sim
                     {
                         canvas.Clear(SKColors.Transparent);
                         canvas.DrawBitmap(polBmp, new SKRect(0, 0, outputSize.Width, outputSize.Height));
+
+                        RenderCitiesOverlay(canvas, viewArea, outputSize, zoomLevel);
                     }
                     polBmp.Dispose();
                     return composed;
@@ -462,10 +532,42 @@ namespace Economy_sim
         public PoliticalDataCache GetPoliticalDataCache() => _politicalTileManager.GetDataCache();
         public IndexedCountryFeature? FindCountryByName(string name)
         { if (string.IsNullOrWhiteSpace(name)) return null; var all = _politicalTileManager.GetAllCountryData(); var match = all.Find(c => string.Equals(c.CountryName, name, StringComparison.OrdinalIgnoreCase)); return match == null ? null : _politicalTileManager.GetCountryFeatureByRasterCode(match.RasterCode); }
-        public void ChangeCountryControlAtGrid(int rasterCode, IEnumerable<Point> cells) => _politicalTileManager.ChangeControl(rasterCode, cells);
+        public void ChangeCountryControlAtGrid(int rasterCode, IEnumerable<Point> cells)
+        {
+            _politicalTileManager.ChangeControl(rasterCode, cells);
+            _stateSplittingProcessed = false;
+        }
+
         public void ChangeCountryControlRect(int rasterCode, Rectangle region)
-        { IEnumerable<Point> Cells() { int x0 = Math.Max(0, region.Left); int y0 = Math.Max(0, region.Top); int x1 = Math.Min(PoliticalBaseWidth, region.Right); int y1 = Math.Min(PoliticalBaseHeight, region.Bottom); for (int y = y0; y < y1; y++) for (int x = x0; x < x1; x++) yield return new Point(x, y); } _politicalTileManager.ChangeControl(rasterCode, Cells()); }
-        public List<(Point cell, int previousId)> ChangeCountryControlZeroSum(int rasterCode, IEnumerable<Point> brushCells) => _politicalTileManager.ChangeControlZeroSum(rasterCode, brushCells);
+        {
+            IEnumerable<Point> Cells()
+            {
+                int x0 = Math.Max(0, region.Left);
+                int y0 = Math.Max(0, region.Top);
+                int x1 = Math.Min(PoliticalBaseWidth, region.Right);
+                int y1 = Math.Min(PoliticalBaseHeight, region.Bottom);
+                for (int y = y0; y < y1; y++)
+                {
+                    for (int x = x0; x < x1; x++)
+                    {
+                        yield return new Point(x, y);
+                    }
+                }
+            }
+
+            _politicalTileManager.ChangeControl(rasterCode, Cells());
+            _stateSplittingProcessed = false;
+        }
+
+        public List<(Point cell, int previousId)> ChangeCountryControlZeroSum(int rasterCode, IEnumerable<Point> brushCells)
+        {
+            var changes = _politicalTileManager.ChangeControlZeroSum(rasterCode, brushCells);
+            if (changes.Count > 0)
+            {
+                _stateSplittingProcessed = false;
+            }
+            return changes;
+        }
         public List<StateBorderManager.StateFeature> GetAllStates() => _stateManager.GetAllStates();
         public StateBorderManager.StateFeature? GetStateAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset)
         {
@@ -506,20 +608,20 @@ namespace Economy_sim
         /// <summary>
         /// Processes state/country border mismatches by splitting states and merging small fragments
         /// </summary>
-        public void ProcessStateSplittingAndMerging()
+        public void ProcessStateSplittingAndMerging(bool force = false, int[,]? providedCountryGrid = null)
         {
-            if (_stateSplittingProcessed)
+            if (_stateSplittingProcessed && !force)
             {
                 Debug.WriteLine("[HYBRID MANAGER] State splitting already processed");
                 return;
             }
-            
+
             try
             {
                 Debug.WriteLine("[HYBRID MANAGER] Starting state splitting and merging process...");
-                
+
                 // Get the country grid from the political tile manager
-                var countryGrid = _politicalTileManager.GetControlGrid();
+                var countryGrid = providedCountryGrid ?? _politicalTileManager.GetControlGrid();
                 if (countryGrid != null)
                 {
                     _stateManager.ProcessStateSplittingAndMerging(countryGrid);
@@ -536,6 +638,824 @@ namespace Economy_sim
                 Debug.WriteLine($"[HYBRID MANAGER] Error during state splitting: {ex.Message}");
             }
         }
+
+        public Task<int> CullStatesWithoutCitiesAsync(IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => CullStatesWithoutCitiesInternal(progress, cancellationToken), cancellationToken);
+        }
+
+        public int CullStatesWithoutCities()
+        {
+            return CullStatesWithoutCitiesInternal(progress: null, cancellationToken: CancellationToken.None);
+        }
+
+        public bool SaveStateMapToDisk(string? filePath = null)
+        {
+            return _stateManager.SaveStateDataToFile(filePath);
+        }
+
+        private sealed class StateGridStats
+        {
+            public long SumX;
+            public long SumY;
+            public int CellCount;
+        }
+
+        private int CullStatesWithoutCitiesInternal(IProgress<double>? progress, CancellationToken cancellationToken)
+        {
+            try
+            {
+                _stateManager.LoadStateData();
+                EnsureCitiesLoaded();
+
+                if (_cityPoints == null || _cityPoints.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] City data unavailable; skipping state cull");
+                    return 0;
+                }
+
+                var states = _stateManager.GetAllStates();
+                if (states == null || states.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] No states available for culling");
+                    return 0;
+                }
+
+                var stateGrid = _stateManager.GetStateGrid();
+                if (stateGrid == null)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] State grid unavailable; skipping cull");
+                    return 0;
+                }
+
+                var stateByCode = states
+                    .Where(s => s.RasterCode > 0)
+                    .GroupBy(s => s.RasterCode)
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                var cityCounts = new Dictionary<int, int>();
+                foreach (var city in _cityPoints)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var state = _stateManager.GetStateAtGridScaled(city.PixelX, city.PixelY);
+                    if (state == null)
+                        continue;
+
+                    if (cityCounts.TryGetValue(state.RasterCode, out var count))
+                        cityCounts[state.RasterCode] = count + 1;
+                    else
+                        cityCounts[state.RasterCode] = 1;
+                }
+
+                var candidateStates = states.Where(s => cityCounts.ContainsKey(s.RasterCode)).ToList();
+                if (candidateStates.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] No states with city assignments found; skipping cull");
+                    return 0;
+                }
+
+                var emptyStates = states.Where(s => !cityCounts.ContainsKey(s.RasterCode)).ToList();
+                if (emptyStates.Count == 0 && !_mergeSmallStatesWithCities)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] No states without cities detected");
+                    return 0;
+                }
+
+                var gridStats = new Dictionary<int, StateGridStats>();
+                var adjacency = new Dictionary<int, HashSet<int>>();
+                var coverageByState = new Dictionary<int, Dictionary<int, int>>();
+                int height = stateGrid.GetLength(0);
+                int width = stateGrid.GetLength(1);
+                var countryGrid = _politicalTileManager.GetControlGrid();
+
+                if (countryGrid != null)
+                {
+                    // Reduce cross-border fragments before we start evaluating full-state merges so only the
+                    // mismatched pieces are considered for reassignment.
+                    ProcessStateSplittingAndMerging(force: true, providedCountryGrid: countryGrid);
+
+                    stateGrid = _stateManager.GetStateGrid();
+                    if (stateGrid == null)
+                    {
+                        Debug.WriteLine("[HYBRID MANAGER] State grid unavailable after splitting");
+                        return 0;
+                    }
+
+                    height = stateGrid.GetLength(0);
+                    width = stateGrid.GetLength(1);
+                }
+
+                int countryHeight = countryGrid?.GetLength(0) ?? 0;
+                int countryWidth = countryGrid?.GetLength(1) ?? 0;
+
+                for (int y = 0; y < height; y++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    for (int x = 0; x < width; x++)
+                    {
+                        int code = stateGrid[y, x];
+                        if (code <= 0)
+                            continue;
+
+                        if (!gridStats.TryGetValue(code, out var stats))
+                        {
+                            stats = new StateGridStats();
+                            gridStats[code] = stats;
+                        }
+
+                        stats.CellCount++;
+                        stats.SumX += x;
+                        stats.SumY += y;
+
+                        if (countryGrid != null && y < countryHeight && x < countryWidth)
+                        {
+                            int countryCode = countryGrid[y, x];
+                            if (countryCode > 0)
+                            {
+                                if (!coverageByState.TryGetValue(code, out var coverage))
+                                {
+                                    coverage = new Dictionary<int, int>();
+                                    coverageByState[code] = coverage;
+                                }
+
+                                if (coverage.TryGetValue(countryCode, out var count))
+                                    coverage[countryCode] = count + 1;
+                                else
+                                    coverage[countryCode] = 1;
+                            }
+                        }
+
+                        if (!adjacency.ContainsKey(code))
+                        {
+                            adjacency[code] = new HashSet<int>();
+                        }
+
+                        if (x + 1 < width)
+                        {
+                            int right = stateGrid[y, x + 1];
+                            if (right > 0 && right != code)
+                            {
+                                AddAdjacency(adjacency, code, right);
+                            }
+                        }
+
+                        if (y + 1 < height)
+                        {
+                            int down = stateGrid[y + 1, x];
+                            if (down > 0 && down != code)
+                            {
+                                AddAdjacency(adjacency, code, down);
+                            }
+                        }
+                    }
+                }
+
+                foreach (var state in stateByCode.Keys)
+                {
+                    if (!adjacency.ContainsKey(state))
+                        adjacency[state] = new HashSet<int>();
+                }
+
+                var countryKeyCache = new Dictionary<int, string>();
+                var coverageByStateKey = ConvertCoverageToCountryKeys(coverageByState, countryKeyCache);
+                var effectiveCountryByState = new Dictionary<int, string>();
+                var foreignMergeTargets = new Dictionary<int, Dictionary<string, double>>();
+                PopulateEffectiveCountryAssignments(states, coverageByStateKey, effectiveCountryByState, foreignMergeTargets);
+
+                var stateAreas = new Dictionary<int, double>();
+                foreach (var state in states)
+                {
+                    double area = CalculateStateArea(state, gridStats);
+                    stateAreas[state.RasterCode] = area;
+                }
+
+                var smallCityStates = new List<StateBorderManager.StateFeature>();
+                if (_mergeSmallStatesWithCities && candidateStates.Count > 0)
+                {
+                    var sampleSizes = candidateStates
+                        .Select(c => gridStats.TryGetValue(c.RasterCode, out var stats) ? stats.CellCount : 0)
+                        .Where(count => count > 0)
+                        .ToList();
+
+                    if (sampleSizes.Count > 0)
+                    {
+                        double average = sampleSizes.Average();
+                        int dynamicThreshold = (int)Math.Max(32, Math.Round(average * 0.35));
+                        foreach (var candidate in candidateStates)
+                        {
+                            if (gridStats.TryGetValue(candidate.RasterCode, out var stats) && stats.CellCount > 0 && stats.CellCount <= dynamicThreshold)
+                            {
+                                smallCityStates.Add(candidate);
+                            }
+                        }
+
+                        if (smallCityStates.Count > 0)
+                        {
+                            Debug.WriteLine($"[HYBRID MANAGER] Identified {smallCityStates.Count} small city state(s) (threshold {dynamicThreshold} cells) for merging");
+                        }
+                    }
+                }
+
+                var mergeableStates = new List<StateBorderManager.StateFeature>();
+                if (emptyStates.Count > 0)
+                    mergeableStates.AddRange(emptyStates);
+                if (smallCityStates.Count > 0)
+                    mergeableStates.AddRange(smallCityStates);
+
+                if (mergeableStates.Count == 0)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] No eligible states found for merging");
+                    return 0;
+                }
+
+                int maxCityCount = cityCounts.Count > 0 ? cityCounts.Values.Max() : 0;
+                int totalMergeSources = mergeableStates.Count;
+                int processed = 0;
+                int culled = 0;
+
+                var orderedMergeableStates = mergeableStates
+                    .OrderBy(s => gridStats.TryGetValue(s.RasterCode, out var stats) ? stats.CellCount : int.MaxValue)
+                    .ToList();
+
+                var perCountryQueues = new Dictionary<string, ConcurrentQueue<StateBorderManager.StateFeature>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var mergeSource in orderedMergeableStates)
+                {
+                    string countryKey = GetEffectiveCountryKey(mergeSource, effectiveCountryByState);
+                    if (!perCountryQueues.TryGetValue(countryKey, out var queue))
+                    {
+                        queue = new ConcurrentQueue<StateBorderManager.StateFeature>();
+                        perCountryQueues[countryKey] = queue;
+                    }
+                    queue.Enqueue(mergeSource);
+                }
+
+                using var cullDataLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+                var tasks = new List<Task>();
+
+                foreach (var kvp in perCountryQueues)
+                {
+                    if (kvp.Value.IsEmpty)
+                        continue;
+
+                    var queue = kvp.Value;
+                    tasks.Add(Task.Run(() =>
+                    {
+                        while (!cancellationToken.IsCancellationRequested && queue.TryDequeue(out var mergeState))
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                            cullDataLock.EnterUpgradeableReadLock();
+                            try
+                            {
+                                if (!stateByCode.ContainsKey(mergeState.RasterCode))
+                                    continue;
+
+                                var target = FindWeightedCullTarget(
+                                    mergeState,
+                                    candidateStates,
+                                    cityCounts,
+                                    adjacency,
+                                    gridStats,
+                                    stateByCode,
+                                    maxCityCount,
+                                    stateAreas,
+                                    effectiveCountryByState,
+                                    foreignMergeTargets);
+
+                                if (target == null)
+                                {
+                                    Debug.WriteLine($"[HYBRID MANAGER] No merge target found for {mergeState.StateName} ({mergeState.CountryCode})");
+                                }
+                                else
+                                {
+                                    cullDataLock.EnterWriteLock();
+                                    try
+                                    {
+                                        if (!stateByCode.TryGetValue(mergeState.RasterCode, out var refreshedSource))
+                                            continue;
+
+                                        if (!stateByCode.TryGetValue(target.RasterCode, out var refreshedTarget))
+                                            continue;
+
+                                        double sourceAreaBefore = GetOrCalculateStateArea(refreshedSource, stateAreas, gridStats);
+                                        double targetAreaBefore = GetOrCalculateStateArea(refreshedTarget, stateAreas, gridStats);
+
+                                        if (_stateManager.MergeStateInto(refreshedSource, refreshedTarget))
+                                        {
+                                            Interlocked.Increment(ref culled);
+                                            Debug.WriteLine($"[HYBRID MANAGER] Merged {refreshedSource.StateName} into {refreshedTarget.StateName}");
+
+                                            UpdateAdjacencyAfterMerge(adjacency, refreshedSource.RasterCode, refreshedTarget.RasterCode);
+                                            UpdateGridStatsAfterMerge(gridStats, refreshedSource.RasterCode, refreshedTarget.RasterCode);
+                                            stateAreas[refreshedTarget.RasterCode] = targetAreaBefore + sourceAreaBefore;
+                                            stateAreas.Remove(refreshedSource.RasterCode);
+                                            stateByCode.Remove(refreshedSource.RasterCode);
+                                            effectiveCountryByState.Remove(refreshedSource.RasterCode);
+                                            foreignMergeTargets.Remove(refreshedSource.RasterCode);
+
+                                            if (cityCounts.TryGetValue(refreshedSource.RasterCode, out var transferredCities))
+                                            {
+                                                cityCounts.Remove(refreshedSource.RasterCode);
+                                                if (transferredCities > 0)
+                                                {
+                                                    if (cityCounts.TryGetValue(refreshedTarget.RasterCode, out var targetCities))
+                                                        cityCounts[refreshedTarget.RasterCode] = targetCities + transferredCities;
+                                                    else
+                                                        cityCounts[refreshedTarget.RasterCode] = transferredCities;
+
+                                                    if (cityCounts[refreshedTarget.RasterCode] > maxCityCount)
+                                                        maxCityCount = cityCounts[refreshedTarget.RasterCode];
+                                                }
+                                            }
+                                        }
+                                    }
+                                    finally
+                                    {
+                                        if (cullDataLock.IsWriteLockHeld)
+                                            cullDataLock.ExitWriteLock();
+                                    }
+                                }
+                            }
+                            finally
+                            {
+                                if (cullDataLock.IsUpgradeableReadLockHeld)
+                                    cullDataLock.ExitUpgradeableReadLock();
+
+                                int processedValue = Interlocked.Increment(ref processed);
+                                if (totalMergeSources > 0)
+                                {
+                                    progress?.Report(processedValue / (double)totalMergeSources);
+                                }
+                            }
+                        }
+                    }, cancellationToken));
+                }
+
+                try
+                {
+                    Task.WaitAll(tasks.ToArray());
+                }
+                catch (AggregateException aex)
+                {
+                    aex.Handle(ex => ex is OperationCanceledException);
+                    if (aex.InnerExceptions.Any(ex => ex is OperationCanceledException))
+                        throw new OperationCanceledException(cancellationToken);
+                    throw;
+                }
+
+                if (cancellationToken.IsCancellationRequested)
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                if (culled > 0)
+                {
+                    _stateSplittingProcessed = false;
+                }
+
+                return culled;
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("[HYBRID MANAGER] State cull cancelled");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HYBRID MANAGER] Failed to cull empty states: {ex.Message}");
+                return 0;
+            }
+        }
+
+        private static void AddAdjacency(Dictionary<int, HashSet<int>> adjacency, int a, int b)
+        {
+            if (!adjacency.TryGetValue(a, out var setA))
+            {
+                setA = new HashSet<int>();
+                adjacency[a] = setA;
+            }
+            setA.Add(b);
+
+            if (!adjacency.TryGetValue(b, out var setB))
+            {
+                setB = new HashSet<int>();
+                adjacency[b] = setB;
+            }
+            setB.Add(a);
+        }
+
+        private static void UpdateAdjacencyAfterMerge(Dictionary<int, HashSet<int>> adjacency, int sourceCode, int targetCode)
+        {
+            if (!adjacency.TryGetValue(targetCode, out var targetNeighbors))
+            {
+                targetNeighbors = new HashSet<int>();
+                adjacency[targetCode] = targetNeighbors;
+            }
+
+            if (adjacency.TryGetValue(sourceCode, out var sourceNeighbors))
+            {
+                foreach (var neighbor in sourceNeighbors)
+                {
+                    if (neighbor == targetCode)
+                        continue;
+
+                    targetNeighbors.Add(neighbor);
+                    if (adjacency.TryGetValue(neighbor, out var neighborSet))
+                    {
+                        neighborSet.Remove(sourceCode);
+                        if (neighbor != targetCode)
+                        {
+                            neighborSet.Add(targetCode);
+                        }
+                    }
+                }
+
+                adjacency.Remove(sourceCode);
+            }
+
+            targetNeighbors.Remove(targetCode);
+        }
+
+        private static void UpdateGridStatsAfterMerge(Dictionary<int, StateGridStats> gridStats, int sourceCode, int targetCode)
+        {
+            if (!gridStats.TryGetValue(targetCode, out var targetStats))
+            {
+                targetStats = new StateGridStats();
+                gridStats[targetCode] = targetStats;
+            }
+
+            if (gridStats.TryGetValue(sourceCode, out var sourceStats))
+            {
+                targetStats.SumX += sourceStats.SumX;
+                targetStats.SumY += sourceStats.SumY;
+                targetStats.CellCount += sourceStats.CellCount;
+                gridStats.Remove(sourceCode);
+            }
+        }
+
+        private static string NormalizeCountryKey(StateBorderManager.StateFeature? state)
+        {
+            if (state == null)
+                return "__UNKNOWN__";
+
+            var code = state.CountryCode;
+            if (string.IsNullOrWhiteSpace(code))
+                return "__UNKNOWN__";
+
+            return code.Trim().ToUpperInvariant();
+        }
+
+        private static string GetEffectiveCountryKey(StateBorderManager.StateFeature? state, Dictionary<int, string> overrides)
+        {
+            if (state == null)
+                return "__UNKNOWN__";
+
+            if (overrides.TryGetValue(state.RasterCode, out var value) && !string.IsNullOrWhiteSpace(value))
+                return value;
+
+            return NormalizeCountryKey(state);
+        }
+
+        private static string GetEffectiveCountryKey(int stateCode, Dictionary<int, string> overrides, Dictionary<int, StateBorderManager.StateFeature> stateByCode)
+        {
+            if (overrides.TryGetValue(stateCode, out var value) && !string.IsNullOrWhiteSpace(value))
+                return value;
+
+            if (stateByCode.TryGetValue(stateCode, out var state))
+                return NormalizeCountryKey(state);
+
+            return "__UNKNOWN__";
+        }
+
+        private static double CalculateStateArea(StateBorderManager.StateFeature state, Dictionary<int, StateGridStats> gridStats)
+        {
+            if (gridStats.TryGetValue(state.RasterCode, out var stats) && stats.CellCount > 0)
+            {
+                return stats.CellCount;
+            }
+
+            var bounds = state.Bounds;
+            double width = Math.Max(1.0, bounds.Width);
+            double height = Math.Max(1.0, bounds.Height);
+            return Math.Max(1.0, width * height);
+        }
+
+        private static double GetOrCalculateStateArea(
+            StateBorderManager.StateFeature state,
+            Dictionary<int, double> stateAreas,
+            Dictionary<int, StateGridStats> gridStats)
+        {
+            if (stateAreas.TryGetValue(state.RasterCode, out var area) && area > 0)
+                return area;
+
+            double computed = CalculateStateArea(state, gridStats);
+            stateAreas[state.RasterCode] = computed;
+            return computed;
+        }
+
+        private StateBorderManager.StateFeature? FindWeightedCullTarget(
+            StateBorderManager.StateFeature source,
+            List<StateBorderManager.StateFeature> candidates,
+            Dictionary<int, int> cityCounts,
+            Dictionary<int, HashSet<int>> adjacency,
+            Dictionary<int, StateGridStats> gridStats,
+            Dictionary<int, StateBorderManager.StateFeature> stateByCode,
+            int maxCityCount,
+            Dictionary<int, double> stateAreas,
+            Dictionary<int, string> effectiveCountryByState,
+            Dictionary<int, Dictionary<string, double>> foreignMergeTargets)
+        {
+            if (source == null)
+                return null;
+
+            var neighborCodes = adjacency.TryGetValue(source.RasterCode, out var neighbors)
+                ? neighbors.Where(code => code != source.RasterCode && cityCounts.ContainsKey(code) && stateByCode.ContainsKey(code)).ToList()
+                : new List<int>();
+
+            if (neighborCodes.Count == 0)
+            {
+                neighborCodes = candidates
+                    .Where(c => c.RasterCode != source.RasterCode && cityCounts.ContainsKey(c.RasterCode))
+                    .Select(c => c.RasterCode)
+                    .Distinct()
+                    .Where(code => stateByCode.ContainsKey(code))
+                    .ToList();
+            }
+
+            if (neighborCodes.Count == 0)
+                return null;
+
+            gridStats.TryGetValue(source.RasterCode, out var sourceStats);
+            _ = GetOrCalculateStateArea(source, stateAreas, gridStats);
+
+            string sourceCountry = GetEffectiveCountryKey(source, effectiveCountryByState);
+            foreignMergeTargets.TryGetValue(source.RasterCode, out var foreignCandidates);
+
+            StateBorderManager.StateFeature? best = null;
+            double bestScore = double.MinValue;
+
+            foreach (var neighborCode in neighborCodes)
+            {
+                if (!stateByCode.TryGetValue(neighborCode, out var candidate))
+                    continue;
+
+                gridStats.TryGetValue(neighborCode, out var candidateStats);
+                _ = GetOrCalculateStateArea(candidate, stateAreas, gridStats);
+
+                double cityScore = 0.0;
+                if (cityCounts.TryGetValue(neighborCode, out var count))
+                {
+                    cityScore = maxCityCount > 0 ? count / (double)maxCityCount : 0.0;
+                }
+
+                double distanceScore = CalculateDistanceScore(source, candidate, sourceStats, candidateStats);
+                double areaScore = CalculateAreaSimilarityScore(sourceStats, candidateStats, source, candidate);
+                bool adjacent = adjacency.TryGetValue(source.RasterCode, out var set) && set.Contains(neighborCode);
+                double adjacencyScore = adjacent ? 1.0 : 0.0;
+
+                string candidateCountry = GetEffectiveCountryKey(candidate, effectiveCountryByState);
+                bool sameCountry = string.Equals(candidateCountry, sourceCountry, StringComparison.OrdinalIgnoreCase);
+                double countryAffinity;
+
+                if (sameCountry)
+                {
+                    countryAffinity = 1.0;
+                }
+                else
+                {
+                    double foreignShare = 0.0;
+                    bool hasForeignShare = foreignCandidates != null && foreignCandidates.TryGetValue(candidateCountry, out foreignShare);
+
+                    if (!hasForeignShare || foreignShare < 0.5)
+                    {
+                        // Only allow full-state merges into another country when the majority of the state's
+                        // political coverage already lies with that country. Smaller overlaps should be handled
+                        // by the fragment splitter instead of absorbing the entire state here.
+                        continue;
+                    }
+
+                    // Weight affinity by how dominant the foreign country is for this state's coverage.
+                    countryAffinity = 0.4 + Math.Min(0.5, foreignShare);
+                }
+
+                double closenessScore = distanceScore;
+                if (adjacent)
+                {
+                    closenessScore = Math.Min(1.0, closenessScore + 0.25);
+                }
+
+                double score = (closenessScore * 0.6) + (adjacencyScore * 0.2) + (countryAffinity * 0.1) + (cityScore * 0.05) + (areaScore * 0.05);
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = candidate;
+                }
+            }
+
+            return best;
+        }
+
+        private Dictionary<int, Dictionary<string, int>> ConvertCoverageToCountryKeys(
+            Dictionary<int, Dictionary<int, int>> coverageByState,
+            Dictionary<int, string> cache)
+        {
+            var result = new Dictionary<int, Dictionary<string, int>>();
+
+            foreach (var kvp in coverageByState)
+            {
+                var stringCoverage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var inner in kvp.Value)
+                {
+                    int countryCode = inner.Key;
+                    int count = inner.Value;
+                    if (count <= 0 || countryCode <= 0)
+                        continue;
+
+                    if (!cache.TryGetValue(countryCode, out var key))
+                    {
+                        var feature = _politicalTileManager.GetCountryFeatureByRasterCode(countryCode);
+                        key = feature?.CountryCode?.Trim().ToUpperInvariant();
+                        if (string.IsNullOrWhiteSpace(key))
+                            key = "__UNKNOWN__";
+                        cache[countryCode] = key;
+                    }
+
+                    if (stringCoverage.TryGetValue(key, out var total))
+                        stringCoverage[key] = total + count;
+                    else
+                        stringCoverage[key] = count;
+                }
+
+                if (stringCoverage.Count > 0)
+                    result[kvp.Key] = stringCoverage;
+            }
+
+            return result;
+        }
+
+        private static void PopulateEffectiveCountryAssignments(
+            IEnumerable<StateBorderManager.StateFeature> states,
+            Dictionary<int, Dictionary<string, int>> coverageByState,
+            Dictionary<int, string> effectiveCountryByState,
+            Dictionary<int, Dictionary<string, double>> foreignMergeTargets)
+        {
+            foreach (var state in states)
+            {
+                string fallback = NormalizeCountryKey(state);
+                if (!coverageByState.TryGetValue(state.RasterCode, out var coverage) || coverage.Count == 0)
+                {
+                    effectiveCountryByState[state.RasterCode] = fallback;
+                    continue;
+                }
+
+                int totalCells = coverage.Values.Sum();
+                if (totalCells <= 0)
+                {
+                    effectiveCountryByState[state.RasterCode] = fallback;
+                    continue;
+                }
+
+                string effectiveKey = fallback;
+                var sorted = coverage.OrderByDescending(k => k.Value).ToList();
+                var top = sorted[0];
+                double topShare = top.Value / (double)totalCells;
+                coverage.TryGetValue(fallback, out var fallbackCount);
+
+                if (string.Equals(fallback, "__UNKNOWN__", StringComparison.OrdinalIgnoreCase) || fallbackCount == 0 || topShare >= 0.6)
+                {
+                    effectiveKey = top.Key;
+                }
+                else if (!string.Equals(fallback, top.Key, StringComparison.OrdinalIgnoreCase) && topShare >= 0.45 && top.Value >= Math.Max(1, fallbackCount) * 1.2)
+                {
+                    effectiveKey = top.Key;
+                }
+
+                effectiveCountryByState[state.RasterCode] = effectiveKey;
+
+                var foreignTargets = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+                foreach (var kv in sorted)
+                {
+                    if (string.Equals(kv.Key, effectiveKey, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    double share = kv.Value / (double)totalCells;
+                    if (share >= 0.15 || (fallbackCount == 0 && share >= 0.05))
+                    {
+                        foreignTargets[kv.Key] = share;
+                    }
+                }
+
+                if (foreignTargets.Count > 0)
+                    foreignMergeTargets[state.RasterCode] = foreignTargets;
+            }
+        }
+
+        private static double CalculateDistanceScore(
+            StateBorderManager.StateFeature source,
+            StateBorderManager.StateFeature candidate,
+            StateGridStats? sourceStats,
+            StateGridStats? candidateStats)
+        {
+            double sx;
+            double sy;
+
+            if (sourceStats != null && sourceStats.CellCount > 0)
+            {
+                sx = sourceStats.SumX / (double)sourceStats.CellCount;
+                sy = sourceStats.SumY / (double)sourceStats.CellCount;
+            }
+            else
+            {
+                sx = source.Bounds.MidX;
+                sy = source.Bounds.MidY;
+            }
+
+            double tx;
+            double ty;
+
+            if (candidateStats != null && candidateStats.CellCount > 0)
+            {
+                tx = candidateStats.SumX / (double)candidateStats.CellCount;
+                ty = candidateStats.SumY / (double)candidateStats.CellCount;
+            }
+            else
+            {
+                tx = candidate.Bounds.MidX;
+                ty = candidate.Bounds.MidY;
+            }
+
+            double dx = sx - tx;
+            double dy = sy - ty;
+            double distance = Math.Sqrt((dx * dx) + (dy * dy));
+
+            return 1.0 / (1.0 + distance);
+        }
+
+        private static double CalculateAreaSimilarityScore(
+            StateGridStats? sourceStats,
+            StateGridStats? candidateStats,
+            StateBorderManager.StateFeature source,
+            StateBorderManager.StateFeature candidate)
+        {
+            double sourceArea;
+            double candidateArea;
+
+            if (sourceStats != null && sourceStats.CellCount > 0)
+            {
+                sourceArea = sourceStats.CellCount;
+            }
+            else
+            {
+                sourceArea = Math.Max(1.0, source.Bounds.Width * source.Bounds.Height);
+            }
+
+            if (candidateStats != null && candidateStats.CellCount > 0)
+            {
+                candidateArea = candidateStats.CellCount;
+            }
+            else
+            {
+                candidateArea = Math.Max(1.0, candidate.Bounds.Width * candidate.Bounds.Height);
+            }
+
+            double maxArea = Math.Max(sourceArea, candidateArea);
+            if (maxArea <= 0)
+                return 0.0;
+
+            double minArea = Math.Min(sourceArea, candidateArea);
+            double similarity = minArea / maxArea;
+
+            // Penalize extremely large disparities to discourage merging into massive states
+            if (similarity < 0.1)
+            {
+                similarity *= 0.5;
+            }
+
+            return similarity;
+        }
+
+        public void EquilibrateStateBorders(int iterations = 2)
+        {
+            try
+            {
+                var countryGrid = _politicalTileManager.GetControlGrid();
+                if (countryGrid == null)
+                {
+                    Debug.WriteLine("[HYBRID MANAGER] Cannot equilibrate states without a country grid");
+                    return;
+                }
+
+                ProcessStateSplittingAndMerging(force: true, providedCountryGrid: countryGrid);
+                iterations = Math.Clamp(iterations, 1, 8);
+                _stateManager.RelaxStateBorders(countryGrid, iterations);
+                Debug.WriteLine($"[HYBRID MANAGER] Equilibrated state borders with {iterations} relaxation pass(es)");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[HYBRID MANAGER] Failed to equilibrate state borders: {ex.Message}");
+            }
+        }
         
         public void Dispose() { _politicalTileManager?.Dispose(); _stateManager?.Dispose(); _populationDensityMap?.Dispose(); _populationDensityMap = null; }
         private static IEnumerable<(int dx, int dy)> GetSpiralOffsets(int radius)
@@ -548,6 +1468,277 @@ namespace Economy_sim
                 for (int dy = r - 1; dy >= -r; dy--) { int dx = r; yield return (dx, dy); }
                 for (int dx = r - 1; dx >= -r + 1; dx--) { int dy = -r; yield return (dx, dy); }
             }
+        }
+
+        private List<CityPoint>? _cityPoints;
+        private bool _citiesLoadAttempted = false;
+        private readonly object _cityLock = new();
+
+        private record CityPoint(string IsoCode, float Lon, float Lat, int PopMax, int ScaleRank, int PixelX, int PixelY, int RasterCode, string Name);
+
+        private void RenderCitiesOverlay(SKCanvas canvas, SKRectI terrainView, SKSizeI outputSize, int zoomLevel)
+        {
+            if (canvas == null) return;
+
+            try
+            {
+                if (_selectedCountry == null)
+                    return;
+
+                EnsureCitiesLoaded();
+                if (_cityPoints == null || _cityPoints.Count == 0)
+                    return;
+
+                if (outputSize.Width <= 0 || outputSize.Height <= 0)
+                    return;
+
+                int cellSize = GetCellSizeForZoom(zoomLevel);
+                double terrainTotalWidthPx = BaseWidth * (double)cellSize;
+                double terrainTotalHeightPx = BaseHeight * (double)cellSize;
+                if (terrainTotalWidthPx <= 0 || terrainTotalHeightPx <= 0)
+                    return;
+
+                double politiToTerrainScaleX = terrainTotalWidthPx / PoliticalBaseWidth;
+                double politiToTerrainScaleY = terrainTotalHeightPx / PoliticalBaseHeight;
+
+                using var fillPaint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = true };
+                using var outlinePaint = new SKPaint { Style = SKPaintStyle.Stroke, StrokeWidth = 1f, Color = SKColors.Black, IsAntialias = true };
+                using var textPaint = new SKPaint { IsAntialias = true, Typeface = SKTypeface.FromFamilyName("Arial"), Color = SKColors.White };
+                using var textBgPaint = new SKPaint { IsAntialias = true, Color = new SKColor(0, 0, 0, 160), Style = SKPaintStyle.Fill };
+
+                int targetRaster = _selectedCountry?.RasterCode ?? -1;
+                string iso = _selectedCountry?.CountryCode?.ToUpperInvariant() ?? string.Empty;
+                int drawn = 0;
+                int considered = 0;
+                int labeled = 0;
+
+                // Simple collision list for labels
+                List<SKRect> placedLabels = new();
+
+                foreach (var city in _cityPoints)
+                {
+                    if (!string.Equals(city.IsoCode, iso, StringComparison.OrdinalIgnoreCase) && city.RasterCode != targetRaster)
+                        continue;
+
+                    considered++;
+
+                    double terrainPx = city.PixelX * politiToTerrainScaleX;
+                    double terrainPy = city.PixelY * politiToTerrainScaleY;
+
+                    double screenX = terrainPx - terrainView.Left;
+                    double screenY = terrainPy - terrainView.Top;
+                    if (screenX < 0 || screenY < 0 || screenX >= outputSize.Width || screenY >= outputSize.Height)
+                        continue;
+
+                    float radius = 2f;
+                    if (city.ScaleRank <= 2)
+                        radius = 4f;
+                    else if (city.ScaleRank <= 4)
+                        radius = 3f;
+
+                    if (city.PopMax > 5_000_000)
+                        radius += 2f;
+                    else if (city.PopMax > 1_000_000)
+                        radius += 1f;
+
+                    fillPaint.Color = city.ScaleRank <= 2
+                        ? new SKColor(255, 220, 0, 220)
+                        : new SKColor(255, 255, 255, 200);
+
+                    canvas.DrawCircle((float)screenX, (float)screenY, radius, fillPaint);
+                    canvas.DrawCircle((float)screenX, (float)screenY, radius, outlinePaint);
+                    drawn++;
+
+                    // Decide if we draw a label
+                    if (!string.IsNullOrWhiteSpace(city.Name) && ShouldDrawCityLabel(city, zoomLevel))
+                    {
+                        float baseTextSize = zoomLevel switch
+                        {
+                            <= 1 => 10f,
+                            2 => 11f,
+                            3 => 12f,
+                            4 => 13f,
+                            5 => 14f,
+                            6 => 16f,
+                            _ => 18f
+                        };
+                        // Adjust by population lightly
+                        if (city.PopMax > 10_000_000) baseTextSize += 3f;
+                        else if (city.PopMax > 5_000_000) baseTextSize += 2f;
+                        else if (city.PopMax > 1_000_000) baseTextSize += 1f;
+
+                        textPaint.TextSize = baseTextSize;
+                        var bounds = new SKRect();
+                        textPaint.MeasureText(city.Name, ref bounds);
+                        float labelPadX = 4f;
+                        float labelPadY = 2f;
+                        float offsetX = radius + 4f; // place label to right of dot
+                        float labelX = (float)screenX + offsetX;
+                        float labelY = (float)screenY - bounds.MidY; // vertically center
+                        var bgRect = new SKRect(labelX - labelPadX, labelY + bounds.Top - labelPadY, labelX + bounds.Width + labelPadX, labelY + bounds.Bottom + labelPadY);
+
+                        // Keep label fully in view (shift left if overflow)
+                        if (bgRect.Right > outputSize.Width)
+                        {
+                            float shift = bgRect.Right - outputSize.Width;
+                            bgRect.Offset(-shift, 0);
+                            labelX -= shift;
+                        }
+                        if (bgRect.Left < 0)
+                        {
+                            float shift = -bgRect.Left;
+                            bgRect.Offset(shift, 0);
+                            labelX += shift;
+                        }
+                        if (bgRect.Top < 0)
+                        {
+                            float shift = -bgRect.Top;
+                            bgRect.Offset(0, shift);
+                            labelY += shift;
+                        }
+                        if (bgRect.Bottom > outputSize.Height)
+                        {
+                            float shift = bgRect.Bottom - outputSize.Height;
+                            bgRect.Offset(0, -shift);
+                            labelY -= shift;
+                        }
+
+                        // Collision check (allow tiny overlaps < 2px area ignored)
+                        bool collides = placedLabels.Any(r => r.IntersectsWith(bgRect));
+                        if (!collides)
+                        {
+                            canvas.DrawRect(bgRect, textBgPaint);
+                            // Light shadow for readability
+                            using var shadowPaint = textPaint.Clone();
+                            shadowPaint.Color = new SKColor(0, 0, 0, 200);
+                            canvas.DrawText(city.Name, labelX + 1, labelY + 1, shadowPaint);
+                            canvas.DrawText(city.Name, labelX, labelY, textPaint);
+                            placedLabels.Add(bgRect);
+                            labeled++;
+                        }
+                    }
+                }
+
+                if (drawn == 0 && considered > 0)
+                {
+                    Debug.WriteLine($"[CITIES] No cities drawn for {iso} (raster {targetRaster}). Considered {considered} candidates. ViewArea={terrainView} cellSize={cellSize}");
+                }
+                else if (drawn > 0)
+                {
+                    Debug.WriteLine($"[CITIES] Drew {drawn} city dots (+{labeled} labels) for {iso} at zoom {zoomLevel}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CITIES] Overlay failed: {ex.Message}");
+            }
+        }
+
+        private void EnsureCitiesLoaded()
+        {
+            if (_citiesLoadAttempted) return;
+            lock (_cityLock)
+            {
+                if (_citiesLoadAttempted) return;
+                _citiesLoadAttempted = true;
+                try
+                {
+                    string baseDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+                    string dataDir = Path.Combine(baseDir, "data");
+                    string shp = Path.Combine(dataDir, "ne_10m_populated_places.shp");
+                    if (!File.Exists(shp))
+                    {
+                        shp = FindFileRecursive(dataDir, "ne_10m_populated_places.shp") ?? shp;
+                    }
+                    if (!File.Exists(shp))
+                    {
+                        Debug.WriteLine($"[CITIES] Populated places shapefile not found at {shp}");
+                        return;
+                    }
+                    // Configure OGR only (we avoid GDAL raster pieces to prevent missing symbol errors)
+                    try { OSGeo.OGR.Ogr.RegisterAll(); } catch { }
+                    using var ds = OSGeo.OGR.Ogr.Open(shp, 0);
+                    if (ds == null) { Debug.WriteLine("[CITIES] Failed to open shapefile"); return; }
+                    var layer = ds.GetLayerByIndex(0);
+                    if (layer == null) { Debug.WriteLine("[CITIES] Layer missing"); return; }
+                    var list = new List<CityPoint>(5000);
+                    int[,]? controlGrid = null;
+                    try { controlGrid = _politicalTileManager.GetControlGrid(); } catch { }
+                    layer.ResetReading();
+                    OSGeo.OGR.Feature feat;
+                    while ((feat = layer.GetNextFeature()) != null)
+                    {
+                        try
+                        {
+                            var geom = feat.GetGeometryRef();
+                            if (geom == null) continue;
+                            var gType = geom.GetGeometryType();
+                            if (gType != OSGeo.OGR.wkbGeometryType.wkbPoint && gType != OSGeo.OGR.wkbGeometryType.wkbPoint25D)
+                                continue;
+                            double lon = geom.GetX(0);
+                            double lat = geom.GetY(0);
+                            string iso = SafeString(feat, "ADM0_A3");
+                            if (string.IsNullOrWhiteSpace(iso)) iso = SafeString(feat, "ISO_A3");
+                            if (string.IsNullOrWhiteSpace(iso)) continue;
+                            int pop = SafeInt(feat, "POP_MAX");
+                            int scalerank = SafeInt(feat, "SCALERANK");
+                            string name = SafeString(feat, "NAMEASCII");
+                            if (string.IsNullOrWhiteSpace(name)) name = SafeString(feat, "NAME_EN");
+                            if (string.IsNullOrWhiteSpace(name)) name = SafeString(feat, "NAME");
+                            int px = (int)Math.Round((lon + 180.0) / 360.0 * (PoliticalBaseWidth - 1));
+                            int py = (int)Math.Round((90.0 - lat) / 180.0 * (PoliticalBaseHeight - 1));
+                            if (px < 0 || py < 0 || px >= PoliticalBaseWidth || py >= PoliticalBaseHeight) continue;
+                            int rasterCode = -1;
+                            if (controlGrid != null && py >= 0 && py < controlGrid.GetLength(0) && px >= 0 && px < controlGrid.GetLength(1))
+                                rasterCode = controlGrid[py, px];
+                            list.Add(new CityPoint(iso.ToUpperInvariant(), (float)lon, (float)lat, pop, scalerank, px, py, rasterCode, name));
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"[CITIES] Feature error: {ex.Message}");
+                        }
+                        finally { feat.Dispose(); }
+                    }
+                    _cityPoints = list;
+                    Debug.WriteLine($"[CITIES] Loaded {list.Count} populated places (with raster sampling {(controlGrid!=null ? "enabled" : "disabled")})");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[CITIES] Load failed: {ex.Message}");
+                }
+            }
+        }
+
+        private static string? FindFileRecursive(string root, string targetName)
+        {
+            try
+            {
+                if (!Directory.Exists(root)) return null;
+                return Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                    .FirstOrDefault(f => string.Equals(Path.GetFileName(f), targetName, StringComparison.OrdinalIgnoreCase));
+            }
+            catch { return null; }
+        }
+
+        private static string SafeString(OSGeo.OGR.Feature f, string field)
+        { try { int idx = f.GetFieldIndex(field); return idx >= 0 ? f.GetFieldAsString(idx) ?? string.Empty : string.Empty; } catch { return string.Empty; } }
+        private static int SafeInt(OSGeo.OGR.Feature f, string field)
+        { try { int idx = f.GetFieldIndex(field); return idx >= 0 ? f.GetFieldAsInteger(idx) : 0; } catch { return 0; } }
+        
+        private static bool ShouldDrawCityLabel(CityPoint city, int zoomLevel)
+        {
+            // Basic heuristic: show only largest cities at low zoom; more as you zoom in
+            // ScaleRank: lower is more important
+            if (zoomLevel <= 1)
+                return city.ScaleRank <= 1 || city.PopMax >= 3_000_000;
+            if (zoomLevel == 2)
+                return city.ScaleRank <= 2 || city.PopMax >= 2_000_000;
+            if (zoomLevel == 3)
+                return city.ScaleRank <= 4 || city.PopMax >= 1_000_000;
+            if (zoomLevel == 4)
+                return city.ScaleRank <= 6 || city.PopMax >= 500_000;
+            // high zoom: show almost everything but avoid very small settlements
+            return city.PopMax >= 50_000 || city.ScaleRank <= 8;
         }
     }
 }

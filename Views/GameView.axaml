@@ -166,11 +166,11 @@
 						Width="130"
 						Height="50"
 						IsHitTestVisible="True"/>
-				<Button x:Name="PlaceHolder2Button"
-						Content="Place Holder"
-						Width="130"
-						Height="50"
-						IsHitTestVisible="True"/>
+                                <Button x:Name="StatesViewButton"
+                                                Content="States"
+                                                Width="130"
+                                                Height="50"
+                                                IsHitTestVisible="True"/>
 			</StackPanel>
 
 			<!-- Bottom HUD Bar -->
@@ -222,11 +222,16 @@
 									Width="130"
 									Height="50"
 									IsHitTestVisible="True"/>
-							<Button x:Name="StatsButton"
-									Content="Statistics"
-									Width="130"
-									Height="50"
-									IsHitTestVisible="True"/>
+                                                        <Button x:Name="StatsButton"
+                                                                        Content="Statistics"
+                                                                        Width="130"
+                                                                        Height="50"
+                                                                        IsHitTestVisible="True"/>
+                                                        <Button x:Name="DebugButton"
+                                                                        Content="Debug"
+                                                                        Width="130"
+                                                                        Height="50"
+                                                                        IsHitTestVisible="True"/>
 						</StackPanel>
 					</Grid>
 				</Border>
@@ -547,12 +552,12 @@
 				</Border>
 			</Border>
 
-			<!-- Statistics Menu Popup -->
-			<Border x:Name="StatsMenuOverlay"
-					Background="#E6000000"
-					IsVisible="False"
-					ZIndex="5000"
-					IsHitTestVisible="True">
+                        <!-- Statistics Menu Popup -->
+                        <Border x:Name="StatsMenuOverlay"
+                                        Background="#E6000000"
+                                        IsVisible="False"
+                                        ZIndex="5000"
+                                        IsHitTestVisible="True">
 				<Border Background="#2D2D30"
 						BorderBrush="#555555"
 						BorderThickness="2"
@@ -611,9 +616,82 @@
 									 Height="250">
 							</ListBox>
 						</StackPanel>
-					</Grid>
-				</Border>
-			</Border>
+                                        </Grid>
+                                </Border>
+                        </Border>
+
+                        <!-- Debug Menu Popup -->
+                        <Border x:Name="DebugMenuOverlay"
+                                        Background="#E6000000"
+                                        IsVisible="False"
+                                        ZIndex="5000"
+                                        IsHitTestVisible="True">
+                                <Border Background="#2D2D30"
+                                                BorderBrush="#555555"
+                                                BorderThickness="2"
+                                                CornerRadius="5"
+                                                Width="400"
+                                                Height="320"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center">
+                                        <Grid Margin="15">
+                                                <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"/>
+                                                </Grid.RowDefinitions>
+
+                                                <!-- Header -->
+                                                <Grid Grid.Row="0" Margin="0,0,0,15">
+                                                        <TextBlock Text="Debug Tools"
+                                                                           FontSize="24"
+                                                                           FontWeight="Bold"
+                                                                           Foreground="#FFD700"
+                                                                           HorizontalAlignment="Left"/>
+                                                        <Button x:Name="DebugCloseButton"
+                                                                        Content="✕"
+                                                                        Width="30"
+                                                                        Height="30"
+                                                                        HorizontalAlignment="Right"
+                                                                        Background="#555555"
+                                                                        Foreground="White"/>
+                                                </Grid>
+
+                                                <!-- Content -->
+                                                <StackPanel Grid.Row="1" Spacing="10">
+                                                        <TextBlock Text="Development helpers"
+                                                                           Foreground="#DDDDDD"
+                                                                           FontWeight="Bold"/>
+                                                        <CheckBox x:Name="MergeSmallCityStatesCheckBox"
+                                                                  Content="Merge small city states"
+                                                                  Foreground="#DDDDDD"/>
+                                                        <Button x:Name="CullEmptyStatesButton"
+                                                                        Content="Cull states without cities"
+                                                                        HorizontalAlignment="Left"
+                                                                        Width="220"/>
+                                                        <CheckBox x:Name="UseSavedStateMapCheckBox"
+                                                                  Content="Use saved state map"
+                                                                  Foreground="#DDDDDD"/>
+                                                        <Button x:Name="SaveStateMapButton"
+                                                                Content="Save state map to data folder"
+                                                                HorizontalAlignment="Left"
+                                                                Width="260"/>
+                                                        <StackPanel x:Name="CullProgressPanel"
+                                                                    Orientation="Vertical"
+                                                                    Spacing="6"
+                                                                    IsVisible="False">
+                                                                <TextBlock x:Name="CullProgressLabel"
+                                                                           Text="Culling states…"
+                                                                           Foreground="#DDDDDD"
+                                                                           FontSize="12"/>
+                                                                <ProgressBar x:Name="CullProgressBar"
+                                                                             Minimum="0"
+                                                                             Maximum="100"
+                                                                             Height="10"/>
+                                                        </StackPanel>
+                                                </StackPanel>
+                                        </Grid>
+                                </Border>
+                        </Border>
 		</Grid>
 
 		<!-- Right Side Slide-in Menu occupies the right auto column -->

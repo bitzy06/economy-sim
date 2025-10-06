@@ -49,6 +49,7 @@ namespace Economy_sim
 
         private bool _isDrawingStrokeActive = false;
         private List<(SDPoint cell, int previousId)> _currentStrokeChanges = new();
+        private Avalonia.Point? _lastDrawPoint = null; // last point for stroke interpolation
 
         private record EditorAction(EditorActionType Type, MapViewLevel Level, int TargetId, List<(SDPoint cell, int previousId)> Changes);
         private enum EditorActionType { ZeroSumAssign, DirectAssign }
@@ -134,6 +135,11 @@ namespace Economy_sim
                 };
             }
 
+            if (this.FindControl<Button>("EquilibrateStatesButton") is Button equilibrateButton)
+            {
+                equilibrateButton.Click += EquilibrateStatesButton_Click;
+            }
+
             // Setup brush size slider
             var brushSizeSlider = this.FindControl<Slider>("BrushSizeSlider");
             var brushSizeLabel = this.FindControl<TextBlock>("BrushSizeLabel");
@@ -160,6 +166,7 @@ namespace Economy_sim
             if (comboBox?.SelectedIndex >= 0)
             {
                 _currentLevel = comboBox.SelectedIndex == 0 ? MapViewLevel.Countries : MapViewLevel.States;
+                _mapManager.SetViewType(_currentLevel == MapViewLevel.Countries ? MapViewType.Political : MapViewType.States);
                 UpdateEntitySelector();
                 UpdateTitle();
                 QueueRender();
@@ -201,11 +208,31 @@ namespace Economy_sim
             {
                 _isDrawingMode = toggle.IsChecked == true;
                 toggle.Content = _isDrawingMode ? "Drawing On" : "Drawing Off";
-                toggle.Background = _isDrawingMode ? 
+                toggle.Background = _isDrawingMode ?
                     new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(100, 150, 100)) :
                     new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.FromRgb(102, 102, 102));
-                
+
                 Debug.WriteLine($"[MAP EDITOR] Drawing mode: {(_isDrawingMode ? "ON" : "OFF")}");
+            }
+        }
+
+        private void EquilibrateStatesButton_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_currentLevel != MapViewLevel.States)
+            {
+                Debug.WriteLine("[MAP EDITOR] Equilibrate states command ignored when not in States level");
+                return;
+            }
+
+            try
+            {
+                Debug.WriteLine("[MAP EDITOR] Equilibrating state borders for visual balance");
+                _mapManager.EquilibrateStateBorders(3);
+                QueueRender();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MAP EDITOR] Failed to equilibrate state borders: {ex.Message}");
             }
         }
 
@@ -266,9 +293,15 @@ namespace Economy_sim
             var titleText = this.FindControl<TextBlock>("TitleText");
             if (titleText != null)
             {
-                titleText.Text = _currentLevel == MapViewLevel.Countries ? 
-                    "Map Editor - Countries View" : 
+                titleText.Text = _currentLevel == MapViewLevel.Countries ?
+                    "Map Editor - Countries View" :
                     "Map Editor - States View";
+            }
+
+            if (this.FindControl<Button>("EquilibrateStatesButton") is Button equilibrateButton)
+            {
+                equilibrateButton.IsEnabled = _currentLevel == MapViewLevel.States;
+                equilibrateButton.Opacity = equilibrateButton.IsEnabled ? 1.0 : 0.5;
             }
         }
 
@@ -408,20 +441,25 @@ namespace Economy_sim
                 {
                     _isDrawingStrokeActive = true;
                     _currentStrokeChanges.Clear();
-                    var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
+                    var mapImg = this.FindControl<Image>("MapImage");
+                    var mousePos = e.GetCurrentPoint(mapImg);
+                    _lastDrawPoint = mousePos.Position; // initialize stroke path
                     HandleDrawing((int)mousePos.Position.X, (int)mousePos.Position.Y);
                     e.Handled = true;
                 }
                 else
                 {
+                    // Use map image coordinate space for consistent delta math
+                    var mapImg = this.FindControl<Image>("MapImage");
                     _isPanning = true;
-                    _panStartPoint = e.GetCurrentPoint(null).Position;
+                    _panStartPoint = e.GetPosition(mapImg);
                     e.Handled = true;
                 }
             }
             else if (e.GetCurrentPoint(null).Properties.IsRightButtonPressed)
             {
-                var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
+                var mapImage = this.FindControl<Image>("MapImage");
+                var mousePos = e.GetCurrentPoint(mapImage);
                 HandleSelection((int)mousePos.Position.X, (int)mousePos.Position.Y);
                 e.Handled = true;
             }
@@ -431,20 +469,83 @@ namespace Economy_sim
         {
             if (_isDrawingMode && e.GetCurrentPoint(null).Properties.IsLeftButtonPressed)
             {
-                var mousePos = e.GetCurrentPoint(this.FindControl<Image>("MapImage"));
-                HandleDrawing((int)mousePos.Position.X, (int)mousePos.Position.Y);
+                var mapImage = this.FindControl<Image>("MapImage");
+                var mousePoint = e.GetCurrentPoint(mapImage).Position;
+
+                if (_lastDrawPoint is Avalonia.Point last)
+                {
+                    // Interpolate along the line to avoid gaps (especially with async enhanced editor)
+                    double dx = mousePoint.X - last.X;
+                    double dy = mousePoint.Y - last.Y;
+                    double dist = Math.Sqrt(dx * dx + dy * dy);
+                    int steps = (int)Math.Ceiling(dist / Math.Max(1, _brushSize));
+                    if (steps < 1) steps = 1;
+                    for (int i = 1; i <= steps; i++)
+                    {
+                        double t = (double)i / steps;
+                        int ix = (int)Math.Round(last.X + dx * t);
+                        int iy = (int)Math.Round(last.Y + dy * t);
+                        HandleDrawing(ix, iy);
+                    }
+                }
+                else
+                {
+                    HandleDrawing((int)mousePoint.X, (int)mousePoint.Y);
+                }
+                _lastDrawPoint = mousePoint;
                 e.Handled = true;
             }
             else if (_isPanning)
             {
-                var currentPoint = e.GetCurrentPoint(null).Position;
-                var deltaX = currentPoint.X - _panStartPoint.X;
-                var deltaY = currentPoint.Y - _panStartPoint.Y;
-                _viewOffset.X = Math.Max(0, _viewOffset.X - (int)deltaX);
-                _viewOffset.Y = Math.Max(0, _viewOffset.Y - (int)deltaY);
+                var mapImage = this.FindControl<Image>("MapImage");
+                var currentPoint = e.GetPosition(mapImage);
+                var previousPoint = _panStartPoint;
+                var delta = previousPoint - currentPoint; // movement since last event
                 _panStartPoint = currentPoint;
+
+                _viewOffset.X += (int)delta.X;
+                _viewOffset.Y += (int)delta.Y;
+
+                ClampViewOffset();
                 QueueRender();
                 e.Handled = true;
+            }
+        }
+
+        private void ClampViewOffset()
+        {
+            // Ensure we don't scroll outside the map bounds (terrain-space; political view scales internally)
+            try
+            {
+                var effectiveSize = GetEffectiveRenderSize();
+                if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
+                var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
+
+                if (mapSize.Width > (int)effectiveSize.Width)
+                {
+                    if (_viewOffset.X < 0) _viewOffset.X = 0;
+                    else if (_viewOffset.X > mapSize.Width - (int)effectiveSize.Width)
+                        _viewOffset.X = mapSize.Width - (int)effectiveSize.Width;
+                }
+                else
+                {
+                    _viewOffset.X = Math.Max(0, (mapSize.Width - (int)effectiveSize.Width) / 2);
+                }
+
+                if (mapSize.Height > (int)effectiveSize.Height)
+                {
+                    if (_viewOffset.Y < 0) _viewOffset.Y = 0;
+                    else if (_viewOffset.Y > mapSize.Height - (int)effectiveSize.Height)
+                        _viewOffset.Y = mapSize.Height - (int)effectiveSize.Height;
+                }
+                else
+                {
+                    _viewOffset.Y = Math.Max(0, (mapSize.Height - (int)effectiveSize.Height) / 2);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[MAP EDITOR] ClampViewOffset error: {ex.Message}");
             }
         }
 
@@ -453,11 +554,10 @@ namespace Economy_sim
             if (_useEnhancedEditor)
             {
                 var effectiveSize = GetEffectiveRenderSize();
-                var outputSize = new SKSizeI((int)effectiveSize.Width, (int)effectiveSize.Height);
-                var viewOffsetSnapshot = _viewOffset; // screen pixel offset
-                var levelSnapshot = _currentLevel;
-                var zoomSnapshot = _currentZoomLevel;
+                if (screenX < 0 || screenY < 0 || screenX >= effectiveSize.Width || screenY >= effectiveSize.Height)
+                    return;
 
+                var levelSnapshot = _currentLevel;
                 uint brushValue = 0;
                 if (levelSnapshot == MapViewLevel.Countries && _selectedCountry != null) brushValue = (uint)_selectedCountry.RasterCode;
                 else if (levelSnapshot == MapViewLevel.States && _selectedState != null) brushValue = (uint)_selectedState.RasterCode;
@@ -467,15 +567,26 @@ namespace Economy_sim
                 _enhancedEditor.SetBrushSize(_brushSize);
                 _enhancedEditor.SetEditPolicy(_currentEditPolicy);
 
-                int sx = screenX; int sy = screenY;
+                // Compute political grid coordinate here (single scaling) to avoid double-scaled top-left restriction
+                int eGridX, eGridY;
+                if (levelSnapshot == MapViewLevel.Countries || levelSnapshot == MapViewLevel.States)
+                {
+                    var (gx, gy) = _mapManager.ScreenToPoliticalGrid(screenX, screenY, _currentZoomLevel, _viewOffset);
+                    eGridX = gx; eGridY = gy;
+                }
+                else
+                {
+                    int cellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
+                    int mapX = _viewOffset.X + screenX;
+                    int mapY = _viewOffset.Y + screenY;
+                    eGridX = mapX / cellSize;
+                    eGridY = mapY / cellSize;
+                }
+
                 _ = Task.Run(async () =>
                 {
-                    try
-                    {
-                        await _enhancedEditor.ApplyEditAsync(levelSnapshot, sx, sy, zoomSnapshot, viewOffsetSnapshot, outputSize);
-                        Dispatcher.UIThread.Post(QueueRender);
-                    }
-                    catch (Exception ex) { Debug.WriteLine($"[MAP EDITOR] Error in enhanced drawing: {ex.Message}"); }
+                    await _enhancedEditor.ApplyEditAtGridAsync(levelSnapshot, eGridX, eGridY, _currentZoomLevel);
+                    Dispatcher.UIThread.Post(QueueRender);
                 });
                 return;
             }
@@ -630,6 +741,7 @@ namespace Economy_sim
                 _currentStrokeChanges.Clear();
                 _isDrawingStrokeActive = false;
             }
+            _lastDrawPoint = null; // reset stroke path
             _isPanning = false;
             e.Handled = true;
         }

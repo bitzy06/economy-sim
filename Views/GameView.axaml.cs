@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Economy_sim
@@ -19,10 +20,10 @@ namespace Economy_sim
         private readonly HybridMapManager _mapManager;
 
         // --- Optimized Rendering Fields ---
-        private WriteableBitmap _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
-        private WriteableBitmap _backBufferBitmap; // Back buffer for double buffering
-        private SKBitmap _currentFrameBuffer; // Current frame in SkBitmap format
-        private SKBitmap _nextFrameBuffer; // Next frame being rendered
+        private WriteableBitmap? _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
+        private WriteableBitmap? _backBufferBitmap; // Back buffer for double buffering
+        private SKBitmap? _currentFrameBuffer; // Current frame in SkBitmap format
+        private SKBitmap? _nextFrameBuffer; // Next frame being rendered
         private int _currentZoomLevel = 1; // Start at the lowest zoom level so user doesn't have to zoom out
         private SKPointI _viewOffset = SKPointI.Empty;
         private bool _isPanning = false;
@@ -32,8 +33,9 @@ namespace Economy_sim
         private bool _isInitialized = false;
 
         private readonly DispatcherTimer _mapUpdateTimer;
-        private DispatcherTimer _initialRenderTimer; // Timer to poll for initial size.
-        private DispatcherTimer _continuousRenderTimer; // Timer for continuous refreshing
+        private DispatcherTimer? _initialRenderTimer; // Timer to poll for initial size.
+        private DispatcherTimer? _continuousRenderTimer; // Timer for continuous refreshing
+        private DispatcherTimer? _hudTimer;
         private bool _pendingMapUpdate = false;
         private readonly object _renderLock = new object();
         private readonly object _bufferSwapLock = new object();
@@ -41,6 +43,9 @@ namespace Economy_sim
         private bool _frameReady = false;
         private readonly TimeSpan _refreshInterval = TimeSpan.FromMilliseconds(100); // 10 FPS continuous refresh
         public Point mousepoint;
+
+        private bool _isCullingStates;
+        private CancellationTokenSource? _cullStatesCts;
 
         // Track baseline base size to compute normalization if env changes
         private readonly int _baselineWidth = 4096 * 4;
@@ -129,11 +134,120 @@ namespace Economy_sim
             }
         }
 
+        protected override void OnClosed(EventArgs e)
+        {
+            try
+            {
+                this.Loaded -= OnWindowLoaded;
+                this.SizeChanged -= OnSizeChanged;
+
+                CancelStateCulling();
+
+                if (_mapUpdateTimer != null)
+                {
+                    _mapUpdateTimer.Stop();
+                    _mapUpdateTimer.Tick -= MapUpdateTimer_Tick;
+                }
+
+                if (_continuousRenderTimer != null)
+                {
+                    _continuousRenderTimer.Stop();
+                    _continuousRenderTimer.Tick -= ContinuousRenderTimer_Tick;
+                    _continuousRenderTimer = null;
+                }
+
+                if (_initialRenderTimer != null)
+                {
+                    _initialRenderTimer.Stop();
+                    _initialRenderTimer.Tick -= InitialRenderTimer_Tick;
+                    _initialRenderTimer = null;
+                }
+
+                if (_hudTimer != null)
+                {
+                    _hudTimer.Stop();
+                    _hudTimer.Tick -= UpdateHUDDisplay;
+                    _hudTimer = null;
+                }
+
+                DetachMapImageHandlers();
+                DisposeRenderResources();
+
+                _mapManager.ViewTypeChanged -= OnMapViewTypeChanged;
+                _mapManager.Dispose();
+            }
+            finally
+            {
+                base.OnClosed(e);
+            }
+        }
+
         private void MapImage_PropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
         {
             if (e.Property == BoundsProperty)
             {
                 OnMapBoundsChanged();
+            }
+        }
+
+        private void CancelStateCulling()
+        {
+            var cts = Interlocked.Exchange(ref _cullStatesCts, null);
+            if (cts != null)
+            {
+                try
+                {
+                    cts.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Ignore; the CTS was already disposed after completion.
+                }
+                finally
+                {
+                    cts.Dispose();
+                }
+            }
+        }
+
+        private void DetachMapImageHandlers()
+        {
+            if (this.MapImage != null)
+            {
+                this.MapImage.PointerPressed -= OnPointerPressed;
+                this.MapImage.PointerMoved -= OnPointerMoved;
+                this.MapImage.PointerReleased -= OnPointerReleased;
+                this.MapImage.PointerWheelChanged -= OnPointerWheelChanged;
+                this.MapImage.PropertyChanged -= MapImage_PropertyChanged;
+            }
+        }
+
+        private void DisposeRenderResources()
+        {
+            lock (_bufferSwapLock)
+            {
+                _writeableBitmap?.Dispose();
+                _writeableBitmap = null;
+
+                _backBufferBitmap?.Dispose();
+                _backBufferBitmap = null;
+            }
+
+            lock (_renderLock)
+            {
+                _currentFrameBuffer?.Dispose();
+                _currentFrameBuffer = null;
+
+                _nextFrameBuffer?.Dispose();
+                _nextFrameBuffer = null;
+
+                _frameReady = false;
+                _renderInProgress = false;
+            }
+
+            if (this.MapImage != null)
+            {
+                this.MapImage.Source = null;
             }
         }
 
@@ -883,12 +997,17 @@ namespace Economy_sim
             _politicalEntityRenderer = new PoliticalEntityRenderer(dataCache);
 
             // Set up HUD update timer
-            var hudTimer = new DispatcherTimer
+            _hudTimer ??= new DispatcherTimer
             {
                 Interval = TimeSpan.FromSeconds(1) // Update every second
             };
-            hudTimer.Tick += UpdateHUDDisplay;
-            hudTimer.Start();
+
+            _hudTimer.Tick -= UpdateHUDDisplay;
+            _hudTimer.Tick += UpdateHUDDisplay;
+            if (!_hudTimer.IsEnabled)
+            {
+                _hudTimer.Start();
+            }
 
             // Initialize HUD button event handlers
             SetupHUDEventHandlers();
@@ -918,6 +1037,26 @@ namespace Economy_sim
             if (this.FindControl<Button>("StatsButton") is Button statsBtn)
                 statsBtn.Click += OnStatsClicked;
 
+            if (this.FindControl<Button>("DebugButton") is Button debugBtn)
+                debugBtn.Click += OnDebugClicked;
+
+            if (this.FindControl<CheckBox>("MergeSmallCityStatesCheckBox") is CheckBox mergeSmallCheck)
+            {
+                mergeSmallCheck.IsChecked = _mapManager.MergeSmallStatesWithCities;
+                mergeSmallCheck.Checked += OnMergeSmallCityStatesToggled;
+                mergeSmallCheck.Unchecked += OnMergeSmallCityStatesToggled;
+            }
+
+            if (this.FindControl<CheckBox>("UseSavedStateMapCheckBox") is CheckBox useSavedCheck)
+            {
+                useSavedCheck.IsChecked = _mapManager.UsePersistedStateMap;
+                useSavedCheck.Checked += OnUseSavedStateMapToggled;
+                useSavedCheck.Unchecked += OnUseSavedStateMapToggled;
+            }
+
+            if (this.FindControl<Button>("SaveStateMapButton") is Button saveStateMapBtn)
+                saveStateMapBtn.Click += OnSaveStateMapClicked;
+
             // Map view toggle buttons
             if (this.FindControl<Button>("TerrainViewButton") is Button terrainBtn)
                 terrainBtn.Click += OnTerrainViewClicked;
@@ -927,6 +1066,9 @@ namespace Economy_sim
 
             if (this.FindControl<Button>("PlaceHolder1Button") is Button populationBtn)
                 populationBtn.Click += OnPopulationDensityViewClicked;
+
+            if (this.FindControl<Button>("StatesViewButton") is Button statesBtn)
+                statesBtn.Click += OnStatesViewClicked;
 
             if (this.FindControl<Button>("MenuButton") is Button menuBtn)
                 menuBtn.Click += OnMenuClicked;
@@ -947,6 +1089,9 @@ namespace Economy_sim
             if (this.FindControl<Button>("StatsCloseButton") is Button statsCloseBtn)
                 statsCloseBtn.Click += (s, e) => HideAllPopups();
 
+            if (this.FindControl<Button>("DebugCloseButton") is Button debugCloseBtn)
+                debugCloseBtn.Click += (s, e) => HideAllPopups();
+
             // Setup overlay click handlers to close popups when clicking outside
             if (this.FindControl<Border>("DiplomacyMenuOverlay") is Border diplomacyOverlay)
                 diplomacyOverlay.PointerPressed += OnOverlayClicked;
@@ -962,6 +1107,9 @@ namespace Economy_sim
 
             if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
                 statsOverlay.PointerPressed += OnOverlayClicked;
+
+            if (this.FindControl<Border>("DebugMenuOverlay") is Border debugOverlay)
+                debugOverlay.PointerPressed += OnOverlayClicked;
 
             // Side menu close button
             if (this.FindControl<Button>("SideMenuCloseButton") is Button sideCloseBtn)
@@ -1063,6 +1211,9 @@ namespace Economy_sim
 
             if (this.FindControl<Border>("StatsMenuOverlay") is Border statsOverlay)
                 statsOverlay.IsVisible = false;
+
+            if (this.FindControl<Border>("DebugMenuOverlay") is Border debugOverlay)
+                debugOverlay.IsVisible = false;
         }
 
         private void ShowPopup(String popupName)
@@ -1188,6 +1339,9 @@ namespace Economy_sim
                     statsList.Items.Add(stat);
                 }
             }
+
+            if (this.FindControl<Button>("CullEmptyStatesButton") is Button cullButton)
+                cullButton.Click += OnCullEmptyStatesClicked;
         }
 
         private void InitializeSideMenus()
@@ -1496,6 +1650,12 @@ namespace Economy_sim
             ShowRightSidePanel("Game Statistics", "SideStatsPanel");
         }
 
+        private void OnDebugClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("Debug button clicked - showing debug menu");
+            ShowPopup("DebugMenuOverlay");
+        }
+
         private void OnMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             Debug.WriteLine("Menu button clicked - returning to main menu");
@@ -1536,6 +1696,210 @@ namespace Economy_sim
             Debug.WriteLine("Population density view button clicked - switching to population density view");
             _mapManager.SetViewType(MapViewType.PopulationDensity);
             QueueRender(immediate: true);
+        }
+
+        private void OnStatesViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Debug.WriteLine("States view button clicked - switching to states view");
+            _mapManager.SetViewType(MapViewType.States);
+            QueueRender(immediate: true);
+        }
+
+        private async void OnCullEmptyStatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_isCullingStates)
+            {
+                Debug.WriteLine("[DEBUG MENU] State culling already in progress");
+                return;
+            }
+
+            Debug.WriteLine("[DEBUG MENU] Cull empty states requested");
+
+            var cullButton = this.FindControl<Button>("CullEmptyStatesButton");
+            var progressPanel = this.FindControl<StackPanel>("CullProgressPanel");
+            var progressBar = this.FindControl<ProgressBar>("CullProgressBar");
+            var progressLabel = this.FindControl<TextBlock>("CullProgressLabel");
+
+            try
+            {
+                if (_mapManager == null)
+                {
+                    Debug.WriteLine("[DEBUG MENU] Map manager unavailable; cannot cull states");
+                    return;
+                }
+
+                _isCullingStates = true;
+                _cullStatesCts = new CancellationTokenSource();
+
+                ShowCullProgressUI(cullButton, progressPanel, progressBar, progressLabel, 0.0);
+
+                var progress = new Progress<double>(value =>
+                {
+                    Dispatcher.UIThread.Post(
+                        () => UpdateCullProgressUI(progressBar, progressLabel, value),
+                        DispatcherPriority.Background);
+                });
+
+                int culled = await _mapManager.CullStatesWithoutCitiesAsync(progress, _cullStatesCts.Token);
+                Debug.WriteLine($"[DEBUG MENU] Culled {culled} state(s) without cities");
+
+                if (culled > 0)
+                {
+                    UpdateCullProgressUI(progressBar, progressLabel, 1.0);
+                    QueueRender(immediate: true);
+                    HideAllPopups();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("[DEBUG MENU] State culling cancelled");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[DEBUG MENU] Failed to cull empty states: {ex.Message}");
+            }
+            finally
+            {
+                _isCullingStates = false;
+                _cullStatesCts?.Dispose();
+                _cullStatesCts = null;
+
+                Dispatcher.UIThread.Post(() => ResetCullProgressUI(cullButton, progressPanel, progressBar, progressLabel));
+            }
+        }
+
+        private void OnMergeSmallCityStatesToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_mapManager == null)
+                return;
+
+            if (sender is CheckBox checkBox)
+            {
+                bool enabled = checkBox.IsChecked ?? false;
+                _mapManager.MergeSmallStatesWithCities = enabled;
+                Debug.WriteLine($"[DEBUG MENU] Merge small city states {(enabled ? "enabled" : "disabled")}");
+            }
+        }
+
+        private async void OnUseSavedStateMapToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_mapManager == null)
+                return;
+
+            if (sender is CheckBox checkBox)
+            {
+                bool requested = checkBox.IsChecked ?? false;
+                Debug.WriteLine($"[DEBUG MENU] {(requested ? "Enabling" : "Disabling")} persisted state map usage");
+
+                checkBox.IsEnabled = false;
+                bool succeeded = false;
+                try
+                {
+                    await Task.Run(() => _mapManager.UsePersistedStateMap = requested);
+                    succeeded = _mapManager.UsePersistedStateMap == requested;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[DEBUG MENU] Failed to toggle persisted state map: {ex.Message}");
+                }
+                finally
+                {
+                    checkBox.IsEnabled = true;
+                }
+
+                if (!succeeded)
+                {
+                    checkBox.IsChecked = _mapManager.UsePersistedStateMap;
+                    return;
+                }
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    QueueRender(immediate: true);
+                });
+            }
+        }
+
+        private async void OnSaveStateMapClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            if (_mapManager == null)
+                return;
+
+            if (sender is Button button)
+            {
+                Debug.WriteLine("[DEBUG MENU] Saving current state map to data folder");
+                button.IsEnabled = false;
+                bool saved = false;
+                try
+                {
+                    saved = await Task.Run(() => _mapManager.SaveStateMapToDisk());
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[DEBUG MENU] Failed to save state map: {ex.Message}");
+                }
+                finally
+                {
+                    button.IsEnabled = true;
+                }
+
+                Debug.WriteLine(saved
+                    ? "[DEBUG MENU] State map saved to data folder"
+                    : "[DEBUG MENU] State map save unsuccessful");
+            }
+        }
+
+        private static void ShowCullProgressUI(Button? button, StackPanel? panel, ProgressBar? bar, TextBlock? label, double progressValue)
+        {
+            if (button != null)
+            {
+                button.IsEnabled = false;
+            }
+
+            if (panel != null)
+            {
+                panel.IsVisible = true;
+            }
+
+            UpdateCullProgressUI(bar, label, progressValue);
+        }
+
+        private static void UpdateCullProgressUI(ProgressBar? bar, TextBlock? label, double progressValue)
+        {
+            double clamped = Math.Clamp(progressValue, 0.0, 1.0);
+
+            if (bar != null)
+            {
+                bar.Value = clamped * 100.0;
+            }
+
+            if (label != null)
+            {
+                label.Text = $"Culling states… {Math.Round(clamped * 100)}%";
+            }
+        }
+
+        private static void ResetCullProgressUI(Button? button, StackPanel? panel, ProgressBar? bar, TextBlock? label)
+        {
+            if (button != null)
+            {
+                button.IsEnabled = true;
+            }
+
+            if (panel != null)
+            {
+                panel.IsVisible = false;
+            }
+
+            if (bar != null)
+            {
+                bar.Value = 0;
+            }
+
+            if (label != null)
+            {
+                label.Text = "Culling states…";
+            }
         }
 
         private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
@@ -1589,6 +1953,13 @@ namespace Economy_sim
             {
                 populationBtn.Background = _mapManager.CurrentViewType == MapViewType.PopulationDensity
                     ? Avalonia.Media.Brushes.DarkGreen
+                    : Avalonia.Media.Brushes.DarkSlateGray;
+            }
+
+            if (this.FindControl<Button>("StatesViewButton") is Button statesBtn)
+            {
+                statesBtn.Background = _mapManager.CurrentViewType == MapViewType.States
+                    ? Avalonia.Media.Brushes.DarkOrange
                     : Avalonia.Media.Brushes.DarkSlateGray;
             }
         }

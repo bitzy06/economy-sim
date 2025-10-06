@@ -4,6 +4,8 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using MaxRev.Gdal.Core;
 using OSGeo.GDAL;
@@ -41,8 +43,11 @@ namespace Economy_sim
 
         private readonly string _stateDataPath;
         private readonly string _colorMappingPath;
+        private readonly string _persistedStateMapPath;
         private readonly List<StateFeature> _stateFeatures = new();
         private bool _dataLoaded = false;
+
+        private bool _usePersistedStateMap;
 
         // Grid-based state rendering
         private volatile bool _stateGridBuilt = false;
@@ -65,7 +70,8 @@ namespace Economy_sim
 
         public StateBorderManager(int baseWidth = 4096, int baseHeight = 2048,
                                   string stateDataPath = "data/country_borders/states/ne_10m_admin_1_states_provinces.shp",
-                                  string colorMappingPath = "data/country_borders/state_colors.json")
+                                  string colorMappingPath = "data/country_borders/state_colors.json",
+                                  string? persistedStateMapPath = null)
         {
             _baseWidth = Math.Max(1, baseWidth);
             _baseHeight = Math.Max(1, baseHeight);
@@ -87,6 +93,8 @@ namespace Economy_sim
 
             _stateDataPath = stateDataPath;
             _colorMappingPath = colorMappingPath;
+            string baseDir = AppContext.BaseDirectory ?? Environment.CurrentDirectory;
+            _persistedStateMapPath = persistedStateMapPath ?? Path.Combine(baseDir, "data", "state_maps", "saved_state_map.json");
             EnsureGdalRegistered();
             
             // Reset the disable flag for new instances unless opt-in is disabled
@@ -171,6 +179,19 @@ namespace Economy_sim
 
             try
             {
+                if (_usePersistedStateMap)
+                {
+                    if (TryLoadPersistedStateMap(_persistedStateMapPath))
+                    {
+                        _dataLoaded = true;
+                        Debug.WriteLine($"[STATE MANAGER] Loaded persisted state map from {_persistedStateMapPath}");
+                        return;
+                    }
+
+                    Debug.WriteLine($"[STATE MANAGER] Failed to load persisted state map at {_persistedStateMapPath}; falling back to default sources");
+                    _usePersistedStateMap = false;
+                }
+
                 // Only use the disable flag if opt-in is not enabled and we've had multiple failures
                 if (_disableShapefileLoading && !_optInEnableShp && _shpLoadAttempts > 2)
                 {
@@ -214,6 +235,137 @@ namespace Economy_sim
                 CreateMockStateData();
                 _dataLoaded = true;
                 BuildStateGrid();
+            }
+        }
+
+        public bool UsePersistedStateMap
+        {
+            get => _usePersistedStateMap;
+            set
+            {
+                if (_usePersistedStateMap == value)
+                    return;
+
+                _usePersistedStateMap = value;
+                ReloadStateData();
+            }
+        }
+
+        public bool SaveStateDataToFile(string? filePath = null)
+        {
+            if (!_dataLoaded)
+                LoadStateData();
+
+            EnsureStateGridBuilt();
+
+            if (_stateGrid == null)
+            {
+                Debug.WriteLine("[STATE MANAGER] Cannot save state data because the grid is unavailable");
+                return false;
+            }
+
+            string targetPath = filePath ?? _persistedStateMapPath;
+
+            try
+            {
+                string? dir = Path.GetDirectoryName(targetPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                var payload = new PersistedStateMap
+                {
+                    BaseWidth = _baseWidth,
+                    BaseHeight = _baseHeight,
+                    GridWidth = _gridWidth,
+                    GridHeight = _gridHeight,
+                    GridScaleFactor = _gridScaleFactor,
+                    StateGrid = SerializeGrid(_stateGrid),
+                    States = _stateFeatures.Select(f => PersistedStateFeature.FromFeature(f)).ToList()
+                };
+
+                var options = new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+                };
+
+                string json = JsonSerializer.Serialize(payload, options);
+                File.WriteAllText(targetPath, json);
+
+                Debug.WriteLine($"[STATE MANAGER] Saved state map to {targetPath}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[STATE MANAGER] Failed to save state map: {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool TryLoadPersistedStateMap(string filePath)
+        {
+            try
+            {
+                if (!File.Exists(filePath))
+                {
+                    Debug.WriteLine($"[STATE MANAGER] Persisted state map not found at {filePath}");
+                    return false;
+                }
+
+                string json = File.ReadAllText(filePath);
+                var payload = JsonSerializer.Deserialize<PersistedStateMap>(json);
+                if (payload == null)
+                {
+                    Debug.WriteLine("[STATE MANAGER] Persisted state map payload was null");
+                    return false;
+                }
+
+                if (payload.GridWidth != _gridWidth || payload.GridHeight != _gridHeight)
+                {
+                    Debug.WriteLine($"[STATE MANAGER] Persisted state map dimensions {payload.GridWidth}x{payload.GridHeight} do not match expected {_gridWidth}x{_gridHeight}");
+                    return false;
+                }
+
+                if (payload.BaseWidth != _baseWidth || payload.BaseHeight != _baseHeight)
+                {
+                    Debug.WriteLine($"[STATE MANAGER] Persisted state base size {payload.BaseWidth}x{payload.BaseHeight} does not match manager {_baseWidth}x{_baseHeight}");
+                    return false;
+                }
+
+                if (payload.GridScaleFactor != _gridScaleFactor)
+                {
+                    Debug.WriteLine($"[STATE MANAGER] Persisted state grid scale {payload.GridScaleFactor} does not match expected {_gridScaleFactor}");
+                    return false;
+                }
+
+                foreach (var state in _stateFeatures)
+                {
+                    state.DisposePaths();
+                }
+                _stateFeatures.Clear();
+                _stateColorsByCode.Clear();
+
+                foreach (var savedFeature in payload.States)
+                {
+                    var feature = savedFeature.ToFeature();
+                    _stateFeatures.Add(feature);
+                    if (feature.RasterCode > 0)
+                    {
+                        _stateColorsByCode[feature.RasterCode] = feature.Color;
+                    }
+                }
+
+                _stateGrid = DeserializeGrid(payload.StateGrid, payload.GridWidth, payload.GridHeight);
+                _stateGridBuilt = true;
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[STATE MANAGER] Failed to load persisted state map: {ex.Message}");
+                return false;
             }
         }
 
@@ -713,51 +865,93 @@ namespace Economy_sim
         {
             if (!_dataLoaded) LoadStateData();
             EnsureStateGridBuilt();
-            if (_stateGrid == null) return;
+            if (_stateFeatures.Count == 0) return;
+
             float scaleX = mapPixelSize.Width / (float)_baseWidth;
             float scaleY = mapPixelSize.Height / (float)_baseHeight;
+            if (scaleX <= 0 || scaleY <= 0)
+                return;
+
             var baseViewport = new SKRect(viewport.Left / scaleX, viewport.Top / scaleY, viewport.Right / scaleX, viewport.Bottom / scaleY);
+            if (baseViewport.Width <= 0 || baseViewport.Height <= 0)
+                return;
+
             var clip = canvas.DeviceClipBounds;
-            int outW = Math.Max(1, clip.Width);
-            int outH = Math.Max(1, clip.Height);
-            using var overlay = new SKBitmap(outW, outH, SKColorType.Rgba8888, SKAlphaType.Premul);
-            overlay.Erase(SKColors.Transparent);
-            unsafe
+            if (clip.Width <= 0 || clip.Height <= 0)
+                return;
+
+            float viewWidth = clip.Width;
+            float viewHeight = clip.Height;
+            float scaleToViewX = viewWidth / baseViewport.Width;
+            float scaleToViewY = viewHeight / baseViewport.Height;
+            float avgScale = Math.Max(0.0001f, (scaleToViewX + scaleToViewY) * 0.5f);
+
+            float desiredScreenWidth = Math.Max(1f, borderWidth);
+            float selectedScreenWidth = desiredScreenWidth * 1.5f;
+            float strokeInBase = desiredScreenWidth / avgScale;
+            float selectedStrokeInBase = selectedScreenWidth / avgScale;
+
+            using var normalPaint = new SKPaint
             {
-                uint* pixels = (uint*)overlay.GetPixels().ToPointer();
-                int stride = overlay.RowBytes / 4;
-                int gridW = _gridWidth;
-                int gridH = _gridHeight;
-                var bc = borderColor ?? SKColors.Black;
-                uint borderPacked = (uint)(0xFF000000 | (bc.Red << 16) | (bc.Green << 8) | bc.Blue);
-                uint white = 0xFFFFFFFF;
-                Parallel.For(0, outH, y =>
+                Style = SKPaintStyle.Stroke,
+                Color = (borderColor ?? SKColors.Black).WithAlpha(255),
+                StrokeWidth = strokeInBase,
+                IsAntialias = true,
+                StrokeJoin = SKStrokeJoin.Round,
+                StrokeCap = SKStrokeCap.Round
+            };
+
+            using var selectedPaint = normalPaint.Clone();
+            selectedPaint.Color = SKColors.White;
+            selectedPaint.StrokeWidth = selectedStrokeInBase;
+
+            var translate = SKMatrix.CreateTranslation(-baseViewport.Left, -baseViewport.Top);
+            var scale = SKMatrix.CreateScale(scaleToViewX, scaleToViewY);
+            var matrix = SKMatrix.Concat(scale, translate);
+
+            canvas.Save();
+            canvas.Concat(ref matrix);
+
+            try
+            {
+                var viewportClip = new SKRect(baseViewport.Left, baseViewport.Top, baseViewport.Right, baseViewport.Bottom);
+                canvas.ClipRect(viewportClip);
+
+                foreach (var state in _stateFeatures)
                 {
-                    for (int x = 0; x < outW; x++)
+                    if (state.Geometry == null || state.Geometry.Count == 0)
+                        continue;
+
+                    if (!RectsIntersect(state.Bounds, baseViewport))
+                        continue;
+
+                    bool isSelected = _selectedStateCode > 0 && state.RasterCode == _selectedStateCode;
+                    var paint = isSelected ? selectedPaint : normalPaint;
+
+                    foreach (var path in state.Geometry)
                     {
-                        int logicalX = (int)(baseViewport.Left + (x * baseViewport.Width) / outW);
-                        int logicalY = (int)(baseViewport.Top + (y * baseViewport.Height) / outH);
-                        int gridX = logicalX / _gridScaleFactor;
-                        int gridY = logicalY / _gridScaleFactor;
-                        if (gridX < 0 || gridY < 0 || gridX >= gridW || gridY >= gridH) continue;
-                        int current = _stateGrid![gridY, gridX];
-                        if (current <= 0) continue;
-                        int nx0 = gridX + 1 < gridW ? _stateGrid[gridY, gridX + 1] : 0;
-                        int nx1 = gridX - 1 >= 0 ? _stateGrid[gridY, gridX - 1] : 0;
-                        int ny0 = gridY + 1 < gridH ? _stateGrid[gridY + 1, gridX] : 0;
-                        int ny1 = gridY - 1 >= 0 ? _stateGrid[gridY - 1, gridX] : 0;
-                        bool isBorder = nx0 != current || nx1 != current || ny0 != current || ny1 != current;
-                        if (!isBorder) continue;
-                        bool selectedAdj = _selectedStateCode > 0 && (current == _selectedStateCode || nx0 == _selectedStateCode || nx1 == _selectedStateCode || ny0 == _selectedStateCode || ny1 == _selectedStateCode);
-                        pixels[y * stride + x] = selectedAdj ? white : borderPacked;
+                        if (path == null || path.IsEmpty)
+                            continue;
+
+                        canvas.DrawPath(path, paint);
                     }
-                });
+                }
             }
-            using var paint = new SKPaint { FilterQuality = SKFilterQuality.None, IsAntialias = false };
-            canvas.DrawBitmap(overlay, new SKPoint(0, 0), paint);
+            finally
+            {
+                canvas.Restore();
+            }
         }
 
         // --- Quick lookup helpers for selection ---
+        private static bool RectsIntersect(SKRect a, SKRect b)
+        {
+            if (a.IsEmpty || b.IsEmpty)
+                return false;
+
+            return a.Left < b.Right && a.Right > b.Left && a.Top < b.Bottom && a.Bottom > b.Top;
+        }
+
         public StateFeature? GetStateAtGrid(int gridX, int gridY)
         {
             EnsureStateGridBuilt();
@@ -782,6 +976,73 @@ namespace Economy_sim
             return _stateFeatures.Find(s => s.RasterCode == code);
         }
 
+        public bool MergeStateInto(StateFeature? sourceState, StateFeature? targetState)
+        {
+            if (sourceState == null || targetState == null)
+                return false;
+
+            if (sourceState.RasterCode <= 0 || targetState.RasterCode <= 0)
+                return false;
+
+            if (sourceState.RasterCode == targetState.RasterCode)
+                return false;
+
+            EnsureStateGridBuilt();
+            if (_stateGrid == null)
+                return false;
+
+            int replacements = 0;
+            int height = _stateGrid.GetLength(0);
+            int width = _stateGrid.GetLength(1);
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (_stateGrid[y, x] == sourceState.RasterCode)
+                    {
+                        _stateGrid[y, x] = targetState.RasterCode;
+                        replacements++;
+                    }
+                }
+            }
+
+            if (replacements == 0)
+            {
+                _stateFeatures.Remove(sourceState);
+                _stateColorsByCode.Remove(sourceState.RasterCode);
+                return false;
+            }
+
+            if (sourceState.Geometry != null && sourceState.Geometry.Count > 0)
+            {
+                foreach (var path in sourceState.Geometry)
+                {
+                    if (path != null)
+                        targetState.Geometry.Add(path);
+                }
+                sourceState.Geometry.Clear();
+            }
+
+            if (!sourceState.Bounds.IsEmpty)
+            {
+                if (targetState.Bounds.IsEmpty)
+                    targetState.Bounds = sourceState.Bounds;
+                else
+                    targetState.Bounds = SKRect.Union(targetState.Bounds, sourceState.Bounds);
+            }
+
+            _stateFeatures.Remove(sourceState);
+            _stateColorsByCode.Remove(sourceState.RasterCode);
+
+            if (_selectedStateCode == sourceState.RasterCode)
+            {
+                _selectedStateCode = targetState.RasterCode;
+            }
+
+            return true;
+        }
+
         public void Dispose()
         {
             foreach (var state in _stateFeatures)
@@ -801,7 +1062,7 @@ namespace Economy_sim
         public void ReloadStateData()
         {
             Debug.WriteLine("[STATE MANAGER] Force reloading state data");
-            
+
             // Clear existing data
             foreach (var state in _stateFeatures)
             {
@@ -812,13 +1073,184 @@ namespace Economy_sim
             _stateGridBuilt = false;
             _stateColorsByCode.Clear();
             _dataLoaded = false;
-            
+
             // Reset loading flags
             _disableShapefileLoading = false;
             _shpLoadAttempts = 0;
-            
+
             // Reload
             LoadStateData();
+        }
+
+        private static int[] SerializeGrid(int[,] grid)
+        {
+            int height = grid.GetLength(0);
+            int width = grid.GetLength(1);
+            var flat = new int[width * height];
+            int index = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    flat[index++] = grid[y, x];
+                }
+            }
+
+            return flat;
+        }
+
+        private static int[,] DeserializeGrid(int[]? flat, int width, int height)
+        {
+            var grid = new int[height, width];
+            if (flat == null || flat.Length != width * height)
+            {
+                Debug.WriteLine("[STATE MANAGER] Persisted state grid data missing or malformed; initializing empty grid");
+                return grid;
+            }
+
+            int index = 0;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    grid[y, x] = flat[index++];
+                }
+            }
+
+            return grid;
+        }
+
+        private static uint EncodeColor(SKColor color)
+        {
+            return ((uint)color.Alpha << 24) | ((uint)color.Red << 16) | ((uint)color.Green << 8) | color.Blue;
+        }
+
+        private static SKColor DecodeColor(uint encoded)
+        {
+            byte a = (byte)((encoded >> 24) & 0xFF);
+            byte r = (byte)((encoded >> 16) & 0xFF);
+            byte g = (byte)((encoded >> 8) & 0xFF);
+            byte b = (byte)(encoded & 0xFF);
+            return new SKColor(r, g, b, a);
+        }
+
+        private sealed class PersistedStateMap
+        {
+            public int BaseWidth { get; set; }
+            public int BaseHeight { get; set; }
+            public int GridScaleFactor { get; set; }
+            public int GridWidth { get; set; }
+            public int GridHeight { get; set; }
+            public int[]? StateGrid { get; set; }
+            public List<PersistedStateFeature> States { get; set; } = new();
+        }
+
+        private sealed class PersistedStateFeature
+        {
+            public string StateName { get; set; } = string.Empty;
+            public string StateCode { get; set; } = string.Empty;
+            public string CountryName { get; set; } = string.Empty;
+            public string CountryCode { get; set; } = string.Empty;
+            public uint Color { get; set; }
+            public int RasterCode { get; set; }
+            public PersistedRect Bounds { get; set; }
+            public List<List<PersistedPoint>> Geometry { get; set; } = new();
+
+            public static PersistedStateFeature FromFeature(StateFeature feature)
+            {
+                var persisted = new PersistedStateFeature
+                {
+                    StateName = feature.StateName,
+                    StateCode = feature.StateCode,
+                    CountryName = feature.CountryName,
+                    CountryCode = feature.CountryCode,
+                    Color = EncodeColor(feature.Color),
+                    RasterCode = feature.RasterCode,
+                    Bounds = PersistedRect.FromRect(feature.Bounds)
+                };
+
+                foreach (var path in feature.Geometry)
+                {
+                    if (path == null || path.IsEmpty)
+                        continue;
+
+                    var points = path.Points;
+                    if (points == null || points.Length < 3)
+                        continue;
+
+                    var persistedPoints = new List<PersistedPoint>();
+                    foreach (var pt in points)
+                    {
+                        persistedPoints.Add(new PersistedPoint { X = pt.X, Y = pt.Y });
+                    }
+
+                    if (persistedPoints.Count > 0)
+                        persisted.Geometry.Add(persistedPoints);
+                }
+
+                return persisted;
+            }
+
+            public StateFeature ToFeature()
+            {
+                var feature = new StateFeature
+                {
+                    StateName = StateName,
+                    StateCode = StateCode,
+                    CountryName = CountryName,
+                    CountryCode = CountryCode,
+                    Color = DecodeColor(Color),
+                    RasterCode = RasterCode,
+                    Bounds = Bounds.ToRect()
+                };
+
+                foreach (var polygon in Geometry)
+                {
+                    if (polygon == null || polygon.Count == 0)
+                        continue;
+
+                    var path = new SKPath { FillType = SKPathFillType.Winding };
+                    path.MoveTo(polygon[0].X, polygon[0].Y);
+                    for (int i = 1; i < polygon.Count; i++)
+                    {
+                        path.LineTo(polygon[i].X, polygon[i].Y);
+                    }
+                    path.Close();
+                    feature.Geometry.Add(path);
+                }
+
+                return feature;
+            }
+        }
+
+        private struct PersistedPoint
+        {
+            public float X { get; set; }
+            public float Y { get; set; }
+        }
+
+        private struct PersistedRect
+        {
+            public float Left { get; set; }
+            public float Top { get; set; }
+            public float Right { get; set; }
+            public float Bottom { get; set; }
+
+            public static PersistedRect FromRect(SKRect rect)
+            {
+                return new PersistedRect
+                {
+                    Left = rect.Left,
+                    Top = rect.Top,
+                    Right = rect.Right,
+                    Bottom = rect.Bottom
+                };
+            }
+
+            public SKRect ToRect()
+            {
+                return new SKRect(Left, Top, Right, Bottom);
+            }
         }
 
         private void BuildStateGrid()
@@ -840,25 +1272,22 @@ namespace Economy_sim
                 using (var canvas = new SKCanvas(codeBitmap))
                 using (var paint = new SKPaint { Style = SKPaintStyle.Fill, IsAntialias = false, BlendMode = SKBlendMode.Src })
                 {
+                    var scale = 1f / _gridScaleFactor;
+                    var scaleMatrix = SKMatrix.CreateScale(scale, scale);
                     foreach (var state in _stateFeatures)
                     {
-                        // Rebuild temporary scaled paths from geographic polygons to avoid storing two copies
+                        byte r = (byte)(state.RasterCode & 0xFF);
+                        byte g = (byte)((state.RasterCode >> 8) & 0xFF);
+                        byte b = (byte)((state.RasterCode >> 16) & 0xFF);
+                        paint.Color = new SKColor(r, g, b, 0xFF);
+
                         foreach (var geoPath in state.Geometry)
                         {
-                            // geoPath currently holds base-pixel coords; we skip reusing it for scaled drawing due to complexity
-                            // Instead rely on re-conversion not available here -> simple bbox fill fallback
-                            // For accuracy we approximate by filling the bounding box scaled
-                            var b = geoPath.Bounds;
-                            var scaledRect = SKRect.Create(
-                                (float)(b.Left / _gridScaleFactor),
-                                (float)(b.Top / _gridScaleFactor),
-                                (float)(b.Width / _gridScaleFactor),
-                                (float)(b.Height / _gridScaleFactor));
-                            byte r = (byte)(state.RasterCode & 0xFF);
-                            byte g = (byte)((state.RasterCode >> 8) & 0xFF);
-                            byte bch = (byte)((state.RasterCode >> 16) & 0xFF);
-                            paint.Color = new SKColor(r, g, bch, 0xFF);
-                            canvas.DrawRect(scaledRect, paint);
+                            if (geoPath == null || geoPath.IsEmpty) continue;
+
+                            using var scaledPath = new SKPath(geoPath);
+                            scaledPath.Transform(scaleMatrix);
+                            canvas.DrawPath(scaledPath, paint);
                         }
                     }
                 }
@@ -910,7 +1339,7 @@ namespace Economy_sim
         {
             if (!_dataLoaded) LoadStateData();
             EnsureStateGridBuilt();
-            
+
             if (_stateGrid == null || countryGrid == null)
             {
                 Debug.WriteLine("[STATE SPLITTING] Missing required grids for processing");
@@ -918,17 +1347,140 @@ namespace Economy_sim
             }
 
             Debug.WriteLine("[STATE SPLITTING] Starting state splitting and merging process...");
-            
+
             try
             {
                 var stateCountryAnalysis = AnalyzeStateCountryOverlaps(countryGrid);
                 ProcessStateSplits(stateCountryAnalysis, countryGrid);
-                
+
                 Debug.WriteLine("[STATE SPLITTING] State splitting and merging completed");
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[STATE SPLITTING] Error during processing: {ex.Message}");
+            }
+        }
+
+        public void RelaxStateBorders(int[,] countryGrid, int iterations = 2)
+        {
+            if (!_dataLoaded) LoadStateData();
+            EnsureStateGridBuilt();
+            if (_stateGrid == null)
+            {
+                Debug.WriteLine("[STATE RELAX] State grid is not available for relaxation");
+                return;
+            }
+
+            if (countryGrid == null)
+            {
+                Debug.WriteLine("[STATE RELAX] Country grid is not available for relaxation");
+                return;
+            }
+
+            iterations = Math.Clamp(iterations, 1, 8);
+            int height = Math.Min(_stateGrid.GetLength(0), countryGrid.GetLength(0));
+            int width = Math.Min(_stateGrid.GetLength(1), countryGrid.GetLength(1));
+            bool anyChange = false;
+
+            for (int iter = 0; iter < iterations; iter++)
+            {
+                bool iterationChanged = false;
+                var nextGrid = (int[,])_stateGrid.Clone();
+
+                for (int y = 1; y < height - 1; y++)
+                {
+                    for (int x = 1; x < width - 1; x++)
+                    {
+                        int countryCode = countryGrid[y, x];
+                        if (countryCode <= 0)
+                            continue;
+
+                        int currentState = _stateGrid[y, x];
+                        Span<int> neighborStates = stackalloc int[8];
+                        Span<int> neighborCounts = stackalloc int[8];
+                        int trackedStates = 0;
+                        int bestState = currentState;
+                        int bestCount = 0;
+
+                        for (int dy = -1; dy <= 1; dy++)
+                        {
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                if (dx == 0 && dy == 0)
+                                    continue;
+
+                                int nx = x + dx;
+                                int ny = y + dy;
+                                if (nx < 0 || ny < 0 || nx >= width || ny >= height)
+                                    continue;
+
+                                if (countryGrid[ny, nx] != countryCode)
+                                    continue;
+
+                                int neighborState = _stateGrid[ny, nx];
+                                if (neighborState <= 0)
+                                    continue;
+
+                                bool recorded = false;
+                                for (int i = 0; i < trackedStates; i++)
+                                {
+                                    if (neighborStates[i] == neighborState)
+                                    {
+                                        int newCount = ++neighborCounts[i];
+                                        if (newCount > bestCount)
+                                        {
+                                            bestCount = newCount;
+                                            bestState = neighborState;
+                                        }
+                                        recorded = true;
+                                        break;
+                                    }
+                                }
+
+                                if (!recorded && trackedStates < neighborStates.Length)
+                                {
+                                    neighborStates[trackedStates] = neighborState;
+                                    neighborCounts[trackedStates] = 1;
+                                    if (bestCount < 1)
+                                    {
+                                        bestCount = 1;
+                                        bestState = neighborState;
+                                    }
+                                    trackedStates++;
+                                }
+                            }
+                        }
+
+                        if (bestCount == 0)
+                            continue;
+
+                        if (bestState != currentState && bestCount >= 3)
+                        {
+                            nextGrid[y, x] = bestState;
+                            iterationChanged = true;
+                        }
+                        else if (currentState <= 0 && bestCount >= 2)
+                        {
+                            nextGrid[y, x] = bestState;
+                            iterationChanged = true;
+                        }
+                    }
+                }
+
+                if (!iterationChanged)
+                    break;
+
+                _stateGrid = nextGrid;
+                anyChange = true;
+            }
+
+            if (anyChange)
+            {
+                Debug.WriteLine("[STATE RELAX] State borders relaxed to better fit country outlines");
+            }
+            else
+            {
+                Debug.WriteLine("[STATE RELAX] No state border adjustments were necessary");
             }
         }
 
