@@ -62,6 +62,8 @@ namespace Economy_sim
         private DispatcherTimer? _economyUpdateTimer;
         private bool _economyInitialized = false;
         private bool _usedMapEconomy = false; // track if map based economy built
+        private TradeRouteManager? _tradeRouteManager;
+        private EnhancedTradeManager? _enhancedTradeManager;
 
         public GameView()
         {
@@ -984,6 +986,11 @@ namespace Economy_sim
 
         private void InitializeHUD()
         {
+            if (GlobalMarket.Instance == null)
+            {
+                _ = new GlobalMarket();
+            }
+
             // Initialize real economy state
             if (!_economyInitialized)
             {
@@ -1137,6 +1144,7 @@ namespace Economy_sim
             // Select the largest population country as player
             _playerCountry = _allCountries.OrderByDescending(c => c.Population).FirstOrDefault();
             if (_playerCountry == null) return false;
+            _currentCountry = _playerCountry;
             _playerRoleManager = new PlayerRoleManager();
             _playerRoleManager.AssumeRolePrimeMinister(_playerCountry);
 
@@ -1146,6 +1154,8 @@ namespace Economy_sim
 
             Market.AllCorporations.Clear();
             Market.AllCorporations.AddRange(_allCorporations);
+
+            InitializeTradeSystemsForCurrentWorld();
 
             _economyInitialized = true;
             return true;
@@ -1203,6 +1213,17 @@ namespace Economy_sim
                 _allCorporations.Add(corp);
                 corpCounter++;
             }
+        }
+
+        private void InitializeTradeSystemsForCurrentWorld()
+        {
+            if (_allCountries == null || _allCountries.Count == 0)
+            {
+                return;
+            }
+
+            _tradeRouteManager ??= new TradeRouteManager();
+            _enhancedTradeManager = new EnhancedTradeManager(_allCountries);
         }
         private void InitializeEconomyData()
         {
@@ -1377,6 +1398,8 @@ namespace Economy_sim
 
             _allCountries = new List<Country> { _currentCountry };
 
+            InitializeTradeSystemsForCurrentWorld();
+
             // Set up player as Prime Minister BEFORE the HUD tries to access it
             _playerRoleManager = new PlayerRoleManager();
             _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
@@ -1395,10 +1418,40 @@ namespace Economy_sim
             {
                 Debug.WriteLine("[Economy Update] Running economy simulation tick...");
 
-                // Run the economy update cycle
-                foreach (var city in _currentCountry.States.SelectMany(s => s.Cities))
+                var activeCountries = (_allCountries != null && _allCountries.Count > 0)
+                    ? _allCountries
+                    : new List<Country> { _currentCountry };
+
+                var playerCities = _currentCountry.States.SelectMany(s => s.Cities).ToList();
+                var allCities = activeCountries.SelectMany(c => c.States).SelectMany(s => s.Cities).ToList();
+
+                _tradeRouteManager ??= new TradeRouteManager();
+                if (_enhancedTradeManager == null)
+                {
+                    _enhancedTradeManager = new EnhancedTradeManager(activeCountries);
+                }
+
+                GlobalMarket.Instance?.PrepareForNewTurn();
+
+                // Run the economy update cycle for city-level data
+                foreach (var city in playerCities)
                 {
                     Economy.UpdateCityEconomy(city);
+                }
+
+                // Resolve inter-city trade before aggregating state/country metrics
+                Economy.ResolveInterCityTrade(allCities, activeCountries);
+
+                _tradeRouteManager?.UpdateAllRoutes();
+
+                if (GlobalMarket.Instance != null)
+                {
+                    GlobalMarket.Instance.UpdateGlobalMarket(allCities, activeCountries, _tradeRouteManager, _enhancedTradeManager);
+
+                    if (_enhancedTradeManager != null)
+                    {
+                        InternationalTrade.ExecuteTradeTurn(activeCountries, GlobalMarket.Instance, _enhancedTradeManager);
+                    }
                 }
 
                 foreach (var state in _currentCountry.States)
@@ -1415,8 +1468,7 @@ namespace Economy_sim
                 var random = new Random();
                 foreach (var corp in _allCorporations)
                 {
-                    var allCities = _currentCountry.States.SelectMany(s => s.Cities).ToList();
-                    corp.UpdateAI(allCities, Market.GoodDefinitions.Values.ToList(), random);
+                    corp.UpdateAI(playerCities, Market.GoodDefinitions.Values.ToList(), random);
                 }
 
                 // Simulate monetary effects
@@ -1504,6 +1556,16 @@ namespace Economy_sim
                     if (this.FindControl<TextBlock>("SideInflationText") is TextBlock sideInflText)
                     {
                         sideInflText.Text = $"{inflationRate:F1}%";
+                    }
+
+                    double globalTradeValue = GlobalMarket.Instance?.GlobalTradeValue ?? 0;
+                    if (this.FindControl<TextBlock>("GlobalTradeText") is TextBlock globalTradeText)
+                    {
+                        globalTradeText.Text = $"${FormatCurrency(globalTradeValue)}";
+                    }
+                    if (this.FindControl<TextBlock>("SideGlobalTradeText") is TextBlock sideGlobalTradeText)
+                    {
+                        sideGlobalTradeText.Text = $"${FormatCurrency(globalTradeValue)}";
                     }
 
                     // Update industries list with real data
@@ -1932,6 +1994,8 @@ namespace Economy_sim
                 unemp.Text = "4.2%";
             if (this.FindControl<TextBlock>("SideInflationText") is TextBlock infl)
                 infl.Text = "2.1%";
+            if (this.FindControl<TextBlock>("SideGlobalTradeText") is TextBlock sideTrade)
+                sideTrade.Text = "$0";
             if (this.FindControl<ListBox>("SideIndustriesList") is ListBox sideIndustries)
             {
                 var industries = new[]
@@ -2250,12 +2314,6 @@ namespace Economy_sim
             if (!_economyInitialized) return;
             var corpList = this.FindControl<ListBox>("CorporationsList");
             var industriesList = this.FindControl<ListBox>("IndustriesList");
-            var stockIdx = this.FindControl<TextBlock>("StockMarketIndexText");
-            if (stockIdx != null)
-            {
-                var r = new Random();
-                stockIdx.Text = $"{15000 + r.Next(-400, 400):N0} pts";
-            }
             if (corpList != null)
             {
                 corpList.Items.Clear();

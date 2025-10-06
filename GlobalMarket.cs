@@ -27,7 +27,8 @@ namespace Economy_sim // Reverted from EconomySim
         public List<GlobalTradeEvent> RecentTradeEvents { get; private set; } // Major trade events
         public List<DetailedTradeRecord> TradeHistory { get; private set; } // Detailed history of all trades
         public double GlobalTradeValue { get; private set; } // Total value of all trade this turn
-          public static GlobalMarket Instance { get; private set; }
+        public static GlobalMarket Instance { get; private set; }
+        private bool _turnPrepared;
         
         public GlobalMarket()
         {
@@ -45,7 +46,8 @@ namespace Economy_sim // Reverted from EconomySim
             RecentTradeEvents = new List<GlobalTradeEvent>();
             TradeHistory = new List<DetailedTradeRecord>();
             GlobalTradeValue = 0;
-            
+            _turnPrepared = false;
+
             // Initialize with goods from the Market class
             foreach (var goodDef in Market.GoodDefinitions.Values)
             {
@@ -60,14 +62,13 @@ namespace Economy_sim // Reverted from EconomySim
         }
         
         // Method signature changed to reflect that it's part of EconomySim and might not need all these specific StrategyGame types directly if they are wrapped or accessed via a common interface.
-        public void UpdateGlobalMarket(List<Economy_sim.City> allCities, List<Economy_sim.Country> allCountries,
-                                     TradeRouteManager routeManager, EnhancedTradeManager tradeManager)
+        public void PrepareForNewTurn()
         {
-            // Clear previous turn trade volumes and flows
             foreach (var goodName in TradeVolumes.Keys)
             {
                 TradeVolumes[goodName].Clear();
             }
+
             foreach (var country in CountryTradeFlows.Values)
             {
                 foreach (var flow in country.Values)
@@ -76,13 +77,24 @@ namespace Economy_sim // Reverted from EconomySim
                     flow.Imports = 0;
                 }
             }
+
             GlobalTradeValue = 0;
 
-            // Update ageing of recent trade events
             RecentTradeEvents.RemoveAll(e => e.TurnsAgo > 5);
             foreach (var evt in RecentTradeEvents)
             {
                 evt.TurnsAgo++;
+            }
+
+            _turnPrepared = true;
+        }
+
+        public void UpdateGlobalMarket(List<Economy_sim.City> allCities, List<Economy_sim.Country> allCountries,
+                                     TradeRouteManager routeManager, EnhancedTradeManager tradeManager)
+        {
+            if (!_turnPrepared)
+            {
+                PrepareForNewTurn();
             }
 
             // Reset demand and supply
@@ -197,8 +209,7 @@ namespace Economy_sim // Reverted from EconomySim
                     }
                 }
             }
-            // Execute international trade between countries
-            InternationalTrade.ExecuteTradeTurn(allCountries, this, tradeManager);
+            _turnPrepared = false;
         }
           public void RecordTrade(string goodName, string exportingCountry, string importingCountry, 
                                int quantity, double totalValue)
