@@ -1,17 +1,21 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using SkiaSharp;
-using Economy_sim; // Assuming HybridMapManager is in this namespace
+using Economy_sim;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Linq;
+using System.Collections.ObjectModel;
 
 namespace Economy_sim
 {
@@ -51,10 +55,18 @@ namespace Economy_sim
         private readonly int _baselineWidth = 4096 * 4;
         private readonly int _baselineHeight = 2048 * 4;
 
+        // === NEW: Real economy data tracking ===
+        private List<Country> _allCountries = new();
+        private List<Corporation> _allCorporations = new();
+        private Country? _playerCountry;
+        private DispatcherTimer? _economyUpdateTimer;
+        private bool _economyInitialized = false;
+        private bool _usedMapEconomy = false; // track if map based economy built
+
         public GameView()
         {
             InitializeComponent();
-            
+
             int baseW = ParseEnvOrDefault("ES_BASE_WIDTH", _baselineWidth);
             int baseH = ParseEnvOrDefault("ES_BASE_HEIGHT", _baselineHeight);
             int defaultPolW = checked(baseW * 2);
@@ -62,7 +74,7 @@ namespace Economy_sim
             int polW = ParseEnvOrDefault("ES_POL_BASE_WIDTH", defaultPolW);
             int polH = ParseEnvOrDefault("ES_POL_BASE_HEIGHT", defaultPolH);
             _mapManager = new HybridMapManager(baseWidth: baseW, baseHeight: baseH, politicalBaseWidth: polW, politicalBaseHeight: polH);
-            
+
             this.Loaded += OnWindowLoaded;
             this.SizeChanged += OnSizeChanged;
 
@@ -86,10 +98,10 @@ namespace Economy_sim
             // Subscribe to map manager events
             _mapManager.ViewTypeChanged += OnMapViewTypeChanged;
             UpdateMapViewButtons();
-            
+
             // Maintain perceived zoom if base sizes differ from baseline
             NormalizeInitialViewOffset(baseW, baseH);
-            
+
             // Run basic integration test for political borders (commented out for production)
             // Economy_sim.Testing.PoliticalBorderIntegrationTest.RunBasicTests();
         }
@@ -295,13 +307,13 @@ namespace Economy_sim
                 Debug.WriteLine($"Initial size detected via timer using ClientSize: {this.ClientSize}. Triggering render.");
                 var pixelSize = PixelSize.FromSize(this.ClientSize, 1.0);
                 UpdateBitmapSource(pixelSize);
-                
+
                 // Center the view to ensure both map types start at the same position
                 CenterView();
-                
+
                 // Initial render
                 QueueRender(immediate: true);
-                
+
                 // Start the continuous refresh timer
                 _continuousRenderTimer.Start();
                 Debug.WriteLine($"Started continuous refresh timer at {_refreshInterval.TotalMilliseconds}ms interval");
@@ -371,7 +383,7 @@ namespace Economy_sim
         private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
         {
             var currentPoint = e.GetCurrentPoint(this);
-            
+
             if (currentPoint.Properties.IsLeftButtonPressed)
             {
                 _isPanning = true;
@@ -396,13 +408,13 @@ namespace Economy_sim
 
             var currentPoint = e.GetPosition(this.MapImage);
             var delta = _panStartPoint - currentPoint;
-            
+
             // Check if movement is significant enough to be considered panning
             var distance = Math.Sqrt(delta.X * delta.X + delta.Y * delta.Y);
             if (distance > PAN_THRESHOLD)
             {
                 _hasPanned = true;
-                
+
                 _panStartPoint = currentPoint;
 
                 _viewOffset.X += (int)delta.X;
@@ -418,14 +430,14 @@ namespace Economy_sim
             {
                 _isPanning = false;
                 this.Cursor = new Cursor(StandardCursorType.Arrow);
-                
+
                 // If user didn't pan (just clicked), select country at click position
                 if (!_hasPanned && _mapManager.CurrentViewType == MapViewType.Political)
                 {
                     var mousePos = e.GetPosition(this.MapImage);
                     HandleSelectionAtPosition((int)mousePos.X, (int)mousePos.Y);
                 }
-                
+
                 _hasPanned = false;
             }
         }
@@ -457,13 +469,13 @@ namespace Economy_sim
                 }
 
                 var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
-                
+
                 if (country != null)
                 {
                     // Show country information
                     string message = $"Country: {country.CountryName} ({country.CountryCode})";
                     Debug.WriteLine($"[COUNTRY DETECTED] {message}");
-                    
+
                     // You could add visual feedback here, such as:
                     // - Highlighting the country border
                     // - Showing a tooltip
@@ -484,7 +496,7 @@ namespace Economy_sim
                 ShowCountryDetectionFeedback(null, screenX, screenY, "Error detecting country");
             }
         }
-        
+
         /// <summary>
         /// Shows visual feedback for country detection (placeholder implementation)
         /// </summary>
@@ -496,11 +508,11 @@ namespace Economy_sim
             // 2. Show a tooltip near the mouse cursor
             // 3. Update a country information panel
             // 4. Play a sound effect
-            
-            string message = customMessage ?? (country != null 
-                ? $"Selected: {country.CountryName}" 
+
+            string message = customMessage ?? (country != null
+                ? $"Selected: {country.CountryName}"
                 : "No country selected (ocean or outside map bounds)");
-                
+
             // Update the HUD or show temporary feedback
             Dispatcher.UIThread.Post(() =>
             {
@@ -508,11 +520,11 @@ namespace Economy_sim
                 {
                     // You could update a label in the UI here
                     Debug.WriteLine($"[UI FEEDBACK] {message}");
-                    
+
                     // Example: Update window title to show selected country (temporary solution)
-                    this.Title = country != null 
+                    this.Title = country != null
                         ? $"Economy Sim - {country.CountryName} ({country.CountryCode})"
-                        : customMessage != null 
+                        : customMessage != null
                         ? $"Economy Sim - {customMessage}"
                         : "Economy Sim";
                 }
@@ -534,7 +546,7 @@ namespace Economy_sim
                 {
                     // Update the window title to show instructions
                     this.Title = "Economy Sim - Political View - LEFT-CLICK to select, RIGHT-CLICK to identify countries";
-                    
+
                     Debug.WriteLine("[INSTRUCTIONS] Country detection and selection are now active!");
                     Debug.WriteLine("[INSTRUCTIONS] LEFT-CLICK on any country to select it (shows white borders).");
                     Debug.WriteLine("[INSTRUCTIONS] RIGHT-CLICK on any country to see its name and code.");
@@ -571,7 +583,7 @@ namespace Economy_sim
 
                 var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
                 var currentSelectedCountry = _mapManager.SelectedCountry;
-                
+
                 if (country != null)
                 {
                     // If no country is currently selected, or clicking on a different country
@@ -579,10 +591,10 @@ namespace Economy_sim
                     {
                         // Select the new country (this will clear any state selection)
                         _mapManager.SelectCountry(country);
-                        
+
                         string message = $"Selected country: {country.CountryName} ({country.CountryCode})";
                         Debug.WriteLine($"[COUNTRY SELECTED] {message}");
-                        
+
                         // Update UI feedback
                         ShowCountrySelectionFeedback(country, screenX, screenY);
                     }
@@ -590,14 +602,14 @@ namespace Economy_sim
                     {
                         // Same country is selected, try to select a state within it
                         var state = _mapManager.GetStateAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
-                        
+
                         if (state != null && state.CountryCode.Equals(country.CountryCode, StringComparison.OrdinalIgnoreCase))
                         {
                             _mapManager.SelectState(state);
-                            
+
                             string message = $"Selected state: {state.StateName} in {state.CountryName}";
                             Debug.WriteLine($"[STATE SELECTED] {message}");
-                            
+
                             // Update UI feedback for state selection
                             ShowStateSelectionFeedback(state, screenX, screenY);
                         }
@@ -606,7 +618,7 @@ namespace Economy_sim
                             // Clear state selection if clicking on a different state or no state found
                             _mapManager.ClearStateSelection();
                             Debug.WriteLine($"[STATE SELECTION] No valid state found at position ({screenX}, {screenY}) - cleared state selection");
-                            
+
                             // Show country feedback since country is still selected
                             ShowCountrySelectionFeedback(country, screenX, screenY);
                         }
@@ -621,7 +633,7 @@ namespace Economy_sim
                     _mapManager.ClearCountrySelection();
                     _mapManager.ClearStateSelection();
                     Debug.WriteLine($"[SELECTION] No country found at position ({screenX}, {screenY}) - cleared all selections");
-                    
+
                     ShowCountrySelectionFeedback(null, screenX, screenY);
 
                     // Force immediate re-render to remove any previous highlights
@@ -634,7 +646,7 @@ namespace Economy_sim
                 Debug.WriteLine($"[SELECTION ERROR] Stack trace: {ex.StackTrace}");
             }
         }
-        
+
         /// <summary>
         /// Shows visual feedback for country selection
         /// </summary>
@@ -709,7 +721,7 @@ namespace Economy_sim
                     _writeableBitmap.Dispose();
                     _writeableBitmap = null;
                 }
-                
+
                 if (_backBufferBitmap != null && _backBufferBitmap.PixelSize != size)
                 {
                     _backBufferBitmap.Dispose();
@@ -726,21 +738,21 @@ namespace Economy_sim
                     _writeableBitmap = new WriteableBitmap(size, new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
                     this.MapImage.Source = _writeableBitmap;
                 }
-                
+
                 // Create back buffer (for rendering next frame)
                 if (_backBufferBitmap == null)
                 {
                     _backBufferBitmap = new WriteableBitmap(size, new Vector(96, 96), PixelFormat.Bgra8888, AlphaFormat.Unpremul);
                 }
-                
+
                 // Create frame buffers for rendering
                 _currentFrameBuffer = new SKBitmap(size.Width, size.Height);
                 _nextFrameBuffer = new SKBitmap(size.Width, size.Height);
-                
+
                 // Initialize with a clear background
                 _currentFrameBuffer.Erase(SKColors.LightGray);
                 _nextFrameBuffer.Erase(SKColors.LightGray);
-                
+
                 Debug.WriteLine($"Created double-buffered bitmaps at size: {size.Width}x{size.Height}");
             }
         }
@@ -753,7 +765,7 @@ namespace Economy_sim
         {
             lock (_renderLock)
             {
-                if (_renderInProgress) 
+                if (_renderInProgress)
                 {
                     // If immediate mode and a render is already in progress, we need to ensure 
                     // another render happens after the current one completes
@@ -777,7 +789,7 @@ namespace Economy_sim
                 {
                     // This runs on a background thread.
                     resultBitmap = RenderMapOnWorkerThread(effectiveSize);
-                    
+
                     if (resultBitmap != null)
                     {
                         lock (_bufferSwapLock)
@@ -790,7 +802,7 @@ namespace Economy_sim
                                 _frameReady = true;
                             }
                         }
-                        
+
                         // Dispatch the buffer swap to the UI thread
                         await Dispatcher.UIThread.InvokeAsync(() =>
                         {
@@ -805,11 +817,11 @@ namespace Economy_sim
                 finally
                 {
                     resultBitmap?.Dispose(); // Dispose the temporary Skia bitmap after we're done with it.
-                    
+
                     lock (_renderLock)
                     {
                         _renderInProgress = false;
-                        
+
                         // If there are pending updates and we're allowed to immediately render again
                         if (_pendingMapUpdate)
                         {
@@ -821,7 +833,7 @@ namespace Economy_sim
                 }
             });
         }
-        
+
         /// <summary>
         /// Swaps the front and back buffers to display the new frame
         /// </summary>
@@ -865,10 +877,10 @@ namespace Economy_sim
                             }
                         }
                     }
-                    
+
                     // Explicitly tell the UI to redraw the updated area
                     MapImage.InvalidateVisual();
-                    
+
                     // Reset the frame ready flag
                     _frameReady = false;
                 }
@@ -908,22 +920,22 @@ namespace Economy_sim
         private Size GetEffectiveRenderSize()
         {
             // First check if we have a proper MapContainer with valid bounds
-            if (this.FindControl<Border>("MapContainer") is Border mapContainer && 
+            if (this.FindControl<Border>("MapContainer") is Border mapContainer &&
                 mapContainer.Bounds.Width > 1 && mapContainer.Bounds.Height > 1)
             {
                 Debug.WriteLine($"Using MapContainer bounds: {mapContainer.Bounds.Size}");
                 return mapContainer.Bounds.Size;
             }
-            
+
             // Fallback to MapImage bounds if available
             if (this.MapImage?.Bounds.Width > 1 && this.MapImage?.Bounds.Height > 1)
             {
                 Debug.WriteLine($"Using MapImage bounds: {this.MapImage.Bounds.Size}");
                 return this.MapImage.Bounds.Size;
             }
-            
+
             // Calculate available space based on Grid column layout
-            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid && 
+            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid &&
                 rootGrid.ColumnDefinitions.Count > 1)
             {
                 var sideMenuColumnWidth = rootGrid.ColumnDefinitions[1].Width.Value;
@@ -932,7 +944,7 @@ namespace Economy_sim
                 Debug.WriteLine($"Calculated size based on Grid layout: {calculatedSize}");
                 return calculatedSize;
             }
-            
+
             // Final fallback to ClientSize
             Debug.WriteLine($"Using ClientSize: {this.ClientSize}");
             return this.ClientSize;
@@ -966,33 +978,36 @@ namespace Economy_sim
         // Sample game state for HUD demonstration
         private PlayerRoleManager _playerRoleManager;
         private Country _currentCountry;
-        
+
         // Unified political entity renderer
         private PoliticalEntityRenderer _politicalEntityRenderer;
 
         private void InitializeHUD()
         {
-            // Initialize sample game state for demonstration
-            _playerRoleManager = new PlayerRoleManager();
-            _currentCountry = new Country("United States");
-
-            // Add some sample states and cities for demonstration
-            var california = new State("California");
-            california.Cities.Add(new City("Los Angeles"));
-            california.Cities.Add(new City("San Francisco"));
-
-            var texas = new State("Texas");
-            texas.Cities.Add(new City("Houston"));
-            texas.Cities.Add(new City("Dallas"));
-
-            _currentCountry.States.Add(california);
-            _currentCountry.States.Add(texas);
-
-            // Set up player as Prime Minister by default
-            _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
+            // Initialize real economy state
+            if (!_economyInitialized)
+            {
+                // Try map based generation first
+                try
+                {
+                    if (InitializeEconomyFromMap())
+                    {
+                        _usedMapEconomy = true;
+                        Debug.WriteLine("[Economy Init] Initialized economy from map data.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[Economy Init] Map-based initialization failed: {ex.Message}");
+                }
+                if (!_economyInitialized)
+                {
+                    InitializeEconomyData(); // fallback sample
+                    Debug.WriteLine("[Economy Init] Fallback sample economy initialized.");
+                }
+            }
 
             // Initialize the unified political entity renderer
-            // Use the existing political data cache from the map manager if available
             var dataCache = _mapManager.GetPoliticalDataCache();
             _politicalEntityRenderer = new PoliticalEntityRenderer(dataCache);
 
@@ -1009,11 +1024,532 @@ namespace Economy_sim
                 _hudTimer.Start();
             }
 
+            // Set up economy simulation timer (updates every 5 seconds)
+            _economyUpdateTimer ??= new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(5)
+            };
+            _economyUpdateTimer.Tick -= OnEconomyUpdateTick;
+            _economyUpdateTimer.Tick += OnEconomyUpdateTick;
+            if (!_economyUpdateTimer.IsEnabled)
+            {
+                _economyUpdateTimer.Start();
+            }
+
             // Initialize HUD button event handlers
             SetupHUDEventHandlers();
 
             // Initial HUD update
             UpdateHUDDisplay(null, null);
+            UpdateEconomyDisplay();
+        }
+
+        private bool InitializeEconomyFromMap()
+        {
+            // Require political map data and city listings
+            if (_mapManager == null) return false;
+            var countryData = _mapManager.GetAllCountryData();
+            if (countryData == null || countryData.Count == 0) return false;
+            List<HybridMapManager.MapCityInfo> cities;
+            try { cities = _mapManager.GetAllCities(includeUnassigned: false); } catch { return false; }
+            if (cities == null || cities.Count == 0) return false;
+
+            // Group cities by country code
+            var citiesByCountry = cities.GroupBy(c => c.CountryCode.ToUpperInvariant()).ToList();
+            if (citiesByCountry.Count == 0) return false;
+
+            _allCountries = new List<Country>();
+            foreach (var countryGroup in citiesByCountry)
+            {
+                // Resolve country display name
+                string iso = countryGroup.Key;
+                string displayName = countryData.FirstOrDefault(c => string.Equals(c.CountryCode, iso, StringComparison.OrdinalIgnoreCase))?.CountryName ?? iso;
+                var country = new Country(displayName) { Name = displayName };
+
+                // Progressive base budgets scaled by number of cities
+                int totalCities = countryGroup.Count();
+                country.Budget = 250000 + totalCities * 25000;
+                country.NationalExpenses = Math.Max(50000, totalCities * 1500);
+
+                // Basic tax policies
+                if (!Market.GoodDefinitions.Any()) FactoryBlueprints.InitializeBlueprints();
+                if (!country.FinancialSystem.TaxPolicies.Any())
+                {
+                    country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.IncomeTax, 0.15m));
+                    country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.CorporateTax, 0.20m));
+                    country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.ConsumptionTax, 0.05m));
+                }
+
+                // Group by state (if null group into a synthetic "Federal District")
+                var statesByCode = countryGroup.GroupBy(c => string.IsNullOrWhiteSpace(c.StateCode) ? "__NO_STATE__" : c.StateCode!);
+                foreach (var stateGroup in statesByCode)
+                {
+                    string stateCode = stateGroup.Key;
+                    string stateName = stateCode == "__NO_STATE__" ? "Federal District" : stateGroup.First().StateName ?? stateCode;
+                    var state = new State(stateName)
+                    {
+                        TaxRate = 0.04,
+                        StateExpenses = 20000 + stateGroup.Count() * 500
+                    };
+
+                    foreach (var cityInfo in stateGroup)
+                    {
+                        // Derive starting population from POP_MAX with floor and scaling
+                        int pop = cityInfo.Population;
+                        if (pop <= 0) pop = 5000;
+                        // Clamp to avoid extreme numbers for prototype
+                        pop = Math.Clamp(pop, 5000, 15_000_000);
+
+                        var city = new City(cityInfo.Name)
+                        {
+                            Population = pop,
+                            Budget = 20000 + pop * 0.01,
+                            TaxRate = 0.02,
+                            CityExpenses = 5000 + pop * 0.002
+                        };
+
+                        // Adjust default pop classes to reflect actual population distribution
+                        if (city.PopClasses.Any())
+                        {
+                            int totalOriginal = city.PopClasses.Sum(pc => pc.Size);
+                            if (totalOriginal > 0)
+                            {
+                                double scale = pop / (double)totalOriginal;
+                                foreach (var pc in city.PopClasses) pc.Size = (int)Math.Max(1, Math.Round(pc.Size * scale));
+                            }
+                        }
+
+                        // Seed stockpile with core goods proportionally to population
+                        SeedCityStockpile(city);
+
+                        state.Cities.Add(city);
+                    }
+
+                    state.Population = state.Cities.Sum(c => c.Population);
+                    state.Budget = 50000 + state.Population * 0.02;
+                    country.States.Add(state);
+                }
+
+                country.Population = country.States.Sum(s => s.Population);
+                _allCountries.Add(country);
+            }
+
+            // Select the largest population country as player
+            _playerCountry = _allCountries.OrderByDescending(c => c.Population).FirstOrDefault();
+            if (_playerCountry == null) return false;
+            _playerRoleManager = new PlayerRoleManager();
+            _playerRoleManager.AssumeRolePrimeMinister(_playerCountry);
+
+            // Minimal corporations seeded per large city cluster
+            _allCorporations = new List<Corporation>();
+            CreateInitialCorporationsFromCities();
+
+            Market.AllCorporations.Clear();
+            Market.AllCorporations.AddRange(_allCorporations);
+
+            _economyInitialized = true;
+            return true;
+        }
+
+        private void SeedCityStockpile(City city)
+        {
+            string[] coreGoods = { "Grain", "Coal", "Iron", "Bread", "Cloth" };
+            foreach (var g in coreGoods)
+            {
+                if (!Market.GoodDefinitions.ContainsKey(g)) continue;
+                int qty = g switch
+                {
+                    "Grain" => city.Population / 5,
+                    "Coal" => city.Population / 20,
+                    "Iron" => city.Population / 30,
+                    "Bread" => city.Population / 8,
+                    "Cloth" => city.Population / 15,
+                    _ => city.Population / 50
+                };
+                city.Stockpile[g] = new Good(g, Market.GoodDefinitions[g].BasePrice, Market.GoodDefinitions[g].Category, qty);
+            }
+        }
+
+        private void CreateInitialCorporationsFromCities()
+        {
+            if (_playerCountry == null) return;
+            var allCities = _playerCountry.States.SelectMany(s => s.Cities).ToList();
+            if (allCities.Count == 0) return;
+
+            var rnd = new Random();
+            int corpCounter = 1;
+            foreach (var city in allCities.OrderByDescending(c => c.Population).Take(8))
+            {
+                var spec = (CorporationSpecialization)(corpCounter % 5);
+                if (spec == 0) spec = CorporationSpecialization.Diversified;
+                var corp = new Corporation($"{city.Name} Holdings", spec)
+                {
+                    Budget = 250000 + city.Population * 0.05
+                };
+
+                // Pick a blueprint biased by specialization
+                var blueprint = FactoryBlueprints.GetBlueprintBySpecialization(corp.Specialization, GoodCategory.RawMaterial, rnd) ?? FactoryBlueprints.AllBlueprints.First();
+                var factory = new Factory($"{blueprint.FactoryTypeName} #{corpCounter}", productionCapacity: Math.Clamp(city.Population / 200_000, 1, 10));
+                foreach (var input in blueprint.InputGoods)
+                    factory.InputGoods.Add(new Good(input.Name, input.BasePrice, input.Category, input.Quantity));
+                factory.OutputGoods.Add(new Good(blueprint.OutputGood.Name, blueprint.OutputGood.BasePrice, blueprint.OutputGood.Category, blueprint.OutputGood.Quantity));
+                foreach (var kvp in blueprint.DefaultJobSlotDistribution)
+                {
+                    factory.JobSlots[kvp.Key] = Math.Max(1, (int)Math.Round(kvp.Value * factory.ProductionCapacity * 10));
+                }
+                factory.OwnerCorporation = corp;
+                corp.AddFactory(factory);
+                city.Factories.Add(factory);
+                _allCorporations.Add(corp);
+                corpCounter++;
+            }
+        }
+        private void InitializeEconomyData()
+        {
+            if (_economyInitialized) return;
+
+            Debug.WriteLine("[Economy Init] Initializing economy system...");
+
+            // Initialize Market and goods definitions
+            if (!Market.GoodDefinitions.Any())
+            {
+                FactoryBlueprints.InitializeBlueprints();
+                Debug.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods and {FactoryBlueprints.AllBlueprints.Count} factory blueprints");
+            }
+
+            // Create the main country (player's country)
+            _currentCountry = new Country("United States");
+            _currentCountry.Budget = 5000000; // $5M starting budget
+            _currentCountry.NationalExpenses = 100000; // $100k expenses per turn
+            _currentCountry.Population = 10000000;
+
+            // Set up initial tax policies
+            var incomeTax = new TaxPolicy(TaxType.IncomeTax, 0.15m, TaxProgressivity.Progressive);
+            incomeTax.ProgressiveBrackets[20000m] = 0.10m;  // First $20k taxed at 10%
+            incomeTax.ProgressiveBrackets[50000m] = 0.15m;  // $20k-50k taxed at 15%
+            incomeTax.ProgressiveBrackets[100000m] = 0.25m; // $50k-100k taxed at 25%
+            _currentCountry.FinancialSystem.AddTaxPolicy(incomeTax);
+
+            _currentCountry.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.CorporateTax, 0.21m));
+            _currentCountry.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.ConsumptionTax, 0.08m));
+
+            // Add some states with cities
+            var california = new State("California");
+            california.Budget = 100000;
+            california.TaxRate = 0.05;
+            california.StateExpenses = 10000;
+
+            var losAngeles = new City("Los Angeles");
+            losAngeles.Budget = 50000;
+            losAngeles.Population = 4000000;
+            losAngeles.TaxRate = 0.02;
+            losAngeles.CityExpenses = 5000;
+
+            // Add some population classes with needs
+            var laborers = new PopClass("Laborers", 1000000, 15.0);
+            laborers.Needs["Bread"] = 2.0;   // 2 units per 1000 people
+            laborers.Needs["Cloth"] = 1.0;   // 1 unit per 1000 people
+
+            var craftsmen = new PopClass("Craftsmen", 500000, 25.0);
+            craftsmen.Needs["Bread"] = 2.0;
+            craftsmen.Needs["Cloth"] = 1.5;
+            craftsmen.Needs["Furniture"] = 0.5;
+
+            var engineers = new PopClass("Engineers", 200000, 50.0);
+            engineers.Needs["Bread"] = 2.0;
+            engineers.Needs["Cloth"] = 2.0;
+            engineers.Needs["Furniture"] = 1.0;
+            engineers.Needs["Books"] = 1.0;
+
+            losAngeles.PopClasses.Add(laborers);
+            losAngeles.PopClasses.Add(craftsmen);
+            losAngeles.PopClasses.Add(engineers);
+
+            california.Cities.Add(losAngeles);
+
+            // Add San Francisco
+            var sanFrancisco = new City("San Francisco");
+            sanFrancisco.Budget = 40000;
+            sanFrancisco.Population = 900000;
+            sanFrancisco.TaxRate = 0.02;
+            sanFrancisco.CityExpenses = 4000;
+
+            var sfLaborers = new PopClass("Laborers", 300000, 18.0);
+            sfLaborers.Needs["Bread"] = 2.0;
+            sfLaborers.Needs["Cloth"] = 1.0;
+
+            var sfCraftsmen = new PopClass("Craftsmen", 200000, 28.0);
+            sfCraftsmen.Needs["Bread"] = 2.0;
+            sfCraftsmen.Needs["Cloth"] = 1.5;
+            sfCraftsmen.Needs["Furniture"] = 0.5;
+
+            sanFrancisco.PopClasses.Add(sfLaborers);
+            sanFrancisco.PopClasses.Add(sfCraftsmen);
+
+            california.Cities.Add(sanFrancisco);
+            _currentCountry.States.Add(california);
+
+            // Add Texas
+            var texas = new State("Texas");
+            texas.Budget = 80000;
+            texas.TaxRate = 0.04;
+            texas.StateExpenses = 8000;
+
+            var houston = new City("Houston");
+            houston.Budget = 45000;
+            houston.Population = 2300000;
+            houston.TaxRate = 0.02;
+            houston.CityExpenses = 4500;
+
+            var houstonLaborers = new PopClass("Laborers", 800000, 16.0);
+            houstonLaborers.Needs["Bread"] = 2.0;
+            houstonLaborers.Needs["Cloth"] = 1.0;
+
+            houston.PopClasses.Add(houstonLaborers);
+            texas.Cities.Add(houston);
+
+            var dallas = new City("Dallas");
+            dallas.Budget = 35000;
+            dallas.Population = 1300000;
+            dallas.TaxRate = 0.02;
+            dallas.CityExpenses = 3500;
+
+            var dallasLaborers = new PopClass("Laborers", 500000, 17.0);
+            dallasLaborers.Needs["Bread"] = 2.0;
+            dallasLaborers.Needs["Cloth"] = 1.0;
+
+            dallas.PopClasses.Add(dallasLaborers);
+            texas.Cities.Add(dallas);
+
+            _currentCountry.States.Add(texas);
+
+            // Create some corporations and factories
+            _allCorporations = new List<Corporation>();
+
+            var steelCorp = new Corporation("US Steel Corporation", CorporationSpecialization.HeavyIndustry);
+            steelCorp.Budget = 500000;
+
+            // Create a steel mill in LA
+            var steelMill = new Factory("US Steel Mill #1", 5);
+            steelMill.InputGoods.Add(new Good("Iron", Market.GoodDefinitions["Iron"].BasePrice, GoodCategory.RawMaterial, 2));
+            steelMill.InputGoods.Add(new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1));
+            steelMill.OutputGoods.Add(new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 1));
+            steelMill.OwnerCorporation = steelCorp;
+            steelMill.JobSlots["Laborers"] = 15;
+            steelMill.JobSlots["Craftsmen"] = 8;
+            steelMill.JobSlots["Engineers"] = 2;
+
+            losAngeles.Factories.Add(steelMill);
+            steelCorp.AddFactory(steelMill);
+            _allCorporations.Add(steelCorp);
+
+            var foodCorp = new Corporation("American Food Co", CorporationSpecialization.Agriculture);
+            foodCorp.Budget = 200000;
+
+            // Create a bakery in Houston
+            var bakery = new Factory("American Bakery #1", 8);
+            bakery.InputGoods.Add(new Good("Grain", Market.GoodDefinitions["Grain"].BasePrice, GoodCategory.RawMaterial, 2));
+            bakery.OutputGoods.Add(new Good("Bread", Market.GoodDefinitions["Bread"].BasePrice, GoodCategory.ProcessedFood, 3));
+            bakery.OwnerCorporation = foodCorp;
+            bakery.JobSlots["Laborers"] = 20;
+            bakery.JobSlots["Craftsmen"] = 4;
+
+            houston.Factories.Add(bakery);
+            foodCorp.AddFactory(bakery);
+            _allCorporations.Add(foodCorp);
+
+            // Add starting stockpile to cities
+            foreach (var state in _currentCountry.States)
+            {
+                foreach (var city in state.Cities)
+                {
+                    // Add basic goods to stockpile
+                    city.Stockpile["Grain"] = new Good("Grain", Market.GoodDefinitions["Grain"].BasePrice, GoodCategory.RawMaterial, 10000);
+                    city.Stockpile["Coal"] = new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 5000);
+                    city.Stockpile["Iron"] = new Good("Iron", Market.GoodDefinitions["Iron"].BasePrice, GoodCategory.RawMaterial, 3000);
+                    city.Stockpile["Bread"] = new Good("Bread", Market.GoodDefinitions["Bread"].BasePrice, GoodCategory.ProcessedFood, 8000);
+                    city.Stockpile["Cloth"] = new Good("Cloth", Market.GoodDefinitions["Cloth"].BasePrice, GoodCategory.ConsumerProduct, 4000);
+                }
+            }
+
+            Market.AllCorporations.Clear();
+            Market.AllCorporations.AddRange(_allCorporations);
+
+            _allCountries = new List<Country> { _currentCountry };
+
+            // Set up player as Prime Minister BEFORE the HUD tries to access it
+            _playerRoleManager = new PlayerRoleManager();
+            _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
+
+            // Set _playerCountry to the current country
+            _playerCountry = _currentCountry;
+
+            _economyInitialized = true;
+            Debug.WriteLine($"[Economy Init] Economy initialized with {_currentCountry.States.Count} states, {_currentCountry.States.Sum(s => s.Cities.Count)} cities, and {_allCorporations.Count} corporations");
+        }
+        private void OnEconomyUpdateTick(object? sender, EventArgs e)
+        {
+            if (!_economyInitialized || _currentCountry == null) return;
+
+            try
+            {
+                Debug.WriteLine("[Economy Update] Running economy simulation tick...");
+
+                // Run the economy update cycle
+                foreach (var city in _currentCountry.States.SelectMany(s => s.Cities))
+                {
+                    Economy.UpdateCityEconomy(city);
+                }
+
+                foreach (var state in _currentCountry.States)
+                {
+                    Economy.UpdateStateEconomy(state);
+                }
+
+                Economy.UpdateCountryEconomy(_currentCountry);
+
+                // Update population growth
+                Economy.UpdateCountryPopulation(_currentCountry);
+
+                // Run AI for corporations
+                var random = new Random();
+                foreach (var corp in _allCorporations)
+                {
+                    var allCities = _currentCountry.States.SelectMany(s => s.Cities).ToList();
+                    corp.UpdateAI(allCities, Market.GoodDefinitions.Values.ToList(), random);
+                }
+
+                // Simulate monetary effects
+                _currentCountry.FinancialSystem.SimulateMonetaryEffects();
+
+                // Update displays
+                UpdateEconomyDisplay();
+                UpdateHUDDisplay(null, null);
+
+                Debug.WriteLine($"[Economy Update] Country budget: ${_currentCountry.Budget:N0}, GDP estimate: ${CalculateGDP():N0}");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Economy Update Error] {ex.Message}");
+                Debug.WriteLine($"[Economy Update Error] Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        private decimal CalculateGDP()
+        {
+            if (_currentCountry == null) return 0;
+
+            decimal totalGDP = 0;
+
+            // Sum all economic activity: population income + corporate profits
+            foreach (var state in _currentCountry.States)
+            {
+                foreach (var city in state.Cities)
+                {
+                    foreach (var pop in city.PopClasses)
+                    {
+                        totalGDP += (decimal)(pop.Size * pop.IncomePerPerson);
+                    }
+                }
+            }
+
+            // Add corporate output value
+            foreach (var corp in _allCorporations)
+            {
+                totalGDP += (decimal)(corp.Budget * 0.1); // Approximate 10% of corp budget as profit contribution
+            }
+
+            return totalGDP;
+        }
+
+        private void UpdateEconomyDisplay()
+        {
+            if (!_economyInitialized || _currentCountry == null) return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    // Update GDP display
+                    decimal gdp = CalculateGDP();
+                    if (this.FindControl<TextBlock>("GDPText") is TextBlock gdpText)
+                    {
+                        gdpText.Text = $"${gdp / 1000000000m:F2}T";
+                    }
+                    if (this.FindControl<TextBlock>("SideGDPText") is TextBlock sideGdpText)
+                    {
+                        sideGdpText.Text = $"${gdp / 1000000000m:F2}T";
+                    }
+
+                    // Calculate unemployment rate
+                    int totalPop = _currentCountry.States.SelectMany(s => s.Cities).SelectMany(c => c.PopClasses).Sum(p => p.Size);
+                    int employed = _currentCountry.States.SelectMany(s => s.Cities).SelectMany(c => c.PopClasses).Sum(p => p.Employed);
+                    double unemploymentRate = totalPop > 0 ? ((totalPop - employed) / (double)totalPop) * 100 : 0;
+
+                    if (this.FindControl<TextBlock>("UnemploymentText") is TextBlock unempText)
+                    {
+                        unempText.Text = $"{unemploymentRate:F1}%";
+                    }
+                    if (this.FindControl<TextBlock>("SideUnemploymentText") is TextBlock sideUnempText)
+                    {
+                        sideUnempText.Text = $"{unemploymentRate:F1}%";
+                    }
+
+                    // Update inflation (from financial system)
+                    decimal inflationRate = _currentCountry.FinancialSystem.InflationRate * 100;
+                    if (this.FindControl<TextBlock>("InflationText") is TextBlock inflText)
+                    {
+                        inflText.Text = $"{inflationRate:F1}%";
+                    }
+                    if (this.FindControl<TextBlock>("SideInflationText") is TextBlock sideInflText)
+                    {
+                        sideInflText.Text = $"{inflationRate:F1}%";
+                    }
+
+                    // Update industries list with real data
+                    if (this.FindControl<ListBox>("IndustriesList") is ListBox industriesList)
+                    {
+                        industriesList.Items.Clear();
+
+                        var factoriesByType = _currentCountry.States
+                            .SelectMany(s => s.Cities)
+                            .SelectMany(c => c.Factories)
+                            .GroupBy(f => f.OutputGoods.FirstOrDefault()?.Name ?? "Unknown")
+                            .OrderByDescending(g => g.Count())
+                            .Take(6);
+
+                        foreach (var group in factoriesByType)
+                        {
+                            int count = group.Count();
+                            double totalOutput = group.Sum(f => f.ProductionCapacity * f.OutputGoods.Sum(o => o.Quantity));
+                            string goodName = group.Key;
+                            industriesList.Items.Add($"🏭 {goodName} - {count} factories (Output: {totalOutput:N0} units)");
+                        }
+                    }
+
+                    if (this.FindControl<ListBox>("SideIndustriesList") is ListBox sideIndList)
+                    {
+                        sideIndList.Items.Clear();
+
+                        var factoriesByType = _currentCountry.States
+                            .SelectMany(s => s.Cities)
+                            .SelectMany(c => c.Factories)
+                            .GroupBy(f => f.OutputGoods.FirstOrDefault()?.Name ?? "Unknown")
+                            .OrderByDescending(g => g.Count())
+                            .Take(3);
+
+                        foreach (var group in factoriesByType)
+                        {
+                            int count = group.Count();
+                            sideIndList.Items.Add($"🏭 {group.Key} - {count} factories");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[Economy Display Error] {ex.Message}");
+                }
+            });
         }
 
         private void SetupHUDEventHandlers()
@@ -1040,22 +1576,8 @@ namespace Economy_sim
             if (this.FindControl<Button>("DebugButton") is Button debugBtn)
                 debugBtn.Click += OnDebugClicked;
 
-            if (this.FindControl<CheckBox>("MergeSmallCityStatesCheckBox") is CheckBox mergeSmallCheck)
-            {
-                mergeSmallCheck.IsChecked = _mapManager.MergeSmallStatesWithCities;
-                mergeSmallCheck.Checked += OnMergeSmallCityStatesToggled;
-                mergeSmallCheck.Unchecked += OnMergeSmallCityStatesToggled;
-            }
-
-            if (this.FindControl<CheckBox>("UseSavedStateMapCheckBox") is CheckBox useSavedCheck)
-            {
-                useSavedCheck.IsChecked = _mapManager.UsePersistedStateMap;
-                useSavedCheck.Checked += OnUseSavedStateMapToggled;
-                useSavedCheck.Unchecked += OnUseSavedStateMapToggled;
-            }
-
-            if (this.FindControl<Button>("SaveStateMapButton") is Button saveStateMapBtn)
-                saveStateMapBtn.Click += OnSaveStateMapClicked;
+            if (this.FindControl<Button>("MenuButton") is Button menuBtn)
+                menuBtn.Click += OnMenuClicked;
 
             // Map view toggle buttons
             if (this.FindControl<Button>("TerrainViewButton") is Button terrainBtn)
@@ -1069,9 +1591,6 @@ namespace Economy_sim
 
             if (this.FindControl<Button>("StatesViewButton") is Button statesBtn)
                 statesBtn.Click += OnStatesViewClicked;
-
-            if (this.FindControl<Button>("MenuButton") is Button menuBtn)
-                menuBtn.Click += OnMenuClicked;
 
             // Setup close button handlers for popup menus
             if (this.FindControl<Button>("DiplomacyCloseButton") is Button diplomacyCloseBtn)
@@ -1464,16 +1983,16 @@ namespace Economy_sim
         private void HideRightSideMenu()
         {
             Debug.WriteLine("HideRightSideMenu called");
-            
+
             // Ensure we're on the UI thread
             if (!Dispatcher.UIThread.CheckAccess())
             {
                 Dispatcher.UIThread.Post(HideRightSideMenu);
                 return;
             }
-            
+
             HideAllSidePanels();
-            
+
             // Find and hide the RightSideMenu
             if (this.FindControl<Border>("RightSideMenu") is Border panel)
             {
@@ -1486,7 +2005,7 @@ namespace Economy_sim
             }
 
             // Collapse the side menu column by setting its width to 0
-            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid && 
+            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid &&
                 rootGrid.ColumnDefinitions.Count > 1)
             {
                 Debug.WriteLine("Collapsing side menu column");
@@ -1497,11 +2016,11 @@ namespace Economy_sim
             Dispatcher.UIThread.Post(() =>
             {
                 Debug.WriteLine("HideRightSideMenu: Forcing layout update and buffer recreation");
-                
+
                 // Force layout updates
                 this.InvalidateArrange();
                 this.InvalidateMeasure();
-                
+
                 // Small delay before recreating buffers to ensure layout is complete
                 Dispatcher.UIThread.Post(() =>
                 {
@@ -1509,31 +2028,31 @@ namespace Economy_sim
                     RecreateBuffersToCurrentSize();
                     QueueRender(immediate: true);
                 }, DispatcherPriority.Background);
-                
+
             }, DispatcherPriority.Normal);
         }
 
         private void ShowRightSidePanel(string title, string panelName)
         {
             Debug.WriteLine($"ShowRightSidePanel called: {title}, {panelName}");
-            
+
             // Ensure we're on the UI thread
             if (!Dispatcher.UIThread.CheckAccess())
             {
                 Dispatcher.UIThread.Post(() => ShowRightSidePanel(title, panelName));
                 return;
             }
-            
+
             HideAllPopups();
-            
+
             // Expand the side menu column to show the panel
-            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid && 
+            if (this.FindControl<Grid>("RootGrid") is Grid rootGrid &&
                 rootGrid.ColumnDefinitions.Count > 1)
             {
                 Debug.WriteLine("Expanding side menu column to 420 pixels");
                 rootGrid.ColumnDefinitions[1].Width = new GridLength(420);
             }
-            
+
             // Show the RightSideMenu
             if (this.FindControl<Border>("RightSideMenu") is Border panel)
             {
@@ -1544,7 +2063,7 @@ namespace Economy_sim
             {
                 Debug.WriteLine("RightSideMenu Border not found!");
             }
-            
+
             // Set title
             if (this.FindControl<TextBlock>("SideMenuTitleText") is TextBlock titleText)
                 titleText.Text = title;
@@ -1564,11 +2083,11 @@ namespace Economy_sim
             Dispatcher.UIThread.Post(() =>
             {
                 Debug.WriteLine("ShowRightSidePanel: Forcing layout update and buffer recreation");
-                
+
                 // Force layout updates
                 this.InvalidateArrange();
                 this.InvalidateMeasure();
-                
+
                 // Small delay before recreating buffers to ensure layout is complete
                 Dispatcher.UIThread.Post(() =>
                 {
@@ -1576,7 +2095,7 @@ namespace Economy_sim
                     RecreateBuffersToCurrentSize();
                     QueueRender(immediate: true);
                 }, DispatcherPriority.Background);
-                
+
             }, DispatcherPriority.Normal);
         }
 
@@ -1586,24 +2105,18 @@ namespace Economy_sim
 
         private void OnDiplomacyClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Diplomacy button clicked - showing diplomacy menu");
-            ShowPopup("DiplomacyMenuOverlay");
             Debug.WriteLine("Diplomacy button clicked - showing right side diplomacy panel");
             ShowRightSidePanel("Diplomatic Relations", "SideDiplomacyPanel");
         }
 
         private void OnTradeClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Trade button clicked - showing trade menu");
-            ShowPopup("TradeMenuOverlay");
             Debug.WriteLine("Trade button clicked - showing right side trade panel");
             ShowRightSidePanel("Trade Management", "SideTradePanel");
         }
 
         private void OnConstructionClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Construction button clicked - showing construction menu");
-            ShowPopup("ConstructionMenuOverlay");
             Debug.WriteLine("Construction button clicked - showing right side construction panel");
             ShowRightSidePanel("Construction Projects", "SideConstructionPanel");
         }
@@ -1636,394 +2149,395 @@ namespace Economy_sim
 
         private void OnEconomyViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Economy view button clicked - showing economy menu");
-            ShowPopup("EconomyMenuOverlay");
-            Debug.WriteLine("Economy view button clicked - showing right side economy panel");
-            ShowRightSidePanel("Economic Overview", "SideEconomyPanel");
+            Debug.WriteLine("Economy view button clicked - showing economy overlay");
+            ShowEconomyOverlay();
         }
 
         private void OnStatsClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
-            Debug.WriteLine("Stats button clicked - showing statistics menu");
-            ShowPopup("StatsMenuOverlay");
             Debug.WriteLine("Stats button clicked - showing right side statistics panel");
             ShowRightSidePanel("Game Statistics", "SideStatsPanel");
         }
 
-        private void OnDebugClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        // ===== ECONOMY OVERLAY (CLEAN IMPLEMENTATION) =====
+        private List<(string name, double amount)> _fullRevenueData = new();
+        private List<(string name, double amount)> _fullExpenseData = new();
+        private Corporation? _selectedCorporation;
+
+        private void ShowEconomyOverlay()
+        {
+            if (this.FindControl<Border>("EconomyMenuOverlay") is Border overlay)
+            {
+                overlay.IsVisible = true;
+                SwitchEconomyTab("PrivateSector");
+            }
+            // Attach tab handlers (idempotent – we remove before adding)
+            if (this.FindControl<Button>("PrivateSectorTabButton") is Button privBtn)
+            {
+                privBtn.Click -= PrivateSectorTabButton_Click;
+                privBtn.Click += PrivateSectorTabButton_Click;
+            }
+            if (this.FindControl<Button>("BudgetTabButton") is Button budBtn)
+            {
+                budBtn.Click -= BudgetTabButton_Click;
+                budBtn.Click += BudgetTabButton_Click;
+            }
+            if (this.FindControl<Button>("PopulationTabButton") is Button popBtn)
+            {
+                popBtn.Click -= PopulationTabButton_Click;
+                popBtn.Click += PopulationTabButton_Click;
+            }
+            if (this.FindControl<Button>("EconomyCloseButton") is Button closeBtn)
+            {
+                closeBtn.Click -= EconomyCloseButton_Click;
+                closeBtn.Click += EconomyCloseButton_Click;
+            }
+        }
+
+        private void EconomyCloseButton_Click(object? sender, RoutedEventArgs e) => HideEconomyOverlay();
+        private void PrivateSectorTabButton_Click(object? sender, RoutedEventArgs e) => SwitchEconomyTab("PrivateSector");
+        private void BudgetTabButton_Click(object? sender, RoutedEventArgs e) => SwitchEconomyTab("Budget");
+        private void PopulationTabButton_Click(object? sender, RoutedEventArgs e) => SwitchEconomyTab("Population");
+
+        private void HideEconomyOverlay()
+        {
+            if (this.FindControl<Border>("EconomyMenuOverlay") is Border overlay)
+                overlay.IsVisible = false;
+        }
+
+        private void SwitchEconomyTab(string tab)
+        {
+            var privatePanel = this.FindControl<Grid>("PrivateSectorPanel");
+            var budgetPanel = this.FindControl<Grid>("BudgetPanel");
+            var populationPanel = this.FindControl<Grid>("PopulationPanel");
+            var privateBtn = this.FindControl<Button>("PrivateSectorTabButton");
+            var budgetBtn = this.FindControl<Button>("BudgetTabButton");
+            var popBtn = this.FindControl<Button>("PopulationTabButton");
+
+            void HideAll()
+            {
+                if (privatePanel != null) privatePanel.IsVisible = false;
+                if (budgetPanel != null) budgetPanel.IsVisible = false;
+                if (populationPanel != null) populationPanel.IsVisible = false;
+                if (privateBtn != null) privateBtn.Background = new SolidColorBrush(Color.Parse("#555555"));
+                if (budgetBtn != null) budgetBtn.Background = new SolidColorBrush(Color.Parse("#555555"));
+                if (popBtn != null) popBtn.Background = new SolidColorBrush(Color.Parse("#555555"));
+            }
+            HideAll();
+
+            switch (tab)
+            {
+                case "PrivateSector":
+                    if (privatePanel != null) privatePanel.IsVisible = true;
+                    if (privateBtn != null) privateBtn.Background = new SolidColorBrush(Color.Parse("#1A4A1A"));
+                    UpdatePrivateSectorTab();
+                    break;
+                case "Budget":
+                    if (budgetPanel != null) budgetPanel.IsVisible = true;
+                    if (budgetBtn != null) budgetBtn.Background = new SolidColorBrush(Color.Parse("#1A4A1A"));
+                    UpdateBudgetTab();
+                    break;
+                case "Population":
+                    if (populationPanel != null) populationPanel.IsVisible = true;
+                    if (popBtn != null) popBtn.Background = new SolidColorBrush(Color.Parse("#1A4A1A"));
+                    UpdatePopulationTab();
+                    break;
+            }
+        }
+
+        private void UpdatePrivateSectorTab()
+        {
+            if (!_economyInitialized) return;
+            var corpList = this.FindControl<ListBox>("CorporationsList");
+            var industriesList = this.FindControl<ListBox>("IndustriesList");
+            var stockIdx = this.FindControl<TextBlock>("StockMarketIndexText");
+            if (stockIdx != null)
+            {
+                var r = new Random();
+                stockIdx.Text = $"{15000 + r.Next(-400, 400):N0} pts";
+            }
+            if (corpList != null)
+            {
+                corpList.Items.Clear();
+                foreach (var corp in _allCorporations.OrderByDescending(c => c.Budget))
+                {
+                    var factories = corp.OwnedFactories;
+                    double revenue = factories.Sum(f => f.ProductionCapacity * 1000.0);
+                    double costs = factories.Sum(f => f.ProductionCapacity * 500.0);
+                    double profit = revenue - costs;
+                    double stockPrice = 50 + profit / 100000.0;
+                    corpList.Items.Add($"🏢 {corp.Name}\n   Revenue: ${FormatCurrency(revenue)} | Profit: ${FormatCurrency(profit)}\n   Stock: ${stockPrice:F2} | Factories: {factories.Count}");
+                }
+            }
+            if (industriesList != null && _currentCountry != null)
+            {
+                industriesList.Items.Clear();
+                var groups = _currentCountry.States.SelectMany(s => s.Cities).SelectMany(c => c.Factories)
+                    .GroupBy(f => f.OutputGoods.FirstOrDefault()?.Name ?? "Unknown")
+                    .OrderByDescending(g => g.Count()).Take(6);
+                foreach (var g in groups)
+                {
+                    int count = g.Count();
+                    double output = g.Sum(f => f.ProductionCapacity * f.OutputGoods.Sum(o => o.Quantity));
+                    industriesList.Items.Add($"🏭 {g.Key} - {count} factories (Output: {output:N0})");
+                }
+            }
+            if (corpList != null)
+            {
+                corpList.SelectionChanged -= CorporationsList_SelectionChanged;
+                corpList.SelectionChanged += CorporationsList_SelectionChanged;
+            }
+        }
+
+        private void UpdateBudgetTab()
+        {
+            if (_playerCountry == null) return;
+            double totalRevenue = 0; double totalExpenses = 0;
+            var revenueList = new List<(string name, double amount)>();
+            var expenseList = new List<(string name, double amount)>();
+            foreach (var state in _playerCountry.States)
+            {
+                foreach (var city in state.Cities)
+                {
+                    var incomeTax = city.PopClasses.Sum(p => p.Size * p.IncomePerPerson * 0.15);
+                    revenueList.Add(($"Income Tax - {city.Name}", incomeTax));
+                    totalRevenue += incomeTax;
+                    var corpTax = city.Factories.Sum(f => f.ProductionCapacity * 100 * 0.21);
+                    revenueList.Add(($"Corporate Tax - {city.Name}", corpTax));
+                    totalRevenue += corpTax;
+                }
+                var admin = state.Cities.Count * 50000.0;
+                expenseList.Add(($"Administration - {state.Name}", admin)); totalExpenses += admin;
+                var infra = state.Cities.Count * 100000.0;
+                expenseList.Add(($"Infrastructure - {state.Name}", infra)); totalExpenses += infra;
+            }
+            var military = (double)_playerCountry.Population * 0.05; expenseList.Add(("Military", military)); totalExpenses += military;
+
+            if (this.FindControl<TextBlock>("TotalRevenueText") is TextBlock tr) tr.Text = $"${FormatCurrency(totalRevenue)}";
+            if (this.FindControl<TextBlock>("TotalExpensesText") is TextBlock te) te.Text = $"${FormatCurrency(totalExpenses)}";
+            double balance = totalRevenue - totalExpenses;
+            if (this.FindControl<TextBlock>("BudgetBalanceText") is TextBlock bb)
+            {
+                bb.Text = $"{(balance >= 0 ? "+" : "-")}${FormatCurrency(Math.Abs(balance))}";
+                bb.Foreground = new SolidColorBrush(Color.Parse(balance >= 0 ? "#90EE90" : "#F08080"));
+            }
+            if (this.FindControl<ListBox>("RevenueSourcesList") is ListBox revList)
+            {
+                revList.Items.Clear();
+                foreach (var r in revenueList.OrderByDescending(r => r.amount).Take(5))
+                    revList.Items.Add($"{r.name}: ${FormatCurrency(r.amount)}");
+            }
+            if (this.FindControl<ListBox>("ExpenseCategoriesList") is ListBox expList)
+            {
+                expList.Items.Clear();
+                foreach (var ex in expenseList.OrderByDescending(r => r.amount).Take(5))
+                    expList.Items.Add($"{ex.name}: ${FormatCurrency(ex.amount)}");
+            }
+            _fullRevenueData = revenueList; _fullExpenseData = expenseList;
+        }
+
+        private void UpdatePopulationTab()
+        {
+            if (_playerCountry == null) return;
+            var allCities = _playerCountry.States.SelectMany(s => s.Cities).ToList();
+            int totalPop = allCities.Sum(c => c.Population);
+            double avgQoL = allCities.Average(c => c.PopClasses.Any() ? c.PopClasses.Average(p => p.QualityOfLife) : 50);
+            double avgHappiness = allCities.Average(c => c.PopClasses.Any() ? c.PopClasses.Average(p => p.Happiness) : 50);
+            double popGrowth = 0.7; // placeholder
+            if (this.FindControl<TextBlock>("AvgQoLText") is TextBlock q) q.Text = $"{avgQoL:F0}%";
+            if (this.FindControl<TextBlock>("AvgHappinessText") is TextBlock h) h.Text = $"{avgHappiness:F0}%";
+            if (this.FindControl<TextBlock>("PopGrowthRateText") is TextBlock g) g.Text = $"+{popGrowth:F1}%";
+            if (this.FindControl<ListBox>("PopulationClassesList") is ListBox pcl)
+            {
+                pcl.Items.Clear();
+                var groups = allCities.SelectMany(c => c.PopClasses).GroupBy(p => p.Name).OrderByDescending(gp => gp.Sum(p => p.Size));
+                foreach (var gp in groups)
+                {
+                    int size = gp.Sum(p => p.Size);
+                    double pct = totalPop > 0 ? (size / (double)totalPop) * 100 : 0;
+                    double income = gp.Average(p => p.IncomePerPerson);
+                    double happiness = gp.Average(p => p.Happiness);
+                    pcl.Items.Add($"{gp.Key} ({pct:F1}%)\n   Pop: {FormatCurrency(size)} | Avg Income: ${income:F0} | Happiness: {happiness:F0}%");
+                }
+            }
+        }
+
+        private void CorporationsList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (this.FindControl<ListBox>("CorporationsList") is not ListBox list) return;
+            var ordered = _allCorporations.OrderByDescending(c => c.Budget).ToList();
+            if (list.SelectedIndex < 0 || list.SelectedIndex >= ordered.Count) return;
+            _selectedCorporation = ordered[list.SelectedIndex];
+            ShowCompanyDetails(_selectedCorporation);
+        }
+
+        private void ShowCompanyDetails(Corporation? corp)
+        {
+            if (corp == null) return;
+            if (this.FindControl<Border>("CompanyDetailsOverlay") is not Border overlay) return;
+            (this.FindControl<TextBlock>("CompanyNameText"))?.Let(t => t.Text = corp.Name);
+            (this.FindControl<TextBlock>("CompanyTypeText"))?.Let(t => t.Text = $" ({corp.Specialization})");
+            double revenue = corp.OwnedFactories.Sum(f => f.ProductionCapacity * 1000.0);
+            double costs = corp.OwnedFactories.Sum(f => f.ProductionCapacity * 500.0);
+            double profit = revenue - costs;
+            (this.FindControl<TextBlock>("CompanyRevenueText"))?.Let(t => t.Text = $"${FormatCurrency(revenue)}");
+            (this.FindControl<TextBlock>("CompanyProfitText"))?.Let(t => t.Text = $"${FormatCurrency(profit)}");
+            (this.FindControl<TextBlock>("CompanyBudgetText"))?.Let(t => t.Text = $"${FormatCurrency(corp.Budget)}");
+            (this.FindControl<TextBlock>("CompanyStockPriceText"))?.Let(t => t.Text = $"${(50 + profit / 100000.0):F2}");
+            if (this.FindControl<ListBox>("CompanyBuildingsList") is ListBox buildings)
+            {
+                buildings.Items.Clear();
+                foreach (var f in corp.OwnedFactories)
+                {
+                    double fProfit = f.ProductionCapacity * 500.0;
+                    buildings.Items.Add($"🏭 {f.Name}\n   Capacity: {f.ProductionCapacity}\n   Profit: ${FormatCurrency(fProfit)} | Workers: {f.WorkersEmployed}");
+                }
+                buildings.SelectionChanged -= CompanyBuildingsList_SelectionChanged;
+                buildings.SelectionChanged += CompanyBuildingsList_SelectionChanged;
+            }
+            overlay.IsVisible = true;
+            if (this.FindControl<Button>("CompanyDetailsCloseButton") is Button closeBtn)
+            {
+                closeBtn.Click -= (_, __) => HideCompanyDetails();
+                closeBtn.Click += (s, e) => HideCompanyDetails();
+            }
+        }
+
+        private void HideCompanyDetails()
+        {
+            if (this.FindControl<Border>("CompanyDetailsOverlay") is Border b) b.IsVisible = false;
+        }
+
+        private void CompanyBuildingsList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (_selectedCorporation == null) return;
+            var list = this.FindControl<ListBox>("CompanyBuildingsList");
+            var details = this.FindControl<StackPanel>("BuildingDetailsPanel");
+            if (list == null || details == null) return;
+            if (list.SelectedIndex < 0 || list.SelectedIndex >= _selectedCorporation.OwnedFactories.Count) return;
+            var factory = _selectedCorporation.OwnedFactories[list.SelectedIndex];
+            details.Children.Clear();
+            details.Children.Add(new TextBlock { Text = factory.Name, FontSize = 18, FontWeight = FontWeight.Bold, Foreground = new SolidColorBrush(Color.Parse("#FFD700")) });
+            double revenue = factory.ProductionCapacity * 1000.0;
+            double costs = factory.ProductionCapacity * 500.0;
+            double profit = revenue - costs;
+            details.Children.Add(new TextBlock { Text = $"Revenue: ${FormatCurrency(revenue)}" });
+            details.Children.Add(new TextBlock { Text = $"Costs: ${FormatCurrency(costs)}" });
+            details.Children.Add(new TextBlock { Text = $"Profit: ${FormatCurrency(profit)}", Foreground = new SolidColorBrush(Color.Parse(profit >= 0 ? "#90EE90" : "#F08080")) });
+        }
+
+        private string FormatCurrency(double amount)
+        {
+            if (amount >= 1_000_000_000) return $"{amount / 1_000_000_000d:F1}B";
+            if (amount >= 1_000_000) return $"{amount / 1_000_000d:F1}M";
+            if (amount >= 1_000) return $"{amount / 1_000d:F1}K";
+            return amount.ToString("F0");
+        }
+        // ================================================
+
+        // ===== Added missing handler implementations (map & menu) =====
+        private void OnDebugClicked(object? sender, RoutedEventArgs e)
         {
             Debug.WriteLine("Debug button clicked - showing debug menu");
             ShowPopup("DebugMenuOverlay");
         }
-
-        private void OnMenuClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void OnMenuClicked(object? sender, RoutedEventArgs e)
         {
             Debug.WriteLine("Menu button clicked - returning to main menu");
-
-            // Stop the continuous render timer before closing
             _continuousRenderTimer?.Stop();
-
-            // Create and show the main menu window
-            var mainWindow = new MainWindow();
-            mainWindow.Show();
-
-            // Close the current game window
-            this.Close();
+            var main = new MainWindow();
+            main.Show();
+            Close();
         }
-
-        private void OnTerrainViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void OnTerrainViewClicked(object? sender, RoutedEventArgs e)
         {
             Debug.WriteLine("Terrain view button clicked");
             _mapManager.SetViewType(MapViewType.Terrain);
             QueueRender(immediate: true);
         }
-
-        private void OnPoliticalViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void OnPoliticalViewClicked(object? sender, RoutedEventArgs e)
         {
-            Debug.WriteLine("Political view button clicked - switching to political view");
+            Debug.WriteLine("Political view button clicked");
             _mapManager.SetViewType(MapViewType.Political);
-            
-            // Show instruction for country detection when switching to political view
             ShowCountryDetectionInstructions();
-            
-            // Force immediate render with debugging
-            Debug.WriteLine("Forcing immediate render after switching to political view");
             QueueRender(immediate: true);
         }
-
-        private void OnPopulationDensityViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void OnPopulationDensityViewClicked(object? sender, RoutedEventArgs e)
         {
-            Debug.WriteLine("Population density view button clicked - switching to population density view");
+            Debug.WriteLine("Population density view button clicked");
             _mapManager.SetViewType(MapViewType.PopulationDensity);
             QueueRender(immediate: true);
         }
-
-        private void OnStatesViewClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void OnStatesViewClicked(object? sender, RoutedEventArgs e)
         {
-            Debug.WriteLine("States view button clicked - switching to states view");
+            Debug.WriteLine("States view button clicked");
             _mapManager.SetViewType(MapViewType.States);
             QueueRender(immediate: true);
         }
-
-        private async void OnCullEmptyStatesClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private async void OnCullEmptyStatesClicked(object? sender, RoutedEventArgs e)
         {
-            if (_isCullingStates)
-            {
-                Debug.WriteLine("[DEBUG MENU] State culling already in progress");
-                return;
-            }
-
-            Debug.WriteLine("[DEBUG MENU] Cull empty states requested");
-
+            if (_isCullingStates) { Debug.WriteLine("[DEBUG MENU] Cull already running"); return; }
+            if (_mapManager == null) return;
             var cullButton = this.FindControl<Button>("CullEmptyStatesButton");
             var progressPanel = this.FindControl<StackPanel>("CullProgressPanel");
             var progressBar = this.FindControl<ProgressBar>("CullProgressBar");
             var progressLabel = this.FindControl<TextBlock>("CullProgressLabel");
-
             try
             {
-                if (_mapManager == null)
-                {
-                    Debug.WriteLine("[DEBUG MENU] Map manager unavailable; cannot cull states");
-                    return;
-                }
-
                 _isCullingStates = true;
-                _cullStatesCts = new CancellationTokenSource();
-
-                ShowCullProgressUI(cullButton, progressPanel, progressBar, progressLabel, 0.0);
-
-                var progress = new Progress<double>(value =>
+                cullButton?.Let(b => b.IsEnabled = false);
+                progressPanel?.Let(p => p.IsVisible = true);
+                progressLabel?.Let(l => l.Text = "Culling states… 0%");
+                var progress = new Progress<double>(v => Dispatcher.UIThread.Post(() =>
                 {
-                    Dispatcher.UIThread.Post(
-                        () => UpdateCullProgressUI(progressBar, progressLabel, value),
-                        DispatcherPriority.Background);
-                });
-
-                int culled = await _mapManager.CullStatesWithoutCitiesAsync(progress, _cullStatesCts.Token);
-                Debug.WriteLine($"[DEBUG MENU] Culled {culled} state(s) without cities");
-
-                if (culled > 0)
-                {
-                    UpdateCullProgressUI(progressBar, progressLabel, 1.0);
-                    QueueRender(immediate: true);
-                    HideAllPopups();
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                Debug.WriteLine("[DEBUG MENU] State culling cancelled");
+                    if (progressBar != null) progressBar.Value = v * 100;
+                    if (progressLabel != null) progressLabel.Text = $"Culling states… {v * 100:F0}%";
+                }));
+                int culled = await _mapManager.CullStatesWithoutCitiesAsync(progress);
+                Debug.WriteLine($"[DEBUG MENU] Culled {culled} empty states");
+                QueueRender(immediate: true);
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[DEBUG MENU] Failed to cull empty states: {ex.Message}");
+                Debug.WriteLine($"[DEBUG MENU] Cull error: {ex.Message}");
             }
             finally
             {
                 _isCullingStates = false;
-                _cullStatesCts?.Dispose();
-                _cullStatesCts = null;
-
-                Dispatcher.UIThread.Post(() => ResetCullProgressUI(cullButton, progressPanel, progressBar, progressLabel));
+                if (cullButton != null) cullButton.IsEnabled = true;
+                if (progressPanel != null) progressPanel.IsVisible = false;
             }
         }
-
-        private void OnMergeSmallCityStatesToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void OnMapViewTypeChanged(object? sender, MapViewType type)
         {
-            if (_mapManager == null)
-                return;
-
-            if (sender is CheckBox checkBox)
-            {
-                bool enabled = checkBox.IsChecked ?? false;
-                _mapManager.MergeSmallStatesWithCities = enabled;
-                Debug.WriteLine($"[DEBUG MENU] Merge small city states {(enabled ? "enabled" : "disabled")}");
-            }
-        }
-
-        private async void OnUseSavedStateMapToggled(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (_mapManager == null)
-                return;
-
-            if (sender is CheckBox checkBox)
-            {
-                bool requested = checkBox.IsChecked ?? false;
-                Debug.WriteLine($"[DEBUG MENU] {(requested ? "Enabling" : "Disabling")} persisted state map usage");
-
-                checkBox.IsEnabled = false;
-                bool succeeded = false;
-                try
-                {
-                    await Task.Run(() => _mapManager.UsePersistedStateMap = requested);
-                    succeeded = _mapManager.UsePersistedStateMap == requested;
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[DEBUG MENU] Failed to toggle persisted state map: {ex.Message}");
-                }
-                finally
-                {
-                    checkBox.IsEnabled = true;
-                }
-
-                if (!succeeded)
-                {
-                    checkBox.IsChecked = _mapManager.UsePersistedStateMap;
-                    return;
-                }
-
-                Dispatcher.UIThread.Post(() =>
-                {
-                    QueueRender(immediate: true);
-                });
-            }
-        }
-
-        private async void OnSaveStateMapClicked(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-        {
-            if (_mapManager == null)
-                return;
-
-            if (sender is Button button)
-            {
-                Debug.WriteLine("[DEBUG MENU] Saving current state map to data folder");
-                button.IsEnabled = false;
-                bool saved = false;
-                try
-                {
-                    saved = await Task.Run(() => _mapManager.SaveStateMapToDisk());
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[DEBUG MENU] Failed to save state map: {ex.Message}");
-                }
-                finally
-                {
-                    button.IsEnabled = true;
-                }
-
-                Debug.WriteLine(saved
-                    ? "[DEBUG MENU] State map saved to data folder"
-                    : "[DEBUG MENU] State map save unsuccessful");
-            }
-        }
-
-        private static void ShowCullProgressUI(Button? button, StackPanel? panel, ProgressBar? bar, TextBlock? label, double progressValue)
-        {
-            if (button != null)
-            {
-                button.IsEnabled = false;
-            }
-
-            if (panel != null)
-            {
-                panel.IsVisible = true;
-            }
-
-            UpdateCullProgressUI(bar, label, progressValue);
-        }
-
-        private static void UpdateCullProgressUI(ProgressBar? bar, TextBlock? label, double progressValue)
-        {
-            double clamped = Math.Clamp(progressValue, 0.0, 1.0);
-
-            if (bar != null)
-            {
-                bar.Value = clamped * 100.0;
-            }
-
-            if (label != null)
-            {
-                label.Text = $"Culling states… {Math.Round(clamped * 100)}%";
-            }
-        }
-
-        private static void ResetCullProgressUI(Button? button, StackPanel? panel, ProgressBar? bar, TextBlock? label)
-        {
-            if (button != null)
-            {
-                button.IsEnabled = true;
-            }
-
-            if (panel != null)
-            {
-                panel.IsVisible = false;
-            }
-
-            if (bar != null)
-            {
-                bar.Value = 0;
-            }
-
-            if (label != null)
-            {
-                label.Text = "Culling states…";
-            }
-        }
-
-        private void OnMapViewTypeChanged(object? sender, MapViewType viewType)
-        {
-            Debug.WriteLine($"Map view type changed to: {viewType}");
-            
-            // Do not recenter view when switching map types - maintain current position
-            // CenterView(); // Removed to prevent annoying recentering
-            
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
-            Dispatcher.UIThread.Post(() =>
-            {
-                Debug.WriteLine($"Queuing render for map view type change to: {viewType}");
-                QueueRender(immediate: true);
-            });
+            QueueRender(immediate: true);
         }
-        
-        private void CenterView()
-        {
-            if (_mapManager == null) return;
-            
-            var effectiveSize = GetEffectiveRenderSize();
-            if (effectiveSize.Width < 1 || effectiveSize.Height < 1) return;
-            
-            var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
-            
-            // Center the view on the map
-            _viewOffset.X = Math.Max(0, (mapSize.Width - (int)effectiveSize.Width) / 2);
-            _viewOffset.Y = Math.Max(0, (mapSize.Height - (int)effectiveSize.Height) / 2);
-            
-            Debug.WriteLine($"Centered view at offset: {_viewOffset}, Map size: {mapSize}, View size: {effectiveSize}");
-        }
-
         private void UpdateMapViewButtons()
         {
             if (this.FindControl<Button>("TerrainViewButton") is Button terrainBtn)
-            {
-                terrainBtn.Background = _mapManager.CurrentViewType == MapViewType.Terrain 
-                    ? Avalonia.Media.Brushes.DarkBlue 
-                    : Avalonia.Media.Brushes.DarkSlateGray;
-            }
-
-            if (this.FindControl<Button>("PoliticalViewButton") is Button politicalBtn)
-            {
-                politicalBtn.Background = _mapManager.CurrentViewType == MapViewType.Political 
-                    ? Avalonia.Media.Brushes.DarkRed 
-                    : Avalonia.Media.Brushes.DarkSlateGray;
-            }
-
-            if (this.FindControl<Button>("PlaceHolder1Button") is Button populationBtn)
-            {
-                populationBtn.Background = _mapManager.CurrentViewType == MapViewType.PopulationDensity
-                    ? Avalonia.Media.Brushes.DarkGreen
-                    : Avalonia.Media.Brushes.DarkSlateGray;
-            }
-
+                terrainBtn.Background = _mapManager.CurrentViewType == MapViewType.Terrain ? Brushes.DarkBlue : Brushes.DarkSlateGray;
+            if (this.FindControl<Button>("PoliticalViewButton") is Button polBtn)
+                polBtn.Background = _mapManager.CurrentViewType == MapViewType.Political ? Brushes.DarkRed : Brushes.DarkSlateGray;
+            if (this.FindControl<Button>("PlaceHolder1Button") is Button popBtn)
+                popBtn.Background = _mapManager.CurrentViewType == MapViewType.PopulationDensity ? Brushes.DarkGreen : Brushes.DarkSlateGray;
             if (this.FindControl<Button>("StatesViewButton") is Button statesBtn)
-            {
-                statesBtn.Background = _mapManager.CurrentViewType == MapViewType.States
-                    ? Avalonia.Media.Brushes.DarkOrange
-                    : Avalonia.Media.Brushes.DarkSlateGray;
-            }
+                statesBtn.Background = _mapManager.CurrentViewType == MapViewType.States ? Brushes.DarkOrange : Brushes.DarkSlateGray;
         }
-
-        #endregion
-
-        #region Political Entity Rendering Demonstration
-
-        /// <summary>
-        /// Demonstrates the unified political entity renderer capabilities.
-        /// This method shows how both Country and State objects can be rendered
-        /// with the new PoliticalEntityRenderer class.
-        /// </summary>
-        public void DemonstratePoliticalEntityRendering()
+        private void CenterView()
         {
-            if (_politicalEntityRenderer == null)
-            {
-                Debug.WriteLine("Political entity renderer not initialized");
-                return;
-            }
-
-            try
-            {
-                Debug.WriteLine("=== Political Entity Rendering Demonstration ===");
-
-                // Render the current country
-                var countryBitmap = _politicalEntityRenderer.RenderCountry(_currentCountry, 400, 300, isSelected: true);
-                if (countryBitmap != null)
-                {
-                    Debug.WriteLine($"Successfully rendered country: {_currentCountry.Name} (400x300)");
-                    // In a real application, you would display this bitmap in the UI
-                    countryBitmap.Dispose(); // Clean up for demo
-                }
-
-                // Render individual states
-                foreach (var state in _currentCountry.States)
-                {
-                    var stateBitmap = _politicalEntityRenderer.RenderState(state, 200, 150, isSelected: false);
-                    if (stateBitmap != null)
-                    {
-                        Debug.WriteLine($"Successfully rendered state: {state.Name} (200x150)");
-                        stateBitmap.Dispose(); // Clean up for demo
-                    }
-                }
-
-                // Render unified view of all political entities
-                var countries = new List<Country> { _currentCountry };
-                var unifiedBitmap = _politicalEntityRenderer.RenderPoliticalEntities(
-                    countries, 800, 600, selectedCountry: _currentCountry, selectedState: null);
-                
-                if (unifiedBitmap != null)
-                {
-                    Debug.WriteLine("Successfully rendered unified political entities view (800x600)");
-                    unifiedBitmap.Dispose(); // Clean up for demo
-                }
-
-                Debug.WriteLine("=== Political Entity Rendering Demonstration Complete ===");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error during political entity rendering demonstration: {ex.Message}");
-            }
+            var size = GetEffectiveRenderSize();
+            var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
+            _viewOffset = new SKPointI(Math.Max(0, (mapSize.Width - (int)size.Width) / 2), Math.Max(0, (mapSize.Height - (int)size.Height) / 2));
         }
+        // ===== End added handlers =====
 
+        // Ensure all regions closed
         #endregion
+    }
+
+    internal static class ControlExtensions
+    {
+        public static void Let<T>(this T? obj, Action<T> act) where T : class { if (obj != null) act(obj); }
     }
 }

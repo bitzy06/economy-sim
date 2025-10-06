@@ -910,7 +910,7 @@ namespace Economy_sim
                             try
                             {
                                 if (!stateByCode.ContainsKey(mergeState.RasterCode))
-                                    continue;
+                                    return;
 
                                 var target = FindWeightedCullTarget(
                                     mergeState,
@@ -934,10 +934,10 @@ namespace Economy_sim
                                     try
                                     {
                                         if (!stateByCode.TryGetValue(mergeState.RasterCode, out var refreshedSource))
-                                            continue;
+                                            return;
 
                                         if (!stateByCode.TryGetValue(target.RasterCode, out var refreshedTarget))
-                                            continue;
+                                            return;
 
                                         double sourceAreaBefore = GetOrCalculateStateArea(refreshedSource, stateAreas, gridStats);
                                         double targetAreaBefore = GetOrCalculateStateArea(refreshedTarget, stateAreas, gridStats);
@@ -1456,7 +1456,7 @@ namespace Economy_sim
                 Debug.WriteLine($"[HYBRID MANAGER] Failed to equilibrate state borders: {ex.Message}");
             }
         }
-        
+
         public void Dispose() { _politicalTileManager?.Dispose(); _stateManager?.Dispose(); _populationDensityMap?.Dispose(); _populationDensityMap = null; }
         private static IEnumerable<(int dx, int dy)> GetSpiralOffsets(int radius)
         {
@@ -1740,5 +1740,61 @@ namespace Economy_sim
             // high zoom: show almost everything but avoid very small settlements
             return city.PopMax >= 50_000 || city.ScaleRank <= 8;
         }
+
+        // Public lightweight city info record for economy/bootstrap layers
+        public record MapCityInfo(
+            string Name,
+            string CountryCode,
+            string CountryName,
+            string? StateCode,
+            string? StateName,
+            int Population,
+            int ScaleRank,
+            double Lon,
+            double Lat);
+
+        // Expose loaded cities as immutable snapshot enriched with state assignment
+        public List<MapCityInfo> GetAllCities(bool includeUnassigned = false)
+        {
+            EnsureCitiesLoaded();
+            var result = new List<MapCityInfo>();
+            if (_cityPoints == null || _cityPoints.Count == 0) return result;
+
+            // Ensure states are loaded so we can resolve state membership
+            try { _stateManager.LoadStateData(); } catch { }
+            var statesCache = _stateManager.GetAllStates();
+
+            foreach (var cp in _cityPoints)
+            {
+                // Resolve state by grid lookup (pixel coords already political grid)
+                StateBorderManager.StateFeature? state = null;
+                try { state = _stateManager.GetStateAtGridScaled(cp.PixelX, cp.PixelY); } catch { }
+                if (state == null && !includeUnassigned) continue; // skip if not mapped and caller not requesting all
+
+                // Resolve country name from political data cache if available
+                string countryName = cp.IsoCode;
+                try
+                {
+                    var feature = _politicalTileManager.GetCountryFeatureByRasterCode(cp.RasterCode);
+                    if (feature != null && !string.IsNullOrWhiteSpace(feature.CountryName)) countryName = feature.CountryName;
+                }
+                catch { }
+
+                result.Add(new MapCityInfo(
+                    cp.Name,
+                    cp.IsoCode,
+                    countryName,
+                    state?.StateCode,
+                    state?.StateName,
+                    cp.PopMax <= 0 ? Math.Max(5000, cp.PopMax) : cp.PopMax,
+                    cp.ScaleRank,
+                    cp.Lon,
+                    cp.Lat));
+            }
+            return result;
+        }
+
+        // Utility to retrieve states (already existing via GetAllStates). Provide explicit ensure method for callers.
+        public void EnsureStateDataLoaded() { try { _stateManager.LoadStateData(); } catch { } }
     }
 }
