@@ -25,6 +25,13 @@ namespace Economy_sim
 
     public static class Economy
     {
+        public static event Action<City> ConstructionProgressed;
+
+        internal static void RaiseConstructionProgressed(City city)
+        {
+            ConstructionProgressed?.Invoke(city);
+        }
+
         public static void UpdateCountryEconomy(Country country)
         {
             // === New Financial System Integration ===
@@ -136,6 +143,51 @@ namespace Economy_sim
 
             // Process detailed city economy including buy/sell order generation
             CityEconomy.ProcessCityEconomy(city);
+
+            var companiesToWork = new HashSet<ConstructionCompany>();
+
+            foreach (var company in city.ConstructionCompanies)
+            {
+                if (company == null)
+                {
+                    continue;
+                }
+
+                if (company.Projects.Any(p => p.OwningCity == city))
+                {
+                    companiesToWork.Add(company);
+                }
+            }
+
+            foreach (var project in city.ActiveProjects)
+            {
+                if (project.AssignedCompany != null)
+                {
+                    companiesToWork.Add(project.AssignedCompany);
+                }
+            }
+
+            if (companiesToWork.Count == 0)
+            {
+                foreach (var company in Market.AllConstructionCompanies.Where(c => c.HomeCity == city))
+                {
+                    if (company != null)
+                    {
+                        city.RegisterConstructionCompany(company);
+                        companiesToWork.Add(company);
+                    }
+                }
+            }
+
+            foreach (var company in companiesToWork)
+            {
+                company.WorkOnProjects(city);
+            }
+
+            if (companiesToWork.Count > 0)
+            {
+                RaiseConstructionProgressed(city);
+            }
         }
 
         public static void UpdatePopGrowth(PopClass pop)

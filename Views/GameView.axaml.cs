@@ -90,6 +90,8 @@ namespace Economy_sim
                 sideConstructionPanel.DataContext = _constructionMenuViewModel;
             }
 
+            Economy.ConstructionProgressed += OnConstructionProgressed;
+
             int baseW = ParseEnvOrDefault("ES_BASE_WIDTH", _baselineWidth);
             int baseH = ParseEnvOrDefault("ES_BASE_HEIGHT", _baselineHeight);
             int defaultPolW = checked(baseW * 2);
@@ -177,6 +179,8 @@ namespace Economy_sim
             {
                 this.Loaded -= OnWindowLoaded;
                 this.SizeChanged -= OnSizeChanged;
+
+                Economy.ConstructionProgressed -= OnConstructionProgressed;
 
                 CancelStateCulling();
 
@@ -1091,15 +1095,42 @@ namespace Economy_sim
 
                     Market.AllConstructionCompanies.Add(company);
                     _allCorporations.Add(company);
+                    city.RegisterConstructionCompany(company);
                 }
             }
 
             foreach (var company in Market.AllConstructionCompanies)
             {
+                company.HomeCity?.RegisterConstructionCompany(company);
                 if (!_allCorporations.Contains(company))
                 {
                     _allCorporations.Add(company);
                 }
+            }
+        }
+
+        private void OnConstructionProgressed(City updatedCity)
+        {
+            if (_constructionMenuViewModel == null)
+            {
+                return;
+            }
+
+            void Refresh()
+            {
+                if (_constructionMenuViewModel.BoundCity == null || _constructionMenuViewModel.BoundCity == updatedCity)
+                {
+                    _constructionMenuViewModel.Refresh();
+                }
+            }
+
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(Refresh);
+            }
+            else
+            {
+                Refresh();
             }
         }
 
@@ -1127,7 +1158,24 @@ namespace Economy_sim
                     break;
             }
 
-            var companies = Market.AllConstructionCompanies.ToList();
+            List<ConstructionCompany>? companies = null;
+            if (focusCity != null)
+            {
+                if (focusCity.ConstructionCompanies.Count > 0)
+                {
+                    companies = focusCity.ConstructionCompanies.ToList();
+                }
+                else
+                {
+                    companies = Market.AllConstructionCompanies
+                        .Where(c => c.HomeCity == focusCity)
+                        .ToList();
+                }
+            }
+            else
+            {
+                companies = Market.AllConstructionCompanies.ToList();
+            }
 
             if (!Dispatcher.UIThread.CheckAccess())
             {

@@ -34,6 +34,7 @@ namespace Economy_sim
             Budget += (double)project.Budget;
             project.AssignedCompany = this;
             Projects.Add(project);
+            city.RegisterConstructionCompany(this);
             return true;
         }
 

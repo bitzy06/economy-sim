@@ -45,6 +45,8 @@ namespace Economy_sim
 
         public ObservableCollection<ConstructionCompanyOption> CompanyOptions => companyOptions;
 
+        public City? BoundCity => city;
+
         public ICommand BuildFactoryCommand => buildFactoryCommand;
 
         public ICommand BuildRoadCommand => buildRoadCommand;
@@ -186,7 +188,7 @@ namespace Economy_sim
                 }
             }
 
-            city.StartConstructionProject(project);
+            city.StartConstructionProject(project, assignedToCompany ? company : null);
 
             if (!assignedToCompany && company != null && company.Projects.Contains(project))
             {
