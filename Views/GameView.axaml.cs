@@ -42,6 +42,9 @@ namespace Economy_sim
         private const double StatePopupDefaultHeight = 260;
         private const double StatePopupPointerOffset = 18;
         private const double StatePopupMinimumTop = 70;
+        private const double CityPopupDefaultWidth = 320;
+        private const double CityPopupDefaultHeight = 240;
+        private const double CityPopupPointerOffset = 20;
         private bool _isInitialized = false;
 
         private readonly DispatcherTimer _mapUpdateTimer;
@@ -58,6 +61,8 @@ namespace Economy_sim
 
         private bool _isCullingStates;
         private CancellationTokenSource? _cullStatesCts;
+
+        private HybridMapManager.CitySelection? _activeCitySelection;
 
         // Track baseline base size to compute normalization if env changes
         private readonly int _baselineWidth = 4096 * 4;
@@ -136,13 +141,27 @@ namespace Economy_sim
             public bool IsPlaceholder { get; set; }
         }
 
-        private void HideStateInfoPopup()
+        private sealed class CitySnapshot
         {
-            if (this.FindControl<Border>("StateInfoPopupOverlay") is Border popup)
-            {
-                popup.IsVisible = false;
-            }
+            public string DisplayName { get; set; } = string.Empty;
+            public string StateName { get; set; } = string.Empty;
+            public string CountryName { get; set; } = string.Empty;
+            public double Budget { get; set; }
+            public double Expenses { get; set; }
+            public double TaxRate { get; set; }
+            public decimal Gdp { get; set; }
+            public long Population { get; set; }
+            public double EmploymentRate { get; set; }
+            public double AverageQualityOfLife { get; set; }
+            public double AverageHappiness { get; set; }
+            public double GrowthRate { get; set; }
+            public List<string> Highlights { get; } = new();
+            public List<string> TopIndustries { get; } = new();
+            public List<string> PopulationBreakdown { get; } = new();
+            public bool IsPlaceholder { get; set; }
         }
+
+        private void HideStateInfoPopup() => HideStateInfoOverlay();
         public GameView()
         {
             InitializeComponent();
@@ -308,94 +327,8 @@ namespace Economy_sim
             }
         }
 
-        private void UpdateStateInfoPopup(StateBorderManager.StateFeature stateFeature, Point pointerPosition)
-        {
-            if (this.FindControl<Border>("StateInfoPopupOverlay") is not Border popup)
-            {
-                return;
-            }
-
-            var snapshot = BuildStateSnapshot(stateFeature);
-
-            double popupWidth = !double.IsNaN(popup.Width) && popup.Width > 0 ? popup.Width : StatePopupDefaultWidth;
-            double popupHeight = popup.Bounds.Height > 0 ? popup.Bounds.Height : StatePopupDefaultHeight;
-            double left = pointerPosition.X + StatePopupPointerOffset;
-            double top = pointerPosition.Y + StatePopupPointerOffset;
-
-            if (this.MapImage != null)
-            {
-                double mapWidth = this.MapImage.Bounds.Width;
-                double mapHeight = this.MapImage.Bounds.Height;
-
-                if (!double.IsNaN(mapWidth) && mapWidth > 0)
-                {
-                    left = Math.Min(left, mapWidth - popupWidth - StatePopupPointerOffset);
-                }
-
-                if (!double.IsNaN(mapHeight) && mapHeight > 0)
-                {
-                    top = Math.Min(top, mapHeight - popupHeight - StatePopupPointerOffset);
-                }
-            }
-
-            left = Math.Max(StatePopupPointerOffset, left);
-            top = Math.Max(StatePopupMinimumTop, top);
-
-            popup.Margin = new Thickness(left, top, 0, 0);
-            popup.IsVisible = true;
-
-            if (this.FindControl<TabControl>("StateInfoTabControl") is TabControl tabControl)
-            {
-                tabControl.SelectedIndex = 0;
-            }
-
-            (this.FindControl<TextBlock>("StateInfoNameText"))?.Let(t => t.Text = snapshot.DisplayName);
-            (this.FindControl<TextBlock>("StateInfoCountryText"))?.Let(t => t.Text = snapshot.CountryName);
-            (this.FindControl<TextBlock>("StateInfoBudgetText"))?.Let(t => t.Text = $"${FormatCurrency(snapshot.Budget)}");
-
-            if (this.FindControl<TextBlock>("StateInfoGdpText") is TextBlock gdpText)
-            {
-                string formattedGdp = snapshot.Gdp >= 1_000_000_000_000m
-                    ? $"${snapshot.Gdp / 1_000_000_000_000m:F2}T"
-                    : $"${FormatCurrency((double)snapshot.Gdp)}";
-                gdpText.Text = formattedGdp;
-            }
-
-            if (this.FindControl<TextBlock>("StateInfoGrowthText") is TextBlock growthText)
-            {
-                growthText.Text = $"{snapshot.GrowthRate:+0.0;-0.0;0.0}%";
-                growthText.Foreground = new SolidColorBrush(Color.Parse(snapshot.GrowthRate >= 0 ? "#90EE90" : "#F08080"));
-            }
-
-            if (this.FindControl<TextBlock>("StateInfoInflationText") is TextBlock inflationText)
-            {
-                inflationText.Text = $"{snapshot.InflationRate:F1}%";
-                var inflationColor = snapshot.InflationRate <= 4 ? "#F0E68C" : "#F08080";
-                inflationText.Foreground = new SolidColorBrush(Color.Parse(inflationColor));
-            }
-
-            if (this.FindControl<TextBlock>("StateInfoTradeBalanceText") is TextBlock balanceText)
-            {
-                double balance = snapshot.TradeBalance;
-                balanceText.Text = $"{(balance >= 0 ? "+" : "-")}${FormatCurrency(Math.Abs(balance))}";
-                balanceText.Foreground = new SolidColorBrush(Color.Parse(balance >= 0 ? "#90EE90" : "#F08080"));
-            }
-
-            (this.FindControl<TextBlock>("StateInfoPopulationText"))?.Let(t => t.Text = FormatPopulation(snapshot.Population));
-            (this.FindControl<TextBlock>("StateInfoUrbanizationText"))?.Let(t => t.Text = $"{snapshot.UrbanizationRate:F1}%");
-
-            if (this.FindControl<TextBlock>("StateInfoPopGrowthText") is TextBlock popGrowthText)
-            {
-                popGrowthText.Text = $"{snapshot.PopulationGrowth:+0.0;-0.0;0.0}%";
-                popGrowthText.Foreground = new SolidColorBrush(Color.Parse(snapshot.PopulationGrowth >= 0 ? "#90EE90" : "#F08080"));
-            }
-
-            PopulateListBox("StateInfoHighlightsList", snapshot.Highlights,
-                snapshot.IsPlaceholder ? "No detailed state data available" : "Highlights unavailable");
-            PopulateListBox("StateInfoExportsList", snapshot.TopExports, "No export data available");
-            PopulateListBox("StateInfoImportsList", snapshot.TopImports, "No import data available");
-            PopulateListBox("StateInfoPopulationBreakdownList", snapshot.PopulationBreakdown, "No population breakdown available");
-        }
+        private void UpdateStateInfoPopup(StateBorderManager.StateFeature stateFeature, Point pointerPosition) =>
+            UpdateStateInfoOverlay(stateFeature, pointerPosition);
         private void CancelStateCulling()
         {
             var cts = Interlocked.Exchange(ref _cullStatesCts, null);
@@ -582,6 +515,7 @@ namespace Economy_sim
             {
 
                 HideStateInfoPopup();
+                HideCityInfoOverlay();
 
                 _isPanning = true;
                 _hasPanned = false;
@@ -681,6 +615,7 @@ namespace Economy_sim
                 {
                     HideStateInfoPopup();
                     ShowStateSelectionFeedback(null, screenX, screenY);
+                    HideCityInfoOverlay();
                 }
             }
             catch (Exception ex)
@@ -688,6 +623,7 @@ namespace Economy_sim
                 Debug.WriteLine($"[STATE POPUP ERROR] {ex.Message}");
                 Debug.WriteLine($"[STATE POPUP ERROR] Stack trace: {ex.StackTrace}");
                 HideStateInfoPopup();
+                HideCityInfoOverlay();
             }
         }
 
@@ -813,6 +749,7 @@ namespace Economy_sim
             try
             {
                 HideStateInfoPopup();
+                HideCityInfoOverlay();
                 // Validate inputs
                 if (screenX < 0 || screenY < 0 || _mapManager == null)
                 {
@@ -843,6 +780,7 @@ namespace Economy_sim
 
                         // Update UI feedback
                         ShowCountrySelectionFeedback(country, screenX, screenY);
+                        HandleCitySelectionAtPosition(screenX, screenY, null);
                     }
                     else
                     {
@@ -858,6 +796,7 @@ namespace Economy_sim
 
                             // Update UI feedback for state selection
                             ShowStateSelectionFeedback(state, screenX, screenY);
+                            HandleCitySelectionAtPosition(screenX, screenY, state);
                         }
                         else
                         {
@@ -867,6 +806,7 @@ namespace Economy_sim
 
                             // Show country feedback since country is still selected
                             ShowCountrySelectionFeedback(country, screenX, screenY);
+                            HandleCitySelectionAtPosition(screenX, screenY, null);
                         }
                     }
 
@@ -878,9 +818,11 @@ namespace Economy_sim
                     // Clear all selections if clicking on water/empty area
                     _mapManager.ClearCountrySelection();
                     _mapManager.ClearStateSelection();
+                    _mapManager.SelectCity(null);
                     Debug.WriteLine($"[SELECTION] No country found at position ({screenX}, {screenY}) - cleared all selections");
 
                     ShowCountrySelectionFeedback(null, screenX, screenY);
+                    ShowCitySelectionFeedback(null, null);
 
                     // Force immediate re-render to remove any previous highlights
                     QueueRender(immediate: true);
@@ -890,6 +832,32 @@ namespace Economy_sim
             {
                 Debug.WriteLine($"[SELECTION ERROR] {ex.Message}");
                 Debug.WriteLine($"[SELECTION ERROR] Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        private void HandleCitySelectionAtPosition(int screenX, int screenY, StateBorderManager.StateFeature? stateFeature)
+        {
+            if (_mapManager == null)
+            {
+                return;
+            }
+
+            var city = _mapManager.GetCityAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset, stateFeature);
+            if (city != null)
+            {
+                bool isNewCity = _activeCitySelection == null || !_activeCitySelection.Equals(city);
+                if (isNewCity)
+                {
+                    _mapManager.SelectCity(city);
+                    ShowCitySelectionFeedback(city, stateFeature);
+                }
+                UpdateCityInfoOverlay(city, stateFeature, new Point(screenX, screenY));
+            }
+            else
+            {
+                _mapManager.SelectCity(null);
+                HideCityInfoOverlay();
+                ShowCitySelectionFeedback(null, stateFeature);
             }
         }
 
@@ -949,6 +917,49 @@ namespace Economy_sim
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[SELECTION FEEDBACK ERROR] {ex.Message}");
+                }
+            });
+        }
+
+        private void ShowCitySelectionFeedback(HybridMapManager.CitySelection? city, StateBorderManager.StateFeature? state)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (city != null)
+                    {
+                        string location = !string.IsNullOrWhiteSpace(state?.StateName)
+                            ? $"{state.StateName}, {state?.CountryName ?? city.CountryCode}"
+                            : state?.CountryName ?? city.CountryCode ?? string.Empty;
+                        this.Title = string.IsNullOrWhiteSpace(location)
+                            ? $"Economy Sim - CITY: {city.Name}"
+                            : $"Economy Sim - CITY: {city.Name} ({location})";
+
+                        if (!string.IsNullOrWhiteSpace(state?.StateName))
+                        {
+                            SetSelectedCountrySubheading($"State: {state.StateName} • City: {city.Name}");
+                        }
+                        else
+                        {
+                            SetSelectedCountrySubheading($"City: {city.Name}");
+                        }
+                    }
+                    else
+                    {
+                        if (state != null && !string.IsNullOrWhiteSpace(state.StateName))
+                        {
+                            SetSelectedCountrySubheading($"State: {state.StateName}");
+                        }
+                        else
+                        {
+                            SetSelectedCountrySubheading("Country Overview");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[CITY FEEDBACK ERROR] {ex.Message}");
                 }
             });
         }
@@ -1043,12 +1054,85 @@ namespace Economy_sim
             PopulateListBox("StateInfoPopulationBreakdownList", snapshot.PopulationBreakdown, "No population breakdown available");
         }
 
+        private void UpdateCityInfoOverlay(HybridMapManager.CitySelection cityFeature, StateBorderManager.StateFeature? stateFeature, Point pointerPosition)
+        {
+            if (this.FindControl<Border>("CityInfoPopup") is not Border popup)
+            {
+                return;
+            }
+
+            var snapshot = BuildCitySnapshot(cityFeature, stateFeature);
+
+            double popupWidth = !double.IsNaN(popup.Width) && popup.Width > 0 ? popup.Width : CityPopupDefaultWidth;
+            double popupHeight = popup.Bounds.Height > 0 ? popup.Bounds.Height : CityPopupDefaultHeight;
+            double left = pointerPosition.X + CityPopupPointerOffset;
+            double top = pointerPosition.Y + CityPopupPointerOffset + 20;
+
+            if (this.MapImage != null)
+            {
+                double mapWidth = this.MapImage.Bounds.Width;
+                double mapHeight = this.MapImage.Bounds.Height;
+
+                if (!double.IsNaN(mapWidth) && mapWidth > 0)
+                {
+                    left = Math.Min(left, mapWidth - popupWidth - CityPopupPointerOffset);
+                }
+
+                if (!double.IsNaN(mapHeight) && mapHeight > 0)
+                {
+                    top = Math.Min(top, mapHeight - popupHeight - CityPopupPointerOffset);
+                }
+            }
+
+            left = Math.Max(CityPopupPointerOffset, left);
+            top = Math.Max(StatePopupMinimumTop, top);
+
+            popup.Margin = new Thickness(left, top, 0, 0);
+            popup.IsVisible = true;
+
+            (this.FindControl<TextBlock>("CityInfoNameText"))?.Let(t => t.Text = snapshot.DisplayName);
+            (this.FindControl<TextBlock>("CityInfoStateText"))?.Let(t => t.Text = snapshot.StateName);
+            (this.FindControl<TextBlock>("CityInfoCountryText"))?.Let(t => t.Text = snapshot.CountryName);
+
+            (this.FindControl<TextBlock>("CityInfoBudgetText"))?.Let(t => t.Text = $"${FormatCurrency(snapshot.Budget)}");
+            (this.FindControl<TextBlock>("CityInfoExpensesText"))?.Let(t => t.Text = $"${FormatCurrency(snapshot.Expenses)}");
+            (this.FindControl<TextBlock>("CityInfoTaxText"))?.Let(t => t.Text = $"{snapshot.TaxRate:F1}%");
+
+            if (this.FindControl<TextBlock>("CityInfoGdpText") is TextBlock gdpText)
+            {
+                string formattedGdp = snapshot.Gdp >= 1_000_000_000_000m
+                    ? $"${snapshot.Gdp / 1_000_000_000_000m:F2}T"
+                    : $"${FormatCurrency((double)snapshot.Gdp)}";
+                gdpText.Text = formattedGdp;
+            }
+
+            (this.FindControl<TextBlock>("CityInfoEmploymentText"))?.Let(t => t.Text = $"{snapshot.EmploymentRate:F1}%");
+            (this.FindControl<TextBlock>("CityInfoQualityText"))?.Let(t => t.Text = $"{snapshot.AverageQualityOfLife:F1}");
+            (this.FindControl<TextBlock>("CityInfoHappinessText"))?.Let(t => t.Text = $"{snapshot.AverageHappiness:F1}%");
+            (this.FindControl<TextBlock>("CityInfoGrowthText"))?.Let(t => t.Text = $"{snapshot.GrowthRate:+0.0;-0.0;0.0}%");
+            (this.FindControl<TextBlock>("CityInfoPopulationText"))?.Let(t => t.Text = FormatPopulation(snapshot.Population));
+
+            PopulateListBox("CityInfoHighlightsList", snapshot.Highlights,
+                snapshot.IsPlaceholder ? "No city highlights available" : "Highlights unavailable");
+            PopulateListBox("CityInfoIndustriesList", snapshot.TopIndustries, "No industry data available");
+            PopulateListBox("CityInfoPopulationBreakdownList", snapshot.PopulationBreakdown, "No population breakdown available");
+
+            _activeCitySelection = cityFeature;
+        }
+
         private void ClearStateInfoLists()
         {
             PopulateListBox("StateInfoHighlightsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
             PopulateListBox("StateInfoExportsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
             PopulateListBox("StateInfoImportsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
             PopulateListBox("StateInfoPopulationBreakdownList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+        }
+
+        private void ClearCityInfoLists()
+        {
+            PopulateListBox("CityInfoHighlightsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+            PopulateListBox("CityInfoIndustriesList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+            PopulateListBox("CityInfoPopulationBreakdownList", Array.Empty<string>(), string.Empty, suppressFallback: true);
         }
 
         private void HideStateInfoOverlay()
@@ -1058,6 +1142,16 @@ namespace Economy_sim
                 popup.IsVisible = false;
             }
             ClearStateInfoLists();
+        }
+
+        private void HideCityInfoOverlay()
+        {
+            if (this.FindControl<Border>("CityInfoPopup") is Border popup)
+            {
+                popup.IsVisible = false;
+            }
+            ClearCityInfoLists();
+            _activeCitySelection = null;
         }
 
 
@@ -1173,6 +1267,17 @@ namespace Economy_sim
             }
 
             return BuildPlaceholderStateSnapshot(stateFeature);
+        }
+
+        private CitySnapshot BuildCitySnapshot(HybridMapManager.CitySelection cityFeature, StateBorderManager.StateFeature? stateFeature)
+        {
+            var resolved = ResolveCityData(cityFeature, stateFeature);
+            if (resolved.HasValue)
+            {
+                return BuildCitySnapshotFromCity(resolved.Value.country, resolved.Value.state, resolved.Value.city);
+            }
+
+            return BuildPlaceholderCitySnapshot(cityFeature, stateFeature);
         }
 
         private StateSnapshot BuildStateSnapshotFromState(Country country, State state, StateBorderManager.StateFeature feature)
@@ -1330,6 +1435,144 @@ namespace Economy_sim
             return snapshot;
         }
 
+        private CitySnapshot BuildCitySnapshotFromCity(Country country, State state, City city)
+        {
+            var snapshot = new CitySnapshot
+            {
+                DisplayName = city.Name,
+                StateName = state.Name,
+                CountryName = country.Name,
+                Budget = city.Budget,
+                Expenses = city.CityExpenses,
+                TaxRate = city.TaxRate * 100.0,
+                IsPlaceholder = false
+            };
+
+            var popClasses = city.PopClasses ?? new List<PopClass>();
+            long popFromClasses = popClasses.Sum(p => (long)p.Size);
+            snapshot.Population = city.Population > 0 ? city.Population : popFromClasses;
+            if (snapshot.Population <= 0)
+            {
+                snapshot.Population = popFromClasses;
+            }
+
+            decimal gdp = 0m;
+            foreach (var pop in popClasses)
+            {
+                gdp += (decimal)(pop.Size * pop.IncomePerPerson);
+            }
+
+            var factories = city.Factories ?? new List<Factory>();
+            foreach (var factory in factories)
+            {
+                double factoryValue = 0.0;
+                if (factory.OutputGoods != null)
+                {
+                    foreach (var output in factory.OutputGoods)
+                    {
+                        double basePrice = output.BasePrice > 0
+                            ? output.BasePrice
+                            : (Market.GoodDefinitions.TryGetValue(output.Name, out var def) ? def.BasePrice : 10.0);
+                        factoryValue += basePrice * output.Quantity * factory.ProductionCapacity;
+                    }
+                }
+                gdp += (decimal)factoryValue;
+            }
+            snapshot.Gdp = gdp;
+
+            long workingPopulation = popFromClasses > 0 ? popFromClasses : snapshot.Population;
+            int totalEmployed = popClasses.Sum(p => p.Employed);
+            if (workingPopulation > 0)
+            {
+                snapshot.EmploymentRate = Math.Clamp(totalEmployed / (double)workingPopulation * 100.0, 0, 100);
+            }
+
+            double avgQoL = popClasses.Count > 0 ? popClasses.Average(p => p.QualityOfLife) : 50.0;
+            double avgHappiness = popClasses.Count > 0 ? popClasses.Average(p => p.Happiness) : 50.0;
+            snapshot.AverageQualityOfLife = avgQoL;
+            snapshot.AverageHappiness = avgHappiness;
+            snapshot.GrowthRate = Math.Clamp((avgQoL - 55.0) / 5.5, -3.5, 6.0);
+
+            double surplus = city.Budget - city.CityExpenses;
+            snapshot.Highlights.Add($"Surplus: {(surplus >= 0 ? "+" : "-")}${FormatCurrency(Math.Abs(surplus))}");
+            snapshot.Highlights.Add($"Quality of Life: {avgQoL:F1} | Happiness: {avgHappiness:F1}%");
+            snapshot.Highlights.Add($"Employment: {snapshot.EmploymentRate:F1}% | Population Classes: {Math.Max(1, popClasses.Count)}");
+
+            if (city.ImportNeeds != null)
+            {
+                var topNeed = city.ImportNeeds
+                    .Where(kvp => kvp.Value > 0)
+                    .OrderByDescending(kvp => kvp.Value)
+                    .FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(topNeed.Key) && topNeed.Value > 0)
+                {
+                    snapshot.Highlights.Add($"Top Import Need: {topNeed.Key} ({topNeed.Value:N0} units)");
+                }
+            }
+
+            foreach (var factory in factories.OrderByDescending(f => f.ProductionCapacity).Take(4))
+            {
+                string outputs = factory.OutputGoods != null && factory.OutputGoods.Count > 0
+                    ? string.Join(", ", factory.OutputGoods.Select(o => $"{o.Name} x{o.Quantity * factory.ProductionCapacity}"))
+                    : "No output data";
+                int jobs = factory.JobSlots?.Values.Sum() ?? 0;
+                snapshot.TopIndustries.Add($"{factory.Name} • Cap: {factory.ProductionCapacity} • Jobs: {jobs} • {outputs}");
+            }
+            if (!snapshot.TopIndustries.Any())
+            {
+                snapshot.TopIndustries.Add("No factories operating in this city");
+            }
+
+            foreach (var pop in popClasses.OrderByDescending(p => p.Size).Take(5))
+            {
+                double employedPct = pop.Size > 0 ? pop.Employed / (double)pop.Size * 100.0 : 0.0;
+                snapshot.PopulationBreakdown.Add($"{pop.Name}: {FormatPopulation(pop.Size)} | Empl: {employedPct:F1}% | QoL {pop.QualityOfLife:F1}");
+            }
+            if (!snapshot.PopulationBreakdown.Any())
+            {
+                snapshot.PopulationBreakdown.Add("Population data unavailable");
+            }
+
+            return snapshot;
+        }
+
+        private CitySnapshot BuildPlaceholderCitySnapshot(HybridMapManager.CitySelection cityFeature, StateBorderManager.StateFeature? stateFeature)
+        {
+            int seed = HashCode.Combine(cityFeature.Name?.GetHashCode() ?? 0, stateFeature?.StateName?.GetHashCode() ?? 0, cityFeature.CountryCode?.GetHashCode() ?? 0);
+            var random = new Random(seed);
+
+            var snapshot = new CitySnapshot
+            {
+                DisplayName = string.IsNullOrWhiteSpace(cityFeature.Name) ? "Unknown City" : cityFeature.Name,
+                StateName = stateFeature?.StateName ?? "Unknown State",
+                CountryName = stateFeature?.CountryName ?? cityFeature.CountryCode ?? "Unknown Country",
+                Budget = random.Next(40, 180) * 1_000_000,
+                Expenses = random.Next(25, 140) * 1_000_000,
+                TaxRate = random.Next(5, 18) + random.NextDouble(),
+                Population = random.Next(150_000, 8_000_000),
+                EmploymentRate = random.Next(70, 98) + random.NextDouble(),
+                AverageQualityOfLife = random.Next(40, 80) + random.NextDouble(),
+                AverageHappiness = random.Next(45, 85) + random.NextDouble(),
+                GrowthRate = Math.Round(random.NextDouble() * 4 - 1.0, 1),
+                IsPlaceholder = true
+            };
+            snapshot.Gdp = (decimal)(snapshot.Population * random.Next(18_000, 75_000));
+
+            double surplus = snapshot.Budget - snapshot.Expenses;
+            snapshot.Highlights.Add($"Estimated surplus: {(surplus >= 0 ? "+" : "-")}${FormatCurrency(Math.Abs(surplus))}");
+            snapshot.Highlights.Add($"Employment: {snapshot.EmploymentRate:F1}%");
+            snapshot.Highlights.Add($"Quality of Life: {snapshot.AverageQualityOfLife:F1}");
+
+            snapshot.TopIndustries.Add("Manufacturing hub");
+            snapshot.TopIndustries.Add("Services & Logistics");
+
+            snapshot.PopulationBreakdown.Add("Workers: 55%");
+            snapshot.PopulationBreakdown.Add("Professionals: 28%");
+            snapshot.PopulationBreakdown.Add("Managers: 12%");
+
+            return snapshot;
+        }
+
         private (Country country, State state)? ResolveStateData(StateBorderManager.StateFeature stateFeature)
         {
             if (_allCountries == null || _allCountries.Count == 0)
@@ -1365,6 +1608,67 @@ namespace Economy_sim
                 if (partial.country != null && partial.state != null)
                 {
                     return partial;
+                }
+            }
+
+            return null;
+        }
+
+        private (Country country, State state, City city)? ResolveCityData(HybridMapManager.CitySelection cityFeature, StateBorderManager.StateFeature? stateFeature)
+        {
+            if (_allCountries == null || _allCountries.Count == 0)
+            {
+                return null;
+            }
+
+            var statePairs = _allCountries
+                .Where(c => c != null)
+                .SelectMany(country => (country.States ?? new List<State>()).Select(state => (country, state)))
+                .ToList();
+
+            if (stateFeature != null && !string.IsNullOrWhiteSpace(stateFeature.StateName))
+            {
+                foreach (var pair in statePairs)
+                {
+                    if (string.Equals(pair.state.Name, stateFeature.StateName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var cityMatch = pair.state.Cities?.FirstOrDefault(ci => string.Equals(ci.Name, cityFeature.Name, StringComparison.OrdinalIgnoreCase));
+                        if (cityMatch != null)
+                        {
+                            return (pair.country, pair.state, cityMatch);
+                        }
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(cityFeature.CountryCode) || !string.IsNullOrWhiteSpace(stateFeature?.CountryName))
+            {
+                foreach (var pair in statePairs)
+                {
+                    if (!string.IsNullOrWhiteSpace(stateFeature?.CountryName) && !pair.country.Name.Equals(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var cityMatch = pair.state.Cities?.FirstOrDefault(ci => string.Equals(ci.Name, cityFeature.Name, StringComparison.OrdinalIgnoreCase));
+                    if (cityMatch != null)
+                    {
+                        return (pair.country, pair.state, cityMatch);
+                    }
+                }
+            }
+
+            foreach (var pair in statePairs)
+            {
+                var cityMatch = pair.state.Cities?.FirstOrDefault(ci =>
+                    string.Equals(ci.Name, cityFeature.Name, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrWhiteSpace(ci.Name) && !string.IsNullOrWhiteSpace(cityFeature.Name) &&
+                        (ci.Name.IndexOf(cityFeature.Name, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         cityFeature.Name.IndexOf(ci.Name, StringComparison.OrdinalIgnoreCase) >= 0)));
+
+                if (cityMatch != null)
+                {
+                    return (pair.country, pair.state, cityMatch);
                 }
             }
 
@@ -2239,6 +2543,8 @@ namespace Economy_sim
 
             _currentCountry.States.Add(texas);
 
+            RegisterEconomyCityAnchors();
+
             // Create some corporations and factories
             _allCorporations = new List<Corporation>();
 
@@ -2309,6 +2615,48 @@ namespace Economy_sim
             UpdateConstructionContext();
             RefreshTradeViewModel();
             Debug.WriteLine($"[Economy Init] Economy initialized with {_currentCountry.States.Count} states, {_currentCountry.States.Sum(s => s.Cities.Count)} cities, and {_allCorporations.Count} corporations");
+        }
+
+        private void RegisterEconomyCityAnchors()
+        {
+            if (_mapManager == null || _currentCountry == null)
+            {
+                return;
+            }
+
+            var knownCoords = new Dictionary<string, (double lat, double lon)>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Los Angeles"] = (34.0522, -118.2437),
+                ["San Francisco"] = (37.7749, -122.4194),
+                ["Houston"] = (29.7604, -95.3698),
+                ["Dallas"] = (32.7767, -96.7970)
+            };
+
+            var descriptors = _currentCountry.States
+                .SelectMany(state => state.Cities.Select(city =>
+                {
+                    double? lat = null;
+                    double? lon = null;
+                    if (knownCoords.TryGetValue(city.Name, out var coord))
+                    {
+                        lat = coord.lat;
+                        lon = coord.lon;
+                    }
+
+                    return new HybridMapManager.EconomyCityInfo(
+                        _currentCountry.Name,
+                        state.Name,
+                        city.Name,
+                        city.Population,
+                        lat,
+                        lon);
+                }))
+                .ToList();
+
+            if (descriptors.Count > 0)
+            {
+                _mapManager.RegisterEconomyCities(descriptors);
+            }
         }
         private void OnEconomyUpdateTick(object? sender, EventArgs e)
         {
@@ -2546,6 +2894,12 @@ namespace Economy_sim
                 selectedCountryCloseBtn.Click += (s, e) => HideSelectedCountryPanel();
             if (this.FindControl<Button>("StateInfoCloseButton") is Button stateCloseBtn)
                 stateCloseBtn.Click += (s, e) => HideStateInfoOverlay();
+            if (this.FindControl<Button>("CityInfoCloseButton") is Button cityCloseBtn)
+                cityCloseBtn.Click += (s, e) =>
+                {
+                    _mapManager?.SelectCity(null);
+                    HideCityInfoOverlay();
+                };
 
             // Setup overlay click handlers to close popups when clicking outside
             if (this.FindControl<Border>("DiplomacyMenuOverlay") is Border diplomacyOverlay)
@@ -2670,6 +3024,7 @@ namespace Economy_sim
             if (this.FindControl<Border>("DebugMenuOverlay") is Border debugOverlay)
                 debugOverlay.IsVisible = false;
             HideStateInfoPopup();
+            HideCityInfoOverlay();
         }
 
         private void ShowPopup(String popupName)
