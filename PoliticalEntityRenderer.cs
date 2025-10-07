@@ -76,9 +76,8 @@ namespace Economy_sim
 
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"Error rendering country {country.Name}: {ex.Message}");
                 return null;
             }
         }
@@ -127,9 +126,8 @@ namespace Economy_sim
 
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"Error rendering state {state.Name}: {ex.Message}");
                 return null;
             }
         }
@@ -192,9 +190,8 @@ namespace Economy_sim
 
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"Error rendering political entities: {ex.Message}");
                 return null;
             }
         }

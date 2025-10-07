@@ -2947,7 +2947,6 @@ namespace Economy_sim
             if (this.FindControl<Grid>("RootGrid") is Grid rootGrid &&
                 rootGrid.ColumnDefinitions.Count > 1)
             {
-                Debug.WriteLine("Expanding side menu column to 420 pixels");
                 rootGrid.ColumnDefinitions[1].Width = new GridLength(420);
             }
 
