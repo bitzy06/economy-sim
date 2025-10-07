@@ -213,7 +213,7 @@ namespace Economy_sim
             int? seed = null)
         {
             Console.WriteLine($"[Economy Init] Generating world economy from map data...");
-            Console.WriteLine($"[Economy Init] Map data: {mapCountries.Count} countries, {mapStates.Count} states");
+            Console.WriteLine($"[Economy Init] Map data: {mapCountries?.Count ?? 0} countries, {mapStates?.Count ?? 0} states");
 
             // Initialize factory blueprints and goods
             if (!Market.GoodDefinitions.Any())
@@ -226,11 +226,22 @@ namespace Economy_sim
             var allCountries = new List<Country>();
             var allCorporations = new List<Corporation>();
 
+            // If no states, we can't generate anything
+            if (mapStates == null || mapStates.Count == 0)
+            {
+                Console.WriteLine($"[Economy Init] ERROR: No states provided, cannot generate economy from map data");
+                return (allCountries, allCorporations);
+            }
+
             // Group states by country
             var statesByCountry = new Dictionary<string, List<StateBorderManager.StateFeature>>(StringComparer.OrdinalIgnoreCase);
             foreach (var state in mapStates)
             {
-                if (string.IsNullOrWhiteSpace(state.CountryName)) continue;
+                if (string.IsNullOrWhiteSpace(state.CountryName))
+                {
+                    Console.WriteLine($"[Economy Init] Skipping state with no country name: {state.StateName}");
+                    continue;
+                }
                 
                 if (!statesByCountry.ContainsKey(state.CountryName))
                 {
@@ -241,12 +252,26 @@ namespace Economy_sim
 
             Console.WriteLine($"[Economy Init] Grouped states into {statesByCountry.Count} countries");
 
-            // Generate countries
-            foreach (var mapCountry in mapCountries)
+            // If no valid countries in map data, use country names from states
+            var countriesToProcess = new List<string>();
+            if (mapCountries != null && mapCountries.Count > 0)
             {
-                if (string.IsNullOrWhiteSpace(mapCountry.CountryName)) continue;
+                // Use provided countries
+                countriesToProcess.AddRange(mapCountries.Select(c => c.CountryName).Where(n => !string.IsNullOrWhiteSpace(n)));
+            }
+            else
+            {
+                // Use countries derived from states
+                countriesToProcess.AddRange(statesByCountry.Keys);
+                Console.WriteLine($"[Economy Init] No explicit countries provided, using {countriesToProcess.Count} countries from states");
+            }
 
-                var country = new Country(mapCountry.CountryName)
+            // Generate countries
+            foreach (var countryName in countriesToProcess)
+            {
+                if (string.IsNullOrWhiteSpace(countryName)) continue;
+
+                var country = new Country(countryName)
                 {
                     Budget = random.Next(1000000, 100000000),
                     NationalExpenses = random.Next(500000, 10000000),
@@ -266,7 +291,7 @@ namespace Economy_sim
                 Console.WriteLine($"[Economy Init] Generating country: {country.Name}");
 
                 // Get states for this country
-                if (statesByCountry.TryGetValue(mapCountry.CountryName, out var countryStates))
+                if (statesByCountry.TryGetValue(countryName, out var countryStates))
                 {
                     Console.WriteLine($"[Economy Init]   Found {countryStates.Count} states for {country.Name}");
                     

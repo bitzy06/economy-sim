@@ -2314,16 +2314,16 @@ namespace Economy_sim
             // Generate economy from map data (countries and states from the political map)
             if (_mapManager != null)
             {
-                // Get all countries from the political map
-                var mapCountries = _mapManager.GetCountryAtPixel(0, 0, 1, 0, 0) != null 
-                    ? GetAllCountriesFromMap() 
-                    : new List<IndexedCountryFeature>();
-                
-                // Get all states from the map
+                // Get all states from the map first
                 var mapStates = _mapManager.GetAllStates();
                 
-                if (mapCountries.Count > 0 || mapStates.Count > 0)
+                Console.WriteLine($"[Economy Init] Found {mapStates?.Count ?? 0} states from map");
+                
+                if (mapStates != null && mapStates.Count > 0)
                 {
+                    // Get all countries from the states
+                    var mapCountries = GetAllCountriesFromMap();
+                    
                     Console.WriteLine($"[Economy Init] Using map data: {mapCountries.Count} countries, {mapStates.Count} states");
                     var (countries, corporations) = Economy.GenerateWorldEconomyFromMapData(mapCountries, mapStates);
                     
@@ -2334,7 +2334,7 @@ namespace Economy_sim
                 }
                 else
                 {
-                    Console.WriteLine($"[Economy Init] No map data available, using procedural generation");
+                    Console.WriteLine($"[Economy Init] No map states available, using procedural generation");
                     var (countries, corporations) = Economy.InitializeWorldEconomy();
                     
                     _allCountries = countries;
