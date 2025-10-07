@@ -32,6 +32,7 @@ namespace Economy_sim
         
         private IndexedCountryFeature? _selectedCountry = null;
         private StateBorderManager.StateFeature? _selectedState = null;
+        private CitySelection? _selectedCity = null;
         private bool _stateSplittingProcessed = false;
         private bool _mergeSmallStatesWithCities = false;
         
@@ -39,6 +40,7 @@ namespace Economy_sim
         public DateTime PoliticalMapDate => _politicalMapDate;
         public IndexedCountryFeature? SelectedCountry => _selectedCountry;
         public StateBorderManager.StateFeature? SelectedState => _selectedState;
+        public CitySelection? SelectedCity => _selectedCity;
         public bool MergeSmallStatesWithCities
         {
             get => _mergeSmallStatesWithCities;
@@ -60,6 +62,18 @@ namespace Economy_sim
         public event EventHandler<MapViewType>? ViewTypeChanged;
         public event EventHandler<IndexedCountryFeature?>? SelectedCountryChanged;
         public event EventHandler<StateBorderManager.StateFeature?>? SelectedStateChanged;
+        public event EventHandler<CitySelection?>? SelectedCityChanged;
+
+        public sealed record CitySelection(
+            string Name,
+            string CountryCode,
+            float Longitude,
+            float Latitude,
+            int PixelX,
+            int PixelY,
+            int PopulationEstimate,
+            int ScaleRank,
+            int RasterCode);
         
         public HybridMapManager(int baseWidth = (4096*4), int baseHeight = (2048*4), int? politicalBaseWidth = null, int? politicalBaseHeight = null)
         {
@@ -490,6 +504,7 @@ namespace Economy_sim
         {
             if (_selectedCountry != country)
             {
+                SelectCity(null);
                 _selectedCountry = country;
                 _politicalTileManager.SetSelectedCountry(country);
                 
@@ -502,6 +517,7 @@ namespace Economy_sim
                 // Clear state selection when selecting a different country
                 if (_selectedState != null)
                 {
+                    SelectCity(null);
                     _selectedState = null;
                     _stateManager.SetSelectedState(null);
                     _politicalTileManager.SetSelectedState(null);
@@ -517,11 +533,21 @@ namespace Economy_sim
         {
             if (_selectedState != state)
             {
+                SelectCity(null);
                 _selectedState = state;
                 _stateManager.SetSelectedState(state);
                 _politicalTileManager.SetSelectedState(state);
                 SelectedStateChanged?.Invoke(this, state);
                 Debug.WriteLine($"State selection changed: {(state != null ? $"{state.StateName} in {state.CountryName}" : "None")}");
+            }
+        }
+
+        public void SelectCity(CitySelection? city)
+        {
+            if (_selectedCity != city)
+            {
+                _selectedCity = city;
+                SelectedCityChanged?.Invoke(this, city);
             }
         }
         
@@ -583,6 +609,97 @@ namespace Economy_sim
                 return null;
             }
             catch (Exception ex) { Debug.WriteLine($"Error detecting state at pixel ({pixelX}, {pixelY}): {ex.Message}"); return null; }
+        }
+
+        public CitySelection? GetCityAtPixel(int pixelX, int pixelY, int zoomLevel, SKPointI viewOffset, StateBorderManager.StateFeature? stateHint = null)
+        {
+            try
+            {
+                EnsureCitiesLoaded();
+                if (_cityPoints == null || _cityPoints.Count == 0)
+                    return null;
+
+                if (pixelX < 0 || pixelY < 0 || zoomLevel < 1)
+                    return null;
+
+                int cellSize = GetCellSizeForZoom(zoomLevel);
+                double terrainTotalWidthPx = BaseWidth * (double)cellSize;
+                double terrainTotalHeightPx = BaseHeight * (double)cellSize;
+                if (terrainTotalWidthPx <= 0 || terrainTotalHeightPx <= 0)
+                    return null;
+
+                double politiToTerrainScaleX = terrainTotalWidthPx / PoliticalBaseWidth;
+                double politiToTerrainScaleY = terrainTotalHeightPx / PoliticalBaseHeight;
+
+                string? isoFilter = _selectedCountry?.CountryCode?.ToUpperInvariant();
+                int stateRaster = stateHint?.RasterCode ?? _selectedState?.RasterCode ?? -1;
+                double tolerance = zoomLevel switch
+                {
+                    <= 1 => 28.0,
+                    2 => 24.0,
+                    3 => 20.0,
+                    4 => 18.0,
+                    5 => 16.0,
+                    _ => 14.0
+                };
+                double maxDistSq = tolerance * tolerance;
+
+                CityPoint? best = null;
+                double bestDist = maxDistSq + 1;
+
+                foreach (var city in _cityPoints)
+                {
+                    if (!string.IsNullOrWhiteSpace(isoFilter))
+                    {
+                        if (!string.Equals(city.IsoCode, isoFilter, StringComparison.OrdinalIgnoreCase) && (stateRaster <= 0 || city.RasterCode != stateRaster))
+                            continue;
+                    }
+
+                    if (stateRaster > 0 && city.RasterCode > 0 && city.RasterCode != stateRaster)
+                    {
+                        // Allow cities outside the raster hint but deprioritize them.
+                        if (best != null && best.RasterCode == stateRaster)
+                            continue;
+                    }
+
+                    double cityTerrainX = city.PixelX * politiToTerrainScaleX;
+                    double cityTerrainY = city.PixelY * politiToTerrainScaleY;
+                    double screenX = cityTerrainX - viewOffset.X;
+                    double screenY = cityTerrainY - viewOffset.Y;
+
+                    double dx = screenX - pixelX;
+                    double dy = screenY - pixelY;
+                    double distSq = dx * dx + dy * dy;
+
+                    if (distSq > maxDistSq)
+                        continue;
+
+                    bool isBetter = distSq < bestDist;
+                    if (!isBetter && stateRaster > 0)
+                    {
+                        if (best == null || best.RasterCode != stateRaster)
+                        {
+                            isBetter = city.RasterCode == stateRaster;
+                        }
+                    }
+
+                    if (isBetter)
+                    {
+                        best = city;
+                        bestDist = distSq;
+                    }
+                }
+
+                if (best == null)
+                    return null;
+
+                return new CitySelection(best.Name, best.IsoCode, best.Lon, best.Lat, best.PixelX, best.PixelY, best.PopMax, best.ScaleRank, best.RasterCode);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CITIES] Error detecting city at pixel ({pixelX}, {pixelY}): {ex.Message}");
+                return null;
+            }
         }
         public void SetSelectedState(StateBorderManager.StateFeature? state) => SelectState(state);
         public void RenderStateFills(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize) => _stateManager.RenderStateFills(canvas, viewport, mapPixelSize);

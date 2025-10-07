@@ -239,6 +239,96 @@
                                 </StackPanel>
                         </Border>
 
+                        <!-- City Context Popup -->
+                        <Border x:Name="CityInfoPopup"
+                                Background="#F01E1E1E"
+                                BorderBrush="#555555"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                Margin="15,360,0,0"
+                                Width="300"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                ZIndex="1160"
+                                IsVisible="False"
+                                IsHitTestVisible="True">
+                                <StackPanel Spacing="8">
+                                        <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Spacing="2">
+                                                        <TextBlock x:Name="CityInfoNameText"
+                                                                   Text="City"
+                                                                   FontSize="16"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="#FFEEA2"/>
+                                                        <TextBlock x:Name="CityInfoStateText"
+                                                                   Text="State"
+                                                                   FontSize="12"
+                                                                   Foreground="#CCCCCC"/>
+                                                        <TextBlock x:Name="CityInfoCountryText"
+                                                                   Text="Country"
+                                                                   FontSize="12"
+                                                                   Foreground="#999999"/>
+                                                </StackPanel>
+                                                <Button x:Name="CityInfoCloseButton"
+                                                        Grid.Column="1"
+                                                        Content="✕"
+                                                        Width="24"
+                                                        Height="24"
+                                                        Background="#444444"
+                                                        Foreground="White"
+                                                        BorderBrush="#666666"
+                                                        CornerRadius="12"
+                                                        Padding="0"
+                                                        HorizontalAlignment="Right"/>
+                                        </Grid>
+
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
+                                                <TextBlock Text="Budget" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoBudgetText" Grid.Column="1" Text="$0" Foreground="#FFFFFF"/>
+                                                <TextBlock Grid.Row="1" Text="Expenses" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoExpensesText" Grid.Row="1" Grid.Column="1" Text="$0" Foreground="#FFFFFF"/>
+                                                <TextBlock Grid.Row="2" Text="Tax Rate" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoTaxText" Grid.Row="2" Grid.Column="1" Text="0%" Foreground="#FFFFFF"/>
+                                                <TextBlock Grid.Row="3" Text="GDP" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoGdpText" Grid.Row="3" Grid.Column="1" Text="$0" Foreground="#FFFFFF"/>
+                                                <TextBlock Grid.Row="4" Text="Population" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoPopulationText" Grid.Row="4" Grid.Column="1" Text="0" Foreground="#FFFFFF"/>
+                                        </Grid>
+
+                                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+                                                <TextBlock Text="Employment" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoEmploymentText" Grid.Column="1" Text="0%" Foreground="#90EE90"/>
+                                                <TextBlock Grid.Row="1" Text="Quality of Life" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoQualityText" Grid.Row="1" Grid.Column="1" Text="0.0" Foreground="#FFFFFF"/>
+                                                <TextBlock Grid.Row="2" Text="Happiness" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoHappinessText" Grid.Row="2" Grid.Column="1" Text="0%" Foreground="#FFD38B"/>
+                                                <TextBlock Grid.Row="3" Text="Growth" Foreground="#DDDDDD"/>
+                                                <TextBlock x:Name="CityInfoGrowthText" Grid.Row="3" Grid.Column="1" Text="0%" Foreground="#90EE90"/>
+                                        </Grid>
+
+                                        <StackPanel>
+                                                <TextBlock Text="Highlights" FontWeight="Bold" Foreground="#DDDDDD"/>
+                                                <ListBox x:Name="CityInfoHighlightsList" Height="80" Background="#22000000" Foreground="#FFFFFF" BorderBrush="#444444"/>
+                                        </StackPanel>
+
+                                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                                <StackPanel>
+                                                        <TextBlock Text="Key Industries" FontWeight="Bold" Foreground="#DDDDDD"/>
+                                                        <ListBox x:Name="CityInfoIndustriesList" Height="100" Background="#22000000" Foreground="#FFFFFF" BorderBrush="#444444"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="Population" FontWeight="Bold" Foreground="#DDDDDD"/>
+                                                        <ListBox x:Name="CityInfoPopulationBreakdownList" Height="100" Background="#22000000" Foreground="#FFFFFF" BorderBrush="#444444"/>
+                                                </StackPanel>
+                                        </Grid>
+                                </StackPanel>
+                        </Border>
+
 
                         <!-- Selected Country Overview Panel -->
                         <Border x:Name="SelectedCountryOverlay"
