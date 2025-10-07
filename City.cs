@@ -182,24 +182,77 @@ namespace Economy_sim
 
         public void StartConstructionProject(ConstructionProject project)
         {
-            ActiveProjects.Add(project);
+            if (project == null)
+            {
+                return;
+            }
+
+            if (!ActiveProjects.Contains(project))
+            {
+                project.OwningCity = this;
+                ActiveProjects.Add(project);
+            }
         }
 
         public void ProgressConstruction()
         {
+            if (ActiveProjects.Count == 0)
+            {
+                return;
+            }
+
+            var companiesToUpdate = new HashSet<ConstructionCompany>();
+
             foreach (var project in ActiveProjects.ToList())
             {
-                decimal dailyCost = 10 / project.Duration; //change this to your desired daily cost calculation
-                if ((decimal)Budget >= dailyCost && project.ProgressProject(1, (decimal)Budget))
+                if (project.AssignedCompany != null)
+                {
+                    companiesToUpdate.Add(project.AssignedCompany);
+                    continue;
+                }
+
+                var dailyCost = CalculateDailyCost(project);
+                if ((decimal)Budget < dailyCost || project.BudgetRemaining < dailyCost)
+                {
+                    continue;
+                }
+
+                if (project.ProgressProject(1, dailyCost))
                 {
                     Budget -= (double)dailyCost;
-                    if (project.IsComplete())
-                    {
-                        ApplyProjectEffects(project);
-                        ActiveProjects.Remove(project);
-                    }
+                }
+
+                if (project.IsComplete())
+                {
+                    ApplyProjectEffects(project);
+                    ActiveProjects.Remove(project);
                 }
             }
+
+            foreach (var company in companiesToUpdate)
+            {
+                company.WorkOnProjects(this);
+            }
+
+            foreach (var project in ActiveProjects.ToList())
+            {
+                if (project.AssignedCompany != null && project.IsComplete())
+                {
+                    ApplyProjectEffects(project);
+                    ActiveProjects.Remove(project);
+                }
+            }
+        }
+
+        private static decimal CalculateDailyCost(ConstructionProject project)
+        {
+            if (project.Duration <= 0)
+            {
+                return Math.Max(project.Budget, ConstructionProject.MinimumDailyBudget);
+            }
+
+            var dailyCost = project.Budget / project.Duration;
+            return dailyCost < ConstructionProject.MinimumDailyBudget ? ConstructionProject.MinimumDailyBudget : dailyCost;
         }
 
         private void ApplyProjectEffects(ConstructionProject project)
@@ -211,6 +264,21 @@ namespace Economy_sim
                     break;
                 case ProjectType.Railway:
                     IncreaseRailwayKilometers(project.Output);
+                    break;
+                case ProjectType.Factory:
+                    BoostIndustrialOutput(project.Output);
+                    break;
+                case ProjectType.Road:
+                    ImproveTransportation(project.Output);
+                    break;
+                case ProjectType.Bridge:
+                    ImproveTransportation(project.Output * 1.5);
+                    break;
+                case ProjectType.Port:
+                    EnhanceTradeCapacity(project.Output);
+                    break;
+                case ProjectType.Airport:
+                    EnhanceTradeCapacity(project.Output * 1.2);
                     break;
             }
         }
@@ -229,6 +297,21 @@ namespace Economy_sim
             {
                 suburb.RailwayKilometers += value / Suburbs.Count; // Distribute railway kilometers
             }
+        }
+
+        private void BoostIndustrialOutput(double factor)
+        {
+            Budget += factor * 5000;
+        }
+
+        private void ImproveTransportation(double factor)
+        {
+            CityExpenses = Math.Max(0, CityExpenses - factor * 10);
+        }
+
+        private void EnhanceTradeCapacity(double factor)
+        {
+            Budget += factor * 3500;
         }
     }
 }

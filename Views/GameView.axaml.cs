@@ -65,6 +65,9 @@ namespace Economy_sim
         private TradeRouteManager? _tradeRouteManager;
         private EnhancedTradeManager? _enhancedTradeManager;
         private readonly TradeMenuViewModel _tradeMenuViewModel;
+        private readonly ConstructionMenuViewModel _constructionMenuViewModel;
+
+        private City? _playerCity;
 
         private static readonly IReadOnlyDictionary<string, string> _needRemapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -87,6 +90,16 @@ namespace Economy_sim
             if (SideTradePanel != null)
             {
                 SideTradePanel.DataContext = _tradeMenuViewModel;
+            }
+
+            _constructionMenuViewModel = new ConstructionMenuViewModel();
+            if (this.FindControl<Border>("ConstructionMenuOverlay") is Border constructionOverlay)
+            {
+                constructionOverlay.DataContext = _constructionMenuViewModel;
+            }
+            if (this.FindControl<StackPanel>("SideConstructionPanel") is StackPanel sideConstructionPanel)
+            {
+                sideConstructionPanel.DataContext = _constructionMenuViewModel;
             }
 
             int baseW = ParseEnvOrDefault("ES_BASE_WIDTH", _baselineWidth);
@@ -1175,12 +1188,16 @@ namespace Economy_sim
             _allCorporations = new List<Corporation>();
             CreateInitialCorporationsFromCities();
 
+            var playerCities = _playerCountry.States.SelectMany(s => s.Cities).ToList();
+            EnsureConstructionCompanies(playerCities);
+
             Market.AllCorporations.Clear();
             Market.AllCorporations.AddRange(_allCorporations);
 
             InitializeTradeSystemsForCurrentWorld();
 
             _economyInitialized = true;
+            UpdateConstructionContext();
             return true;
         }
 
@@ -1283,6 +1300,66 @@ namespace Economy_sim
             _tradeRouteManager ??= new TradeRouteManager();
             _enhancedTradeManager ??= new EnhancedTradeManager(_allCountries);
             RefreshTradeViewModel();
+        }
+
+        private void EnsureConstructionCompanies(IReadOnlyList<City> cities)
+        {
+            if (cities == null || cities.Count == 0)
+            {
+                return;
+            }
+
+            if (Market.AllConstructionCompanies.Count == 0)
+            {
+                var orderedCities = cities.OrderByDescending(c => c.Population).ToList();
+                var primaryCity = orderedCities.First();
+                var secondaryCity = orderedCities.Skip(1).FirstOrDefault() ?? primaryCity;
+
+                var metroBuilders = new ConstructionCompany($"{primaryCity.Name} Builders Guild", 600, 500_000m)
+                {
+                    HomeCity = primaryCity
+                };
+
+                var infrastructureWorks = new ConstructionCompany($"{secondaryCity.Name} Infrastructure Works", 420, 400_000m)
+                {
+                    HomeCity = secondaryCity
+                };
+
+                Market.AllConstructionCompanies.Add(metroBuilders);
+                if (!ReferenceEquals(primaryCity, secondaryCity) || Market.AllConstructionCompanies.All(c => c != infrastructureWorks))
+                {
+                    Market.AllConstructionCompanies.Add(infrastructureWorks);
+                }
+            }
+
+            foreach (var company in Market.AllConstructionCompanies)
+            {
+                if (company.HomeCity == null)
+                {
+                    company.HomeCity = cities[0];
+                }
+
+                if (!_allCorporations.Contains(company))
+                {
+                    _allCorporations.Add(company);
+                }
+            }
+        }
+
+        private void UpdateConstructionContext()
+        {
+            if (_constructionMenuViewModel == null)
+            {
+                return;
+            }
+
+            var cities = _playerCountry?.States.SelectMany(s => s.Cities).ToList() ?? new List<City>();
+            if (_playerCity == null || (cities.Count > 0 && !cities.Contains(_playerCity)))
+            {
+                _playerCity = cities.OrderByDescending(c => c.Population).FirstOrDefault();
+            }
+
+            _constructionMenuViewModel.BindToCity(_playerCity, Market.AllConstructionCompanies);
         }
 
         private void RefreshTradeViewModel()
@@ -1539,6 +1616,10 @@ namespace Economy_sim
                 }
             }
 
+            var sampleCities = _currentCountry.States.SelectMany(s => s.Cities).ToList();
+            Market.AllConstructionCompanies.Clear();
+            EnsureConstructionCompanies(sampleCities);
+
             Market.AllCorporations.Clear();
             Market.AllCorporations.AddRange(_allCorporations);
 
@@ -1554,6 +1635,7 @@ namespace Economy_sim
             _playerCountry = _currentCountry;
 
             _economyInitialized = true;
+            UpdateConstructionContext();
             Debug.WriteLine($"[Economy Init] Economy initialized with {_currentCountry.States.Count} states, {_currentCountry.States.Sum(s => s.Cities.Count)} cities, and {_allCorporations.Count} corporations");
         }
         private void OnEconomyUpdateTick(object? sender, EventArgs e)
@@ -1583,6 +1665,7 @@ namespace Economy_sim
                 foreach (var city in playerCities)
                 {
                     Economy.UpdateCityEconomy(city);
+                    city.ProgressConstruction();
                 }
 
                 // Resolve inter-city trade before aggregating state/country metrics
@@ -1625,6 +1708,7 @@ namespace Economy_sim
                 // Update displays
                 UpdateEconomyDisplay();
                 UpdateHUDDisplay(null, null);
+                UpdateConstructionContext();
 
                 Debug.WriteLine($"[Economy Update] Country budget: ${_currentCountry.Budget:N0}, GDP estimate: ${CalculateGDP():N0}");
             }
@@ -1979,22 +2063,6 @@ namespace Economy_sim
                 }
             }
 
-            // Initialize Construction menu content
-            if (this.FindControl<ListBox>("ActiveProjectsList") is ListBox projectsList)
-            {
-                var projects = new[]
-                {
-                    "🏭 Steel Factory - Los Angeles (Progress: 75%)",
-                    "🛣️ Interstate Highway - Texas (Progress: 45%)",
-                    "🌉 Golden Gate Bridge Maintenance (Progress: 20%)",
-                    "✈️ Airport Expansion - New York (Progress: 90%)"
-                };
-                foreach (var project in projects)
-                {
-                    projectsList.Items.Add(project);
-                }
-            }
-
             // Initialize Economy menu content
             if (this.FindControl<ListBox>("IndustriesList") is ListBox industriesList)
             {
@@ -2058,20 +2126,6 @@ namespace Economy_sim
                 };
                 foreach (var relation in relations)
                     sideDip.Items.Add(relation);
-            }
-
-            // Construction
-            if (this.FindControl<ListBox>("SideActiveProjectsList") is ListBox sideProjects)
-            {
-                var projects = new[]
-                {
-                    "🏭 Steel Factory - Los Angeles (Progress: 75%)",
-                    "🛣️ Interstate Highway - Texas (Progress: 45%)",
-                    "🌉 Golden Gate Bridge Maintenance (Progress: 20%)",
-                    "✈️ Airport Expansion - New York (Progress: 90%)"
-                };
-                foreach (var project in projects)
-                    sideProjects.Items.Add(project);
             }
 
             // Economy

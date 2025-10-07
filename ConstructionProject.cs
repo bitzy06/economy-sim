@@ -6,7 +6,12 @@ namespace Economy_sim
     public enum ProjectType
     {
         Housing,
-        Railway
+        Railway,
+        Factory,
+        Road,
+        Bridge,
+        Port,
+        Airport
     }
 
     public class ConstructionProject
@@ -28,6 +33,8 @@ namespace Economy_sim
         public int ResourcePerDay { get; private set; }
 
         public ConstructionCompany AssignedCompany { get; set; }
+
+        public City? OwningCity { get; internal set; }
 
         public const decimal MinimumDailyBudget = 100m;
 

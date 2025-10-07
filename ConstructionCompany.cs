@@ -42,6 +42,11 @@ namespace Economy_sim
         {
             foreach (var project in Projects.ToList())
             {
+                if (project.OwningCity != null && project.OwningCity != city)
+                {
+                    continue;
+                }
+
                 if (project.IsComplete())
                 {
                     Projects.Remove(project);
