@@ -359,7 +359,7 @@ namespace Economy_sim
 
         private void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
-        private sealed record ConstructionProjectConfig(ProjectType Type, string DisplayName, string Description, decimal Budget, int Duration, double Output, string RequiredResource, int ResourcePerDay);
+        public sealed record ConstructionProjectConfig(ProjectType Type, string DisplayName, string Description, decimal Budget, int Duration, double Output, string RequiredResource, int ResourcePerDay);
 
         public sealed class ConstructionCompanyOption
         {
