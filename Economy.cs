@@ -718,7 +718,7 @@ namespace Economy_sim
         {
             city.BuyOrders.Clear();
             city.SellOrders.Clear();
-            
+
             // Clear/Reset trade-related dictionaries for the current turn
             if (Market.GoodDefinitions != null)
             {
@@ -756,12 +756,15 @@ namespace Economy_sim
                 factory.Produce(city.Stockpile, city);
             }
 
+            var baseIncomeByPop = new Dictionary<PopClass, double>();
+
             foreach (var pop in city.PopClasses)
             {
                 DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Size: {pop.Size}, Initial Employed: {pop.Employed}", DebugLogger.LogCategory.Pop);
                 pop.Size = Math.Max(1, pop.Size);
                 pop.IncomePerPerson = Math.Max(0.01, pop.IncomePerPerson);
-           //     pop.Employed = 0;
+                baseIncomeByPop[pop] = pop.IncomePerPerson;
+                pop.Employed = 0;
             }
 
             foreach (var factory in city.Factories)
@@ -793,11 +796,11 @@ namespace Economy_sim
                 DebugLogger.Log($"[Employment Debug] Job Type: {jobType}, Total Available Slots: {totalAvailableSlots[jobType]}", DebugLogger.LogCategory.Building);
             }
 
-            foreach (string jobType in new List<string>(totalAvailableSlots.Keys)) 
+            foreach (string jobType in new List<string>(totalAvailableSlots.Keys))
             {
                 if (!totalAvailableSlots.ContainsKey(jobType) || totalAvailableSlots[jobType] == 0) continue;
                 int remainingSlotsForJobType = totalAvailableSlots[jobType];
-                foreach (var pop in city.PopClasses.Where(p => p.Name == jobType)) 
+                foreach (var pop in city.PopClasses.Where(p => p.Name == jobType))
                 {
                     if (remainingSlotsForJobType == 0) break; 
                     int canBeEmployed = Math.Min(pop.Size - pop.Employed, remainingSlotsForJobType); 
@@ -827,6 +830,19 @@ namespace Economy_sim
                 {
                     DebugLogger.Log($"[Warning] No population class matches job type '{jobType}'.", DebugLogger.LogCategory.Building);
                 }
+            }
+
+            foreach (var pop in city.PopClasses)
+            {
+                double baseIncome = baseIncomeByPop.TryGetValue(pop, out double recordedIncome)
+                    ? recordedIncome
+                    : Math.Max(0.01, pop.IncomePerPerson);
+
+                double employedIncome = baseIncome;
+                double unemployedIncome = baseIncome * 0.3;
+                double avgIncome = (pop.Employed * employedIncome + pop.Unemployed * unemployedIncome) / Math.Max(1, pop.Size);
+                pop.IncomePerPerson = avgIncome;
+                pop.UpdateQualityOfLife();
             }
 
             foreach (var pop in city.PopClasses)
@@ -904,12 +920,6 @@ namespace Economy_sim
                     pop.Happiness = Math.Max(0, pop.Happiness - 1);
                 else
                     pop.Happiness = Math.Max(0, pop.Happiness - 4);
-
-                // Adjust income for unemployment
-                double employedIncome = pop.IncomePerPerson;
-                double unemployedIncome = pop.IncomePerPerson * 0.3; // 30% of normal income
-                double avgIncome = (pop.Employed * employedIncome + pop.Unemployed * unemployedIncome) / Math.Max(1, pop.Size);
-                pop.IncomePerPerson = avgIncome;
 
                 // Adjust happiness for unemployment
                 if (pop.Unemployed > 0)
