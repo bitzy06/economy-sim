@@ -1925,7 +1925,7 @@ namespace Economy_sim
                     continue;
 
                 statesByName.TryGetValue(group.Key, out var stateFeature);
-                var placements = CreateCityPlacements(stateFeature, descriptors.Count);
+                var placements = CreateCityPlacements(stateFeature, descriptors.Count, PoliticalBaseWidth, PoliticalBaseHeight);
 
                 for (int i = 0; i < descriptors.Count; i++)
                 {
@@ -1977,7 +1977,7 @@ namespace Economy_sim
             return result;
         }
 
-        private static List<(int, int)> CreateCityPlacements(StateBorderManager.StateFeature? stateFeature, int cityCount)
+        private static List<(int, int)> CreateCityPlacements(StateBorderManager.StateFeature? stateFeature, int cityCount, int politicalBaseWidth, int politicalBaseHeight)
         {
             var placements = new List<(int, int)>(cityCount);
             if (cityCount <= 0)
@@ -1988,8 +1988,8 @@ namespace Economy_sim
             {
                 for (int i = 0; i < cityCount; i++)
                 {
-                    placements.Add((stateFeature != null ? (int)stateFeature.Bounds.MidX : PoliticalBaseWidth / 2,
-                                     stateFeature != null ? (int)stateFeature.Bounds.MidY : PoliticalBaseHeight / 2));
+                    placements.Add((stateFeature != null ? (int)stateFeature.Bounds.MidX : politicalBaseWidth / 2,
+                                     stateFeature != null ? (int)stateFeature.Bounds.MidY : politicalBaseHeight / 2));
                 }
                 return placements;
             }

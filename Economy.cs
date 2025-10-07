@@ -32,6 +32,79 @@ namespace Economy_sim
             ConstructionProgressed?.Invoke(city);
         }
 
+        /// <summary>
+        /// Initialize the world economy using procedural generation with city templates
+        /// </summary>
+        /// <param name="numCountries">Number of countries to generate (default: uses all available country templates)</param>
+        /// <param name="numStatesPerCountry">Number of states per country</param>
+        /// <param name="numCitiesPerState">Base number of cities per state</param>
+        /// <param name="seed">Random seed for reproducible generation (null for random)</param>
+        /// <returns>Tuple of (countries, corporations) lists</returns>
+        public static (List<Country> countries, List<Corporation> corporations) InitializeWorldEconomy(
+            int numCountries = 10,
+            int numStatesPerCountry = 5,
+            int numCitiesPerState = 3,
+            int? seed = null)
+        {
+            Console.WriteLine("[Economy Init] Starting procedural world economy initialization...");
+            Console.WriteLine($"[Economy Init] Parameters: {numCountries} countries, {numStatesPerCountry} states each, ~{numCitiesPerState} cities per state");
+
+            // Initialize factory blueprints and goods
+            if (!Market.GoodDefinitions.Any())
+            {
+                FactoryBlueprints.InitializeBlueprints();
+                Console.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods and {FactoryBlueprints.AllBlueprints.Count} factory blueprints");
+            }
+
+            // Generate world structure data
+            var random = seed.HasValue ? new Random(seed.Value) : new Random();
+            var worldData = WorldDataGenerator.GenerateWorldData(numCountries, numStatesPerCountry, numCitiesPerState);
+            
+            Console.WriteLine($"[Economy Init] Generated world structure with {worldData.Countries.Count} countries");
+
+            // Use procedural generation with templates to create the actual world
+            var (countries, corporations) = ProceduralWorldGenerator.GenerateWorld(worldData, random);
+
+            // Set up construction companies
+            var constructionCompanies = new List<ConstructionCompany>();
+            foreach (var companyData in worldData.ConstructionCompanies)
+            {
+                var homeCity = countries
+                    .SelectMany(c => c.States)
+                    .SelectMany(s => s.Cities)
+                    .FirstOrDefault(city => city.Name == companyData.HomeCity);
+
+                if (homeCity != null)
+                {
+                    var company = new ConstructionCompany(
+                        companyData.Name,
+                        companyData.Workers,
+                        (decimal)companyData.InitialBudget)
+                    {
+                        HomeCity = homeCity
+                    };
+                    
+                    constructionCompanies.Add(company);
+                    homeCity.RegisterConstructionCompany(company);
+                    corporations.Add(company);
+                }
+            }
+
+            // Register corporations in global market
+            Market.AllCorporations.Clear();
+            Market.AllCorporations.AddRange(corporations);
+
+            Market.AllConstructionCompanies.Clear();
+            Market.AllConstructionCompanies.AddRange(constructionCompanies);
+
+            Console.WriteLine($"[Economy Init] Economy initialization complete!");
+            Console.WriteLine($"[Economy Init] Total: {countries.Count} countries, {countries.Sum(c => c.States.Count)} states, {countries.SelectMany(c => c.States).Sum(s => s.Cities.Count)} cities");
+            Console.WriteLine($"[Economy Init] Total: {corporations.Count} corporations ({constructionCompanies.Count} construction companies)");
+            Console.WriteLine($"[Economy Init] Total population: {countries.Sum(c => c.Population):N0}");
+
+            return (countries, corporations);
+        }
+
         public static void UpdateCountryEconomy(Country country)
         {
             // === New Financial System Integration ===
