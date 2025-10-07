@@ -143,6 +143,103 @@
 				</StackPanel>
                         </Border>
 
+
+                        <!-- State Context Popup (appears near right-click position) -->
+                        <Border x:Name="StateInfoPopup"
+                                Background="#F01E1E1E"
+                                BorderBrush="#555555"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                Margin="15,120,0,0"
+                                Width="320"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                ZIndex="1150"
+                                IsVisible="False"
+                                IsHitTestVisible="True">
+                                <StackPanel Spacing="10">
+                                        <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Orientation="Vertical" Spacing="2">
+                                                        <TextBlock x:Name="StateInfoNameText"
+                                                                   Text="State"
+                                                                   FontSize="17"
+                                                                   FontWeight="Bold"
+                                                                   Foreground="#FFD38B"/>
+                                                        <TextBlock x:Name="StateInfoCountryText"
+                                                                   Text="Country"
+                                                                   FontSize="12"
+                                                                   Foreground="#CCCCCC"/>
+                                                </StackPanel>
+                                                <Button x:Name="StateInfoCloseButton"
+                                                        Grid.Column="1"
+                                                        Content="✕"
+                                                        Width="24"
+                                                        Height="24"
+                                                        Background="#444444"
+                                                        Foreground="White"
+                                                        BorderBrush="#666666"
+                                                        CornerRadius="12"
+                                                        Padding="0"
+                                                        HorizontalAlignment="Right"/>
+                                        </Grid>
+
+                                        <TabControl x:Name="StateInfoTabControl">
+                                                <TabItem Header="Economy">
+                                                        <StackPanel Spacing="6" Margin="0,6,0,0">
+                                                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+                                                                        <TextBlock Text="Budget" Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="StateInfoBudgetText" Grid.Column="1" Text="$0" Foreground="#FFFFFF"/>
+                                                                        <TextBlock Grid.Row="1" Text="GDP" Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="StateInfoGdpText" Grid.Row="1" Grid.Column="1" Text="$0" Foreground="#FFFFFF"/>
+                                                                        <TextBlock Grid.Row="2" Text="Growth" Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="StateInfoGrowthText" Grid.Row="2" Grid.Column="1" Text="0%" Foreground="#90EE90"/>
+                                                                        <TextBlock Grid.Row="3" Text="Inflation" Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="StateInfoInflationText" Grid.Row="3" Grid.Column="1" Text="0%" Foreground="#F0E68C"/>
+                                                                </Grid>
+                                                                <ListBox x:Name="StateInfoHighlightsList" Height="110" Background="#22000000" Foreground="#FFFFFF" BorderBrush="#444444"/>
+                                                        </StackPanel>
+                                                </TabItem>
+                                                <TabItem Header="Trade">
+                                                        <StackPanel Spacing="6" Margin="0,6,0,0">
+                                                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto" RowSpacing="4">
+                                                                        <TextBlock Text="Balance" Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="StateInfoTradeBalanceText" Grid.Column="1" Text="$0" Foreground="#FFFFFF"/>
+                                                                </Grid>
+                                                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                                                        <StackPanel>
+                                                                                <TextBlock Text="Top Exports" FontSize="13" FontWeight="Bold" Foreground="#DDDDDD"/>
+                                                                                <ListBox x:Name="StateInfoExportsList" Height="110" Background="#22000000" Foreground="#FFFFFF" BorderBrush="#444444"/>
+                                                                        </StackPanel>
+                                                                        <StackPanel>
+                                                                                <TextBlock Text="Top Imports" FontSize="13" FontWeight="Bold" Foreground="#DDDDDD"/>
+                                                                                <ListBox x:Name="StateInfoImportsList" Height="110" Background="#22000000" Foreground="#FFFFFF" BorderBrush="#444444"/>
+                                                                        </StackPanel>
+                                                                </Grid>
+                                                        </StackPanel>
+                                                </TabItem>
+                                                <TabItem Header="Population">
+                                                        <StackPanel Spacing="6" Margin="0,6,0,0">
+                                                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
+                                                                        <TextBlock Text="Population" Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="StateInfoPopulationText" Grid.Column="1" Text="0" Foreground="#FFFFFF"/>
+                                                                        <TextBlock Grid.Row="1" Text="Urbanization" Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="StateInfoUrbanizationText" Grid.Row="1" Grid.Column="1" Text="0%" Foreground="#FFFFFF"/>
+                                                                        <TextBlock Grid.Row="2" Text="Growth" Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="StateInfoPopGrowthText" Grid.Row="2" Grid.Column="1" Text="0%" Foreground="#FFFFFF"/>
+                                                                </Grid>
+                                                                <ListBox x:Name="StateInfoPopulationBreakdownList" Height="110" Background="#22000000" Foreground="#FFFFFF" BorderBrush="#444444"/>
+                                                        </StackPanel>
+                                                </TabItem>
+                                        </TabControl>
+                                </StackPanel>
+                        </Border>
+
+
                         <!-- Selected Country Overview Panel -->
                         <Border x:Name="SelectedCountryOverlay"
                                 Background="#E61E1E1E"
