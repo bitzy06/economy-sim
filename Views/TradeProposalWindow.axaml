@@ -1,7 +1,64 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="Economy_sim.TradeProposalWindow"
-        Width="400" Height="300"
-        Title="TradeProposal">
-    <TextBlock Text="TradeProposal content" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        Width="480"
+        Height="520"
+        Title="Trade Proposal"
+        Background="#2D2D30">
+    <Border Background="#2D2D30" Padding="16">
+        <Grid RowDefinitions="Auto,* ,Auto" RowSpacing="12">
+            <StackPanel Orientation="Vertical" Spacing="4">
+                <TextBlock Text="Configure Trade Agreement"
+                           FontSize="20"
+                           FontWeight="Bold"
+                           Foreground="#FFD700"/>
+                <TextBlock x:Name="DirectionText"
+                           Text=""
+                           Foreground="#CCCCCC"
+                           FontSize="13"/>
+            </StackPanel>
+
+            <Grid Grid.Row="1" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Text="From Country" Foreground="#FFFFFF" Grid.Row="0" Grid.Column="0" Margin="0,0,8,0"/>
+                <ComboBox x:Name="FromCountryComboBox" Grid.Row="0" Grid.Column="1" MinWidth="180"/>
+
+                <TextBlock Text="To Country" Foreground="#FFFFFF" Grid.Row="1" Grid.Column="0" Margin="0,0,8,0"/>
+                <ComboBox x:Name="ToCountryComboBox" Grid.Row="1" Grid.Column="1" MinWidth="180"/>
+
+                <TextBlock Text="Resource" Foreground="#FFFFFF" Grid.Row="2" Grid.Column="0" Margin="0,0,8,0"/>
+                <ComboBox x:Name="ResourceComboBox" Grid.Row="2" Grid.Column="1" MinWidth="180"/>
+
+                <TextBlock Text="Quantity" Foreground="#FFFFFF" Grid.Row="3" Grid.Column="0" Margin="0,0,8,0"/>
+                <TextBox x:Name="QuantityTextBox" Grid.Row="3" Grid.Column="1" MinWidth="120"/>
+
+                <TextBlock Text="Price per Unit" Foreground="#FFFFFF" Grid.Row="4" Grid.Column="0" Margin="0,0,8,0"/>
+                <TextBox x:Name="PriceTextBox" Grid.Row="4" Grid.Column="1" MinWidth="120"/>
+
+                <TextBlock Text="Duration (turns)" Foreground="#FFFFFF" Grid.Row="5" Grid.Column="0" Margin="0,0,8,0"/>
+                <TextBox x:Name="DurationTextBox" Grid.Row="5" Grid.Column="1" MinWidth="120"/>
+
+                <TextBlock Text="Tariff Type" Foreground="#FFFFFF" Grid.Row="6" Grid.Column="0" Margin="0,0,8,0"/>
+                <ComboBox x:Name="TariffTypeComboBox" Grid.Row="6" Grid.Column="1" MinWidth="180"/>
+
+                <TextBlock Text="Tariff Rate" Foreground="#FFFFFF" Grid.Row="7" Grid.Column="0" Margin="0,0,8,0"/>
+                <TextBox x:Name="TariffRateTextBox" Grid.Row="7" Grid.Column="1" MinWidth="120"/>
+            </Grid>
+
+            <StackPanel Grid.Row="2" Orientation="Vertical" Spacing="8">
+                <TextBlock x:Name="ValidationText"
+                           Foreground="#FF6B6B"
+                           Text=""
+                           FontSize="12"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+                    <Button x:Name="CancelButton" Content="Cancel" Width="90"/>
+                    <Button x:Name="SubmitButton" Content="Create Deal" Width="120" Background="#3A8D3A" Foreground="White"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </Border>
 </Window>

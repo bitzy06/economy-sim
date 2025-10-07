@@ -272,11 +272,12 @@
 						Height="400"
 						HorizontalAlignment="Center"
 						VerticalAlignment="Center">
-					<Grid Margin="15">
-						<Grid.RowDefinitions>
-							<RowDefinition Height="Auto"/>
-							<RowDefinition Height="*"/>
-						</Grid.RowDefinitions>
+                                        <Grid Margin="15">
+                                                <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="*"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
 
 						<!-- Header -->
 						<Grid Grid.Row="0" Margin="0,0,0,15">
@@ -352,40 +353,55 @@
 									Foreground="White"/>
 						</Grid>
 
-						<!-- Content -->
-						<Grid Grid.Row="1">
-							<Grid.ColumnDefinitions>
-								<ColumnDefinition Width="*"/>
-								<ColumnDefinition Width="*"/>
-							</Grid.ColumnDefinitions>
+                                                <!-- Content -->
+                                                <Grid Grid.Row="1">
+                                                        <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
 
-							<!-- Exports -->
-							<StackPanel Grid.Column="0" Margin="0,0,10,0">
-								<TextBlock Text="Exports" Foreground="#90EE90" FontWeight="Bold" FontSize="16"/>
-								<ListBox x:Name="ExportsList"
-										 Background="#1A1A1A"
-										 BorderBrush="#444444"
-										 Height="150"
-										 Margin="0,5,0,10">
-								</ListBox>
-								<Button x:Name="CreateExportButton" Content="Create Export Deal" Width="180"/>
-							</StackPanel>
+                                                        <!-- Exports -->
+                                                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                                                <TextBlock Text="Exports" Foreground="#90EE90" FontWeight="Bold" FontSize="16"/>
+                                                                <ListBox x:Name="ExportsList"
+                                                                                 ItemsSource="{Binding Exports}"
+                                                                                 Background="#1A1A1A"
+                                                                                 BorderBrush="#444444"
+                                                                                 Height="150"
+                                                                                 Margin="0,5,0,10">
+                                                                </ListBox>
+                                                                <Button x:Name="CreateExportButton" Content="Create Export Deal" Width="180" Command="{Binding CreateExportCommand}"/>
+                                                        </StackPanel>
 
-							<!-- Imports -->
-							<StackPanel Grid.Column="1" Margin="10,0,0,0">
-								<TextBlock Text="Imports" Foreground="#FFB6C1" FontWeight="Bold" FontSize="16"/>
-								<ListBox x:Name="ImportsList"
-									 Background="#1A1A1A"
-									 BorderBrush="#444444"
-									 Height="150"
-									 Margin="0,5,0,10">
-								</ListBox>
-								<Button x:Name="CreateImportButton" Content="Create Import Deal" Width="180"/>
-							</StackPanel>
-						</Grid>
-					</Grid>
-				</Border>
-			</Border>
+                                                        <!-- Imports -->
+                                                        <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                                                <TextBlock Text="Imports" Foreground="#FFB6C1" FontWeight="Bold" FontSize="16"/>
+                                                                <ListBox x:Name="ImportsList"
+                                                                         ItemsSource="{Binding Imports}"
+                                                                         Background="#1A1A1A"
+                                                                         BorderBrush="#444444"
+                                                                         Height="150"
+                                                                         Margin="0,5,0,10">
+                                                                </ListBox>
+                                                                <Button x:Name="CreateImportButton" Content="Create Import Deal" Width="180" Command="{Binding CreateImportCommand}"/>
+                                                        </StackPanel>
+                                                </Grid>
+
+                                                <StackPanel Grid.Row="2" Margin="0,15,0,0" Spacing="8">
+                                                        <TextBlock Text="{Binding TradeSummaryText}" Foreground="#FFFFFF" TextWrapping="Wrap"/>
+                                                        <ItemsControl ItemsSource="{Binding Aggregates}">
+                                                                <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                                <TextBlock Text="{Binding}" Foreground="#CCCCCC"/>
+                                                                        </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                        <TextBlock Text="Recent Trade Events" Foreground="#87CEFA" FontWeight="Bold" FontSize="14" Margin="0,10,0,0"/>
+                                                        <ListBox ItemsSource="{Binding RecentTradeEvents}" Background="#1A1A1A" BorderBrush="#444444" Height="120"/>
+                                                </StackPanel>
+                                        </Grid>
+                                </Border>
+                        </Border>
 
 			<!-- Construction Menu Popup -->
 			<Border x:Name="ConstructionMenuOverlay"
@@ -1095,9 +1111,22 @@
                         </StackPanel>
 
                         <!-- TRADE PANEL -->
-                        <StackPanel Name="SideTradePanel" IsVisible="False" Spacing="15">
-                            <!-- Content here -->
-                            <TextBlock Text="Trade panel content" Foreground="White"/>
+                        <StackPanel x:Name="SideTradePanel" IsVisible="False" Spacing="12">
+                            <TextBlock Text="Trade Overview" Foreground="#FFD700" FontWeight="Bold" FontSize="16"/>
+                            <TextBlock Text="{Binding TradeSummaryText}" Foreground="#FFFFFF" TextWrapping="Wrap"/>
+                            <ItemsControl ItemsSource="{Binding Aggregates}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" Foreground="#CCCCCC"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="Top Exports" Foreground="#90EE90" FontWeight="Bold"/>
+                            <ListBox x:Name="SideExportsList" ItemsSource="{Binding Exports}" Background="#1A1A1A" BorderBrush="#444444" Height="100"/>
+                            <TextBlock Text="Top Imports" Foreground="#FFB6C1" FontWeight="Bold"/>
+                            <ListBox x:Name="SideImportsList" ItemsSource="{Binding Imports}" Background="#1A1A1A" BorderBrush="#444444" Height="100"/>
+                            <TextBlock Text="Recent Trade Events" Foreground="#87CEFA" FontWeight="Bold"/>
+                            <ListBox x:Name="SideRecentEventsList" ItemsSource="{Binding RecentTradeEvents}" Background="#1A1A1A" BorderBrush="#444444" Height="120"/>
                         </StackPanel>
 
                         <!-- CONSTRUCTION PANEL -->
