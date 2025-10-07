@@ -50,4 +50,7 @@
     <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.6" />
     <PackageReference Include="SkiaSharp" Version="3.119.0" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Procedural\Stubs\" />
+  </ItemGroup>
 </Project>

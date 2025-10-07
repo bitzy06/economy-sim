@@ -15,7 +15,6 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
-using System.Collections.ObjectModel;
 
 namespace Economy_sim
 {
@@ -61,22 +60,6 @@ namespace Economy_sim
         private Country? _playerCountry;
         private DispatcherTimer? _economyUpdateTimer;
         private bool _economyInitialized = false;
-        private bool _usedMapEconomy = false; // track if map based economy built
-        private TradeRouteManager? _tradeRouteManager;
-        private EnhancedTradeManager? _enhancedTradeManager;
-        private readonly TradeMenuViewModel _tradeMenuViewModel;
-        private readonly ConstructionMenuViewModel _constructionMenuViewModel;
-
-        private City? _playerCity;
-
-        private static readonly IReadOnlyDictionary<string, string> _needRemapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Food"] = "Bread",
-            ["Housing"] = "Furniture",
-            ["Clothing"] = "Cloth",
-            ["Luxury"] = "Luxury Clothes",
-            ["Education"] = "Books"
-        };
 
         public GameView()
         {
@@ -1021,32 +1004,10 @@ namespace Economy_sim
 
         private void InitializeHUD()
         {
-            if (GlobalMarket.Instance == null)
-            {
-                _ = new GlobalMarket();
-            }
-
             // Initialize real economy state
             if (!_economyInitialized)
             {
-                // Try map based generation first
-                try
-                {
-                    if (InitializeEconomyFromMap())
-                    {
-                        _usedMapEconomy = true;
-                        Debug.WriteLine("[Economy Init] Initialized economy from map data.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[Economy Init] Map-based initialization failed: {ex.Message}");
-                }
-                if (!_economyInitialized)
-                {
-                    InitializeEconomyData(); // fallback sample
-                    Debug.WriteLine("[Economy Init] Fallback sample economy initialized.");
-                }
+                InitializeEconomyData();
             }
 
             // Initialize the unified political entity renderer
@@ -1086,347 +1047,6 @@ namespace Economy_sim
             UpdateEconomyDisplay();
         }
 
-        private bool InitializeEconomyFromMap()
-        {
-            // Require political map data and city listings
-            if (_mapManager == null) return false;
-            var countryData = _mapManager.GetAllCountryData();
-            if (countryData == null || countryData.Count == 0) return false;
-            List<HybridMapManager.MapCityInfo> cities;
-            try { cities = _mapManager.GetAllCities(includeUnassigned: false); } catch { return false; }
-            if (cities == null || cities.Count == 0) return false;
-
-            // Group cities by country code
-            var citiesByCountry = cities.GroupBy(c => c.CountryCode.ToUpperInvariant()).ToList();
-            if (citiesByCountry.Count == 0) return false;
-
-            _allCountries = new List<Country>();
-            foreach (var countryGroup in citiesByCountry)
-            {
-                // Resolve country display name
-                string iso = countryGroup.Key;
-                string displayName = countryData.FirstOrDefault(c => string.Equals(c.CountryCode, iso, StringComparison.OrdinalIgnoreCase))?.CountryName ?? iso;
-                var country = new Country(displayName) { Name = displayName };
-
-                // Progressive base budgets scaled by number of cities
-                int totalCities = countryGroup.Count();
-                country.Budget = 250000 + totalCities * 25000;
-                country.NationalExpenses = Math.Max(50000, totalCities * 1500);
-
-                // Basic tax policies
-                if (!Market.GoodDefinitions.Any()) FactoryBlueprints.InitializeBlueprints();
-                if (!country.FinancialSystem.TaxPolicies.Any())
-                {
-                    country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.IncomeTax, 0.15m));
-                    country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.CorporateTax, 0.20m));
-                    country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.ConsumptionTax, 0.05m));
-                }
-
-                // Group by state (if null group into a synthetic "Federal District")
-                var statesByCode = countryGroup.GroupBy(c => string.IsNullOrWhiteSpace(c.StateCode) ? "__NO_STATE__" : c.StateCode!);
-                foreach (var stateGroup in statesByCode)
-                {
-                    string stateCode = stateGroup.Key;
-                    string stateName = stateCode == "__NO_STATE__" ? "Federal District" : stateGroup.First().StateName ?? stateCode;
-                    var state = new State(stateName)
-                    {
-                        TaxRate = 0.04,
-                        StateExpenses = 20000 + stateGroup.Count() * 500
-                    };
-
-                    foreach (var cityInfo in stateGroup)
-                    {
-                        // Derive starting population from POP_MAX with floor and scaling
-                        int pop = cityInfo.Population;
-                        if (pop <= 0) pop = 5000;
-                        // Clamp to avoid extreme numbers for prototype
-                        pop = Math.Clamp(pop, 5000, 15_000_000);
-
-                        var city = new City(cityInfo.Name)
-                        {
-                            Population = pop,
-                            Budget = 20000 + pop * 0.01,
-                            TaxRate = 0.02,
-                            CityExpenses = 5000 + pop * 0.002
-                        };
-
-                        // Adjust default pop classes to reflect actual population distribution
-                        if (city.PopClasses.Any())
-                        {
-                            int totalOriginal = city.PopClasses.Sum(pc => pc.Size);
-                            if (totalOriginal > 0)
-                            {
-                                double scale = pop / (double)totalOriginal;
-                                foreach (var pc in city.PopClasses) pc.Size = (int)Math.Max(1, Math.Round(pc.Size * scale));
-                            }
-                        }
-
-                        // Seed stockpile with core goods proportionally to population
-                        SeedCityStockpile(city);
-                        NormalizeCityPopulationNeeds(city);
-
-                        state.Cities.Add(city);
-                    }
-
-                    state.Population = state.Cities.Sum(c => c.Population);
-                    state.Budget = 50000 + state.Population * 0.02;
-                    country.States.Add(state);
-                }
-
-                country.Population = country.States.Sum(s => s.Population);
-                _allCountries.Add(country);
-            }
-
-            // Select the largest population country as player
-            _playerCountry = _allCountries.OrderByDescending(c => c.Population).FirstOrDefault();
-            if (_playerCountry == null) return false;
-            _currentCountry = _playerCountry;
-            _playerRoleManager = new PlayerRoleManager();
-            _playerRoleManager.AssumeRolePrimeMinister(_playerCountry);
-
-            // Minimal corporations seeded per large city cluster
-            _allCorporations = new List<Corporation>();
-            CreateInitialCorporationsFromCities();
-
-            var playerCities = _playerCountry.States.SelectMany(s => s.Cities).ToList();
-            EnsureConstructionCompanies(playerCities);
-
-            Market.AllCorporations.Clear();
-            Market.AllCorporations.AddRange(_allCorporations);
-
-            InitializeTradeSystemsForCurrentWorld();
-
-            _economyInitialized = true;
-            UpdateConstructionContext();
-            return true;
-        }
-
-        private void SeedCityStockpile(City city)
-        {
-            string[] coreGoods = { "Grain", "Coal", "Iron", "Bread", "Cloth" };
-            foreach (var g in coreGoods)
-            {
-                if (!Market.GoodDefinitions.ContainsKey(g)) continue;
-                int qty = g switch
-                {
-                    "Grain" => city.Population / 5,
-                    "Coal" => city.Population / 20,
-                    "Iron" => city.Population / 30,
-                    "Bread" => city.Population / 8,
-                    "Cloth" => city.Population / 15,
-                    _ => city.Population / 50
-                };
-                city.Stockpile[g] = new Good(g, Market.GoodDefinitions[g].BasePrice, Market.GoodDefinitions[g].Category, qty);
-            }
-        }
-
-        private void NormalizeCityPopulationNeeds(City city)
-        {
-            if (city?.PopClasses == null || !city.PopClasses.Any()) return;
-            if (!Market.GoodDefinitions.Any()) return;
-
-            foreach (var popClass in city.PopClasses)
-            {
-                var needsToReview = popClass.Needs.Keys.ToList();
-                foreach (var needName in needsToReview)
-                {
-                    if (Market.GoodDefinitions.ContainsKey(needName)) continue;
-
-                    if (_needRemapping.TryGetValue(needName, out var mappedNeed) && Market.GoodDefinitions.ContainsKey(mappedNeed))
-                    {
-                        double amount = popClass.Needs[needName];
-                        popClass.Needs.Remove(needName);
-                        if (popClass.Needs.TryGetValue(mappedNeed, out var existing))
-                        {
-                            popClass.Needs[mappedNeed] = existing + amount;
-                        }
-                        else
-                        {
-                            popClass.Needs[mappedNeed] = amount;
-                        }
-                        Debug.WriteLine($"[Economy Init] Remapped need '{needName}' to '{mappedNeed}' for {popClass.Name} in {city.Name}.");
-                    }
-                    else
-                    {
-                        popClass.Needs.Remove(needName);
-                        Debug.WriteLine($"[Economy Init] Removed unsupported need '{needName}' for {popClass.Name} in {city.Name}.");
-                    }
-                }
-            }
-        }
-
-        private void CreateInitialCorporationsFromCities()
-        {
-            if (_playerCountry == null) return;
-            var allCities = _playerCountry.States.SelectMany(s => s.Cities).ToList();
-            if (allCities.Count == 0) return;
-
-            var rnd = new Random();
-            int corpCounter = 1;
-            foreach (var city in allCities.OrderByDescending(c => c.Population).Take(8))
-            {
-                var spec = (CorporationSpecialization)(corpCounter % 5);
-                if (spec == 0) spec = CorporationSpecialization.Diversified;
-                var corp = new Corporation($"{city.Name} Holdings", spec)
-                {
-                    Budget = 250000 + city.Population * 0.05
-                };
-
-                // Pick a blueprint biased by specialization
-                var blueprint = FactoryBlueprints.GetBlueprintBySpecialization(corp.Specialization, GoodCategory.RawMaterial, rnd) ?? FactoryBlueprints.AllBlueprints.First();
-                var factory = new Factory($"{blueprint.FactoryTypeName} #{corpCounter}", productionCapacity: Math.Clamp(city.Population / 200_000, 1, 10));
-                foreach (var input in blueprint.InputGoods)
-                    factory.InputGoods.Add(new Good(input.Name, input.BasePrice, input.Category, input.Quantity));
-                factory.OutputGoods.Add(new Good(blueprint.OutputGood.Name, blueprint.OutputGood.BasePrice, blueprint.OutputGood.Category, blueprint.OutputGood.Quantity));
-                foreach (var kvp in blueprint.DefaultJobSlotDistribution)
-                {
-                    factory.JobSlots[kvp.Key] = Math.Max(1, (int)Math.Round(kvp.Value * factory.ProductionCapacity * 10));
-                }
-                factory.OwnerCorporation = corp;
-                corp.AddFactory(factory);
-                city.Factories.Add(factory);
-                _allCorporations.Add(corp);
-                corpCounter++;
-            }
-        }
-
-        private void InitializeTradeSystemsForCurrentWorld()
-        {
-            if (_allCountries == null || _allCountries.Count == 0)
-            {
-                return;
-            }
-
-            _tradeRouteManager ??= new TradeRouteManager();
-            _enhancedTradeManager ??= new EnhancedTradeManager(_allCountries);
-            RefreshTradeViewModel();
-        }
-
-        private void EnsureConstructionCompanies(IReadOnlyList<City> cities)
-        {
-            if (cities == null || cities.Count == 0)
-            {
-                return;
-            }
-
-            if (Market.AllConstructionCompanies.Count == 0)
-            {
-                var orderedCities = cities.OrderByDescending(c => c.Population).ToList();
-                var primaryCity = orderedCities.First();
-                var secondaryCity = orderedCities.Skip(1).FirstOrDefault() ?? primaryCity;
-
-                var metroBuilders = new ConstructionCompany($"{primaryCity.Name} Builders Guild", 600, 500_000m)
-                {
-                    HomeCity = primaryCity
-                };
-
-                var infrastructureWorks = new ConstructionCompany($"{secondaryCity.Name} Infrastructure Works", 420, 400_000m)
-                {
-                    HomeCity = secondaryCity
-                };
-
-                Market.AllConstructionCompanies.Add(metroBuilders);
-                if (!ReferenceEquals(primaryCity, secondaryCity) || Market.AllConstructionCompanies.All(c => c != infrastructureWorks))
-                {
-                    Market.AllConstructionCompanies.Add(infrastructureWorks);
-                }
-            }
-
-            foreach (var company in Market.AllConstructionCompanies)
-            {
-                if (company.HomeCity == null)
-                {
-                    company.HomeCity = cities[0];
-                }
-
-                if (!_allCorporations.Contains(company))
-                {
-                    _allCorporations.Add(company);
-                }
-            }
-        }
-
-        private void UpdateConstructionContext()
-        {
-            if (_constructionMenuViewModel == null)
-            {
-                return;
-            }
-
-            var cities = _playerCountry?.States.SelectMany(s => s.Cities).ToList() ?? new List<City>();
-            if (_playerCity == null || (cities.Count > 0 && !cities.Contains(_playerCity)))
-            {
-                _playerCity = cities.OrderByDescending(c => c.Population).FirstOrDefault();
-            }
-
-            _constructionMenuViewModel.BindToCity(_playerCity, Market.AllConstructionCompanies);
-        }
-
-        private void RefreshTradeViewModel()
-        {
-            var focusCountry = _currentCountry?.Name ?? _playerCountry?.Name ?? string.Empty;
-            _tradeMenuViewModel.Refresh(GlobalMarket.Instance, _tradeRouteManager, _enhancedTradeManager, focusCountry);
-        }
-
-        private async Task HandleCreateTradeAsync(bool isExport)
-        {
-            InitializeTradeSystemsForCurrentWorld();
-
-            if (_enhancedTradeManager == null)
-            {
-                _enhancedTradeManager = new EnhancedTradeManager(_allCountries);
-            }
-
-            var countryNames = (_allCountries != null && _allCountries.Count > 0)
-                ? _allCountries.Select(c => c.Name).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
-                : new List<string>();
-
-            var focusCountry = _currentCountry?.Name ?? _playerCountry?.Name;
-            if (!string.IsNullOrWhiteSpace(focusCountry) && !countryNames.Any(n => string.Equals(n, focusCountry, StringComparison.OrdinalIgnoreCase)))
-            {
-                countryNames.Add(focusCountry!);
-            }
-
-            if (countryNames.Count == 0)
-            {
-                countryNames.Add("Player Nation");
-            }
-
-            var goodsNames = Market.GoodDefinitions.Any()
-                ? Market.GoodDefinitions.Keys.ToList()
-                : new List<string> { "Generic Goods" };
-
-            string? partner = countryNames.FirstOrDefault(n => !string.Equals(n, focusCountry, StringComparison.OrdinalIgnoreCase));
-            string? defaultFrom = isExport ? focusCountry ?? partner : partner ?? focusCountry;
-            string? defaultTo = isExport ? partner ?? focusCountry : focusCountry ?? partner;
-
-            var proposalWindow = new TradeProposalWindow();
-            proposalWindow.Configure(isExport, countryNames, goodsNames, defaultFrom, defaultTo);
-            var result = await proposalWindow.ShowDialog<TradeDealParameters?>(this);
-
-            if (result == null)
-            {
-                return;
-            }
-
-            var agreement = _enhancedTradeManager!.CreateEnhancedTradeAgreement(
-                result.FromCountry,
-                result.ToCountry,
-                result.Resource,
-                result.Quantity,
-                result.Price,
-                result.Duration,
-                result.TariffType,
-                result.TariffRate);
-
-            agreement.Status = TradeStatus.Active;
-            if (!_enhancedTradeManager.AllTradeAgreements.Contains(agreement))
-            {
-                _enhancedTradeManager.AllTradeAgreements.Add(agreement);
-            }
-
-            RefreshTradeViewModel();
-        }
         private void InitializeEconomyData()
         {
             if (_economyInitialized) return;
@@ -1468,32 +1088,25 @@ namespace Economy_sim
             losAngeles.TaxRate = 0.02;
             losAngeles.CityExpenses = 5000;
 
-            losAngeles.PopClasses.Clear();
-
             // Add some population classes with needs
             var laborers = new PopClass("Laborers", 1000000, 15.0);
             laborers.Needs["Bread"] = 2.0;   // 2 units per 1000 people
-            laborers.Needs["Furniture"] = 1.0;
             laborers.Needs["Cloth"] = 1.0;   // 1 unit per 1000 people
 
             var craftsmen = new PopClass("Craftsmen", 500000, 25.0);
             craftsmen.Needs["Bread"] = 2.0;
             craftsmen.Needs["Cloth"] = 1.5;
             craftsmen.Needs["Furniture"] = 0.5;
-            craftsmen.Needs["Luxury Clothes"] = 0.2;
 
             var engineers = new PopClass("Engineers", 200000, 50.0);
             engineers.Needs["Bread"] = 2.0;
             engineers.Needs["Cloth"] = 2.0;
             engineers.Needs["Furniture"] = 1.0;
             engineers.Needs["Books"] = 1.0;
-            engineers.Needs["Luxury Clothes"] = 0.5;
 
             losAngeles.PopClasses.Add(laborers);
             losAngeles.PopClasses.Add(craftsmen);
             losAngeles.PopClasses.Add(engineers);
-
-            NormalizeCityPopulationNeeds(losAngeles);
 
             california.Cities.Add(losAngeles);
 
@@ -1504,23 +1117,17 @@ namespace Economy_sim
             sanFrancisco.TaxRate = 0.02;
             sanFrancisco.CityExpenses = 4000;
 
-            sanFrancisco.PopClasses.Clear();
-
             var sfLaborers = new PopClass("Laborers", 300000, 18.0);
             sfLaborers.Needs["Bread"] = 2.0;
             sfLaborers.Needs["Cloth"] = 1.0;
-            sfLaborers.Needs["Furniture"] = 1.0;
 
             var sfCraftsmen = new PopClass("Craftsmen", 200000, 28.0);
             sfCraftsmen.Needs["Bread"] = 2.0;
             sfCraftsmen.Needs["Cloth"] = 1.5;
             sfCraftsmen.Needs["Furniture"] = 0.5;
-            sfCraftsmen.Needs["Luxury Clothes"] = 0.2;
 
             sanFrancisco.PopClasses.Add(sfLaborers);
             sanFrancisco.PopClasses.Add(sfCraftsmen);
-
-            NormalizeCityPopulationNeeds(sanFrancisco);
 
             california.Cities.Add(sanFrancisco);
             _currentCountry.States.Add(california);
@@ -1537,15 +1144,11 @@ namespace Economy_sim
             houston.TaxRate = 0.02;
             houston.CityExpenses = 4500;
 
-            houston.PopClasses.Clear();
-
             var houstonLaborers = new PopClass("Laborers", 800000, 16.0);
             houstonLaborers.Needs["Bread"] = 2.0;
             houstonLaborers.Needs["Cloth"] = 1.0;
-            houstonLaborers.Needs["Furniture"] = 1.0;
 
             houston.PopClasses.Add(houstonLaborers);
-            NormalizeCityPopulationNeeds(houston);
             texas.Cities.Add(houston);
 
             var dallas = new City("Dallas");
@@ -1554,15 +1157,11 @@ namespace Economy_sim
             dallas.TaxRate = 0.02;
             dallas.CityExpenses = 3500;
 
-            dallas.PopClasses.Clear();
-
             var dallasLaborers = new PopClass("Laborers", 500000, 17.0);
             dallasLaborers.Needs["Bread"] = 2.0;
             dallasLaborers.Needs["Cloth"] = 1.0;
-            dallasLaborers.Needs["Furniture"] = 1.0;
 
             dallas.PopClasses.Add(dallasLaborers);
-            NormalizeCityPopulationNeeds(dallas);
             texas.Cities.Add(dallas);
 
             _currentCountry.States.Add(texas);
@@ -1625,8 +1224,6 @@ namespace Economy_sim
 
             _allCountries = new List<Country> { _currentCountry };
 
-            InitializeTradeSystemsForCurrentWorld();
-
             // Set up player as Prime Minister BEFORE the HUD tries to access it
             _playerRoleManager = new PlayerRoleManager();
             _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
@@ -1646,44 +1243,12 @@ namespace Economy_sim
             {
                 Debug.WriteLine("[Economy Update] Running economy simulation tick...");
 
-                var activeCountries = (_allCountries != null && _allCountries.Count > 0)
-                    ? _allCountries
-                    : new List<Country> { _currentCountry };
-
-                var playerCities = _currentCountry.States.SelectMany(s => s.Cities).ToList();
-                var allCities = activeCountries.SelectMany(c => c.States).SelectMany(s => s.Cities).ToList();
-
-                _tradeRouteManager ??= new TradeRouteManager();
-                if (_enhancedTradeManager == null)
-                {
-                    _enhancedTradeManager = new EnhancedTradeManager(activeCountries);
-                }
-
-                GlobalMarket.Instance?.PrepareForNewTurn();
-
-                // Run the economy update cycle for city-level data
-                foreach (var city in playerCities)
+                // Run the economy update cycle
+                foreach (var city in _currentCountry.States.SelectMany(s => s.Cities))
                 {
                     Economy.UpdateCityEconomy(city);
                     city.ProgressConstruction();
                 }
-
-                // Resolve inter-city trade before aggregating state/country metrics
-                Economy.ResolveInterCityTrade(allCities, activeCountries);
-
-                _tradeRouteManager?.UpdateAllRoutes();
-
-                if (GlobalMarket.Instance != null)
-                {
-                    GlobalMarket.Instance.UpdateGlobalMarket(allCities, activeCountries, _tradeRouteManager, _enhancedTradeManager);
-
-                    if (_enhancedTradeManager != null)
-                    {
-                        InternationalTrade.ExecuteTradeTurn(activeCountries, GlobalMarket.Instance, _enhancedTradeManager);
-                    }
-                }
-
-                RefreshTradeViewModel();
 
                 foreach (var state in _currentCountry.States)
                 {
@@ -1699,7 +1264,8 @@ namespace Economy_sim
                 var random = new Random();
                 foreach (var corp in _allCorporations)
                 {
-                    corp.UpdateAI(playerCities, Market.GoodDefinitions.Values.ToList(), random);
+                    var allCities = _currentCountry.States.SelectMany(s => s.Cities).ToList();
+                    corp.UpdateAI(allCities, Market.GoodDefinitions.Values.ToList(), random);
                 }
 
                 // Simulate monetary effects
@@ -1788,12 +1354,6 @@ namespace Economy_sim
                     if (this.FindControl<TextBlock>("SideInflationText") is TextBlock sideInflText)
                     {
                         sideInflText.Text = $"{inflationRate:F1}%";
-                    }
-
-                    double globalTradeValue = GlobalMarket.Instance?.GlobalTradeValue ?? 0;
-                    if (this.FindControl<TextBlock>("GlobalTradeText") is TextBlock globalTradeText)
-                    {
-                        globalTradeText.Text = $"${FormatCurrency(globalTradeValue)}";
                     }
 
                     // Update industries list with real data
@@ -2453,6 +2013,12 @@ namespace Economy_sim
             if (!_economyInitialized) return;
             var corpList = this.FindControl<ListBox>("CorporationsList");
             var industriesList = this.FindControl<ListBox>("IndustriesList");
+            var stockIdx = this.FindControl<TextBlock>("StockMarketIndexText");
+            if (stockIdx != null)
+            {
+                var r = new Random();
+                stockIdx.Text = $"{15000 + r.Next(-400, 400):N0} pts";
+            }
             if (corpList != null)
             {
                 corpList.Items.Clear();
