@@ -74,6 +74,14 @@ namespace Economy_sim
             int PopulationEstimate,
             int ScaleRank,
             int RasterCode);
+
+        public sealed record EconomyCityInfo(
+            string CountryName,
+            string StateName,
+            string CityName,
+            int Population,
+            double? Latitude,
+            double? Longitude);
         
         public HybridMapManager(int baseWidth = (4096*4), int baseHeight = (2048*4), int? politicalBaseWidth = null, int? politicalBaseHeight = null)
         {
@@ -1590,6 +1598,7 @@ namespace Economy_sim
         private List<CityPoint>? _cityPoints;
         private bool _citiesLoadAttempted = false;
         private readonly object _cityLock = new();
+        private List<EconomyCityInfo> _economyCityInfos = new();
 
         private record CityPoint(string IsoCode, float Lon, float Lat, int PopMax, int ScaleRank, int PixelX, int PixelY, int RasterCode, string Name);
 
@@ -1751,6 +1760,16 @@ namespace Economy_sim
             }
         }
 
+        public void RegisterEconomyCities(IEnumerable<EconomyCityInfo> cityInfos)
+        {
+            lock (_cityLock)
+            {
+                _economyCityInfos = cityInfos?.ToList() ?? new List<EconomyCityInfo>();
+                _cityPoints = null;
+                _citiesLoadAttempted = false;
+            }
+        }
+
         private void EnsureCitiesLoaded()
         {
             if (_citiesLoadAttempted) return;
@@ -1758,6 +1777,7 @@ namespace Economy_sim
             {
                 if (_citiesLoadAttempted) return;
                 _citiesLoadAttempted = true;
+
                 try
                 {
                     string baseDir = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -1767,64 +1787,97 @@ namespace Economy_sim
                     {
                         shp = FindFileRecursive(dataDir, "ne_10m_populated_places.shp") ?? shp;
                     }
-                    if (!File.Exists(shp))
-                    {
-                        Debug.WriteLine($"[CITIES] Populated places shapefile not found at {shp}");
-                        return;
-                    }
-                    // Configure OGR only (we avoid GDAL raster pieces to prevent missing symbol errors)
-                    try { OSGeo.OGR.Ogr.RegisterAll(); } catch { }
-                    using var ds = OSGeo.OGR.Ogr.Open(shp, 0);
-                    if (ds == null) { Debug.WriteLine("[CITIES] Failed to open shapefile"); return; }
-                    var layer = ds.GetLayerByIndex(0);
-                    if (layer == null) { Debug.WriteLine("[CITIES] Layer missing"); return; }
-                    var list = new List<CityPoint>(5000);
-                    int[,]? controlGrid = null;
-                    try { controlGrid = _politicalTileManager.GetControlGrid(); } catch { }
-                    layer.ResetReading();
-                    OSGeo.OGR.Feature feat;
-                    while ((feat = layer.GetNextFeature()) != null)
+
+                    bool loadedFromShapefile = false;
+                    if (File.Exists(shp))
                     {
                         try
                         {
-                            var geom = feat.GetGeometryRef();
-                            if (geom == null) continue;
-                            var gType = geom.GetGeometryType();
-                            if (gType != OSGeo.OGR.wkbGeometryType.wkbPoint && gType != OSGeo.OGR.wkbGeometryType.wkbPoint25D)
-                                continue;
-                            double lon = geom.GetX(0);
-                            double lat = geom.GetY(0);
-                            string iso = SafeString(feat, "ADM0_A3");
-                            if (string.IsNullOrWhiteSpace(iso)) iso = SafeString(feat, "ISO_A3");
-                            if (string.IsNullOrWhiteSpace(iso)) continue;
-                            int pop = SafeInt(feat, "POP_MAX");
-                            int scalerank = SafeInt(feat, "SCALERANK");
-                            string name = SafeString(feat, "NAMEASCII");
-                            if (string.IsNullOrWhiteSpace(name)) name = SafeString(feat, "NAME_EN");
-                            if (string.IsNullOrWhiteSpace(name)) name = SafeString(feat, "NAME");
-                            int px = (int)Math.Round((lon + 180.0) / 360.0 * (PoliticalBaseWidth - 1));
-                            int py = (int)Math.Round((90.0 - lat) / 180.0 * (PoliticalBaseHeight - 1));
-                            if (px < 0 || py < 0 || px >= PoliticalBaseWidth || py >= PoliticalBaseHeight) continue;
-                            int rasterCode = -1;
-                            if (controlGrid != null && py >= 0 && py < controlGrid.GetLength(0) && px >= 0 && px < controlGrid.GetLength(1))
-                                rasterCode = controlGrid[py, px];
-                            list.Add(new CityPoint(iso.ToUpperInvariant(), (float)lon, (float)lat, pop, scalerank, px, py, rasterCode, name));
+                            try { OSGeo.OGR.Ogr.RegisterAll(); } catch { }
+                            using var ds = OSGeo.OGR.Ogr.Open(shp, 0);
+                            if (ds != null)
+                            {
+                                var layer = ds.GetLayerByIndex(0);
+                                if (layer != null)
+                                {
+                                    var list = new List<CityPoint>(5000);
+                                    int[,]? controlGrid = null;
+                                    try { controlGrid = _politicalTileManager.GetControlGrid(); } catch { }
+                                    layer.ResetReading();
+                                    OSGeo.OGR.Feature feat;
+                                    while ((feat = layer.GetNextFeature()) != null)
+                                    {
+                                        try
+                                        {
+                                            var geom = feat.GetGeometryRef();
+                                            if (geom == null) continue;
+                                            var gType = geom.GetGeometryType();
+                                            if (gType != OSGeo.OGR.wkbGeometryType.wkbPoint && gType != OSGeo.OGR.wkbGeometryType.wkbPoint25D)
+                                                continue;
+                                            double lon = geom.GetX(0);
+                                            double lat = geom.GetY(0);
+                                            string iso = SafeString(feat, "ADM0_A3");
+                                            if (string.IsNullOrWhiteSpace(iso)) iso = SafeString(feat, "ISO_A3");
+                                            if (string.IsNullOrWhiteSpace(iso)) continue;
+                                            int pop = SafeInt(feat, "POP_MAX");
+                                            int scalerank = SafeInt(feat, "SCALERANK");
+                                            string name = SafeString(feat, "NAMEASCII");
+                                            if (string.IsNullOrWhiteSpace(name)) name = SafeString(feat, "NAME_EN");
+                                            if (string.IsNullOrWhiteSpace(name)) name = SafeString(feat, "NAME");
+                                            int px = (int)Math.Round((lon + 180.0) / 360.0 * (PoliticalBaseWidth - 1));
+                                            int py = (int)Math.Round((90.0 - lat) / 180.0 * (PoliticalBaseHeight - 1));
+                                            if (px < 0 || py < 0 || px >= PoliticalBaseWidth || py >= PoliticalBaseHeight) continue;
+                                            int rasterCode = -1;
+                                            if (controlGrid != null && py >= 0 && py < controlGrid.GetLength(0) && px >= 0 && px < controlGrid.GetLength(1))
+                                                rasterCode = controlGrid[py, px];
+                                            list.Add(new CityPoint(iso.ToUpperInvariant(), (float)lon, (float)lat, pop, scalerank, px, py, rasterCode, name));
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Debug.WriteLine($"[CITIES] Feature error: {ex.Message}");
+                                        }
+                                        finally { feat.Dispose(); }
+                                    }
+
+                                    if (list.Count > 0)
+                                    {
+                                        _cityPoints = list;
+                                        loadedFromShapefile = true;
+                                        Debug.WriteLine($"[CITIES] Loaded {list.Count} populated places from shapefile.");
+                                    }
+                                }
+                            }
                         }
                         catch (Exception ex)
                         {
-                            Debug.WriteLine($"[CITIES] Feature error: {ex.Message}");
+                            Debug.WriteLine($"[CITIES] Shapefile loading failed: {ex.Message}");
                         }
-                        finally { feat.Dispose(); }
                     }
-                    _cityPoints = list;
-                    Debug.WriteLine($"[CITIES] Loaded {list.Count} populated places (with raster sampling {(controlGrid!=null ? "enabled" : "disabled")})");
+
+                    if (!loadedFromShapefile)
+                    {
+                        _cityPoints = GenerateCityPointsFromEconomyData();
+                        if (_cityPoints != null && _cityPoints.Count > 0)
+                        {
+                            Debug.WriteLine($"[CITIES] Generated {_cityPoints.Count} city anchor(s) from economy data.");
+                        }
+                        else
+                        {
+                            Debug.WriteLine("[CITIES] City data unavailable; overlays will be disabled.");
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[CITIES] Load failed: {ex.Message}");
+                    if (_cityPoints == null || _cityPoints.Count == 0)
+                    {
+                        _cityPoints = GenerateCityPointsFromEconomyData();
+                    }
                 }
             }
         }
+
 
         private static string? FindFileRecursive(string root, string targetName)
         {
@@ -1835,6 +1888,146 @@ namespace Economy_sim
                     .FirstOrDefault(f => string.Equals(Path.GetFileName(f), targetName, StringComparison.OrdinalIgnoreCase));
             }
             catch { return null; }
+        }
+
+        private List<CityPoint>? GenerateCityPointsFromEconomyData()
+        {
+            if (_economyCityInfos == null || _economyCityInfos.Count == 0)
+                return null;
+
+            var result = new List<CityPoint>();
+            var statesByName = new Dictionary<string, StateBorderManager.StateFeature>(StringComparer.OrdinalIgnoreCase);
+
+            try
+            {
+                if (_stateManager.GetAllStates().Count == 0)
+                {
+                    _stateManager.LoadStateData();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[CITIES] Unable to load state data for economy fallback: {ex.Message}");
+            }
+
+            foreach (var state in _stateManager.GetAllStates())
+            {
+                if (!string.IsNullOrWhiteSpace(state.StateName))
+                {
+                    statesByName[state.StateName] = state;
+                }
+            }
+
+            foreach (var group in _economyCityInfos.GroupBy(c => c.StateName ?? string.Empty, StringComparer.OrdinalIgnoreCase))
+            {
+                var descriptors = group.ToList();
+                if (descriptors.Count == 0)
+                    continue;
+
+                statesByName.TryGetValue(group.Key, out var stateFeature);
+                var placements = CreateCityPlacements(stateFeature, descriptors.Count);
+
+                for (int i = 0; i < descriptors.Count; i++)
+                {
+                    var info = descriptors[i];
+                    int pixelX;
+                    int pixelY;
+                    double lon;
+                    double lat;
+
+                    if (info.Longitude.HasValue && info.Latitude.HasValue)
+                    {
+                        var pixel = CoordinateTransform.GeographicToPixel(info.Longitude.Value, info.Latitude.Value, PoliticalBaseWidth, PoliticalBaseHeight);
+                        pixelX = pixel.X;
+                        pixelY = pixel.Y;
+                        lon = info.Longitude.Value;
+                        lat = info.Latitude.Value;
+                    }
+                    else
+                    {
+                        var placement = placements.Count > i ? placements[i] : (PoliticalBaseWidth / 2, PoliticalBaseHeight / 2);
+                        pixelX = placement.Item1;
+                        pixelY = placement.Item2;
+                        (lon, lat) = CoordinateTransform.PixelToGeographic(pixelX, pixelY, PoliticalBaseWidth, PoliticalBaseHeight);
+                    }
+
+                    pixelX = Math.Clamp(pixelX, 0, PoliticalBaseWidth - 1);
+                    pixelY = Math.Clamp(pixelY, 0, PoliticalBaseHeight - 1);
+
+                    int population = info.Population > 0 ? info.Population : 100_000;
+                    int scaleRank = EstimateScaleRank(population);
+                    int rasterCode = stateFeature?.RasterCode ?? -1;
+                    string iso = !string.IsNullOrWhiteSpace(stateFeature?.CountryCode)
+                        ? stateFeature!.CountryCode
+                        : info.CountryName ?? string.Empty;
+
+                    result.Add(new CityPoint(
+                        iso.ToUpperInvariant(),
+                        (float)lon,
+                        (float)lat,
+                        population,
+                        scaleRank,
+                        pixelX,
+                        pixelY,
+                        rasterCode,
+                        info.CityName));
+                }
+            }
+
+            return result;
+        }
+
+        private static List<(int, int)> CreateCityPlacements(StateBorderManager.StateFeature? stateFeature, int cityCount)
+        {
+            var placements = new List<(int, int)>(cityCount);
+            if (cityCount <= 0)
+                return placements;
+
+            SKRect bounds = stateFeature?.Bounds ?? SKRect.Create(0, 0, 0, 0);
+            if (bounds.Width <= 1 || bounds.Height <= 1)
+            {
+                for (int i = 0; i < cityCount; i++)
+                {
+                    placements.Add((stateFeature != null ? (int)stateFeature.Bounds.MidX : PoliticalBaseWidth / 2,
+                                     stateFeature != null ? (int)stateFeature.Bounds.MidY : PoliticalBaseHeight / 2));
+                }
+                return placements;
+            }
+
+            int columns = cityCount <= 2 ? 1 : cityCount <= 4 ? 2 : 3;
+            int rows = (int)Math.Ceiling(cityCount / (double)columns);
+
+            float marginX = Math.Clamp(bounds.Width * 0.15f, 4f, bounds.Width / 3f);
+            float marginY = Math.Clamp(bounds.Height * 0.15f, 4f, bounds.Height / 3f);
+
+            float usableWidth = Math.Max(2f, bounds.Width - marginX * 2f);
+            float usableHeight = Math.Max(2f, bounds.Height - marginY * 2f);
+
+            for (int index = 0; index < cityCount; index++)
+            {
+                int row = index / columns;
+                int column = index % columns;
+                float xFraction = columns == 1 ? 0.5f : column / (float)(columns - 1);
+                float yFraction = rows == 1 ? 0.5f : row / (float)(rows - 1);
+
+                float x = bounds.Left + marginX + usableWidth * xFraction;
+                float y = bounds.Top + marginY + usableHeight * yFraction;
+
+                placements.Add(((int)Math.Round(x), (int)Math.Round(y)));
+            }
+
+            return placements;
+        }
+
+        private static int EstimateScaleRank(int population)
+        {
+            if (population >= 5_000_000) return 1;
+            if (population >= 2_500_000) return 2;
+            if (population >= 1_000_000) return 3;
+            if (population >= 500_000) return 4;
+            if (population >= 250_000) return 5;
+            if (population >= 100_000) return 6;
+            return 7;
         }
 
         private static string SafeString(OSGeo.OGR.Feature f, string field)

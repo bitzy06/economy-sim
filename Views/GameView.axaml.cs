@@ -2543,6 +2543,8 @@ namespace Economy_sim
 
             _currentCountry.States.Add(texas);
 
+            RegisterEconomyCityAnchors();
+
             // Create some corporations and factories
             _allCorporations = new List<Corporation>();
 
@@ -2613,6 +2615,48 @@ namespace Economy_sim
             UpdateConstructionContext();
             RefreshTradeViewModel();
             Debug.WriteLine($"[Economy Init] Economy initialized with {_currentCountry.States.Count} states, {_currentCountry.States.Sum(s => s.Cities.Count)} cities, and {_allCorporations.Count} corporations");
+        }
+
+        private void RegisterEconomyCityAnchors()
+        {
+            if (_mapManager == null || _currentCountry == null)
+            {
+                return;
+            }
+
+            var knownCoords = new Dictionary<string, (double lat, double lon)>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Los Angeles"] = (34.0522, -118.2437),
+                ["San Francisco"] = (37.7749, -122.4194),
+                ["Houston"] = (29.7604, -95.3698),
+                ["Dallas"] = (32.7767, -96.7970)
+            };
+
+            var descriptors = _currentCountry.States
+                .SelectMany(state => state.Cities.Select(city =>
+                {
+                    double? lat = null;
+                    double? lon = null;
+                    if (knownCoords.TryGetValue(city.Name, out var coord))
+                    {
+                        lat = coord.lat;
+                        lon = coord.lon;
+                    }
+
+                    return new HybridMapManager.EconomyCityInfo(
+                        _currentCountry.Name,
+                        state.Name,
+                        city.Name,
+                        city.Population,
+                        lat,
+                        lon);
+                }))
+                .ToList();
+
+            if (descriptors.Count > 0)
+            {
+                _mapManager.RegisterEconomyCities(descriptors);
+            }
         }
         private void OnEconomyUpdateTick(object? sender, EventArgs e)
         {
