@@ -448,30 +448,57 @@
 
 							<!-- Project List -->
 							<StackPanel Grid.Column="0" Margin="0,0,15,0">
-								<TextBlock Text="Active Projects" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16"/>
-								<ListBox x:Name="ActiveProjectsList"
-									 Background="#1A1A1A"
-									 BorderBrush="#444444"
-									 Height="250"
-									 Margin="0,5,0,0">
-								</ListBox>
-							</StackPanel>
+                                                                <TextBlock Text="Active Projects" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16"/>
+                                                                <StackPanel Orientation="Vertical" Spacing="4" Margin="0,6,0,6">
+                                                                    <TextBlock Text="{Binding CityBudgetDisplay}" Foreground="#AAAAAA" FontSize="12"/>
+                                                                    <TextBlock Text="{Binding TotalAllocatedBudgetDisplay}" Foreground="#AAAAAA" FontSize="12"/>
+                                                                    <TextBlock Text="{Binding EstimatedDailyCostDisplay}" Foreground="#AAAAAA" FontSize="12"/>
+                                                                </StackPanel>
+                                                                <ListBox x:Name="ActiveProjectsList"
+                                                                         ItemsSource="{Binding ActiveProjects}"
+                                                                         SelectedItem="{Binding SelectedProject, Mode=TwoWay}"
+                                                                         Background="#1A1A1A"
+                                                                         BorderBrush="#444444"
+                                                                         Height="250"
+                                                                         Margin="0,5,0,0">
+                                                                    <ListBox.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Border BorderBrush="#333333" BorderThickness="1" Padding="8" Margin="0,0,0,6" Background="#202020">
+                                                                                <StackPanel Spacing="4">
+                                                                                    <TextBlock Text="{Binding Title}" Foreground="#FFFFFF" FontWeight="Bold"/>
+                                                                                    <ProgressBar Minimum="0" Maximum="100" Height="6" Value="{Binding ProgressPercentage}"/>
+                                                                                    <TextBlock Text="{Binding ProgressText}" Foreground="#CCCCCC" FontSize="12"/>
+                                                                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                                                                        <TextBlock Text="{Binding BudgetDisplay}" Foreground="#999999" FontSize="11"/>
+                                                                                        <TextBlock Text="{Binding BudgetRemainingDisplay}" Foreground="#999999" FontSize="11"/>
+                                                                                    </StackPanel>
+                                                                                    <TextBlock Text="{Binding AssignedCompanyDisplay}" Foreground="#888888" FontSize="11"/>
+                                                                                </StackPanel>
+                                                                            </Border>
+                                                                        </DataTemplate>
+                                                                    </ListBox.ItemTemplate>
+                                                                </ListBox>
+                                                        </StackPanel>
 
-							<!-- Project Actions -->
-							<StackPanel Grid.Column="1" Spacing="15">
+                                                        <!-- Project Actions -->
+                                                        <StackPanel Grid.Column="1" Spacing="15">
 								<TextBlock Text="New Projects" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16"/>
-								<Button x:Name="BuildFactoryButton" Content="Build Factory" Width="160"/>
-								<Button x:Name="BuildRoadButton" Content="Build Road" Width="160"/>
-								<Button x:Name="BuildBridgeButton" Content="Build Bridge" Width="160"/>
-								<Button x:Name="BuildPortButton" Content="Build Port" Width="160"/>
-								<Button x:Name="BuildAirportButton" Content="Build Airport" Width="160"/>
+                                                                <ComboBox ItemsSource="{Binding CompanyOptions}"
+                                                                          SelectedItem="{Binding SelectedCompanyOption, Mode=TwoWay}"
+                                                                          Width="160"
+                                                                          HorizontalAlignment="Left"/>
+                                                                <Button x:Name="BuildFactoryButton" Content="Build Factory" Width="160" Command="{Binding BuildFactoryCommand}"/>
+                                                                <Button x:Name="BuildRoadButton" Content="Build Road" Width="160" Command="{Binding BuildRoadCommand}"/>
+                                                                <Button x:Name="BuildBridgeButton" Content="Build Bridge" Width="160" Command="{Binding BuildBridgeCommand}"/>
+                                                                <Button x:Name="BuildPortButton" Content="Build Port" Width="160" Command="{Binding BuildPortCommand}"/>
+                                                                <Button x:Name="BuildAirportButton" Content="Build Airport" Width="160" Command="{Binding BuildAirportCommand}"/>
 
-								<TextBlock Text="Project Info" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16" Margin="0,20,0,0"/>
-								<TextBlock x:Name="ProjectInfoText"
-									   Text="Select a project to view details"
-									   Foreground="#AAAAAA"
-									   TextWrapping="Wrap"
-									   Width="160"/>
+                                                                <TextBlock Text="Project Info" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16" Margin="0,20,0,0"/>
+                                                                <TextBlock x:Name="ProjectInfoText"
+                                                                           Text="{Binding SelectedProjectSummary}"
+                                                                           Foreground="#AAAAAA"
+                                                                           TextWrapping="Wrap"
+                                                                           Width="160"/>
 							</StackPanel>
 						</Grid>
 					</Grid>
@@ -1130,9 +1157,23 @@
                         </StackPanel>
 
                         <!-- CONSTRUCTION PANEL -->
-                        <StackPanel Name="SideConstructionPanel" IsVisible="False" Spacing="15">
-                            <!-- Content here -->
-                            <TextBlock Text="Construction panel content" Foreground="White"/>
+                        <StackPanel Name="SideConstructionPanel" IsVisible="False" Spacing="12">
+                            <TextBlock Text="City Construction" Foreground="#FFD700" FontWeight="Bold" FontSize="16"/>
+                            <TextBlock Text="{Binding CityBudgetDisplay}" Foreground="#FFFFFF"/>
+                            <TextBlock Text="{Binding TotalAllocatedBudgetDisplay}" Foreground="#FFFFFF"/>
+                            <TextBlock Text="{Binding EstimatedDailyCostDisplay}" Foreground="#FFFFFF"/>
+                            <ListBox ItemsSource="{Binding ActiveProjects}" SelectedItem="{Binding SelectedProject, Mode=TwoWay}" Background="#1A1A1A" BorderBrush="#444444" Height="220">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding Title}" Foreground="#FFFFFF" FontWeight="Bold"/>
+                                            <ProgressBar Minimum="0" Maximum="100" Height="4" Value="{Binding ProgressPercentage}"/>
+                                            <TextBlock Text="{Binding ProgressText}" Foreground="#CCCCCC" FontSize="12"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                            <TextBlock Text="{Binding SelectedProjectSummary}" Foreground="#CCCCCC" TextWrapping="Wrap"/>
                         </StackPanel>
 
                         <!-- ECONOMY PANEL -->
