@@ -141,11 +141,182 @@
 						</StackPanel>
 					</Border>
 				</StackPanel>
-			</Border>
+                        </Border>
 
-			<!-- Right Side Button Panel -->
-			<StackPanel Orientation="Vertical"
-						HorizontalAlignment="Right"
+                        <!-- Selected Country Overview Panel -->
+                        <Border x:Name="SelectedCountryOverlay"
+                                Background="#E61E1E1E"
+                                BorderBrush="#555555"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="12"
+                                Margin="15,70,0,0"
+                                Width="340"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                ZIndex="1100"
+                                IsVisible="False"
+                                IsHitTestVisible="True">
+                                <StackPanel Spacing="10">
+                                        <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock x:Name="SelectedCountryNameText"
+                                                           Text="Country"
+                                                           FontSize="18"
+                                                           FontWeight="Bold"
+                                                           Foreground="#FFD700"/>
+                                                <Button x:Name="SelectedCountryCloseButton"
+                                                        Grid.Column="1"
+                                                        Content="✕"
+                                                        Width="26"
+                                                        Height="26"
+                                                        Background="#444444"
+                                                        Foreground="White"
+                                                        BorderBrush="#666666"
+                                                        CornerRadius="13"
+                                                        Padding="0"
+                                                        HorizontalAlignment="Right"/>
+                                        </Grid>
+
+                                        <TextBlock x:Name="SelectedCountrySubheadingText"
+                                                   Text="Country Overview"
+                                                   Foreground="#CCCCCC"
+                                                   FontSize="13"
+                                                   IsVisible="False"/>
+
+                                        <TabControl x:Name="SelectedCountryTabControl">
+                                                <TabItem Header="Economy">
+                                                        <StackPanel Spacing="6" Margin="0,6,0,0">
+                                                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+                                                                        <TextBlock Grid.Row="0"
+                                                                                   Text="Budget"
+                                                                                   Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="SelectedCountryBudgetText"
+                                                                                   Grid.Row="0" Grid.Column="1"
+                                                                                   Text="$0"
+                                                                                   Foreground="#FFFFFF"
+                                                                                   FontWeight="Bold"/>
+
+                                                                        <TextBlock Grid.Row="1"
+                                                                                   Text="GDP"
+                                                                                   Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="SelectedCountryGdpText"
+                                                                                   Grid.Row="1" Grid.Column="1"
+                                                                                   Text="$0"
+                                                                                   Foreground="#FFFFFF"
+                                                                                   FontWeight="Bold"/>
+
+                                                                        <TextBlock Grid.Row="2"
+                                                                                   Text="Growth"
+                                                                                   Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="SelectedCountryGrowthText"
+                                                                                   Grid.Row="2" Grid.Column="1"
+                                                                                   Text="0%"
+                                                                                   Foreground="#90EE90"
+                                                                                   FontWeight="Bold"/>
+
+                                                                        <TextBlock Grid.Row="3"
+                                                                                   Text="Inflation"
+                                                                                   Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="SelectedCountryInflationText"
+                                                                                   Grid.Row="3" Grid.Column="1"
+                                                                                   Text="0%"
+                                                                                   Foreground="#F0E68C"
+                                                                                   FontWeight="Bold"/>
+                                                                </Grid>
+                                                                <ListBox x:Name="SelectedCountryEconomicHighlightsList"
+                                                                         Height="90"
+                                                                         Background="#1E1E1E"
+                                                                         BorderBrush="#333333"
+                                                                         Margin="0,6,0,0"/>
+                                                        </StackPanel>
+                                                </TabItem>
+                                                <TabItem Header="Trade">
+                                                        <Grid Margin="0,6,0,0">
+                                                                <Grid.RowDefinitions>
+                                                                        <RowDefinition Height="Auto"/>
+                                                                        <RowDefinition Height="*"/>
+                                                                </Grid.RowDefinitions>
+                                                                <StackPanel Orientation="Horizontal"
+                                                                            Grid.Row="0"
+                                                                            HorizontalAlignment="Stretch"
+                                                                            Spacing="10">
+                                                                        <TextBlock Text="Trade Balance"
+                                                                                   Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="SelectedCountryTradeBalanceText"
+                                                                                   Text="$0"
+                                                                                   Foreground="#87CEFA"
+                                                                                   FontWeight="Bold"/>
+                                                                </StackPanel>
+                                                                <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10">
+                                                                        <StackPanel>
+                                                                                <TextBlock Text="Top Exports"
+                                                                                           Foreground="#90EE90"
+                                                                                           FontWeight="Bold"/>
+                                                                                <ListBox x:Name="SelectedCountryExportsList"
+                                                                                         Height="120"
+                                                                                         Background="#1E1E1E"
+                                                                                         BorderBrush="#333333"/>
+                                                                        </StackPanel>
+                                                                        <StackPanel Grid.Column="1">
+                                                                                <TextBlock Text="Top Imports"
+                                                                                           Foreground="#F08080"
+                                                                                           FontWeight="Bold"/>
+                                                                                <ListBox x:Name="SelectedCountryImportsList"
+                                                                                         Height="120"
+                                                                                         Background="#1E1E1E"
+                                                                                         BorderBrush="#333333"/>
+                                                                        </StackPanel>
+                                                                </Grid>
+                                                        </Grid>
+                                                </TabItem>
+                                                <TabItem Header="Population">
+                                                        <StackPanel Spacing="6" Margin="0,6,0,0">
+                                                                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
+                                                                        <TextBlock Grid.Row="0"
+                                                                                   Text="Population"
+                                                                                   Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="SelectedCountryPopulationText"
+                                                                                   Grid.Row="0" Grid.Column="1"
+                                                                                   Text="0"
+                                                                                   Foreground="#FFFFFF"
+                                                                                   FontWeight="Bold"/>
+
+                                                                        <TextBlock Grid.Row="1"
+                                                                                   Text="Urbanization"
+                                                                                   Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="SelectedCountryUrbanizationText"
+                                                                                   Grid.Row="1" Grid.Column="1"
+                                                                                   Text="0%"
+                                                                                   Foreground="#ADD8E6"
+                                                                                   FontWeight="Bold"/>
+
+                                                                        <TextBlock Grid.Row="2"
+                                                                                   Text="Pop Growth"
+                                                                                   Foreground="#DDDDDD"/>
+                                                                        <TextBlock x:Name="SelectedCountryPopGrowthText"
+                                                                                   Grid.Row="2" Grid.Column="1"
+                                                                                   Text="0%"
+                                                                                   Foreground="#90EE90"
+                                                                                   FontWeight="Bold"/>
+                                                                </Grid>
+                                                                <ListBox x:Name="SelectedCountryPopulationBreakdownList"
+                                                                         Height="90"
+                                                                         Background="#1E1E1E"
+                                                                         BorderBrush="#333333"
+                                                                         Margin="0,6,0,0"/>
+                                                        </StackPanel>
+                                                </TabItem>
+                                        </TabControl>
+                                </StackPanel>
+                        </Border>
+
+                        <!-- Right Side Button Panel -->
+                        <StackPanel Orientation="Vertical"
+                                                HorizontalAlignment="Right"
 						VerticalAlignment="Center"
 						Margin="10"
 						Spacing="5"
