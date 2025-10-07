@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Economy_sim
 {
@@ -28,6 +29,14 @@ namespace Economy_sim
                 city.Budget += perCity;
                 Budget -= perCity;
             }
+        }
+
+        /// <summary>
+        /// Update state population based on cities
+        /// </summary>
+        public void UpdatePopulationFromCities()
+        {
+            Population = Cities?.Sum(c => c.Population) ?? 0;
         }
     }
 } 

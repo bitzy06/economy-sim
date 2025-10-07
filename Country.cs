@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Economy_sim
 {
@@ -102,6 +103,20 @@ namespace Economy_sim
                     Market.UpdateCityPrices(city);
                 }
             }
+        }
+
+        /// <summary>
+        /// Update country population based on states
+        /// </summary>
+        public void UpdatePopulationFromStates()
+        {
+            // First update all state populations from their cities
+            foreach (var state in States)
+            {
+                state.UpdatePopulationFromCities();
+            }
+            // Then sum up all state populations
+            Population = States?.Sum(s => s.Population) ?? 0;
         }
     }
 }
