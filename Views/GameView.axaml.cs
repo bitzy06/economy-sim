@@ -38,6 +38,10 @@ namespace Economy_sim
         private Point _panStartPoint;
         private bool _hasPanned = false; // Track if user actually moved during pan
         private const double PAN_THRESHOLD = 5.0; // Minimum distance to consider as panning
+        private const double StatePopupDefaultWidth = 320;
+        private const double StatePopupDefaultHeight = 260;
+        private const double StatePopupPointerOffset = 18;
+        private const double StatePopupMinimumTop = 70;
         private bool _isInitialized = false;
 
         private readonly DispatcherTimer _mapUpdateTimer;
@@ -460,6 +464,7 @@ namespace Economy_sim
 
             if (currentPoint.Properties.IsLeftButtonPressed)
             {
+                HideStateInfoPopup();
                 _isPanning = true;
                 _hasPanned = false;
                 _panStartPoint = e.GetPosition(this.MapImage);
@@ -469,9 +474,8 @@ namespace Economy_sim
             }
             else if (currentPoint.Properties.IsRightButtonPressed)
             {
-                // Right-click for country detection (existing behavior)
                 var mousePos = e.GetPosition(this.MapImage);
-                DetectCountryAtPosition((int)mousePos.X, (int)mousePos.Y);
+                HandleStatePopupAtPosition((int)mousePos.X, (int)mousePos.Y);
                 e.Handled = true;
             }
         }
@@ -519,6 +523,55 @@ namespace Economy_sim
         #endregion
 
         #region Country Detection
+
+        private void HandleStatePopupAtPosition(int screenX, int screenY)
+        {
+            try
+            {
+                if (screenX < 0 || screenY < 0 || _mapManager == null)
+                {
+                    HideStateInfoPopup();
+                    return;
+                }
+
+                if (_mapManager.CurrentViewType != MapViewType.Political && _mapManager.CurrentViewType != MapViewType.States)
+                {
+                    HideStateInfoPopup();
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        try
+                        {
+                            this.Title = "Economy Sim - Switch to Political/States view for regional details";
+                        }
+                        catch (Exception titleEx)
+                        {
+                            Debug.WriteLine($"[STATE POPUP] Unable to update title: {titleEx.Message}");
+                        }
+                    });
+                    return;
+                }
+
+                var state = _mapManager.GetStateAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
+                if (state != null)
+                {
+                    _mapManager.SelectState(state);
+                    ShowStateSelectionFeedback(state, screenX, screenY);
+                    UpdateStateInfoPopup(state, new Point(screenX, screenY));
+                    QueueRender(immediate: true);
+                }
+                else
+                {
+                    HideStateInfoPopup();
+                    ShowStateSelectionFeedback(null, screenX, screenY);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[STATE POPUP ERROR] {ex.Message}");
+                Debug.WriteLine($"[STATE POPUP ERROR] Stack trace: {ex.StackTrace}");
+                HideStateInfoPopup();
+            }
+        }
 
         /// <summary>
         /// Detects which country is at the specified screen position
@@ -641,6 +694,7 @@ namespace Economy_sim
         {
             try
             {
+                HideStateInfoPopup();
                 // Validate inputs
                 if (screenX < 0 || screenY < 0 || _mapManager == null)
                 {
@@ -2159,6 +2213,7 @@ namespace Economy_sim
 
             if (this.FindControl<Border>("DebugMenuOverlay") is Border debugOverlay)
                 debugOverlay.IsVisible = false;
+            HideStateInfoPopup();
         }
 
         private void ShowPopup(String popupName)
