@@ -66,6 +66,51 @@ namespace Economy_sim
         private DispatcherTimer? _economyUpdateTimer;
         private bool _economyInitialized = false;
 
+        private static readonly string[] _sampleTradeGoods = new[]
+        {
+            "Machinery",
+            "Electronics",
+            "Oil",
+            "Automobiles",
+            "Textiles",
+            "Pharmaceuticals",
+            "Steel",
+            "Timber",
+            "Agricultural Goods",
+            "Tourism Services"
+        };
+
+        private static readonly string[] _samplePopulationGroups = new[]
+        {
+            "Laborers",
+            "Engineers",
+            "Farmers",
+            "Artisans",
+            "Clerks",
+            "Merchants",
+            "Administrators",
+            "Students"
+        };
+
+        private sealed class CountrySnapshot
+        {
+            public string DisplayName { get; set; } = string.Empty;
+            public string CountryCode { get; set; } = string.Empty;
+            public double Budget { get; set; }
+            public decimal Gdp { get; set; }
+            public double GrowthRate { get; set; }
+            public double InflationRate { get; set; }
+            public long Population { get; set; }
+            public double PopulationGrowth { get; set; }
+            public double UrbanizationRate { get; set; }
+            public double TradeBalance { get; set; }
+            public List<string> TopExports { get; } = new();
+            public List<string> TopImports { get; } = new();
+            public List<string> EconomicHighlights { get; } = new();
+            public List<string> PopulationBreakdown { get; } = new();
+            public bool IsPlaceholder { get; set; }
+        }
+
         public GameView()
         {
             InitializeComponent();
@@ -687,11 +732,15 @@ namespace Economy_sim
                 {
                     if (country != null)
                     {
+                        UpdateSelectedCountryPanel(country);
+                        SetSelectedCountrySubheading("Country Overview");
                         this.Title = $"Economy Sim - SELECTED: {country.CountryName} ({country.CountryCode})";
                         Debug.WriteLine($"[SELECTION FEEDBACK] Country selected: {country.CountryName}");
                     }
                     else
                     {
+                        UpdateSelectedCountryPanel(null);
+                        SetSelectedCountrySubheading(string.Empty, false);
                         this.Title = "Economy Sim - No country selected";
                         Debug.WriteLine("[SELECTION FEEDBACK] No country selected");
                     }
@@ -715,10 +764,12 @@ namespace Economy_sim
                     if (state != null)
                     {
                         this.Title = $"Economy Sim - STATE: {state.StateName}, {state.CountryName} ({state.CountryCode})";
+                        SetSelectedCountrySubheading($"State: {state.StateName}");
                         Debug.WriteLine($"[SELECTION FEEDBACK] State selected: {state.StateName} in {state.CountryName}");
                     }
                     else
                     {
+                        SetSelectedCountrySubheading("Country Overview");
                         this.Title = "Economy Sim - No state selected";
                         Debug.WriteLine("[SELECTION FEEDBACK] No state selected");
                     }
@@ -728,6 +779,324 @@ namespace Economy_sim
                     Debug.WriteLine($"[SELECTION FEEDBACK ERROR] {ex.Message}");
                 }
             });
+        }
+
+        private void UpdateSelectedCountryPanel(IndexedCountryFeature? feature)
+        {
+            if (this.FindControl<Border>("SelectedCountryOverlay") is not Border panel)
+            {
+                return;
+            }
+
+            if (feature == null)
+            {
+                panel.IsVisible = false;
+                ClearSelectedCountryLists();
+                return;
+            }
+
+            var snapshot = BuildCountrySnapshot(feature);
+            panel.IsVisible = true;
+
+            if (this.FindControl<TabControl>("SelectedCountryTabControl") is TabControl tabControl)
+            {
+                tabControl.SelectedIndex = 0;
+            }
+
+            (this.FindControl<TextBlock>("SelectedCountryNameText"))?.Let(t => t.Text = snapshot.DisplayName);
+            (this.FindControl<TextBlock>("SelectedCountryBudgetText"))?.Let(t => t.Text = $"${FormatCurrency(snapshot.Budget)}");
+
+            var gdpText = this.FindControl<TextBlock>("SelectedCountryGdpText");
+            if (gdpText != null)
+            {
+                string formattedGdp = snapshot.Gdp >= 1_000_000_000_000m
+                    ? $"${snapshot.Gdp / 1_000_000_000_000m:F2}T"
+                    : $"${FormatCurrency((double)snapshot.Gdp)}";
+                gdpText.Text = formattedGdp;
+            }
+
+            if (this.FindControl<TextBlock>("SelectedCountryGrowthText") is TextBlock growthText)
+            {
+                growthText.Text = $"{snapshot.GrowthRate:+0.0;-0.0;0.0}%";
+                growthText.Foreground = new SolidColorBrush(Color.Parse(snapshot.GrowthRate >= 0 ? "#90EE90" : "#F08080"));
+            }
+
+            if (this.FindControl<TextBlock>("SelectedCountryInflationText") is TextBlock inflationText)
+            {
+                inflationText.Text = $"{snapshot.InflationRate:F1}%";
+                var inflationColor = snapshot.InflationRate <= 4 ? "#F0E68C" : "#F08080";
+                inflationText.Foreground = new SolidColorBrush(Color.Parse(inflationColor));
+            }
+
+            if (this.FindControl<TextBlock>("SelectedCountryTradeBalanceText") is TextBlock balanceText)
+            {
+                double balance = snapshot.TradeBalance;
+                balanceText.Text = $"{(balance >= 0 ? "+" : "-")}${FormatCurrency(Math.Abs(balance))}";
+                balanceText.Foreground = new SolidColorBrush(Color.Parse(balance >= 0 ? "#90EE90" : "#F08080"));
+            }
+
+            (this.FindControl<TextBlock>("SelectedCountryPopulationText"))?.Let(t => t.Text = FormatPopulation(snapshot.Population));
+            (this.FindControl<TextBlock>("SelectedCountryUrbanizationText"))?.Let(t => t.Text = $"{snapshot.UrbanizationRate:F1}%");
+
+            if (this.FindControl<TextBlock>("SelectedCountryPopGrowthText") is TextBlock popGrowthText)
+            {
+                popGrowthText.Text = $"{snapshot.PopulationGrowth:+0.0;-0.0;0.0}%";
+                popGrowthText.Foreground = new SolidColorBrush(Color.Parse(snapshot.PopulationGrowth >= 0 ? "#90EE90" : "#F08080"));
+            }
+
+            PopulateListBox("SelectedCountryEconomicHighlightsList", snapshot.EconomicHighlights,
+                snapshot.IsPlaceholder ? "No detailed economy data available" : "Economic indicators unavailable");
+            PopulateListBox("SelectedCountryExportsList", snapshot.TopExports, "No export data available");
+            PopulateListBox("SelectedCountryImportsList", snapshot.TopImports, "No import data available");
+            PopulateListBox("SelectedCountryPopulationBreakdownList", snapshot.PopulationBreakdown, "No population breakdown available");
+        }
+
+        private void ClearSelectedCountryLists()
+        {
+            PopulateListBox("SelectedCountryEconomicHighlightsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+            PopulateListBox("SelectedCountryExportsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+            PopulateListBox("SelectedCountryImportsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+            PopulateListBox("SelectedCountryPopulationBreakdownList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+        }
+
+        private void PopulateListBox(string controlName, IEnumerable<string> items, string emptyMessage, bool suppressFallback = false)
+        {
+            if (this.FindControl<ListBox>(controlName) is not ListBox listBox)
+            {
+                return;
+            }
+
+            listBox.Items.Clear();
+            bool hasItem = false;
+            foreach (var item in items)
+            {
+                if (!string.IsNullOrWhiteSpace(item))
+                {
+                    listBox.Items.Add(item);
+                    hasItem = true;
+                }
+            }
+
+            if (!hasItem && !suppressFallback && !string.IsNullOrWhiteSpace(emptyMessage))
+            {
+                listBox.Items.Add(emptyMessage);
+            }
+        }
+
+        private CountrySnapshot BuildCountrySnapshot(IndexedCountryFeature feature)
+        {
+            var resolved = ResolveCountryData(feature);
+            if (resolved != null)
+            {
+                return BuildSnapshotFromCountry(resolved, feature);
+            }
+
+            return BuildPlaceholderSnapshot(feature);
+        }
+
+        private CountrySnapshot BuildSnapshotFromCountry(Country country, IndexedCountryFeature feature)
+        {
+            var snapshot = new CountrySnapshot
+            {
+                DisplayName = country.Name,
+                CountryCode = feature.CountryCode ?? string.Empty,
+                Budget = country.Budget,
+                Gdp = CalculateCountryGdp(country, ReferenceEquals(country, _currentCountry) ? _allCorporations : null),
+                InflationRate = (double)(country.FinancialSystem.InflationRate * 100m),
+                IsPlaceholder = false
+            };
+
+            var allCities = country.States.SelectMany(s => s.Cities).ToList();
+            snapshot.Population = allCities.Sum(c => (long)c.Population);
+            double avgQoL = allCities.Any()
+                ? allCities.Average(c => c.PopClasses.Any() ? c.PopClasses.Average(p => p.QualityOfLife) : 50)
+                : 50;
+            snapshot.GrowthRate = Math.Clamp((avgQoL - 50) / 5.0, -5.0, 8.0);
+            snapshot.PopulationGrowth = Math.Clamp((avgQoL - 60) / 18.0, -2.5, 4.0);
+            double urbanPopulation = allCities.Where(c => c.Population > 100000).Sum(c => (double)c.Population);
+            snapshot.UrbanizationRate = snapshot.Population > 0
+                ? Math.Clamp((urbanPopulation / snapshot.Population) * 100.0, 0, 100)
+                : 0;
+
+            double gdpPerCapita = snapshot.Population > 0 ? (double)snapshot.Gdp / snapshot.Population : 0;
+            snapshot.EconomicHighlights.Add($"GDP per capita: ${FormatCurrency(gdpPerCapita)}");
+            snapshot.EconomicHighlights.Add($"States: {country.States.Count} | Cities: {allCities.Count}");
+            snapshot.EconomicHighlights.Add($"Reserves: ${FormatCurrency((double)country.FinancialSystem.NationalReserves)}");
+
+            var outputGroups = allCities
+                .SelectMany(c => c.Factories)
+                .SelectMany(f => f.OutputGoods.Select(o => new
+                {
+                    o.Name,
+                    Quantity = o.Quantity * f.ProductionCapacity,
+                    Value = (o.BasePrice > 0 ? o.BasePrice : (Market.GoodDefinitions.TryGetValue(o.Name, out var def) ? def.BasePrice : 10.0)) * o.Quantity * f.ProductionCapacity
+                }))
+                .GroupBy(x => x.Name)
+                .Select(g => new
+                {
+                    Name = g.Key,
+                    Quantity = g.Sum(x => x.Quantity),
+                    Value = g.Sum(x => x.Value)
+                })
+                .OrderByDescending(g => g.Value)
+                .ToList();
+
+            double totalExportsValue = outputGroups.Sum(g => g.Value);
+            foreach (var group in outputGroups.Take(4))
+            {
+                snapshot.TopExports.Add($"{group.Name}: ${FormatCurrency(group.Value)} ({FormatCurrency(group.Quantity)} units)");
+            }
+
+            var importGroups = allCities
+                .SelectMany(c => c.ImportNeeds)
+                .Where(kvp => kvp.Value > 0)
+                .GroupBy(kvp => kvp.Key)
+                .Select(g => new
+                {
+                    Name = g.Key,
+                    Quantity = g.Sum(kvp => kvp.Value),
+                    Value = g.Sum(kvp => kvp.Value * (Market.GoodDefinitions.TryGetValue(g.Key, out var def) ? def.BasePrice : 10.0))
+                })
+                .OrderByDescending(g => g.Value)
+                .ToList();
+
+            double totalImportsValue = importGroups.Sum(g => g.Value);
+            foreach (var group in importGroups.Take(4))
+            {
+                snapshot.TopImports.Add($"{group.Name}: ${FormatCurrency(group.Value)} ({FormatCurrency(group.Quantity)} units)");
+            }
+
+            snapshot.TradeBalance = totalExportsValue - totalImportsValue;
+
+            var popGroups = allCities
+                .SelectMany(c => c.PopClasses)
+                .GroupBy(p => p.Name)
+                .Select(g => new
+                {
+                    Name = g.Key,
+                    Count = g.Sum(p => (long)p.Size)
+                })
+                .OrderByDescending(g => g.Count)
+                .Take(5);
+
+            foreach (var group in popGroups)
+            {
+                snapshot.PopulationBreakdown.Add($"{group.Name}: {FormatPopulation(group.Count)}");
+            }
+
+            if (!snapshot.PopulationBreakdown.Any())
+            {
+                snapshot.PopulationBreakdown.Add("Population data unavailable");
+            }
+
+            return snapshot;
+        }
+
+        private CountrySnapshot BuildPlaceholderSnapshot(IndexedCountryFeature feature)
+        {
+            int seed = HashCode.Combine(feature.CountryCode?.GetHashCode() ?? 0, feature.CountryName?.GetHashCode() ?? 0);
+            var random = new Random(seed);
+            var snapshot = new CountrySnapshot
+            {
+                DisplayName = string.IsNullOrWhiteSpace(feature.CountryName) ? "Unknown Country" : feature.CountryName,
+                CountryCode = feature.CountryCode ?? string.Empty,
+                Budget = random.Next(20, 500) * 1_000_000,
+                Gdp = (decimal)(random.Next(60, 900) * 1_000_000_000d),
+                GrowthRate = Math.Round(random.NextDouble() * 6 - 1.5, 1),
+                InflationRate = Math.Round(random.NextDouble() * 7 + 1.0, 1),
+                Population = random.Next(5, 250) * 1_000_000L,
+                PopulationGrowth = Math.Round(random.NextDouble() * 3 - 0.5, 1),
+                UrbanizationRate = Math.Round(random.Next(25, 90) + random.NextDouble(), 1),
+                TradeBalance = random.Next(-80, 80) * 1_000_000,
+                IsPlaceholder = true
+            };
+
+            snapshot.EconomicHighlights.Add($"Est. currency reserves: ${FormatCurrency(random.Next(5, 120) * 1_000_000)}");
+            snapshot.EconomicHighlights.Add($"Policy interest rate: {(random.NextDouble() * 5 + 1):F1}%");
+            snapshot.EconomicHighlights.Add("Figures estimated from limited intelligence");
+
+            var goods = _sampleTradeGoods.OrderBy(_ => random.Next()).Take(4).ToList();
+            foreach (var good in goods.Take(3))
+            {
+                double value = random.Next(5, 50) * 1_000_000;
+                snapshot.TopExports.Add($"{good}: ${FormatCurrency(value)}");
+            }
+
+            foreach (var good in goods.Skip(3).Take(3))
+            {
+                double value = random.Next(3, 35) * 1_000_000;
+                snapshot.TopImports.Add($"{good}: ${FormatCurrency(value)}");
+            }
+
+            var popGroups = _samplePopulationGroups.OrderBy(_ => random.Next()).Take(4).ToList();
+            long remainingPopulation = snapshot.Population;
+            foreach (var group in popGroups)
+            {
+                long allocation = (long)Math.Max(remainingPopulation * (0.1 + random.NextDouble() * 0.25), 1_000_000);
+                allocation = Math.Min(allocation, remainingPopulation);
+                snapshot.PopulationBreakdown.Add($"{group}: {FormatPopulation(allocation)}");
+                remainingPopulation = Math.Max(0, remainingPopulation - allocation);
+            }
+
+            if (snapshot.PopulationBreakdown.Count == 0)
+            {
+                snapshot.PopulationBreakdown.Add("Population estimates unavailable");
+            }
+
+            return snapshot;
+        }
+
+        private Country? ResolveCountryData(IndexedCountryFeature feature)
+        {
+            if (_allCountries == null || _allCountries.Count == 0)
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(feature.CountryName))
+            {
+                var exact = _allCountries.FirstOrDefault(c => c.Name.Equals(feature.CountryName, StringComparison.OrdinalIgnoreCase));
+                if (exact != null) return exact;
+            }
+
+            if (!string.IsNullOrWhiteSpace(feature.CountryCode))
+            {
+                var codeMatch = _allCountries.FirstOrDefault(c => c.Name.Equals(feature.CountryCode, StringComparison.OrdinalIgnoreCase));
+                if (codeMatch != null) return codeMatch;
+            }
+
+            foreach (var candidate in _allCountries)
+            {
+                if (!string.IsNullOrWhiteSpace(feature.CountryName) && candidate.Name.IndexOf(feature.CountryName, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return candidate;
+                }
+                if (!string.IsNullOrWhiteSpace(feature.CountryName) && feature.CountryName.IndexOf(candidate.Name, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        private void SetSelectedCountrySubheading(string text, bool visible = true)
+        {
+            if (this.FindControl<TextBlock>("SelectedCountrySubheadingText") is TextBlock subheading)
+            {
+                subheading.Text = text;
+                subheading.IsVisible = visible && !string.IsNullOrWhiteSpace(text);
+            }
+        }
+
+        private void HideSelectedCountryPanel()
+        {
+            if (this.FindControl<Border>("SelectedCountryOverlay") is Border panel)
+            {
+                panel.IsVisible = false;
+            }
+            ClearSelectedCountryLists();
+            SetSelectedCountrySubheading(string.Empty, false);
         }
 
         #endregion
@@ -1486,12 +1855,16 @@ namespace Economy_sim
 
         private decimal CalculateGDP()
         {
-            if (_currentCountry == null) return 0;
+            return CalculateCountryGdp(_currentCountry, _allCorporations);
+        }
+
+        private decimal CalculateCountryGdp(Country? country, IEnumerable<Corporation>? corporations = null)
+        {
+            if (country == null) return 0;
 
             decimal totalGDP = 0;
 
-            // Sum all economic activity: population income + corporate profits
-            foreach (var state in _currentCountry.States)
+            foreach (var state in country.States)
             {
                 foreach (var city in state.Cities)
                 {
@@ -1502,10 +1875,12 @@ namespace Economy_sim
                 }
             }
 
-            // Add corporate output value
-            foreach (var corp in _allCorporations)
+            if (corporations != null)
             {
-                totalGDP += (decimal)(corp.Budget * 0.1); // Approximate 10% of corp budget as profit contribution
+                foreach (var corp in corporations)
+                {
+                    totalGDP += (decimal)(corp.Budget * 0.1);
+                }
             }
 
             return totalGDP;
@@ -1659,6 +2034,8 @@ namespace Economy_sim
 
             if (this.FindControl<Button>("DebugCloseButton") is Button debugCloseBtn)
                 debugCloseBtn.Click += (s, e) => HideAllPopups();
+            if (this.FindControl<Button>("SelectedCountryCloseButton") is Button selectedCountryCloseBtn)
+                selectedCountryCloseBtn.Click += (s, e) => HideSelectedCountryPanel();
 
             // Setup overlay click handlers to close popups when clicking outside
             if (this.FindControl<Border>("DiplomacyMenuOverlay") is Border diplomacyOverlay)
@@ -2394,6 +2771,14 @@ namespace Economy_sim
             if (amount >= 1_000_000) return $"{amount / 1_000_000d:F1}M";
             if (amount >= 1_000) return $"{amount / 1_000d:F1}K";
             return amount.ToString("F0");
+        }
+
+        private string FormatPopulation(long population)
+        {
+            if (population >= 1_000_000_000L) return $"{population / 1_000_000_000d:F1}B";
+            if (population >= 1_000_000L) return $"{population / 1_000_000d:F1}M";
+            if (population >= 1_000L) return $"{population / 1_000d:F0}K";
+            return population.ToString("N0");
         }
         // ================================================
 
