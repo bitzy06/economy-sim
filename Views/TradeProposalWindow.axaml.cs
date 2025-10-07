@@ -23,10 +23,10 @@ namespace Economy_sim
                 : "Create an import agreement to bring goods into your country.";
 
             var countryList = countries.ToList();
-            FromCountryComboBox.Items = countryList;
-            ToCountryComboBox.Items = countryList;
+            FromCountryComboBox.ItemsSource = countryList;
+            ToCountryComboBox.ItemsSource = countryList;
             var goodsList = goods.ToList();
-            ResourceComboBox.Items = goodsList;
+            ResourceComboBox.ItemsSource = goodsList;
 
             if (!string.IsNullOrWhiteSpace(defaultFrom) && countryList.Contains(defaultFrom))
             {
@@ -48,7 +48,7 @@ namespace Economy_sim
         {
             if (TariffTypeComboBox != null)
             {
-                TariffTypeComboBox.Items = Enum.GetValues(typeof(TariffType)).Cast<TariffType>().ToList();
+                TariffTypeComboBox.ItemsSource = Enum.GetValues(typeof(TariffType)).Cast<TariffType>().ToList();
                 TariffTypeComboBox.SelectedItem = TariffType.None;
             }
 
@@ -99,9 +99,9 @@ namespace Economy_sim
                 return;
             }
 
-            var fromCountry = FromCountryComboBox.SelectedItem as string ?? FromCountryComboBox.Text;
-            var toCountry = ToCountryComboBox.SelectedItem as string ?? ToCountryComboBox.Text;
-            var resource = ResourceComboBox.SelectedItem as string ?? ResourceComboBox.Text;
+            var fromCountry = FromCountryComboBox.SelectedItem as string;
+            var toCountry = ToCountryComboBox.SelectedItem as string;
+            var resource = ResourceComboBox.SelectedItem as string;
 
             if (string.IsNullOrWhiteSpace(fromCountry) || string.IsNullOrWhiteSpace(toCountry) || string.IsNullOrWhiteSpace(resource))
             {

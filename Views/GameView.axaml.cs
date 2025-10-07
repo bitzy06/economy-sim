@@ -21,6 +21,11 @@ namespace Economy_sim
     public partial class GameView : Window
     {
         private readonly HybridMapManager _mapManager;
+        private readonly TradeMenuViewModel _tradeMenuViewModel;
+        private readonly ConstructionMenuViewModel _constructionMenuViewModel;
+        private GlobalMarket? _globalMarket;
+        private TradeRouteManager? _tradeRouteManager;
+        private EnhancedTradeManager? _enhancedTradeManager;
 
         // --- Optimized Rendering Fields ---
         private WriteableBitmap? _writeableBitmap; // Use a WriteableBitmap for high-performance updates.
@@ -993,6 +998,149 @@ namespace Economy_sim
 
         #endregion
 
+        #region Trade and Construction Support
+
+        private void InitializeTradeSystems()
+        {
+            _globalMarket ??= new GlobalMarket();
+            _tradeRouteManager ??= new TradeRouteManager();
+
+            if (_allCountries.Count > 0 && _enhancedTradeManager == null)
+            {
+                _enhancedTradeManager = new EnhancedTradeManager(_allCountries);
+            }
+        }
+
+        private void RefreshTradeViewModel()
+        {
+            if (_tradeMenuViewModel == null)
+            {
+                return;
+            }
+
+            var focusCountry = _playerCountry?.Name ?? _currentCountry?.Name;
+            _tradeMenuViewModel.Refresh(_globalMarket, _tradeRouteManager, _enhancedTradeManager, focusCountry);
+        }
+
+        private async Task HandleCreateTradeAsync(bool isExport)
+        {
+            InitializeTradeSystems();
+
+            if (_playerCountry == null)
+            {
+                return;
+            }
+
+            var countries = _allCountries.Select(c => c.Name).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct().OrderBy(name => name).ToList();
+            if (countries.Count == 0)
+            {
+                countries.Add(_playerCountry.Name);
+            }
+
+            var goods = Market.GoodDefinitions.Keys.OrderBy(k => k).ToList();
+
+            var defaultFrom = isExport ? _playerCountry.Name : countries.FirstOrDefault();
+            var defaultTo = isExport ? countries.FirstOrDefault(name => !string.Equals(name, defaultFrom, StringComparison.Ordinal)) : _playerCountry.Name;
+
+            var proposalWindow = new TradeProposalWindow();
+            proposalWindow.Configure(isExport, countries, goods, defaultFrom, defaultTo);
+
+            var parameters = await proposalWindow.ShowDialog<TradeDealParameters?>(this);
+            if (parameters == null)
+            {
+                return;
+            }
+
+            InitializeTradeSystems();
+
+            _enhancedTradeManager?.CreateEnhancedTradeAgreement(
+                parameters.FromCountry,
+                parameters.ToCountry,
+                parameters.Resource,
+                parameters.Quantity,
+                parameters.Price,
+                parameters.Duration,
+                parameters.TariffType,
+                parameters.TariffRate);
+
+            if (_globalMarket != null)
+            {
+                var quantity = (int)Math.Round(parameters.Quantity);
+                var totalValue = parameters.Price * parameters.Quantity;
+                _globalMarket.RecordTrade(parameters.Resource, parameters.FromCountry, parameters.ToCountry, quantity, totalValue);
+            }
+
+            RefreshTradeViewModel();
+        }
+
+        private void EnsureConstructionCompanies(IReadOnlyList<City> cities)
+        {
+            if (cities == null || cities.Count == 0)
+            {
+                return;
+            }
+
+            if (Market.AllConstructionCompanies.Count == 0)
+            {
+                foreach (var city in cities.Take(3))
+                {
+                    var company = new ConstructionCompany($"{city.Name} Builders", workers: 250, initialBudget: 250000m)
+                    {
+                        HomeCity = city
+                    };
+
+                    Market.AllConstructionCompanies.Add(company);
+                    _allCorporations.Add(company);
+                }
+            }
+
+            foreach (var company in Market.AllConstructionCompanies)
+            {
+                if (!_allCorporations.Contains(company))
+                {
+                    _allCorporations.Add(company);
+                }
+            }
+        }
+
+        private void UpdateConstructionContext()
+        {
+            if (_constructionMenuViewModel == null)
+            {
+                return;
+            }
+
+            City? focusCity = null;
+
+            switch (_playerRoleManager?.CurrentRole)
+            {
+                case PlayerRoleType.Governor:
+                    focusCity = _playerRoleManager.ControlledState?.Cities.FirstOrDefault();
+                    break;
+                case PlayerRoleType.CEO:
+                    var corp = _playerRoleManager.ControlledCorporation;
+                    focusCity = _currentCountry?.States.SelectMany(s => s.Cities)
+                        .FirstOrDefault(c => c.Factories.Any(f => f.OwnerCorporation == corp));
+                    break;
+                default:
+                    focusCity = _currentCountry?.States.SelectMany(s => s.Cities).FirstOrDefault();
+                    break;
+            }
+
+            var companies = Market.AllConstructionCompanies.ToList();
+
+            if (!Dispatcher.UIThread.CheckAccess())
+            {
+                Dispatcher.UIThread.Post(() => _constructionMenuViewModel.BindToCity(focusCity, companies));
+            }
+            else
+            {
+                _constructionMenuViewModel.BindToCity(focusCity, companies);
+            }
+        }
+
+        #endregion
+
         #region HUD Management
 
         // Sample game state for HUD demonstration
@@ -1223,6 +1371,7 @@ namespace Economy_sim
             Market.AllCorporations.AddRange(_allCorporations);
 
             _allCountries = new List<Country> { _currentCountry };
+            InitializeTradeSystems();
 
             // Set up player as Prime Minister BEFORE the HUD tries to access it
             _playerRoleManager = new PlayerRoleManager();
@@ -1233,6 +1382,7 @@ namespace Economy_sim
 
             _economyInitialized = true;
             UpdateConstructionContext();
+            RefreshTradeViewModel();
             Debug.WriteLine($"[Economy Init] Economy initialized with {_currentCountry.States.Count} states, {_currentCountry.States.Sum(s => s.Cities.Count)} cities, and {_allCorporations.Count} corporations");
         }
         private void OnEconomyUpdateTick(object? sender, EventArgs e)
@@ -1275,6 +1425,7 @@ namespace Economy_sim
                 UpdateEconomyDisplay();
                 UpdateHUDDisplay(null, null);
                 UpdateConstructionContext();
+                RefreshTradeViewModel();
 
                 Debug.WriteLine($"[Economy Update] Country budget: ${_currentCountry.Budget:N0}, GDP estimate: ${CalculateGDP():N0}");
             }
