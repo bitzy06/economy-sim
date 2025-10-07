@@ -8,9 +8,9 @@
         WindowState="FullScreen">
 
 	<Window.Resources>
-		<!-- Replace the gradient with an ImageBrush -->
+		<!-- Main menu background image using correct assembly name and file -->
 		<ImageBrush x:Key="MainMenuBackgroundBrush"
-		           Source="avares://Economy sim/Assets/main menu.png"
+		           Source="avares://Economy_sim/Assets/main_menu.png"
 		           Stretch="UniformToFill"/>
 	</Window.Resources>
 
@@ -22,14 +22,20 @@
 	<Viewbox Stretch="Uniform">
 		<Grid Width="800" Height="450" Background="{StaticResource MainMenuBackgroundBrush}">
 			<StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-				<!-- Text with outline effect using layered TextBlocks -->
-				<Grid HorizontalAlignment="Center" Margin="0,0,0,40">
+				<!-- Title container with max width + wrapping so text never overflows -->
+				<Grid HorizontalAlignment="Center" Margin="0,0,0,40" MaxWidth="760">
 					<!-- Black outline layer (back) -->
-					<TextBlock Text="CounterPoint: coldwar economy" Classes="heading-large-outline"
-					          HorizontalAlignment="Center" />
+					<TextBlock Text="CounterPoint: coldwar economy"
+					          Classes="heading-large-outline"
+					          HorizontalAlignment="Center"
+					          TextAlignment="Center"
+					          TextWrapping="Wrap"/>
 					<!-- White text layer (front) -->
-					<TextBlock Text="CounterPoint: coldwar economy" Classes="heading-large-white"
-					          HorizontalAlignment="Center" />
+					<TextBlock Text="CounterPoint: coldwar economy"
+					          Classes="heading-large-white"
+					          HorizontalAlignment="Center"
+					          TextAlignment="Center"
+					          TextWrapping="Wrap"/>
 				</Grid>
 				<Button x:Name="NewGameButton" Content="New Game" Classes="menu-button" HorizontalAlignment="Center" />
 				<Button x:Name="LoadGameButton" Content="Load Game" Classes="menu-button" HorizontalAlignment="Center" />

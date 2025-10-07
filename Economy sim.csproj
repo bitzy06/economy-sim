@@ -5,31 +5,28 @@
     <Nullable>enable</Nullable>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Disable compiled bindings by default since many views use untyped DataContexts -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <Platforms>AnyCPU;x64</Platforms>
+    <!-- Ensure assembly name has no spaces so XAML lookup works -->
+    <AssemblyName>Economy_sim</AssemblyName>
+    <RootNamespace>Economy_sim</RootNamespace>
   </PropertyGroup>
 
-
-
-	<ItemGroup>
-		<AvaloniaResource Include="Assets\**" />
-
-	</ItemGroup>
-
-
-
-	<ItemGroup>
-	  <AvaloniaXaml Remove="GlobalStyles.axaml" />
-	</ItemGroup>
-
-
-
-	<ItemGroup>
-	  <AvaloniaResource Include="GlobalStyles.axaml" />
-	</ItemGroup>
   <ItemGroup>
-    
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaXaml Remove="GlobalStyles.axaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="GlobalStyles.axaml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.2" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.2" />
