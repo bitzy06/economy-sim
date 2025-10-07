@@ -732,12 +732,36 @@ namespace Economy_sim
             foreach (var goodKey in city.ExportableSurplus.Keys.ToList()) city.ExportableSurplus[goodKey] = 0;
             foreach (var goodKey in city.ImportNeeds.Keys.ToList()) city.ImportNeeds[goodKey] = 0;
 
+            foreach (var factory in city.Factories)
+            {
+                foreach (var input in factory.InputGoods)
+                {
+                    if (!city.Stockpile.ContainsKey(input.Name))
+                    {
+                        city.Stockpile[input.Name] = new Good(input.Name, input.BasePrice, input.Category, 0);
+                    }
+                }
+
+                foreach (var output in factory.OutputGoods)
+                {
+                    if (!city.Stockpile.ContainsKey(output.Name))
+                    {
+                        city.Stockpile[output.Name] = new Good(output.Name, output.BasePrice, output.Category, 0);
+                    }
+                }
+            }
+
+            foreach (var factory in city.Factories)
+            {
+                factory.Produce(city.Stockpile, city);
+            }
+
             foreach (var pop in city.PopClasses)
             {
                 DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Size: {pop.Size}, Initial Employed: {pop.Employed}", DebugLogger.LogCategory.Pop);
-                pop.Size = Math.Max(1, pop.Size); 
-                pop.IncomePerPerson = Math.Max(0.01, pop.IncomePerPerson); 
-           //     pop.Employed = 0; 
+                pop.Size = Math.Max(1, pop.Size);
+                pop.IncomePerPerson = Math.Max(0.01, pop.IncomePerPerson);
+           //     pop.Employed = 0;
             }
 
             foreach (var factory in city.Factories)
