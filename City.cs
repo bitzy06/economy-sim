@@ -30,6 +30,7 @@ namespace Economy_sim
         public List<SellOrder> SellOrders { get; set; }
         public List<Suburb> Suburbs { get; private set; } // Added Suburbs property
         public List<ConstructionProject> ActiveProjects { get; private set; } // Added to track active construction projects
+        public List<ConstructionCompany> ConstructionCompanies { get; } = new();
 
         public City(string name)
         {
@@ -180,7 +181,20 @@ namespace Economy_sim
             return cityQoL;
         }
 
-        public void StartConstructionProject(ConstructionProject project)
+        public void RegisterConstructionCompany(ConstructionCompany company)
+        {
+            if (company == null)
+            {
+                return;
+            }
+
+            if (!ConstructionCompanies.Contains(company))
+            {
+                ConstructionCompanies.Add(company);
+            }
+        }
+
+        public void StartConstructionProject(ConstructionProject project, ConstructionCompany company = null)
         {
             if (project == null)
             {
@@ -190,6 +204,19 @@ namespace Economy_sim
             if (!ActiveProjects.Contains(project))
             {
                 project.OwningCity = this;
+                if (company != null)
+                {
+                    project.AssignedCompany = company;
+                    RegisterConstructionCompany(company);
+                    if (!company.Projects.Contains(project))
+                    {
+                        company.Projects.Add(project);
+                    }
+                }
+                else
+                {
+                    project.AssignedCompany = null;
+                }
                 ActiveProjects.Add(project);
             }
         }
@@ -201,20 +228,12 @@ namespace Economy_sim
                 return;
             }
 
-            var companiesToUpdate = new HashSet<ConstructionCompany>();
+            bool progressMade = false;
 
             foreach (var project in ActiveProjects.ToList())
             {
-                if (project.IsComplete())
-                {
-                    ApplyProjectEffects(project);
-                    ActiveProjects.Remove(project);
-                    continue;
-                }
-
                 if (project.AssignedCompany != null)
                 {
-                    companiesToUpdate.Add(project.AssignedCompany);
                     continue;
                 }
 
@@ -233,18 +252,15 @@ namespace Economy_sim
                 if (project.ProgressProject(1, dailyCost))
                 {
                     Budget -= (double)dailyCost;
+                    progressMade = true;
 
                     if (project.IsComplete())
                     {
                         ApplyProjectEffects(project);
                         ActiveProjects.Remove(project);
+                        progressMade = true;
                     }
                 }
-            }
-
-            foreach (var company in companiesToUpdate)
-            {
-                company.WorkOnProjects(this);
             }
 
             foreach (var project in ActiveProjects.ToList())
@@ -253,7 +269,13 @@ namespace Economy_sim
                 {
                     ApplyProjectEffects(project);
                     ActiveProjects.Remove(project);
+                    progressMade = true;
                 }
+            }
+
+            if (progressMade)
+            {
+                Economy.RaiseConstructionProgressed(this);
             }
         }
 
