@@ -143,6 +143,7 @@
 				</StackPanel>
                         </Border>
 
+
                         <!-- State Context Popup (appears near right-click position) -->
                         <Border x:Name="StateInfoPopup"
                                 Background="#F01E1E1E"
@@ -237,6 +238,7 @@
                                         </TabControl>
                                 </StackPanel>
                         </Border>
+
 
                         <!-- Selected Country Overview Panel -->
                         <Border x:Name="SelectedCountryOverlay"

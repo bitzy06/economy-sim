@@ -115,6 +115,7 @@ namespace Economy_sim
             public bool IsPlaceholder { get; set; }
         }
 
+
         private sealed class StateSnapshot
         {
             public string DisplayName { get; set; } = string.Empty;
@@ -134,6 +135,7 @@ namespace Economy_sim
             public List<string> PopulationBreakdown { get; } = new();
             public bool IsPlaceholder { get; set; }
         }
+
 
         public GameView()
         {
@@ -484,7 +486,9 @@ namespace Economy_sim
 
             if (currentPoint.Properties.IsLeftButtonPressed)
             {
-                HideStateInfoOverlay();
+
+                HideStateInfoPopup();
+
                 _isPanning = true;
                 _hasPanned = false;
                 _panStartPoint = e.GetPosition(this.MapImage);
@@ -550,13 +554,13 @@ namespace Economy_sim
             {
                 if (screenX < 0 || screenY < 0 || _mapManager == null)
                 {
-                    HideStateInfoOverlay();
+                    HideStateInfoPopup();
                     return;
                 }
 
                 if (_mapManager.CurrentViewType != MapViewType.Political && _mapManager.CurrentViewType != MapViewType.States)
                 {
-                    HideStateInfoOverlay();
+                    HideStateInfoPopup();
                     Dispatcher.UIThread.Post(() =>
                     {
                         try
@@ -576,12 +580,12 @@ namespace Economy_sim
                 {
                     _mapManager.SelectState(state);
                     ShowStateSelectionFeedback(state, screenX, screenY);
-                    UpdateStateInfoOverlay(state, new Point(screenX, screenY));
+                    UpdateStateInfoPopup(state, new Point(screenX, screenY));
                     QueueRender(immediate: true);
                 }
                 else
                 {
-                    HideStateInfoOverlay();
+                    HideStateInfoPopup();
                     ShowStateSelectionFeedback(null, screenX, screenY);
                 }
             }
@@ -589,7 +593,7 @@ namespace Economy_sim
             {
                 Debug.WriteLine($"[STATE POPUP ERROR] {ex.Message}");
                 Debug.WriteLine($"[STATE POPUP ERROR] Stack trace: {ex.StackTrace}");
-                HideStateInfoOverlay();
+                HideStateInfoPopup();
             }
         }
 
@@ -714,7 +718,7 @@ namespace Economy_sim
         {
             try
             {
-                HideStateInfoOverlay();
+                HideStateInfoPopup();
                 // Validate inputs
                 if (screenX < 0 || screenY < 0 || _mapManager == null)
                 {
@@ -855,6 +859,7 @@ namespace Economy_sim
             });
         }
 
+
         private void UpdateStateInfoOverlay(StateBorderManager.StateFeature stateFeature, Point pointerPosition)
         {
             if (this.FindControl<Border>("StateInfoPopup") is not Border popup)
@@ -961,6 +966,7 @@ namespace Economy_sim
             ClearStateInfoLists();
         }
 
+
         private void UpdateSelectedCountryPanel(IndexedCountryFeature? feature)
         {
             if (this.FindControl<Border>("SelectedCountryOverlay") is not Border panel)
@@ -1062,6 +1068,7 @@ namespace Economy_sim
                 listBox.Items.Add(emptyMessage);
             }
         }
+
 
         private StateSnapshot BuildStateSnapshot(StateBorderManager.StateFeature stateFeature)
         {
@@ -1288,6 +1295,7 @@ namespace Economy_sim
 
             return totalGdp;
         }
+
 
         private CountrySnapshot BuildCountrySnapshot(IndexedCountryFeature feature)
         {
@@ -2567,7 +2575,7 @@ namespace Economy_sim
 
             if (this.FindControl<Border>("DebugMenuOverlay") is Border debugOverlay)
                 debugOverlay.IsVisible = false;
-            HideStateInfoOverlay();
+            HideStateInfoPopup();
         }
 
         private void ShowPopup(String popupName)
