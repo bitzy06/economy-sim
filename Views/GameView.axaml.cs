@@ -136,7 +136,13 @@ namespace Economy_sim
             public bool IsPlaceholder { get; set; }
         }
 
-
+        private void HideStateInfoPopup()
+        {
+            if (this.FindControl<Border>("StateInfoPopupOverlay") is Border popup)
+            {
+                popup.IsVisible = false;
+            }
+        }
         public GameView()
         {
             InitializeComponent();
@@ -302,6 +308,94 @@ namespace Economy_sim
             }
         }
 
+        private void UpdateStateInfoPopup(StateBorderManager.StateFeature stateFeature, Point pointerPosition)
+        {
+            if (this.FindControl<Border>("StateInfoPopupOverlay") is not Border popup)
+            {
+                return;
+            }
+
+            var snapshot = BuildStateSnapshot(stateFeature);
+
+            double popupWidth = !double.IsNaN(popup.Width) && popup.Width > 0 ? popup.Width : StatePopupDefaultWidth;
+            double popupHeight = popup.Bounds.Height > 0 ? popup.Bounds.Height : StatePopupDefaultHeight;
+            double left = pointerPosition.X + StatePopupPointerOffset;
+            double top = pointerPosition.Y + StatePopupPointerOffset;
+
+            if (this.MapImage != null)
+            {
+                double mapWidth = this.MapImage.Bounds.Width;
+                double mapHeight = this.MapImage.Bounds.Height;
+
+                if (!double.IsNaN(mapWidth) && mapWidth > 0)
+                {
+                    left = Math.Min(left, mapWidth - popupWidth - StatePopupPointerOffset);
+                }
+
+                if (!double.IsNaN(mapHeight) && mapHeight > 0)
+                {
+                    top = Math.Min(top, mapHeight - popupHeight - StatePopupPointerOffset);
+                }
+            }
+
+            left = Math.Max(StatePopupPointerOffset, left);
+            top = Math.Max(StatePopupMinimumTop, top);
+
+            popup.Margin = new Thickness(left, top, 0, 0);
+            popup.IsVisible = true;
+
+            if (this.FindControl<TabControl>("StateInfoTabControl") is TabControl tabControl)
+            {
+                tabControl.SelectedIndex = 0;
+            }
+
+            (this.FindControl<TextBlock>("StateInfoNameText"))?.Let(t => t.Text = snapshot.DisplayName);
+            (this.FindControl<TextBlock>("StateInfoCountryText"))?.Let(t => t.Text = snapshot.CountryName);
+            (this.FindControl<TextBlock>("StateInfoBudgetText"))?.Let(t => t.Text = $"${FormatCurrency(snapshot.Budget)}");
+
+            if (this.FindControl<TextBlock>("StateInfoGdpText") is TextBlock gdpText)
+            {
+                string formattedGdp = snapshot.Gdp >= 1_000_000_000_000m
+                    ? $"${snapshot.Gdp / 1_000_000_000_000m:F2}T"
+                    : $"${FormatCurrency((double)snapshot.Gdp)}";
+                gdpText.Text = formattedGdp;
+            }
+
+            if (this.FindControl<TextBlock>("StateInfoGrowthText") is TextBlock growthText)
+            {
+                growthText.Text = $"{snapshot.GrowthRate:+0.0;-0.0;0.0}%";
+                growthText.Foreground = new SolidColorBrush(Color.Parse(snapshot.GrowthRate >= 0 ? "#90EE90" : "#F08080"));
+            }
+
+            if (this.FindControl<TextBlock>("StateInfoInflationText") is TextBlock inflationText)
+            {
+                inflationText.Text = $"{snapshot.InflationRate:F1}%";
+                var inflationColor = snapshot.InflationRate <= 4 ? "#F0E68C" : "#F08080";
+                inflationText.Foreground = new SolidColorBrush(Color.Parse(inflationColor));
+            }
+
+            if (this.FindControl<TextBlock>("StateInfoTradeBalanceText") is TextBlock balanceText)
+            {
+                double balance = snapshot.TradeBalance;
+                balanceText.Text = $"{(balance >= 0 ? "+" : "-")}${FormatCurrency(Math.Abs(balance))}";
+                balanceText.Foreground = new SolidColorBrush(Color.Parse(balance >= 0 ? "#90EE90" : "#F08080"));
+            }
+
+            (this.FindControl<TextBlock>("StateInfoPopulationText"))?.Let(t => t.Text = FormatPopulation(snapshot.Population));
+            (this.FindControl<TextBlock>("StateInfoUrbanizationText"))?.Let(t => t.Text = $"{snapshot.UrbanizationRate:F1}%");
+
+            if (this.FindControl<TextBlock>("StateInfoPopGrowthText") is TextBlock popGrowthText)
+            {
+                popGrowthText.Text = $"{snapshot.PopulationGrowth:+0.0;-0.0;0.0}%";
+                popGrowthText.Foreground = new SolidColorBrush(Color.Parse(snapshot.PopulationGrowth >= 0 ? "#90EE90" : "#F08080"));
+            }
+
+            PopulateListBox("StateInfoHighlightsList", snapshot.Highlights,
+                snapshot.IsPlaceholder ? "No detailed state data available" : "Highlights unavailable");
+            PopulateListBox("StateInfoExportsList", snapshot.TopExports, "No export data available");
+            PopulateListBox("StateInfoImportsList", snapshot.TopImports, "No import data available");
+            PopulateListBox("StateInfoPopulationBreakdownList", snapshot.PopulationBreakdown, "No population breakdown available");
+        }
         private void CancelStateCulling()
         {
             var cts = Interlocked.Exchange(ref _cullStatesCts, null);
