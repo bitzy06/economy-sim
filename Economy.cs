@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using System;
 using System.Linq;
+using System.IO;
+using System.Text.Json;
 
 namespace Economy_sim
 {
@@ -98,6 +100,99 @@ namespace Economy_sim
             Market.AllConstructionCompanies.AddRange(constructionCompanies);
 
             Console.WriteLine($"[Economy Init] Economy initialization complete!");
+            Console.WriteLine($"[Economy Init] Total: {countries.Count} countries, {countries.Sum(c => c.States.Count)} states, {countries.SelectMany(c => c.States).Sum(s => s.Cities.Count)} cities");
+            Console.WriteLine($"[Economy Init] Total: {corporations.Count} corporations ({constructionCompanies.Count} construction companies)");
+            Console.WriteLine($"[Economy Init] Total population: {countries.Sum(c => c.Population):N0}");
+
+            return (countries, corporations);
+        }
+
+        /// <summary>
+        /// Load the world economy from world_setup.json file
+        /// </summary>
+        /// <param name="filePath">Path to the world_setup.json file (defaults to world_setup.json in current directory)</param>
+        /// <param name="seed">Random seed for reproducible generation (null for random)</param>
+        /// <returns>Tuple of (countries, corporations) lists</returns>
+        public static (List<Country> countries, List<Corporation> corporations) LoadWorldEconomyFromJson(
+            string filePath = "world_setup.json",
+            int? seed = null)
+        {
+            Console.WriteLine($"[Economy Init] Loading world economy from {filePath}...");
+
+            // Initialize factory blueprints and goods
+            if (!Market.GoodDefinitions.Any())
+            {
+                FactoryBlueprints.InitializeBlueprints();
+                Console.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods and {FactoryBlueprints.AllBlueprints.Count} factory blueprints");
+            }
+
+            // Load world data from JSON
+            WorldSetupData worldData;
+            try
+            {
+                string jsonText = File.ReadAllText(filePath);
+                worldData = JsonSerializer.Deserialize<WorldSetupData>(jsonText, new JsonSerializerOptions 
+                { 
+                    PropertyNameCaseInsensitive = true 
+                });
+                
+                if (worldData == null || worldData.Countries == null)
+                {
+                    Console.WriteLine($"[Economy Init] ERROR: Failed to deserialize world data from {filePath}");
+                    // Fallback to procedural generation
+                    return InitializeWorldEconomy();
+                }
+                
+                Console.WriteLine($"[Economy Init] Loaded world structure with {worldData.Countries.Count} countries from JSON");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Economy Init] ERROR loading {filePath}: {ex.Message}");
+                Console.WriteLine($"[Economy Init] Falling back to procedural generation");
+                // Fallback to procedural generation
+                return InitializeWorldEconomy();
+            }
+
+            // Use procedural generation with the loaded data
+            var random = seed.HasValue ? new Random(seed.Value) : new Random();
+            var (countries, corporations) = ProceduralWorldGenerator.GenerateWorld(worldData, random);
+
+            // Set up construction companies
+            var constructionCompanies = new List<ConstructionCompany>();
+            if (worldData.ConstructionCompanies != null)
+            {
+                foreach (var companyData in worldData.ConstructionCompanies)
+                {
+                    var homeCity = countries
+                        .SelectMany(c => c.States)
+                        .SelectMany(s => s.Cities)
+                        .FirstOrDefault(city => city.Name == companyData.HomeCity);
+
+                    if (homeCity != null)
+                    {
+                        var company = new ConstructionCompany(
+                            companyData.Name,
+                            companyData.Workers,
+                            (decimal)companyData.InitialBudget)
+                        {
+                            HomeCity = homeCity
+                        };
+                        
+                        constructionCompanies.Add(company);
+                        homeCity.RegisterConstructionCompany(company);
+                        corporations.Add(company);
+                    }
+                }
+            }
+
+            // Register corporations in global market
+            Market.AllCorporations.Clear();
+            Market.AllCorporations.AddRange(corporations);
+
+            Market.AllConstructionCompanies.Clear();
+            Market.AllConstructionCompanies.AddRange(constructionCompanies);
+
+            Console.WriteLine($"[Economy Init] Economy initialization complete from JSON!");
             Console.WriteLine($"[Economy Init] Total: {countries.Count} countries, {countries.Sum(c => c.States.Count)} states, {countries.SelectMany(c => c.States).Sum(s => s.Cities.Count)} cities");
             Console.WriteLine($"[Economy Init] Total: {corporations.Count} corporations ({constructionCompanies.Count} construction companies)");
             Console.WriteLine($"[Economy Init] Total population: {countries.Sum(c => c.Population):N0}");

@@ -2311,8 +2311,8 @@ namespace Economy_sim
         {
             if (_economyInitialized) return;
 
-            // Generate entire world with one line!
-            var (countries, corporations) = Economy.InitializeWorldEconomy();
+            // Load world from JSON file if it exists, otherwise generate procedurally
+            var (countries, corporations) = Economy.LoadWorldEconomyFromJson();
 
             _allCountries = countries;
             _allCorporations = corporations;
