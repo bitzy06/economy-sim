@@ -64,6 +64,7 @@ namespace Economy_sim
         private bool _usedMapEconomy = false; // track if map based economy built
         private TradeRouteManager? _tradeRouteManager;
         private EnhancedTradeManager? _enhancedTradeManager;
+        private readonly TradeMenuViewModel _tradeMenuViewModel;
 
         private static readonly IReadOnlyDictionary<string, string> _needRemapping = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -77,6 +78,16 @@ namespace Economy_sim
         public GameView()
         {
             InitializeComponent();
+
+            _tradeMenuViewModel = new TradeMenuViewModel(HandleCreateTradeAsync);
+            if (TradeMenuOverlay != null)
+            {
+                TradeMenuOverlay.DataContext = _tradeMenuViewModel;
+            }
+            if (SideTradePanel != null)
+            {
+                SideTradePanel.DataContext = _tradeMenuViewModel;
+            }
 
             int baseW = ParseEnvOrDefault("ES_BASE_WIDTH", _baselineWidth);
             int baseH = ParseEnvOrDefault("ES_BASE_HEIGHT", _baselineHeight);
@@ -115,6 +126,8 @@ namespace Economy_sim
 
             // Run basic integration test for political borders (commented out for production)
             // Economy_sim.Testing.PoliticalBorderIntegrationTest.RunBasicTests();
+
+            RefreshTradeViewModel();
         }
 
         private void NormalizeInitialViewOffset(int baseW, int baseH)
@@ -1268,7 +1281,74 @@ namespace Economy_sim
             }
 
             _tradeRouteManager ??= new TradeRouteManager();
-            _enhancedTradeManager = new EnhancedTradeManager(_allCountries);
+            _enhancedTradeManager ??= new EnhancedTradeManager(_allCountries);
+            RefreshTradeViewModel();
+        }
+
+        private void RefreshTradeViewModel()
+        {
+            var focusCountry = _currentCountry?.Name ?? _playerCountry?.Name ?? string.Empty;
+            _tradeMenuViewModel.Refresh(GlobalMarket.Instance, _tradeRouteManager, _enhancedTradeManager, focusCountry);
+        }
+
+        private async Task HandleCreateTradeAsync(bool isExport)
+        {
+            InitializeTradeSystemsForCurrentWorld();
+
+            if (_enhancedTradeManager == null)
+            {
+                _enhancedTradeManager = new EnhancedTradeManager(_allCountries);
+            }
+
+            var countryNames = (_allCountries != null && _allCountries.Count > 0)
+                ? _allCountries.Select(c => c.Name).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                : new List<string>();
+
+            var focusCountry = _currentCountry?.Name ?? _playerCountry?.Name;
+            if (!string.IsNullOrWhiteSpace(focusCountry) && !countryNames.Any(n => string.Equals(n, focusCountry, StringComparison.OrdinalIgnoreCase)))
+            {
+                countryNames.Add(focusCountry!);
+            }
+
+            if (countryNames.Count == 0)
+            {
+                countryNames.Add("Player Nation");
+            }
+
+            var goodsNames = Market.GoodDefinitions.Any()
+                ? Market.GoodDefinitions.Keys.ToList()
+                : new List<string> { "Generic Goods" };
+
+            string? partner = countryNames.FirstOrDefault(n => !string.Equals(n, focusCountry, StringComparison.OrdinalIgnoreCase));
+            string? defaultFrom = isExport ? focusCountry ?? partner : partner ?? focusCountry;
+            string? defaultTo = isExport ? partner ?? focusCountry : focusCountry ?? partner;
+
+            var proposalWindow = new TradeProposalWindow();
+            proposalWindow.Configure(isExport, countryNames, goodsNames, defaultFrom, defaultTo);
+            var result = await proposalWindow.ShowDialog<TradeDealParameters?>(this);
+
+            if (result == null)
+            {
+                return;
+            }
+
+            var agreement = _enhancedTradeManager!.CreateEnhancedTradeAgreement(
+                result.FromCountry,
+                result.ToCountry,
+                result.Resource,
+                result.Quantity,
+                result.Price,
+                result.Duration,
+                result.TariffType,
+                result.TariffRate);
+
+            agreement.Status = TradeStatus.Active;
+            if (!_enhancedTradeManager.AllTradeAgreements.Contains(agreement))
+            {
+                _enhancedTradeManager.AllTradeAgreements.Add(agreement);
+            }
+
+            RefreshTradeViewModel();
         }
         private void InitializeEconomyData()
         {
@@ -1520,6 +1600,8 @@ namespace Economy_sim
                     }
                 }
 
+                RefreshTradeViewModel();
+
                 foreach (var state in _currentCountry.States)
                 {
                     Economy.UpdateStateEconomy(state);
@@ -1628,10 +1710,6 @@ namespace Economy_sim
                     if (this.FindControl<TextBlock>("GlobalTradeText") is TextBlock globalTradeText)
                     {
                         globalTradeText.Text = $"${FormatCurrency(globalTradeValue)}";
-                    }
-                    if (this.FindControl<TextBlock>("SideGlobalTradeText") is TextBlock sideGlobalTradeText)
-                    {
-                        sideGlobalTradeText.Text = $"${FormatCurrency(globalTradeValue)}";
                     }
 
                     // Update industries list with real data
@@ -1901,37 +1979,6 @@ namespace Economy_sim
                 }
             }
 
-            // Initialize Trade menu content
-            if (this.FindControl<ListBox>("ExportsList") is ListBox exportsList)
-            {
-                var exports = new[]
-                {
-                    "💼 Manufactured Goods → UK ($2.5B)",
-                    "🌾 Agricultural Products → Japan ($1.8B)",
-                    "⚙️ Technology → Germany ($3.2B)",
-                    "🛢️ Oil Products → Various ($4.1B)"
-                };
-                foreach (var export in exports)
-                {
-                    exportsList.Items.Add(export);
-                }
-            }
-
-            if (this.FindControl<ListBox>("ImportsList") is ListBox importsList)
-            {
-                var imports = new[]
-                {
-                    "📱 Electronics ← China ($2.8B)",
-                    "☕ Coffee ← Brazil ($0.9B)",
-                    "💎 Rare Metals ← Africa ($1.5B)",
-                    "🏭 Machinery ← Germany ($2.2B)"
-                };
-                foreach (var import in imports)
-                {
-                    importsList.Items.Add(import);
-                }
-            }
-
             // Initialize Construction menu content
             if (this.FindControl<ListBox>("ActiveProjectsList") is ListBox projectsList)
             {
@@ -2013,32 +2060,6 @@ namespace Economy_sim
                     sideDip.Items.Add(relation);
             }
 
-            // Trade
-            if (this.FindControl<ListBox>("SideExportsList") is ListBox sideExports)
-            {
-                var exports = new[]
-                {
-                    "💼 Manufactured Goods → UK ($2.5B)",
-                    "🌾 Agricultural Products → Japan ($1.8B)",
-                    "⚙️ Technology → Germany ($3.2B)",
-                    "🛢️ Oil Products → Various ($4.1B)"
-                };
-                foreach (var export in exports)
-                    sideExports.Items.Add(export);
-            }
-            if (this.FindControl<ListBox>("SideImportsList") is ListBox sideImports)
-            {
-                var imports = new[]
-                {
-                    "📱 Electronics ← China ($2.8B)",
-                    "☕ Coffee ← Brazil ($0.9B)",
-                    "💎 Rare Metals ← Africa ($1.5B)",
-                    "🏭 Machinery ← Germany ($2.2B)"
-                };
-                foreach (var import in imports)
-                    sideImports.Items.Add(import);
-            }
-
             // Construction
             if (this.FindControl<ListBox>("SideActiveProjectsList") is ListBox sideProjects)
             {
@@ -2060,8 +2081,6 @@ namespace Economy_sim
                 unemp.Text = "4.2%";
             if (this.FindControl<TextBlock>("SideInflationText") is TextBlock infl)
                 infl.Text = "2.1%";
-            if (this.FindControl<TextBlock>("SideGlobalTradeText") is TextBlock sideTrade)
-                sideTrade.Text = "$0";
             if (this.FindControl<ListBox>("SideIndustriesList") is ListBox sideIndustries)
             {
                 var industries = new[]
