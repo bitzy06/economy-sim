@@ -205,6 +205,13 @@ namespace Economy_sim
 
             foreach (var project in ActiveProjects.ToList())
             {
+                if (project.IsComplete())
+                {
+                    ApplyProjectEffects(project);
+                    ActiveProjects.Remove(project);
+                    continue;
+                }
+
                 if (project.AssignedCompany != null)
                 {
                     companiesToUpdate.Add(project.AssignedCompany);
@@ -212,7 +219,13 @@ namespace Economy_sim
                 }
 
                 var dailyCost = CalculateDailyCost(project);
-                if ((decimal)Budget < dailyCost || project.BudgetRemaining < dailyCost)
+                if (dailyCost <= 0m)
+                {
+                    continue;
+                }
+
+                var cityBudget = (decimal)Budget;
+                if (cityBudget < dailyCost || project.BudgetRemaining < dailyCost)
                 {
                     continue;
                 }
@@ -220,12 +233,12 @@ namespace Economy_sim
                 if (project.ProgressProject(1, dailyCost))
                 {
                     Budget -= (double)dailyCost;
-                }
 
-                if (project.IsComplete())
-                {
-                    ApplyProjectEffects(project);
-                    ActiveProjects.Remove(project);
+                    if (project.IsComplete())
+                    {
+                        ApplyProjectEffects(project);
+                        ActiveProjects.Remove(project);
+                    }
                 }
             }
 
@@ -246,13 +259,7 @@ namespace Economy_sim
 
         private static decimal CalculateDailyCost(ConstructionProject project)
         {
-            if (project.Duration <= 0)
-            {
-                return Math.Max(project.Budget, ConstructionProject.MinimumDailyBudget);
-            }
-
-            var dailyCost = project.Budget / project.Duration;
-            return dailyCost < ConstructionProject.MinimumDailyBudget ? ConstructionProject.MinimumDailyBudget : dailyCost;
+            return project.Duration > 0 ? project.Budget / project.Duration : 0m;
         }
 
         private void ApplyProjectEffects(ConstructionProject project)
