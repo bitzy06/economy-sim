@@ -1635,7 +1635,21 @@ namespace Economy_sim
                 return BuildSnapshotFromCountry(resolved, feature);
             }
 
-            return BuildPlaceholderSnapshot(feature);
+            // Return error state instead of placeholder
+            return new CountrySnapshot
+            {
+                DisplayName = feature.CountryName ?? "Unknown Country",
+                CountryCode = feature.CountryCode ?? string.Empty,
+                IsPlaceholder = true,
+                Budget = 0,
+                Gdp = 0,
+                GrowthRate = 0,
+                InflationRate = 0,
+                Population = 0,
+                PopulationGrowth = 0,
+                UrbanizationRate = 0,
+                TradeBalance = 0
+            };
         }
 
         private CountrySnapshot BuildSnapshotFromCountry(Country country, IndexedCountryFeature feature)
@@ -1731,60 +1745,6 @@ namespace Economy_sim
             if (!snapshot.PopulationBreakdown.Any())
             {
                 snapshot.PopulationBreakdown.Add("Population data unavailable");
-            }
-
-            return snapshot;
-        }
-
-        private CountrySnapshot BuildPlaceholderSnapshot(IndexedCountryFeature feature)
-        {
-            int seed = HashCode.Combine(feature.CountryCode?.GetHashCode() ?? 0, feature.CountryName?.GetHashCode() ?? 0);
-            var random = new Random(seed);
-            var snapshot = new CountrySnapshot
-            {
-                DisplayName = string.IsNullOrWhiteSpace(feature.CountryName) ? "Unknown Country" : feature.CountryName,
-                CountryCode = feature.CountryCode ?? string.Empty,
-                Budget = random.Next(20, 500) * 1_000_000,
-                Gdp = (decimal)(random.Next(60, 900) * 1_000_000_000d),
-                GrowthRate = Math.Round(random.NextDouble() * 6 - 1.5, 1),
-                InflationRate = Math.Round(random.NextDouble() * 7 + 1.0, 1),
-                Population = random.Next(5, 250) * 1_000_000L,
-                PopulationGrowth = Math.Round(random.NextDouble() * 3 - 0.5, 1),
-                UrbanizationRate = Math.Round(random.Next(25, 90) + random.NextDouble(), 1),
-                TradeBalance = random.Next(-80, 80) * 1_000_000,
-                IsPlaceholder = true
-            };
-
-            snapshot.EconomicHighlights.Add($"Est. currency reserves: ${FormatCurrency(random.Next(5, 120) * 1_000_000)}");
-            snapshot.EconomicHighlights.Add($"Policy interest rate: {(random.NextDouble() * 5 + 1):F1}%");
-            snapshot.EconomicHighlights.Add("Figures estimated from limited intelligence");
-
-            var goods = _sampleTradeGoods.OrderBy(_ => random.Next()).Take(4).ToList();
-            foreach (var good in goods.Take(3))
-            {
-                double value = random.Next(5, 50) * 1_000_000;
-                snapshot.TopExports.Add($"{good}: ${FormatCurrency(value)}");
-            }
-
-            foreach (var good in goods.Skip(3).Take(3))
-            {
-                double value = random.Next(3, 35) * 1_000_000;
-                snapshot.TopImports.Add($"{good}: ${FormatCurrency(value)}");
-            }
-
-            var popGroups = _samplePopulationGroups.OrderBy(_ => random.Next()).Take(4).ToList();
-            long remainingPopulation = snapshot.Population;
-            foreach (var group in popGroups)
-            {
-                long allocation = (long)Math.Max(remainingPopulation * (0.1 + random.NextDouble() * 0.25), 1_000_000);
-                allocation = Math.Min(allocation, remainingPopulation);
-                snapshot.PopulationBreakdown.Add($"{group}: {FormatPopulation(allocation)}");
-                remainingPopulation = Math.Max(0, remainingPopulation - allocation);
-            }
-
-            if (snapshot.PopulationBreakdown.Count == 0)
-            {
-                snapshot.PopulationBreakdown.Add("Population estimates unavailable");
             }
 
             return snapshot;
