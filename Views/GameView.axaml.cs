@@ -2311,19 +2311,92 @@ namespace Economy_sim
         {
             if (_economyInitialized) return;
 
-            // Load world from JSON file if it exists, otherwise generate procedurally
-            var (countries, corporations) = Economy.LoadWorldEconomyFromJson();
-
-            _allCountries = countries;
-            _allCorporations = corporations;
-            _currentCountry = countries.FirstOrDefault();
-            _playerCountry = _currentCountry;
+            // Generate economy from map data (countries and states from the political map)
+            if (_mapManager != null)
+            {
+                // Get all countries from the political map
+                var mapCountries = _mapManager.GetCountryAtPixel(0, 0, 1, 0, 0) != null 
+                    ? GetAllCountriesFromMap() 
+                    : new List<IndexedCountryFeature>();
+                
+                // Get all states from the map
+                var mapStates = _mapManager.GetAllStates();
+                
+                if (mapCountries.Count > 0 || mapStates.Count > 0)
+                {
+                    Console.WriteLine($"[Economy Init] Using map data: {mapCountries.Count} countries, {mapStates.Count} states");
+                    var (countries, corporations) = Economy.GenerateWorldEconomyFromMapData(mapCountries, mapStates);
+                    
+                    _allCountries = countries;
+                    _allCorporations = corporations;
+                    _currentCountry = countries.FirstOrDefault();
+                    _playerCountry = _currentCountry;
+                }
+                else
+                {
+                    Console.WriteLine($"[Economy Init] No map data available, using procedural generation");
+                    var (countries, corporations) = Economy.InitializeWorldEconomy();
+                    
+                    _allCountries = countries;
+                    _allCorporations = corporations;
+                    _currentCountry = countries.FirstOrDefault();
+                    _playerCountry = _currentCountry;
+                }
+            }
+            else
+            {
+                Console.WriteLine($"[Economy Init] Map manager not available, using procedural generation");
+                var (countries, corporations) = Economy.InitializeWorldEconomy();
+                
+                _allCountries = countries;
+                _allCorporations = corporations;
+                _currentCountry = countries.FirstOrDefault();
+                _playerCountry = _currentCountry;
+            }
 
             RegisterEconomyCityAnchors();
             _playerRoleManager = new PlayerRoleManager();
             _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
             InitializeTradeSystems();
             _economyInitialized = true;
+        }
+
+        private List<IndexedCountryFeature> GetAllCountriesFromMap()
+        {
+            // This is a workaround since HybridMapManager doesn't expose GetAllCountries directly
+            // We need to scan through the political data to get all countries
+            var countries = new List<IndexedCountryFeature>();
+            var countryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            // Get countries from states
+            var states = _mapManager.GetAllStates();
+            foreach (var state in states)
+            {
+                if (!string.IsNullOrWhiteSpace(state.CountryName) && !countryNames.Contains(state.CountryName))
+                {
+                    countryNames.Add(state.CountryName);
+                    
+                    // Try to find the country feature
+                    var countryFeature = _mapManager.FindCountryByName(state.CountryName);
+                    if (countryFeature != null && !countries.Any(c => c.CountryName.Equals(countryFeature.CountryName, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        countries.Add(countryFeature);
+                    }
+                    else if (countryFeature == null)
+                    {
+                        // Create a minimal country feature
+                        countries.Add(new IndexedCountryFeature
+                        {
+                            CountryName = state.CountryName,
+                            CountryCode = state.CountryCode ?? state.CountryName.Substring(0, Math.Min(3, state.CountryName.Length)).ToUpper(),
+                            RasterCode = state.RasterCode
+                        });
+                    }
+                }
+            }
+            
+            Console.WriteLine($"[Economy Init] Found {countries.Count} unique countries from {states.Count} states");
+            return countries;
         }
 
         private void RegisterEconomyCityAnchors()

@@ -286,7 +286,7 @@ namespace Economy_sim
             }
         }
 
-        private static string SelectWeightedFactoryType(Dictionary<string, double> weights, Random random)
+        public static string SelectWeightedFactoryType(Dictionary<string, double> weights, Random random)
         {
             double totalWeight = weights.Values.Sum();
             double randomValue = random.NextDouble() * totalWeight;
@@ -304,7 +304,7 @@ namespace Economy_sim
             return weights.Keys.FirstOrDefault() ?? "Grain Farm";
         }
 
-        private static Corporation FindOrCreateCorporation(
+        public static Corporation FindOrCreateCorporation(
             FactoryBlueprint blueprint, 
             City city, 
             List<Corporation> corporationPool, 
@@ -375,7 +375,7 @@ namespace Economy_sim
             return $"{prefixes[random.Next(prefixes.Length)]} {industry} {suffixes[random.Next(suffixes.Length)]}";
         }
 
-        private static Factory CreateFactoryFromBlueprint(
+        public static Factory CreateFactoryFromBlueprint(
             FactoryBlueprint blueprint, 
             Corporation owner, 
             int capacity, 
@@ -412,7 +412,7 @@ namespace Economy_sim
             return factory;
         }
 
-        private static void InitializeStockpile(City city, CityTemplate template, Random random)
+        public static void InitializeStockpile(City city, CityTemplate template, Random random)
         {
             // Start with template biases
             foreach (var bias in template.StockpileBias)
@@ -442,7 +442,7 @@ namespace Economy_sim
             }
         }
 
-        private static void InitializeLocalPrices(City city)
+        public static void InitializeLocalPrices(City city)
         {
             foreach (var good in Market.GoodDefinitions.Values)
             {

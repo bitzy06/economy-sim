@@ -200,6 +200,245 @@ namespace Economy_sim
             return (countries, corporations);
         }
 
+        /// <summary>
+        /// Generate world economy from map data (countries and states from the political map rendering system)
+        /// </summary>
+        /// <param name="mapCountries">List of country features from the map</param>
+        /// <param name="mapStates">List of state features from the map</param>
+        /// <param name="seed">Random seed for reproducible generation (null for random)</param>
+        /// <returns>Tuple of (countries, corporations) lists</returns>
+        public static (List<Country> countries, List<Corporation> corporations) GenerateWorldEconomyFromMapData(
+            IReadOnlyList<IndexedCountryFeature> mapCountries,
+            List<StateBorderManager.StateFeature> mapStates,
+            int? seed = null)
+        {
+            Console.WriteLine($"[Economy Init] Generating world economy from map data...");
+            Console.WriteLine($"[Economy Init] Map data: {mapCountries.Count} countries, {mapStates.Count} states");
+
+            // Initialize factory blueprints and goods
+            if (!Market.GoodDefinitions.Any())
+            {
+                FactoryBlueprints.InitializeBlueprints();
+                Console.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods and {FactoryBlueprints.AllBlueprints.Count} factory blueprints");
+            }
+
+            var random = seed.HasValue ? new Random(seed.Value) : new Random();
+            var allCountries = new List<Country>();
+            var allCorporations = new List<Corporation>();
+
+            // Group states by country
+            var statesByCountry = new Dictionary<string, List<StateBorderManager.StateFeature>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var state in mapStates)
+            {
+                if (string.IsNullOrWhiteSpace(state.CountryName)) continue;
+                
+                if (!statesByCountry.ContainsKey(state.CountryName))
+                {
+                    statesByCountry[state.CountryName] = new List<StateBorderManager.StateFeature>();
+                }
+                statesByCountry[state.CountryName].Add(state);
+            }
+
+            Console.WriteLine($"[Economy Init] Grouped states into {statesByCountry.Count} countries");
+
+            // Generate countries
+            foreach (var mapCountry in mapCountries)
+            {
+                if (string.IsNullOrWhiteSpace(mapCountry.CountryName)) continue;
+
+                var country = new Country(mapCountry.CountryName)
+                {
+                    Budget = random.Next(1000000, 100000000),
+                    NationalExpenses = random.Next(500000, 10000000),
+                    Population = 0
+                };
+
+                // Set up tax policies
+                double baseTaxRate = 0.15 + random.NextDouble() * 0.15; // 15-30%
+                var incomeTax = new TaxPolicy(TaxType.IncomeTax, (decimal)baseTaxRate, TaxProgressivity.Progressive);
+                incomeTax.ProgressiveBrackets[20000m] = (decimal)(baseTaxRate * 0.6);
+                incomeTax.ProgressiveBrackets[50000m] = (decimal)baseTaxRate;
+                incomeTax.ProgressiveBrackets[100000m] = (decimal)(baseTaxRate * 1.5);
+                country.FinancialSystem.AddTaxPolicy(incomeTax);
+                country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.CorporateTax, (decimal)(baseTaxRate * 1.2)));
+                country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.ConsumptionTax, (decimal)(baseTaxRate * 0.4)));
+
+                Console.WriteLine($"[Economy Init] Generating country: {country.Name}");
+
+                // Get states for this country
+                if (statesByCountry.TryGetValue(mapCountry.CountryName, out var countryStates))
+                {
+                    Console.WriteLine($"[Economy Init]   Found {countryStates.Count} states for {country.Name}");
+                    
+                    bool isFirstState = true;
+                    foreach (var mapState in countryStates)
+                    {
+                        var state = new State(mapState.StateName)
+                        {
+                            Budget = random.Next(100000, 10000000),
+                            TaxRate = 0.03 + random.NextDouble() * 0.05, // 3-8%
+                            StateExpenses = random.Next(50000, 1000000),
+                            Population = 0
+                        };
+
+                        Console.WriteLine($"[Economy Init]    Generating state: {state.Name}");
+
+                        // Generate 3-8 cities per state
+                        int numCities = random.Next(3, 9);
+                        var cityTypes = CityTemplateManager.DetermineStateCityTypes(numCities, random, hasCapital: isFirstState);
+
+                        for (int i = 0; i < numCities; i++)
+                        {
+                            var cityType = i < cityTypes.Count ? cityTypes[i] : CityType.MixedIndustrial;
+                            var template = CityTemplateManager.GetTemplate(cityType);
+                            
+                            string cityName = $"{state.Name} City {i + 1}";
+                            int population = random.Next(50000, 2000000);
+                            
+                            var city = new City(cityName)
+                            {
+                                Budget = random.Next(100000, 5000000) * template.BudgetMultiplier,
+                                TaxRate = 0.02 + random.NextDouble() * 0.04, // 2-6%
+                                CityExpenses = random.Next(50000, 500000) * template.ExpenseMultiplier,
+                                Population = population,
+                                Happiness = 50
+                            };
+
+                            Console.WriteLine($"[Economy Init]     Generating {cityType} city: {city.Name} (pop: {population:N0})");
+
+                            // Generate population classes
+                            city.PopClasses.Clear();
+                            foreach (var popDist in template.PopulationDistribution)
+                            {
+                                string className = popDist.Key;
+                                double percentage = popDist.Value;
+                                
+                                int classSize = (int)(population * percentage);
+                                if (classSize < 1) classSize = 1;
+
+                                double baseIncome = className switch
+                                {
+                                    "Laborers" => random.Next(12, 20) * template.IncomeMultiplier,
+                                    "Craftsmen" => random.Next(20, 35) * template.IncomeMultiplier,
+                                    "Engineers" => random.Next(40, 70) * template.IncomeMultiplier,
+                                    "Managers" => random.Next(60, 100) * template.IncomeMultiplier,
+                                    "Clerks" => random.Next(25, 45) * template.IncomeMultiplier,
+                                    _ => 20.0
+                                };
+
+                                var pop = new PopClass(className, classSize, baseIncome)
+                                {
+                                    Employed = (int)(classSize * (0.85 + random.NextDouble() * 0.1)),
+                                    Happiness = 50 + random.Next(-15, 15)
+                                };
+
+                                // Set basic needs
+                                pop.Needs["Grain"] = 1.0;
+                                pop.Needs["Bread"] = 0.8;
+                                pop.Needs["Cloth"] = 0.3;
+
+                                city.PopClasses.Add(pop);
+                            }
+                            city.Population = city.PopClasses.Sum(p => p.Size);
+
+                            // Generate factories
+                            int targetFactoryCount = random.Next(3, 8);
+                            for (int f = 0; f < targetFactoryCount; f++)
+                            {
+                                var factoryType = ProceduralWorldGenerator.SelectWeightedFactoryType(template.FactoryWeights, random);
+                                var blueprint = FactoryBlueprints.GetBlueprintForGood(factoryType) ?? 
+                                               FactoryBlueprints.AllBlueprints.FirstOrDefault(b => b.FactoryTypeName == factoryType);
+                                
+                                if (blueprint != null)
+                                {
+                                    var corporation = ProceduralWorldGenerator.FindOrCreateCorporation(blueprint, city, allCorporations, random);
+                                    var factory = ProceduralWorldGenerator.CreateFactoryFromBlueprint(blueprint, corporation, random.Next(2, 6), city);
+                                    
+                                    city.Factories.Add(factory);
+                                    corporation.AddFactory(factory);
+                                }
+                            }
+
+                            // Initialize stockpile and prices
+                            ProceduralWorldGenerator.InitializeStockpile(city, template, random);
+                            ProceduralWorldGenerator.InitializeLocalPrices(city);
+                            ProceduralCityBuilder.InitializeCityData(city, template, random);
+
+                            Console.WriteLine($"[Economy Init]     ✓ Completed city: {city.Name} - {city.PopClasses.Count} pop classes, {city.Factories.Count} factories");
+
+                            state.Cities.Add(city);
+                            state.Population += city.Population;
+                        }
+
+                        Console.WriteLine($"[Economy Init]    ✓ Completed state: {state.Name} - {state.Cities.Count} cities, pop: {state.Population:N0}");
+                        country.States.Add(state);
+                        country.Population += state.Population;
+                        isFirstState = false;
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[Economy Init]   No states found for {country.Name}, creating default state");
+                    // Create a default state if none exist
+                    var state = new State($"{country.Name} State")
+                    {
+                        Budget = random.Next(100000, 10000000),
+                        TaxRate = 0.05,
+                        StateExpenses = random.Next(50000, 1000000),
+                        Population = 0
+                    };
+                    
+                    // Generate 1 city for this default state
+                    var template = CityTemplateManager.GetTemplate(CityType.CapitalCity);
+                    int population = random.Next(500000, 5000000);
+                    var city = new City($"{country.Name} Capital")
+                    {
+                        Budget = random.Next(1000000, 10000000),
+                        TaxRate = 0.03,
+                        CityExpenses = random.Next(100000, 1000000),
+                        Population = population,
+                        Happiness = 50
+                    };
+
+                    // Quick population class setup
+                    city.PopClasses.Add(new PopClass("Laborers", (int)(population * 0.6), 15)
+                    {
+                        Employed = (int)(population * 0.5),
+                        Happiness = 50
+                    });
+                    city.Population = city.PopClasses.Sum(p => p.Size);
+
+                    state.Cities.Add(city);
+                    state.Population = city.Population;
+                    country.States.Add(state);
+                    country.Population = state.Population;
+                }
+
+                Console.WriteLine($"[Economy Init] ✓ Completed country: {country.Name} - {country.States.Count} states, {country.States.Sum(s => s.Cities.Count)} cities, pop: {country.Population:N0}");
+                allCountries.Add(country);
+            }
+
+            // Register corporations in global market
+            Market.AllCorporations.Clear();
+            Market.AllCorporations.AddRange(allCorporations);
+
+            int totalCities = allCountries.Sum(c => c.States.Sum(s => s.Cities.Count));
+            int totalFactories = allCountries.Sum(c => c.States.Sum(s => s.Cities.Sum(city => city.Factories.Count)));
+            int totalPopClasses = allCountries.Sum(c => c.States.Sum(s => s.Cities.Sum(city => city.PopClasses.Count)));
+
+            Console.WriteLine($"[Economy Init] ========================================");
+            Console.WriteLine($"[Economy Init] World economy generation from map data complete!");
+            Console.WriteLine($"[Economy Init] - {allCountries.Count} countries");
+            Console.WriteLine($"[Economy Init] - {allCountries.Sum(c => c.States.Count)} states");
+            Console.WriteLine($"[Economy Init] - {totalCities} cities");
+            Console.WriteLine($"[Economy Init] - {totalPopClasses} population classes");
+            Console.WriteLine($"[Economy Init] - {totalFactories} factories");
+            Console.WriteLine($"[Economy Init] - {allCorporations.Count} corporations");
+            Console.WriteLine($"[Economy Init] ========================================");
+
+            return (allCountries, allCorporations);
+        }
+
         public static void UpdateCountryEconomy(Country country)
         {
             // === New Financial System Integration ===
