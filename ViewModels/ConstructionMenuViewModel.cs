@@ -325,24 +325,12 @@ namespace Economy_sim
 
         private static decimal CalculateDailyCost(ConstructionProject project)
         {
-            if (project.Duration <= 0)
-            {
-                return Math.Max(project.Budget, ConstructionProject.MinimumDailyBudget);
-            }
-
-            var dailyCost = project.Budget / project.Duration;
-            return dailyCost < ConstructionProject.MinimumDailyBudget ? ConstructionProject.MinimumDailyBudget : dailyCost;
+            return project.Duration > 0 ? project.Budget / project.Duration : 0m;
         }
 
         private static decimal CalculateDailyCost(ConstructionProjectConfig config)
         {
-            if (config.Duration <= 0)
-            {
-                return config.Budget;
-            }
-
-            var dailyCost = config.Budget / config.Duration;
-            return dailyCost < ConstructionProject.MinimumDailyBudget ? ConstructionProject.MinimumDailyBudget : dailyCost;
+            return config.Duration > 0 ? config.Budget / config.Duration : 0m;
         }
 
         private static Dictionary<ProjectType, ConstructionProjectConfig> CreateDefaultConfigs()
@@ -407,12 +395,16 @@ namespace Economy_sim
 
             public string Status => project.IsComplete() ? "Complete" : "In Progress";
 
+            public decimal DailyCost => CalculateDailyCost(project);
+
+            public string DailyCostDisplay => $"Daily Cost: {DailyCost:C0}";
+
             public string Summary
             {
                 get
                 {
                     var description = config?.Description ?? "Construction project";
-                    return $"{description}\nStatus: {Status}\n{ProgressText}\n{BudgetDisplay}\n{BudgetRemainingDisplay}\n{AssignedCompanyDisplay}";
+                    return $"{description}\nStatus: {Status}\n{ProgressText}\n{DailyCostDisplay}\n{BudgetDisplay}\n{BudgetRemainingDisplay}\n{AssignedCompanyDisplay}";
                 }
             }
 
@@ -426,6 +418,8 @@ namespace Economy_sim
                 OnPropertyChanged(nameof(Status));
                 OnPropertyChanged(nameof(Summary));
                 OnPropertyChanged(nameof(AssignedCompanyDisplay));
+                OnPropertyChanged(nameof(DailyCost));
+                OnPropertyChanged(nameof(DailyCostDisplay));
             }
 
             private void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
