@@ -122,6 +122,7 @@ namespace Economy_sim
 
             // Generate population classes based on template
             GeneratePopulationClasses(city, data.InitialPopulation, template, random);
+            city.Population = city.PopClasses.Sum(p => p.Size);
 
             // Generate factories based on template
             GenerateFactories(city, data, template, random, corporationPool);
@@ -131,6 +132,9 @@ namespace Economy_sim
 
             // Initialize local prices
             InitializeLocalPrices(city);
+
+            // Link procedural city data to the economic simulation
+            ProceduralCityBuilder.InitializeCityData(city, template, random);
 
             return city;
         }

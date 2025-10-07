@@ -31,6 +31,7 @@ namespace Economy_sim
         public List<Suburb> Suburbs { get; private set; } // Added Suburbs property
         public List<ConstructionProject> ActiveProjects { get; private set; } // Added to track active construction projects
         public List<ConstructionCompany> ConstructionCompanies { get; } = new();
+        public CityProceduralData ProceduralData { get; set; }
 
         public City(string name)
         {
@@ -130,20 +131,84 @@ namespace Economy_sim
         public void SimulateGrowth()
         {
             double surplus = Budget - CityExpenses;
-            if (surplus > 0)
+            if (surplus <= 0)
             {
-                int growth = (int)(surplus / 1000); // Example: population grows with surplus
-                Population += growth;
-
-                // Distribute growth among PopClasses proportionally
-                foreach (var pop in PopClasses)
-                {
-                    int popGrowth = (int)(growth * ((double)pop.Size / Population));
-                    pop.Size += popGrowth;
-                }
-
-                Budget += surplus * 0.05; // Example: reinvest surplus
+                HandleOvercrowding();
+                return;
             }
+
+            int baseGrowth = (int)(surplus / 1000);
+            if (baseGrowth <= 0)
+            {
+                HandleOvercrowding();
+                return;
+            }
+
+            int currentPopulation = Math.Max(1, PopClasses.Sum(p => p.Size));
+            int allowedGrowth = baseGrowth;
+
+            if (ProceduralData != null)
+            {
+                int maxPopulation = ProceduralData.TotalResidentialCapacity;
+                if (maxPopulation > 0)
+                {
+                    int availableCapacity = Math.Max(0, maxPopulation - currentPopulation);
+                    allowedGrowth = Math.Min(baseGrowth, availableCapacity);
+
+                    if (availableCapacity <= 0)
+                    {
+                        HandleOvercrowding();
+                        return;
+                    }
+                }
+            }
+
+            if (allowedGrowth <= 0)
+            {
+                HandleOvercrowding();
+                return;
+            }
+
+            Population = currentPopulation + allowedGrowth;
+
+            foreach (var pop in PopClasses)
+            {
+                int popGrowth = (int)Math.Round(allowedGrowth * (pop.Size / (double)currentPopulation));
+                pop.Size += popGrowth;
+            }
+
+            Budget += surplus * 0.05;
+        }
+
+        private void HandleOvercrowding()
+        {
+            if (ProceduralData == null)
+            {
+                return;
+            }
+
+            int totalCapacity = ProceduralData.TotalResidentialCapacity;
+            if (totalCapacity <= 0)
+            {
+                return;
+            }
+
+            int currentPopulation = PopClasses.Sum(p => p.Size);
+            if (currentPopulation <= totalCapacity)
+            {
+                return;
+            }
+
+            int overflow = currentPopulation - totalCapacity;
+            int reduction = Math.Max(1, overflow / Math.Max(1, PopClasses.Count));
+
+            foreach (var pop in PopClasses)
+            {
+                pop.Size = Math.Max(0, pop.Size - reduction);
+            }
+
+            Population = PopClasses.Sum(p => p.Size);
+            Happiness = Math.Max(0, Happiness - 2);
         }
 
         public void AddSuburb(Suburb suburb)
