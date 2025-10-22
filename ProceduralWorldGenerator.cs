@@ -27,11 +27,21 @@ namespace Economy_sim
             {
                 var country = GenerateCountry(countryData, random, allCorporations);
                 allCountries.Add(country);
-                
-                Console.WriteLine($"[World Gen] Generated country: {country.Name} with {country.States.Count} states");
             }
 
-            Console.WriteLine($"[World Gen] World generation complete: {allCountries.Count} countries, {allCorporations.Count} corporations");
+            int totalCities = allCountries.Sum(c => c.States.Sum(s => s.Cities.Count));
+            int totalFactories = allCountries.Sum(c => c.States.Sum(s => s.Cities.Sum(city => city.Factories.Count)));
+            int totalPopClasses = allCountries.Sum(c => c.States.Sum(s => s.Cities.Sum(city => city.PopClasses.Count)));
+
+            Console.WriteLine($"[World Gen] ========================================");
+            Console.WriteLine($"[World Gen] World generation complete!");
+            Console.WriteLine($"[World Gen] - {allCountries.Count} countries");
+            Console.WriteLine($"[World Gen] - {allCountries.Sum(c => c.States.Count)} states");
+            Console.WriteLine($"[World Gen] - {totalCities} cities");
+            Console.WriteLine($"[World Gen] - {totalPopClasses} population classes");
+            Console.WriteLine($"[World Gen] - {totalFactories} factories");
+            Console.WriteLine($"[World Gen] - {allCorporations.Count} corporations");
+            Console.WriteLine($"[World Gen] ========================================");
 
             return (allCountries, allCorporations);
         }
@@ -54,6 +64,8 @@ namespace Economy_sim
             country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.CorporateTax, (decimal)(data.TaxRate * 1.2)));
             country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.ConsumptionTax, (decimal)(data.TaxRate * 0.4)));
 
+            Console.WriteLine($"[World Gen] Generating country: {country.Name} with {data.States.Count} states");
+            
             bool isFirstState = true;
             foreach (var stateData in data.States)
             {
@@ -63,6 +75,8 @@ namespace Economy_sim
                 isFirstState = false;
             }
 
+            Console.WriteLine($"[World Gen] ✓ Completed country: {country.Name} - {country.States.Count} states, {country.States.Sum(s => s.Cities.Count)} cities, population: {country.Population:N0}");
+            
             return country;
         }
 
@@ -75,6 +89,8 @@ namespace Economy_sim
                 StateExpenses = data.StateExpenses,
                 Population = 0
             };
+
+            Console.WriteLine($"[World Gen]  Generating state: {state.Name} with {data.Cities.Count} cities");
 
             // Determine city types for this state
             var cityTypes = CityTemplateManager.DetermineStateCityTypes(
@@ -91,6 +107,8 @@ namespace Economy_sim
                 state.Cities.Add(city);
                 state.Population += city.Population;
             }
+
+            Console.WriteLine($"[World Gen]  ✓ Completed state: {state.Name} - {state.Cities.Count} cities, population: {state.Population:N0}");
 
             return state;
         }
@@ -118,7 +136,7 @@ namespace Economy_sim
                 Happiness = 50
             };
 
-            Console.WriteLine($"[World Gen]   Creating {cityType} city: {city.Name} (pop: {city.Population:N0})");
+            Console.WriteLine($"[World Gen]   Generating {cityType} city: {city.Name} (initial pop: {city.Population:N0})");
 
             // Generate population classes based on template
             GeneratePopulationClasses(city, data.InitialPopulation, template, random);
@@ -135,6 +153,8 @@ namespace Economy_sim
 
             // Link procedural city data to the economic simulation
             ProceduralCityBuilder.InitializeCityData(city, template, random);
+
+            Console.WriteLine($"[World Gen]   ✓ Completed city: {city.Name} - {city.PopClasses.Count} pop classes, {city.Factories.Count} factories, final pop: {city.Population:N0}");
 
             return city;
         }
@@ -248,7 +268,7 @@ namespace Economy_sim
             // Create factories and assign to corporations
             foreach (var (type, capacity) in factoriesToBuild)
             {
-                var blueprint = FactoryBlueprints.GetBlueprintForGood(type);
+                var blueprint = FactoryBlueprints.AllBlueprints.FirstOrDefault(b => b.OutputGood.Name == type || b.FactoryTypeName == type);
                 if (blueprint == null)
                 {
                     blueprint = FactoryBlueprints.AllBlueprints.FirstOrDefault(b => b.FactoryTypeName == type);
@@ -266,7 +286,7 @@ namespace Economy_sim
             }
         }
 
-        private static string SelectWeightedFactoryType(Dictionary<string, double> weights, Random random)
+        public static string SelectWeightedFactoryType(Dictionary<string, double> weights, Random random)
         {
             double totalWeight = weights.Values.Sum();
             double randomValue = random.NextDouble() * totalWeight;
@@ -284,7 +304,7 @@ namespace Economy_sim
             return weights.Keys.FirstOrDefault() ?? "Grain Farm";
         }
 
-        private static Corporation FindOrCreateCorporation(
+        public static Corporation FindOrCreateCorporation(
             FactoryBlueprint blueprint, 
             City city, 
             List<Corporation> corporationPool, 
@@ -355,7 +375,7 @@ namespace Economy_sim
             return $"{prefixes[random.Next(prefixes.Length)]} {industry} {suffixes[random.Next(suffixes.Length)]}";
         }
 
-        private static Factory CreateFactoryFromBlueprint(
+        public static Factory CreateFactoryFromBlueprint(
             FactoryBlueprint blueprint, 
             Corporation owner, 
             int capacity, 
@@ -392,7 +412,7 @@ namespace Economy_sim
             return factory;
         }
 
-        private static void InitializeStockpile(City city, CityTemplate template, Random random)
+        public static void InitializeStockpile(City city, CityTemplate template, Random random)
         {
             // Start with template biases
             foreach (var bias in template.StockpileBias)
@@ -422,7 +442,7 @@ namespace Economy_sim
             }
         }
 
-        private static void InitializeLocalPrices(City city)
+        public static void InitializeLocalPrices(City city)
         {
             foreach (var good in Market.GoodDefinitions.Values)
             {

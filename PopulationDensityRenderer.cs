@@ -75,7 +75,7 @@ namespace Economy_sim
                     if (!_gdalConfigured)
                     {
                         try { GdalBase.ConfigureAll(); _gdalConfigured = true; }
-                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[PopulationDensity] GDAL init failed: {ex.Message}"); return GenerateFallback("GDAL init failure"); }
+                        catch (Exception) { return GenerateFallback("GDAL init failure"); }
                     }
                 }
 
@@ -84,7 +84,6 @@ namespace Economy_sim
 
                 if (!File.Exists(placesPath))
                 {
-                    System.Diagnostics.Debug.WriteLine($"[PopulationDensity] Populated places shapefile missing: {placesPath}");
                     // Attempt structured fallback via urban texture
                     var urban = TryGenerateFromUrbanTexture(countriesPath);
                     if (urban != null) return urban;
@@ -143,12 +142,10 @@ namespace Economy_sim
                 }
 
                 if (File.Exists(countriesPath)) DrawCountryBorders(bitmap, countriesPath);
-                else System.Diagnostics.Debug.WriteLine($"[PopulationDensity] Country borders missing: {countriesPath}");
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"[PopulationDensity] Fatal: {ex.Message}");
                 return GenerateFallback("Exception");
             }
         }
@@ -191,12 +188,10 @@ namespace Economy_sim
                     }
                 }
                 if (File.Exists(countriesPath)) DrawCountryBorders(bmp, countriesPath);
-                System.Diagnostics.Debug.WriteLine("[PopulationDensity] Used urban_texture.png as fallback density source.");
                 return bmp;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"[PopulationDensity] Urban texture fallback failed: {ex.Message}");
                 return null;
             }
         }
@@ -257,7 +252,7 @@ namespace Economy_sim
                 layer.ResetReading(); Feature feat; while ((feat = layer.GetNextFeature()) != null)
                 { var geom = feat.GetGeometryRef(); if (geom == null) continue; DrawGeometry(canvas, paint, geom); }
             }
-            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[PopulationDensity] Border draw failed: {ex.Message}"); }
+            catch (Exception) { }
         }
 
         private static void DrawGeometry(SKCanvas canvas, SKPaint paint, Geometry geom)

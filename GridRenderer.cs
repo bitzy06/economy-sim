@@ -42,8 +42,6 @@ namespace Economy_sim
         {
             try
             {
-                Debug.WriteLine($"GridRenderer.RenderGridTile: Starting render for tile ({tileX}, {tileY}) at LOD {lodLevel}");
-                
                 var controlGrid = _gridEngine.GetControlGridLod(lodLevel);
                 int gridWidth = controlGrid.GetLength(1);
                 int gridHeight = controlGrid.GetLength(0);
@@ -74,10 +72,8 @@ namespace Economy_sim
 
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"GridRenderer.RenderGridTile: ERROR rendering tile ({tileX}, {tileY}): {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"GridRenderer.RenderGridTile: Stack trace: {ex.StackTrace}");
                 return null;
             }
         }
@@ -122,9 +118,8 @@ namespace Economy_sim
 
                 return bitmap;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"GridRenderer.RenderGridTileScaled: ERROR rendering tile ({tileX}, {tileY}): {ex.Message}");
                 return null;
             }
         }

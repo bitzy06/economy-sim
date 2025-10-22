@@ -421,9 +421,42 @@ namespace Economy_sim
 
                 layer.ResetReading();
 
+                // DEBUG: Print available fields from the first feature
+                var firstFeat = layer.GetNextFeature();
+                if (firstFeat != null)
+                {
+                    var defn = firstFeat.GetDefnRef();
+                    if (defn != null)
+                    {
+                        int fieldCount = defn.GetFieldCount();
+                        Debug.WriteLine($"[STATE MANAGER] Available fields in shapefile ({fieldCount} fields):");
+                        for (int i = 0; i < fieldCount; i++)
+                        {
+                            try
+                            {
+                                var fieldDefn = defn.GetFieldDefn(i);
+                                if (fieldDefn != null)
+                                {
+                                    string fieldName = fieldDefn.GetName();
+                                    string fieldValue = firstFeat.IsFieldSet(i) ? firstFeat.GetFieldAsString(i) : "<not set>";
+                                    Debug.WriteLine($"[STATE MANAGER]   Field {i}: '{fieldName}' = '{fieldValue}'");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Debug.WriteLine($"[STATE MANAGER]   Field {i}: <error reading field: {ex.Message}>");
+                            }
+                        }
+                    }
+                    firstFeat.Dispose();
+                }
+                
+                layer.ResetReading();
+
                 int errorCount = 0;
                 const int maxErrors = 50; // fail-fast to avoid crash loops
                 int nextRaster = 1;
+                int statesWithoutCountry = 0;
 
                 Feature? feat;
                 while ((feat = layer.GetNextFeature()) != null)
@@ -436,13 +469,33 @@ namespace Economy_sim
                         string stateName = GetFirstNonEmpty(feat,
                             "name_en", "name", "name_long", "adm1name", "gns_name") ?? string.Empty;
                         string stateCode = GetFirstNonEmpty(feat, "postal", "adm1_code", "iso_3166_2", "sr_adm1") ?? string.Empty;
-                        string countryName = GetFirstNonEmpty(feat, "adm0_name", "sr_adm0", "name_0", "name_en_0") ?? string.Empty;
+                        
+                        // Try multiple field names for country name
+                        string countryName = GetFirstNonEmpty(feat, 
+                            "admin", // Common in Natural Earth data
+                            "adm0_name", "sr_adm0", "name_0", "name_en_0",
+                            "ADMIN", // Try uppercase
+                            "sovereignt", // Sovereignty name
+                            "sov_a3", // Sovereignty code
+                            "name_sort" // Alternative name field
+                        ) ?? string.Empty;
+                        
                         string countryCode = GetFirstNonEmpty(feat, "iso_a2", "iso_a3", "adm0_a3", "sr_sov_a3") ?? string.Empty;
 
                         if (string.IsNullOrWhiteSpace(stateName))
                         {
                             feat.Dispose();
                             continue; // require at least a name
+                        }
+
+                        // Track states without country names for debugging
+                        if (string.IsNullOrWhiteSpace(countryName))
+                        {
+                            statesWithoutCountry++;
+                            if (statesWithoutCountry <= 5) // Only log first few
+                            {
+                                Debug.WriteLine($"[STATE MANAGER] State '{stateName}' has no country name (stateCode='{stateCode}', countryCode='{countryCode}')");
+                            }
                         }
 
                         var state = new StateFeature
@@ -488,6 +541,11 @@ namespace Economy_sim
                     {
                         feat.Dispose();
                     }
+                }
+
+                if (statesWithoutCountry > 0)
+                {
+                    Debug.WriteLine($"[STATE MANAGER] WARNING: {statesWithoutCountry} states loaded without country names out of {_stateFeatures.Count} total");
                 }
 
                 bool ok = _stateFeatures.Count > 0 && errorCount <= maxErrors;
