@@ -140,6 +140,95 @@
 									   VerticalAlignment="Center"/>
 						</StackPanel>
 					</Border>
+
+					<!-- Time Control Section -->
+					<Border Background="#2D2D30"
+							CornerRadius="3"
+							Padding="8,4"
+							Margin="15,0,0,0"
+							BorderBrush="#555555"
+							BorderThickness="1">
+						<StackPanel Orientation="Horizontal" Spacing="8">
+							<!-- Pause/Resume Button -->
+							<Button x:Name="PauseResumeButton"
+									Content="⏸"
+									Width="36"
+									Height="36"
+									Background="#1A4A1A"
+									BorderBrush="#2A6A2A"
+									Foreground="White"
+									FontSize="16"
+									Padding="0"
+									ToolTip.Tip="Pause/Resume Simulation"/>
+							
+							<!-- Speed Control Buttons -->
+							<Border BorderBrush="#444444" BorderThickness="1,0,0,0" Padding="8,0,0,0">
+								<StackPanel Orientation="Horizontal" Spacing="4">
+									<Button x:Name="Speed05xButton"
+											Content="0.5x"
+											Width="42"
+											Height="36"
+											Background="#333333"
+											BorderBrush="#555555"
+											Foreground="#AAAAAA"
+											FontSize="11"
+											Padding="2"
+											ToolTip.Tip="Slow Speed"/>
+									<Button x:Name="Speed1xButton"
+											Content="1x"
+											Width="38"
+											Height="36"
+											Background="#1A4A1A"
+											BorderBrush="#2A6A2A"
+											Foreground="White"
+											FontSize="11"
+											FontWeight="Bold"
+											Padding="2"
+											ToolTip.Tip="Normal Speed"/>
+									<Button x:Name="Speed2xButton"
+											Content="2x"
+											Width="38"
+											Height="36"
+											Background="#333333"
+											BorderBrush="#555555"
+											Foreground="#AAAAAA"
+											FontSize="11"
+											Padding="2"
+											ToolTip.Tip="Fast Speed"/>
+									<Button x:Name="Speed5xButton"
+											Content="5x"
+											Width="38"
+											Height="36"
+											Background="#333333"
+											BorderBrush="#555555"
+											Foreground="#AAAAAA"
+											FontSize="11"
+											Padding="2"
+											ToolTip.Tip="Very Fast Speed"/>
+									<Button x:Name="Speed10xButton"
+											Content="10x"
+											Width="42"
+											Height="36"
+											Background="#333333"
+											BorderBrush="#555555"
+											Foreground="#AAAAAA"
+											FontSize="11"
+											Padding="2"
+											ToolTip.Tip="Ultra Fast Speed"/>
+								</StackPanel>
+							</Border>
+							
+							<!-- Speed Indicator -->
+							<TextBlock x:Name="SpeedIndicatorText"
+									   Text="1.0x"
+									   Foreground="#90EE90"
+									   FontWeight="Bold"
+									   FontSize="13"
+									   VerticalAlignment="Center"
+									   Margin="4,0,0,0"
+									   MinWidth="35"/>
+						</StackPanel>
+					</Border>
 				</StackPanel>
                         </Border>
 

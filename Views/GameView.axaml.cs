@@ -75,6 +75,13 @@ namespace Economy_sim
         private DispatcherTimer? _economyUpdateTimer;
         private bool _economyInitialized = false;
 
+        // === Time Control Fields ===
+        private bool _isSimulationPaused = false;
+        private double _simulationSpeedMultiplier = 1.0;
+        private TimeSpan _baseEconomyUpdateInterval = TimeSpan.FromSeconds(5);
+        private readonly double[] _speedOptions = new[] { 0.5, 1.0, 2.0, 5.0, 10.0 };
+        private int _currentSpeedIndex = 1; // Start at 1.0x
+
         private static readonly string[] _sampleTradeGoods = new[]
         {
             "Machinery",
@@ -2456,6 +2463,7 @@ namespace Economy_sim
             // Initial HUD update
             UpdateHUDDisplay(null, null);
             UpdateEconomyDisplay();
+            UpdateTimeControlUI(); // Initialize time control button states
         }
 
         private void InitializeEconomyData()
@@ -2640,48 +2648,49 @@ namespace Economy_sim
         {
             if (!_economyInitialized) return;
 
+            var startTime = Stopwatch.GetTimestamp();
             try
             {
+                // Pre-calculate all cities list once for corporation AI (optimization)
+                var allCities = _allCountries.SelectMany(c => c.States.SelectMany(s => s.Cities)).ToList();
+                var goodDefinitions = Market.GoodDefinitions.Values.ToList();
+                var random = new Random();
+
                 // Run the economy update cycle for ALL countries in the world
-                foreach (var country in _allCountries)
+                // Use Parallel.ForEach for better performance with multiple countries
+                if (_allCountries.Count > 3)
                 {
-                    if (country == null) continue;
-
-                    // Update all cities in the country
-                    foreach (var state in country.States)
+                    // Use parallel processing for large worlds
+                    Parallel.ForEach(_allCountries, country =>
                     {
-                        foreach (var city in state.Cities)
-                        {
-                            Economy.UpdateCityEconomy(city);
-                            city.ProgressConstruction();
-                        }
-                    }
-
-                    // Update all states in the country
-                    foreach (var state in country.States)
+                        if (country == null) return;
+                        ProcessCountryEconomyUpdate(country);
+                    });
+                }
+                else
+                {
+                    // Use sequential processing for small worlds to avoid overhead
+                    foreach (var country in _allCountries)
                     {
-                        Economy.UpdateStateEconomy(state);
+                        if (country == null) continue;
+                        ProcessCountryEconomyUpdate(country);
                     }
-
-                    // Update the country economy
-                    Economy.UpdateCountryEconomy(country);
-
-                    // Update population growth
-                    Economy.UpdateCountryPopulation(country);
-
-                    // Update aggregated population from cities -> states -> country
-                    country.UpdatePopulationFromStates();
-
-                    // Simulate monetary effects
-                    country.FinancialSystem.SimulateMonetaryEffects();
                 }
 
-                // Run AI for corporations
-                var random = new Random();
-                foreach (var corp in _allCorporations)
+                // Run AI for corporations (can also be parallelized for large numbers)
+                if (_allCorporations.Count > 10)
                 {
-                    var allCities = _allCountries.SelectMany(c => c.States.SelectMany(s => s.Cities)).ToList();
-                    corp.UpdateAI(allCities, Market.GoodDefinitions.Values.ToList(), random);
+                    Parallel.ForEach(_allCorporations, corp =>
+                    {
+                        corp.UpdateAI(allCities, goodDefinitions, random);
+                    });
+                }
+                else
+                {
+                    foreach (var corp in _allCorporations)
+                    {
+                        corp.UpdateAI(allCities, goodDefinitions, random);
+                    }
                 }
 
                 // Update displays (only for current country if one is selected)
@@ -2692,11 +2701,57 @@ namespace Economy_sim
                     UpdateConstructionContext();
                     RefreshTradeViewModel();
                 }
+
+                // Log performance metrics
+                var elapsed = Stopwatch.GetElapsedTime(startTime);
+                if (elapsed.TotalMilliseconds > 100) // Log if taking more than 100ms
+                {
+                    Debug.WriteLine($"[Economy Update Performance] Tick completed in {elapsed.TotalMilliseconds:F2}ms " +
+                                  $"({_allCountries.Count} countries, {allCities.Count} cities, {_allCorporations.Count} corporations)");
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"[Economy Update Error] {ex.Message}");
                 Debug.WriteLine($"[Economy Update Error] Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        private void ProcessCountryEconomyUpdate(Country country)
+        {
+            try
+            {
+                // Update all cities in the country
+                foreach (var state in country.States)
+                {
+                    foreach (var city in state.Cities)
+                    {
+                        Economy.UpdateCityEconomy(city);
+                        city.ProgressConstruction();
+                    }
+                }
+
+                // Update all states in the country
+                foreach (var state in country.States)
+                {
+                    Economy.UpdateStateEconomy(state);
+                }
+
+                // Update the country economy
+                Economy.UpdateCountryEconomy(country);
+
+                // Update population growth
+                Economy.UpdateCountryPopulation(country);
+
+                // Update aggregated population from cities -> states -> country
+                country.UpdatePopulationFromStates();
+
+                // Simulate monetary effects
+                country.FinancialSystem.SimulateMonetaryEffects();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Country Update Error] Failed to update {country.Name}: {ex.Message}");
             }
         }
 
@@ -2858,6 +2913,25 @@ namespace Economy_sim
 
             if (this.FindControl<Button>("StatesViewButton") is Button statesBtn)
                 statesBtn.Click += OnStatesViewClicked;
+
+            // Time Control buttons
+            if (this.FindControl<Button>("PauseResumeButton") is Button pauseBtn)
+                pauseBtn.Click += OnPauseResumeClicked;
+            
+            if (this.FindControl<Button>("Speed05xButton") is Button speed05Btn)
+                speed05Btn.Click += (s, e) => SetSimulationSpeed(0.5);
+            
+            if (this.FindControl<Button>("Speed1xButton") is Button speed1Btn)
+                speed1Btn.Click += (s, e) => SetSimulationSpeed(1.0);
+            
+            if (this.FindControl<Button>("Speed2xButton") is Button speed2Btn)
+                speed2Btn.Click += (s, e) => SetSimulationSpeed(2.0);
+            
+            if (this.FindControl<Button>("Speed5xButton") is Button speed5Btn)
+                speed5Btn.Click += (s, e) => SetSimulationSpeed(5.0);
+            
+            if (this.FindControl<Button>("Speed10xButton") is Button speed10Btn)
+                speed10Btn.Click += (s, e) => SetSimulationSpeed(10.0);
 
             // Setup close button handlers for popup menus
             if (this.FindControl<Button>("DiplomacyCloseButton") is Button diplomacyCloseBtn)
@@ -3625,6 +3699,118 @@ namespace Economy_sim
                 if (progressPanel != null) progressPanel.IsVisible = false;
             }
         }
+        
+        #region Time Control Methods
+        
+        private void OnPauseResumeClicked(object? sender, RoutedEventArgs e)
+        {
+            _isSimulationPaused = !_isSimulationPaused;
+            
+            if (_isSimulationPaused)
+            {
+                _economyUpdateTimer?.Stop();
+                Debug.WriteLine("[Time Control] Simulation PAUSED");
+            }
+            else
+            {
+                _economyUpdateTimer?.Start();
+                Debug.WriteLine($"[Time Control] Simulation RESUMED at {_simulationSpeedMultiplier}x speed");
+            }
+            
+            UpdateTimeControlUI();
+        }
+        
+        private void SetSimulationSpeed(double speedMultiplier)
+        {
+            _simulationSpeedMultiplier = speedMultiplier;
+            
+            // Update the timer interval based on speed multiplier
+            if (_economyUpdateTimer != null)
+            {
+                // Calculate new interval: base interval / speed multiplier
+                // e.g., 5 seconds at 2x speed = 2.5 seconds
+                double intervalSeconds = _baseEconomyUpdateInterval.TotalSeconds / _simulationSpeedMultiplier;
+                
+                // Clamp to reasonable limits (min 0.1 seconds, max 60 seconds)
+                intervalSeconds = Math.Clamp(intervalSeconds, 0.1, 60.0);
+                
+                _economyUpdateTimer.Interval = TimeSpan.FromSeconds(intervalSeconds);
+                
+                Debug.WriteLine($"[Time Control] Speed set to {_simulationSpeedMultiplier}x (interval: {intervalSeconds:F2}s)");
+            }
+            
+            UpdateTimeControlUI();
+        }
+        
+        private void UpdateTimeControlUI()
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    // Update pause/resume button
+                    if (this.FindControl<Button>("PauseResumeButton") is Button pauseBtn)
+                    {
+                        pauseBtn.Content = _isSimulationPaused ? "▶" : "⏸";
+                        pauseBtn.Background = _isSimulationPaused 
+                            ? new SolidColorBrush(Color.Parse("#4A1A1A"))  // Red when paused
+                            : new SolidColorBrush(Color.Parse("#1A4A1A")); // Green when running
+                    }
+                    
+                    // Update speed indicator
+                    if (this.FindControl<TextBlock>("SpeedIndicatorText") is TextBlock speedText)
+                    {
+                        if (_isSimulationPaused)
+                        {
+                            speedText.Text = "PAUSED";
+                            speedText.Foreground = new SolidColorBrush(Color.Parse("#F08080"));
+                        }
+                        else
+                        {
+                            speedText.Text = $"{_simulationSpeedMultiplier:F1}x";
+                            speedText.Foreground = new SolidColorBrush(Color.Parse("#90EE90"));
+                        }
+                    }
+                    
+                    // Update speed button styles to highlight active speed
+                    UpdateSpeedButtonStyle("Speed05xButton", 0.5);
+                    UpdateSpeedButtonStyle("Speed1xButton", 1.0);
+                    UpdateSpeedButtonStyle("Speed2xButton", 2.0);
+                    UpdateSpeedButtonStyle("Speed5xButton", 5.0);
+                    UpdateSpeedButtonStyle("Speed10xButton", 10.0);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[Time Control UI Error] {ex.Message}");
+                }
+            });
+        }
+        
+        private void UpdateSpeedButtonStyle(string buttonName, double speed)
+        {
+            if (this.FindControl<Button>(buttonName) is Button btn)
+            {
+                bool isActive = Math.Abs(_simulationSpeedMultiplier - speed) < 0.01;
+                
+                if (isActive)
+                {
+                    btn.Background = new SolidColorBrush(Color.Parse("#1A4A1A"));
+                    btn.BorderBrush = new SolidColorBrush(Color.Parse("#2A6A2A"));
+                    btn.Foreground = Brushes.White;
+                    btn.FontWeight = FontWeight.Bold;
+                }
+                else
+                {
+                    btn.Background = new SolidColorBrush(Color.Parse("#333333"));
+                    btn.BorderBrush = new SolidColorBrush(Color.Parse("#555555"));
+                    btn.Foreground = new SolidColorBrush(Color.Parse("#AAAAAA"));
+                    btn.FontWeight = FontWeight.Normal;
+                }
+            }
+        }
+        
+        #endregion
+
         private void OnMapViewTypeChanged(object? sender, MapViewType type)
         {
             Dispatcher.UIThread.Post(UpdateMapViewButtons);
