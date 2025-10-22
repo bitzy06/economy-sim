@@ -268,7 +268,7 @@ namespace Economy_sim
             // Create factories and assign to corporations
             foreach (var (type, capacity) in factoriesToBuild)
             {
-                var blueprint = FactoryBlueprints.GetBlueprintForGood(type);
+                var blueprint = FactoryBlueprints.AllBlueprints.FirstOrDefault(b => b.OutputGood.Name == type || b.FactoryTypeName == type);
                 if (blueprint == null)
                 {
                     blueprint = FactoryBlueprints.AllBlueprints.FirstOrDefault(b => b.FactoryTypeName == type);

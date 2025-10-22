@@ -1002,6 +1002,26 @@ namespace Economy_sim
 
             (this.FindControl<TextBlock>("StateInfoNameText"))?.Let(t => t.Text = snapshot.DisplayName);
             (this.FindControl<TextBlock>("StateInfoCountryText"))?.Let(t => t.Text = snapshot.CountryName);
+
+            // Show "No Data" when placeholder
+            if (snapshot.IsPlaceholder)
+            {
+                (this.FindControl<TextBlock>("StateInfoBudgetText"))?.Let(t => t.Text = "No Data");
+                (this.FindControl<TextBlock>("StateInfoGdpText"))?.Let(t => t.Text = "No Data");
+                (this.FindControl<TextBlock>("StateInfoGrowthText"))?.Let(t => t.Text = "No Data");
+                (this.FindControl<TextBlock>("StateInfoInflationText"))?.Let(t => t.Text = "No Data");
+                (this.FindControl<TextBlock>("StateInfoTradeBalanceText"))?.Let(t => t.Text = "No Data");
+                (this.FindControl<TextBlock>("StateInfoPopulationText"))?.Let(t => t.Text = "No Data");
+                (this.FindControl<TextBlock>("StateInfoUrbanizationText"))?.Let(t => t.Text = "No Data");
+                (this.FindControl<TextBlock>("StateInfoPopGrowthText"))?.Let(t => t.Text = "No Data");
+                
+                PopulateListBox("StateInfoHighlightsList", new[] { "⚠️ No economy data available for this state" }, string.Empty);
+                PopulateListBox("StateInfoExportsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+                PopulateListBox("StateInfoImportsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+                PopulateListBox("StateInfoPopulationBreakdownList", Array.Empty<string>(), string.Empty, suppressFallback: true);
+                return;
+            }
+
             (this.FindControl<TextBlock>("StateInfoBudgetText"))?.Let(t => t.Text = $"${FormatCurrency(snapshot.Budget)}");
 
             if (this.FindControl<TextBlock>("StateInfoGdpText") is TextBlock gdpText)
@@ -1041,8 +1061,7 @@ namespace Economy_sim
                 popGrowthText.Foreground = new SolidColorBrush(Color.Parse(snapshot.PopulationGrowth >= 0 ? "#90EE90" : "#F08080"));
             }
 
-            PopulateListBox("StateInfoHighlightsList", snapshot.Highlights,
-                snapshot.IsPlaceholder ? "No detailed state data available" : "Highlights unavailable");
+            PopulateListBox("StateInfoHighlightsList", snapshot.Highlights, "Highlights unavailable");
             PopulateListBox("StateInfoExportsList", snapshot.TopExports, "No export data available");
             PopulateListBox("StateInfoImportsList", snapshot.TopImports, "No import data available");
             PopulateListBox("StateInfoPopulationBreakdownList", snapshot.PopulationBreakdown, "No population breakdown available");
@@ -1260,7 +1279,10 @@ namespace Economy_sim
                 return BuildStateSnapshotFromState(resolved.Value.country, resolved.Value.state, stateFeature);
             }
 
-            // Return error state instead of placeholder
+            // Log when we can't find data instead of showing placeholder
+            Debug.WriteLine($"[State Data] No economy data found for state: {stateFeature.StateName} ({stateFeature.CountryName})");
+            
+            // Return minimal error state
             return new StateSnapshot
             {
                 DisplayName = stateFeature.StateName ?? "Unknown State",
@@ -1286,7 +1308,10 @@ namespace Economy_sim
                 return BuildCitySnapshotFromCity(resolved.Value.country, resolved.Value.state, resolved.Value.city);
             }
 
-            // Return error state instead of placeholder
+            // Log when we can't find data instead of showing placeholder
+            Debug.WriteLine($"[City Data] No economy data found for city: {cityFeature.Name} in {stateFeature?.StateName ?? "Unknown State"} ({stateFeature?.CountryName ?? cityFeature.CountryCode})");
+            
+            // Return minimal error state
             return new CitySnapshot
             {
                 DisplayName = cityFeature.Name ?? "Unknown City",
@@ -1509,43 +1534,166 @@ namespace Economy_sim
         {
             if (_allCountries == null || _allCountries.Count == 0)
             {
+                Debug.WriteLine($"[ResolveStateData] ERROR: _allCountries is null or empty");
                 return null;
             }
 
-            var pairs = _allCountries.SelectMany(country => country.States.Select(state => (country, state))).ToList();
+            Debug.WriteLine($"[ResolveStateData] Searching for state: '{stateFeature.StateName}' in country: '{stateFeature.CountryName}'");
+            Debug.WriteLine($"[ResolveStateData] Total countries available: {_allCountries.Count}");
 
-            if (!string.IsNullOrWhiteSpace(stateFeature.StateName))
+            // Get all country-state pairs
+            var pairs = _allCountries
+                .Where(c => c != null && c.States != null)
+                .SelectMany(country => country.States
+                    .Where(s => s != null)
+                    .Select(state => (country, state)))
+                .ToList();
+
+            Debug.WriteLine($"[ResolveStateData] Total country-state pairs: {pairs.Count}");
+
+            if (pairs.Count == 0)
             {
-                var exact = pairs.FirstOrDefault(p => p.state.Name.Equals(stateFeature.StateName, StringComparison.OrdinalIgnoreCase));
-                if (exact.country != null && exact.state != null)
+                Debug.WriteLine($"[ResolveStateData] ERROR: No states found in any country");
+                
+                // Debug: Print country information
+                foreach (var country in _allCountries.Where(c => c != null))
                 {
-                    return exact;
+                    Debug.WriteLine($"[ResolveStateData]   Country: {country.Name}, States: {country.States?.Count ?? 0}");
                 }
+                
+                return null;
             }
 
+            // Debug: Print all available states for diagnostic purposes
+            Debug.WriteLine($"[ResolveStateData] Available states:");
+            var statesByCountry = pairs.GroupBy(p => p.country.Name);
+            foreach (var group in statesByCountry.Take(5)) // Limit output to first 5 countries
+            {
+                Debug.WriteLine($"[ResolveStateData]   {group.Key}: {string.Join(", ", group.Select(p => p.state.Name).Take(10))}");
+            }
+
+            // First, try exact match on country + state name
             if (!string.IsNullOrWhiteSpace(stateFeature.CountryName) && !string.IsNullOrWhiteSpace(stateFeature.StateName))
             {
-                var scoped = pairs.FirstOrDefault(p =>
+                Debug.WriteLine($"[ResolveStateData] Attempting exact match: Country='{stateFeature.CountryName}', State='{stateFeature.StateName}'");
+                
+                var exactMatch = pairs.FirstOrDefault(p => 
                     p.country.Name.Equals(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase) &&
-                    p.state.Name.IndexOf(stateFeature.StateName, StringComparison.OrdinalIgnoreCase) >= 0);
-                if (scoped.country != null && scoped.state != null)
+                    p.state.Name.Equals(stateFeature.StateName, StringComparison.OrdinalIgnoreCase));
+                
+                if (exactMatch.country != null && exactMatch.state != null)
                 {
-                    return scoped;
+                    Debug.WriteLine($"[ResolveStateData] ✓ Found exact match: {exactMatch.country.Name} -> {exactMatch.state.Name}");
+                    return exactMatch;
+                }
+                else
+                {
+                    Debug.WriteLine($"[ResolveStateData] × No exact match found");
                 }
             }
 
+            // Second, try exact match on just state name (unique state names)
             if (!string.IsNullOrWhiteSpace(stateFeature.StateName))
             {
-                var partial = pairs.FirstOrDefault(p => stateFeature.StateName.IndexOf(p.state.Name, StringComparison.OrdinalIgnoreCase) >= 0);
-                if (partial.country != null && partial.state != null)
+                Debug.WriteLine($"[ResolveStateData] Attempting state name match: '{stateFeature.StateName}'");
+                
+                var stateMatches = pairs.Where(p => 
+                    p.state.Name.Equals(stateFeature.StateName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                
+                Debug.WriteLine($"[ResolveStateData] Found {stateMatches.Count} state(s) with matching name");
+                
+                if (stateMatches.Count == 1)
                 {
-                    return partial;
+                    // Unique state name found
+                    Debug.WriteLine($"[ResolveStateData] ✓ Found unique state: {stateMatches[0].country.Name} -> {stateMatches[0].state.Name}");
+                    return stateMatches[0];
+                }
+                else if (stateMatches.Count > 1 && !string.IsNullOrWhiteSpace(stateFeature.CountryName))
+                {
+                    Debug.WriteLine($"[ResolveStateData] Multiple states found, using country as tiebreaker");
+                    
+                    // Multiple states with same name, use country as tiebreaker
+                    var match = stateMatches.FirstOrDefault(p =>
+                        p.country.Name.Equals(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase));
+                    if (match.country != null && match.state != null)
+                    {
+                        Debug.WriteLine($"[ResolveStateData] ✓ Found match with country tiebreaker: {match.country.Name} -> {match.state.Name}");
+                        return match;
+                    }
+                    // If no country match, return first state match
+                    Debug.WriteLine($"[ResolveStateData] ⚠ No country tiebreaker match, returning first: {stateMatches[0].country.Name} -> {stateMatches[0].state.Name}");
+                    return stateMatches[0];
+                }
+                else if (stateMatches.Count > 0)
+                {
+                    // Multiple states, no country info, return first
+                    Debug.WriteLine($"[ResolveStateData] ⚠ Multiple states but no country info, returning first: {stateMatches[0].country.Name} -> {stateMatches[0].state.Name}");
+                    return stateMatches[0];
                 }
             }
 
+            // Third, try partial match on state name
+            if (!string.IsNullOrWhiteSpace(stateFeature.StateName))
+            {
+                Debug.WriteLine($"[ResolveStateData] Attempting partial state name match");
+                
+                var partialMatches = pairs.Where(p => 
+                    p.state.Name.Contains(stateFeature.StateName, StringComparison.OrdinalIgnoreCase) ||
+                    stateFeature.StateName.Contains(p.state.Name, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                
+                Debug.WriteLine($"[ResolveStateData] Found {partialMatches.Count} partial match(es)");
+                
+                if (partialMatches.Count == 1)
+                {
+                    Debug.WriteLine($"[ResolveStateData] ✓ Found single partial match: {partialMatches[0].country.Name} -> {partialMatches[0].state.Name}");
+                    return partialMatches[0];
+                }
+                else if (partialMatches.Count > 1 && !string.IsNullOrWhiteSpace(stateFeature.CountryName))
+                {
+                    Debug.WriteLine($"[ResolveStateData] Multiple partial matches, using country as tiebreaker");
+                    
+                    // Use country as tiebreaker
+                    var match = partialMatches.FirstOrDefault(p =>
+                        p.country.Name.Contains(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase) ||
+                        stateFeature.CountryName.Contains(p.country.Name, StringComparison.OrdinalIgnoreCase));
+                    if (match.country != null && match.state != null)
+                    {
+                        Debug.WriteLine($"[ResolveStateData] ✓ Found partial match with country: {match.country.Name} -> {match.state.Name}");
+                        return match;
+                    }
+                    Debug.WriteLine($"[ResolveStateData] ⚠ No country tiebreaker, returning first partial: {partialMatches[0].country.Name} -> {partialMatches[0].state.Name}");
+                    return partialMatches[0];
+                }
+                else if (partialMatches.Count > 0)
+                {
+                    Debug.WriteLine($"[ResolveStateData] ⚠ Returning first partial match: {partialMatches[0].country.Name} -> {partialMatches[0].state.Name}");
+                    return partialMatches[0];
+                }
+            }
+
+            // Fourth, try matching by country and picking first state
+            if (!string.IsNullOrWhiteSpace(stateFeature.CountryName))
+            {
+                Debug.WriteLine($"[ResolveStateData] Attempting country match fallback");
+                
+                var countryMatch = pairs.FirstOrDefault(p =>
+                    p.country.Name.Equals(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase) ||
+                    p.country.Name.Contains(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase) ||
+                    stateFeature.CountryName.Contains(p.country.Name, StringComparison.OrdinalIgnoreCase));
+                
+                if (countryMatch.country != null && countryMatch.state != null)
+                {
+                    Debug.WriteLine($"[ResolveStateData] ⚠ Using country fallback (first state): {countryMatch.country.Name} -> {countryMatch.state.Name}");
+                    return countryMatch;
+                }
+            }
+
+            // Last resort: return null (will show placeholder data)
+            Debug.WriteLine($"[ResolveStateData] × No match found for state: '{stateFeature.StateName}' in country: '{stateFeature.CountryName}'");
             return null;
         }
-
         private (Country country, State state, City city)? ResolveCityData(HybridMapManager.CitySelection cityFeature, StateBorderManager.StateFeature? stateFeature)
         {
             if (_allCountries == null || _allCountries.Count == 0)
@@ -1635,7 +1783,10 @@ namespace Economy_sim
                 return BuildSnapshotFromCountry(resolved, feature);
             }
 
-            // Return error state instead of placeholder
+            // Log when we can't find data instead of showing placeholder
+            Debug.WriteLine($"[Country Data] No economy data found for country: {feature.CountryName} ({feature.CountryCode})");
+            
+            // Return minimal error state
             return new CountrySnapshot
             {
                 DisplayName = feature.CountryName ?? "Unknown Country",
@@ -1878,7 +2029,7 @@ namespace Economy_sim
                 _renderInProgress = true;
             }
 
-            // Get the effective render size on the UI thread before starting background task
+            // Get the effective size on the UI thread before starting background task
             var effectiveSize = GetEffectiveRenderSize();
 
             // Fire and forget the async task.
@@ -2311,41 +2462,94 @@ namespace Economy_sim
         {
             if (_economyInitialized) return;
 
-            // Generate economy from map data (countries and states from the political map)
+            Debug.WriteLine("[Economy Init] Initializing economy system...");
+
+            // Initialize Market and goods definitions
+            if (!Market.GoodDefinitions.Any())
+            {
+                FactoryBlueprints.InitializeBlueprints();
+                Debug.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods and {FactoryBlueprints.AllBlueprints.Count} factory blueprints");
+            }
+
+            // Try to generate economy from map data if available
+            bool useMapData = false;
             if (_mapManager != null)
             {
-                // Get all states from the map first
                 var mapStates = _mapManager.GetAllStates();
-                
-                Console.WriteLine($"[Economy Init] Found {mapStates?.Count ?? 0} states from map");
+                Debug.WriteLine($"[Economy Init] Found {mapStates?.Count ?? 0} states from map");
                 
                 if (mapStates != null && mapStates.Count > 0)
                 {
-                    // Get all countries from the states
-                    var mapCountries = GetAllCountriesFromMap();
+                    // Filter: Keep states that have EITHER CountryName OR CountryCode
+                    var statesWithCountry = mapStates
+                        .Where(s => !string.IsNullOrWhiteSpace(s.CountryName) || !string.IsNullOrWhiteSpace(s.CountryCode))
+                        .ToList();
                     
-                    Console.WriteLine($"[Economy Init] Using map data: {mapCountries.Count} countries, {mapStates.Count} states");
-                    var (countries, corporations) = Economy.GenerateWorldEconomyFromMapData(mapCountries, mapStates);
+                    Debug.WriteLine($"[Economy Init] Found {statesWithCountry.Count} states with country information");
                     
-                    _allCountries = countries;
-                    _allCorporations = corporations;
-                    _currentCountry = countries.FirstOrDefault();
-                    _playerCountry = _currentCountry;
-                }
-                else
-                {
-                    Console.WriteLine($"[Economy Init] No map states available, using procedural generation");
-                    var (countries, corporations) = Economy.InitializeWorldEconomy();
+                    // Sample first few states for debugging
+                    foreach (var state in statesWithCountry.Take(5))
+                    {
+                        Debug.WriteLine($"[Economy Init]   Sample state: '{state.StateName}' in country '{state.CountryName}' (code: '{state.CountryCode}')");
+                    }
                     
-                    _allCountries = countries;
-                    _allCorporations = corporations;
-                    _currentCountry = countries.FirstOrDefault();
-                    _playerCountry = _currentCountry;
+                    // Group by country, using either CountryName or CountryCode as the key
+                    var countryGroups = statesWithCountry
+                        .GroupBy(s => !string.IsNullOrWhiteSpace(s.CountryName) ? s.CountryName : s.CountryCode)
+                        .Where(g => !string.IsNullOrWhiteSpace(g.Key))
+                        .ToList();
+                    
+                    Debug.WriteLine($"[Economy Init] Found {countryGroups.Count} unique countries from states");
+                    
+                    if (countryGroups.Count > 0)
+                    {
+                        // Build country features list from state data
+                        var mapCountries = new List<IndexedCountryFeature>();
+                        foreach (var group in countryGroups)
+                        {
+                            var firstState = group.First();
+                            
+                            // Use CountryName if available, otherwise use CountryCode
+                            string countryName = !string.IsNullOrWhiteSpace(firstState.CountryName) 
+                                ? firstState.CountryName 
+                                : firstState.CountryCode ?? $"Country_{group.Key}";
+                            
+                            string countryCode = !string.IsNullOrWhiteSpace(firstState.CountryCode)
+                                ? firstState.CountryCode
+                                : countryName.Substring(0, Math.Min(3, countryName.Length)).ToUpper();
+                            
+
+                            mapCountries.Add(new IndexedCountryFeature
+                            {
+                                CountryName = countryName,
+                                CountryCode = countryCode,
+                                RasterCode = firstState.RasterCode
+                            });
+                            
+
+                            Debug.WriteLine($"[Economy Init]   Country: '{countryName}' (code: '{countryCode}') with {group.Count()} states");
+                        }
+                        
+                        Debug.WriteLine($"[Economy Init] Using map data: {mapCountries.Count} countries, {statesWithCountry.Count} states");
+                        var (countries, corporations) = Economy.GenerateWorldEconomyFromMapData(mapCountries, statesWithCountry);
+                        
+                        _allCountries = countries;
+                        _allCorporations = corporations;
+                        _currentCountry = countries.FirstOrDefault();
+                        _playerCountry = _currentCountry;
+                        useMapData = true;
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[Economy Init] WARNING: No countries could be extracted from states");
+                    }
                 }
             }
-            else
+            
+            // Fall back to procedural generation if map data not available
+            if (!useMapData)
             {
-                Console.WriteLine($"[Economy Init] Map manager not available, using procedural generation");
+                Debug.WriteLine($"[Economy Init] No map data available, using procedural generation");
                 var (countries, corporations) = Economy.InitializeWorldEconomy();
                 
                 _allCountries = countries;
@@ -2359,44 +2563,36 @@ namespace Economy_sim
             _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
             InitializeTradeSystems();
             _economyInitialized = true;
-        }
-
-        private List<IndexedCountryFeature> GetAllCountriesFromMap()
-        {
-            // This is a workaround since HybridMapManager doesn't expose GetAllCountries directly
-            // We need to scan through the political data to get all countries
-            var countries = new List<IndexedCountryFeature>();
-            var countryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             
-            // Get countries from states
-            var states = _mapManager.GetAllStates();
-            foreach (var state in states)
+            Debug.WriteLine($"[Economy Init] Economy initialization complete!");
+            
+            // Use safe calculations to prevent overflow
+            try
             {
-                if (!string.IsNullOrWhiteSpace(state.CountryName) && !countryNames.Contains(state.CountryName))
+                int totalStates = _allCountries.Sum(c => c.States.Count);
+                int totalCities = _allCountries.SelectMany(c => c.States).Sum(s => s.Cities.Count);
+                
+                // Use long for population to prevent overflow
+                long totalPopulation = 0;
+                foreach (var country in _allCountries)
                 {
-                    countryNames.Add(state.CountryName);
-                    
-                    // Try to find the country feature
-                    var countryFeature = _mapManager.FindCountryByName(state.CountryName);
-                    if (countryFeature != null && !countries.Any(c => c.CountryName.Equals(countryFeature.CountryName, StringComparison.OrdinalIgnoreCase)))
+                    foreach (var state in country.States)
                     {
-                        countries.Add(countryFeature);
-                    }
-                    else if (countryFeature == null)
-                    {
-                        // Create a minimal country feature
-                        countries.Add(new IndexedCountryFeature
+                        foreach (var city in state.Cities)
                         {
-                            CountryName = state.CountryName,
-                            CountryCode = state.CountryCode ?? state.CountryName.Substring(0, Math.Min(3, state.CountryName.Length)).ToUpper(),
-                            RasterCode = state.RasterCode
-                        });
+                            totalPopulation += city.Population;
+                        }
                     }
                 }
+                
+                Debug.WriteLine($"[Economy Init] Total: {_allCountries.Count} countries, {totalStates} states, {totalCities} cities");
+                Debug.WriteLine($"[Economy Init] Total: {_allCorporations.Count} corporations");
+                Debug.WriteLine($"[Economy Init] Total population: {totalPopulation:N0}");
             }
-            
-            Console.WriteLine($"[Economy Init] Found {countries.Count} unique countries from {states.Count} states");
-            return countries;
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Economy Init] Error calculating totals: {ex.Message}");
+            }
         }
 
         private void RegisterEconomyCityAnchors()
@@ -2586,9 +2782,7 @@ namespace Economy_sim
                     {
                         industriesList.Items.Clear();
 
-                        var factoriesByType = _currentCountry.States
-                            .SelectMany(s => s.Cities)
-                            .SelectMany(c => c.Factories)
+                        var factoriesByType = _currentCountry.States.SelectMany(s => s.Cities).SelectMany(c => c.Factories)
                             .GroupBy(f => f.OutputGoods.FirstOrDefault()?.Name ?? "Unknown")
                             .OrderByDescending(g => g.Count())
                             .Take(6);
@@ -2606,9 +2800,7 @@ namespace Economy_sim
                     {
                         sideIndList.Items.Clear();
 
-                        var factoriesByType = _currentCountry.States
-                            .SelectMany(s => s.Cities)
-                            .SelectMany(c => c.Factories)
+                        var factoriesByType = _currentCountry.States.SelectMany(s => s.Cities).SelectMany(c => c.Factories)
                             .GroupBy(f => f.OutputGoods.FirstOrDefault()?.Name ?? "Unknown")
                             .OrderByDescending(g => g.Count())
                             .Take(3);
@@ -2696,7 +2888,7 @@ namespace Economy_sim
                     HideCityInfoOverlay();
                 };
 
-            // Setup overlay click handlers to close popups when clicking outside
+            // Overlay click handlers to close popups when clicking outside
             if (this.FindControl<Border>("DiplomacyMenuOverlay") is Border diplomacyOverlay)
                 diplomacyOverlay.PointerPressed += OnOverlayClicked;
 
@@ -3188,14 +3380,15 @@ namespace Economy_sim
             if (industriesList != null && _currentCountry != null)
             {
                 industriesList.Items.Clear();
-                var groups = _currentCountry.States.SelectMany(s => s.Cities).SelectMany(c => c.Factories)
+                var factoriesByType = _currentCountry.States.SelectMany(s => s.Cities).SelectMany(c => c.Factories)
                     .GroupBy(f => f.OutputGoods.FirstOrDefault()?.Name ?? "Unknown")
                     .OrderByDescending(g => g.Count()).Take(6);
-                foreach (var g in groups)
+                foreach (var g in factoriesByType)
                 {
                     int count = g.Count();
-                    double output = g.Sum(f => f.ProductionCapacity * f.OutputGoods.Sum(o => o.Quantity));
-                    industriesList.Items.Add($"🏭 {g.Key} - {count} factories (Output: {output:N0})");
+                    double totalOutput = g.Sum(f => f.ProductionCapacity * f.OutputGoods.Sum(o => o.Quantity));
+                    string goodName = g.Key;
+                    industriesList.Items.Add($"🏭 {goodName} - {count} factories (Output: {totalOutput:N0} units)");
                 }
             }
             if (corpList != null)
@@ -3456,7 +3649,6 @@ namespace Economy_sim
         }
         // ===== End added handlers =====
 
-        // Ensure all regions closed
         #endregion
     }
 

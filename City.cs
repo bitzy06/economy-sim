@@ -144,7 +144,27 @@ namespace Economy_sim
                 return;
             }
 
-            int currentPopulation = Math.Max(1, PopClasses.Sum(p => p.Size));
+            // Use long to prevent overflow, and ensure all pop sizes are non-negative
+            long totalPopSize = 0;
+            try
+            {
+                foreach (var p in PopClasses)
+                {
+                    if (p.Size < 0)
+                    {
+                        p.Size = 0; // Clamp negative populations to 0
+                    }
+                    totalPopSize += p.Size;
+                }
+            }
+            catch (OverflowException)
+            {
+                // If we still overflow, cap at max int
+                totalPopSize = int.MaxValue;
+            }
+
+            int currentPopulation = Math.Max(1, (int)Math.Min(totalPopSize, int.MaxValue));
+
             int allowedGrowth = baseGrowth;
 
             if (ProceduralData != null)
@@ -173,7 +193,7 @@ namespace Economy_sim
 
             foreach (var pop in PopClasses)
             {
-                int popGrowth = (int)Math.Round(allowedGrowth * (pop.Size / (double)currentPopulation));
+                int popGrowth = (int)Math.Round(allowedGrowth * (pop.Size / (double)Math.Max(1, currentPopulation)));
                 pop.Size += popGrowth;
             }
 
@@ -193,7 +213,15 @@ namespace Economy_sim
                 return;
             }
 
-            int currentPopulation = PopClasses.Sum(p => p.Size);
+            // Recalculate current population safely
+            long totalPopSize = 0;
+            foreach (var p in PopClasses)
+            {
+                if (p.Size < 0) p.Size = 0;
+                totalPopSize += p.Size;
+            }
+            int currentPopulation = (int)Math.Min(totalPopSize, int.MaxValue);
+
             if (currentPopulation <= totalCapacity)
             {
                 return;
@@ -207,7 +235,12 @@ namespace Economy_sim
                 pop.Size = Math.Max(0, pop.Size - reduction);
             }
 
-            Population = PopClasses.Sum(p => p.Size);
+            totalPopSize = 0;
+            foreach (var p in PopClasses)
+            {
+                totalPopSize += p.Size;
+            }
+            Population = (int)Math.Min(totalPopSize, int.MaxValue);
             Happiness = Math.Max(0, Happiness - 2);
         }
 
