@@ -6,12 +6,72 @@ namespace Economy_sim
 {
     public class City
     {
+        private readonly List<Factory> factories = new();
+        private readonly object factoriesLock = new object();
+
         public string Name { get; set; }
         public double Budget { get; set; }
         public int Population { get; set; }
         public double TaxRate { get; set; } // Percentage (e.g., 0.1 for 10%)
         public double CityExpenses { get; set; }
-        public List<Factory> Factories { get; set; }
+        
+        /// <summary>
+        /// Thread-safe access to factories. Returns a snapshot of the current factories list.
+        /// </summary>
+        public List<Factory> Factories
+        {
+            get
+            {
+                lock (factoriesLock)
+                {
+                    return new List<Factory>(factories);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Adds a factory to the city in a thread-safe manner.
+        /// </summary>
+        public void AddFactory(Factory factory)
+        {
+            if (factory == null) return;
+
+            lock (factoriesLock)
+            {
+                if (!factories.Contains(factory))
+                {
+                    factories.Add(factory);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Removes a factory from the city in a thread-safe manner.
+        /// </summary>
+        public bool RemoveFactory(Factory factory)
+        {
+            if (factory == null) return false;
+
+            lock (factoriesLock)
+            {
+                return factories.Remove(factory);
+            }
+        }
+
+        /// <summary>
+        /// Gets the count of factories in a thread-safe manner.
+        /// </summary>
+        public int FactoryCount
+        {
+            get
+            {
+                lock (factoriesLock)
+                {
+                    return factories.Count;
+                }
+            }
+        }
+
         public Dictionary<string, Good> Stockpile { get; set; }
         
         // Local market data
@@ -38,7 +98,6 @@ namespace Economy_sim
             Name = name;
             Budget = 10000; // Example starting budget
             Population = 100000; // Example starting population
-            Factories = new List<Factory>();
             Stockpile = new Dictionary<string, Good>();
             Happiness = 50; // Out of 100
             PopBudget = Population * 0.05; // Example: $0.05 per person per turn

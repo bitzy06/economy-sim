@@ -383,7 +383,7 @@ namespace Economy_sim
                                     var corporation = ProceduralWorldGenerator.FindOrCreateCorporation(blueprint, city, allCorporations, random);
                                     var factory = ProceduralWorldGenerator.CreateFactoryFromBlueprint(blueprint, corporation, random.Next(2, 6), city);
                                     
-                                    city.Factories.Add(factory);
+                                    city.AddFactory(factory);
                                     corporation.AddFactory(factory);
                                 }
                             }
@@ -1232,14 +1232,14 @@ namespace Economy_sim
 
                     newFactory.OwnerCorporation = this;
 
-                    targetCity.Factories.Add(newFactory);
+                    targetCity.AddFactory(newFactory);
                     this.AddFactory(newFactory);
 
                     if (targetCity.ProceduralData != null)
                     {
                         var newParcel = new Parcel { LandUse = LandUseType.Industrial };
                         var newBuilding = new Building { LandUse = LandUseType.Industrial };
-                        targetCity.ProceduralData.Parcels.Add(newParcel);
+                        targetCity.ProceduralData.AddParcel(newParcel);
                         targetCity.ProceduralData.SetBuilding(newParcel, newBuilding);
                         newFactory.BuildingData = newBuilding;
 

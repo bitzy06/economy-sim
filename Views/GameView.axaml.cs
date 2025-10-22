@@ -3772,7 +3772,7 @@ namespace Economy_sim
                         }
                     }
                     
-                    // Update speed button styles to highlight active speed
+                    // Update speed button styles to highlight active speed and disable when paused
                     UpdateSpeedButtonStyle("Speed05xButton", 0.5);
                     UpdateSpeedButtonStyle("Speed1xButton", 1.0);
                     UpdateSpeedButtonStyle("Speed2xButton", 2.0);
@@ -3790,21 +3790,37 @@ namespace Economy_sim
         {
             if (this.FindControl<Button>(buttonName) is Button btn)
             {
-                bool isActive = Math.Abs(_simulationSpeedMultiplier - speed) < 0.01;
+                // Disable speed buttons when simulation is paused
+                btn.IsEnabled = !_isSimulationPaused;
                 
-                if (isActive)
+                bool isActive = !_isSimulationPaused && Math.Abs(_simulationSpeedMultiplier - speed) < 0.01;
+                
+                if (_isSimulationPaused)
                 {
+                    // Grayed out when paused
+                    btn.Background = new SolidColorBrush(Color.Parse("#222222"));
+                    btn.BorderBrush = new SolidColorBrush(Color.Parse("#333333"));
+                    btn.Foreground = new SolidColorBrush(Color.Parse("#555555"));
+                    btn.FontWeight = FontWeight.Normal;
+                    btn.Opacity = 0.5;
+                }
+                else if (isActive)
+                {
+                    // Highlighted when active
                     btn.Background = new SolidColorBrush(Color.Parse("#1A4A1A"));
                     btn.BorderBrush = new SolidColorBrush(Color.Parse("#2A6A2A"));
                     btn.Foreground = Brushes.White;
                     btn.FontWeight = FontWeight.Bold;
+                    btn.Opacity = 1.0;
                 }
                 else
                 {
+                    // Normal state when not active
                     btn.Background = new SolidColorBrush(Color.Parse("#333333"));
                     btn.BorderBrush = new SolidColorBrush(Color.Parse("#555555"));
                     btn.Foreground = new SolidColorBrush(Color.Parse("#AAAAAA"));
                     btn.FontWeight = FontWeight.Normal;
+                    btn.Opacity = 1.0;
                 }
             }
         }
