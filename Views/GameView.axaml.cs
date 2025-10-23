@@ -3346,6 +3346,17 @@ namespace Economy_sim
         private List<(string name, double amount)> _fullExpenseData = new();
         private Corporation? _selectedCorporation;
 
+        // Goods market data model
+        private class GoodMarketData
+        {
+            public string Name { get; set; } = string.Empty;
+            public string Category { get; set; } = string.Empty;
+            public double BasePrice { get; set; }
+            public double TotalSupply { get; set; }
+            public double TotalDemand { get; set; }
+            public double AveragePrice { get; set; }
+        }
+
         private void ShowEconomyOverlay()
         {
             if (this.FindControl<Border>("EconomyMenuOverlay") is Border overlay)
@@ -3369,6 +3380,11 @@ namespace Economy_sim
                 popBtn.Click -= PopulationTabButton_Click;
                 popBtn.Click += PopulationTabButton_Click;
             }
+            if (this.FindControl<Button>("GoodsTabButton") is Button goodsBtn)
+            {
+                goodsBtn.Click -= GoodsTabButton_Click;
+                goodsBtn.Click += GoodsTabButton_Click;
+            }
             if (this.FindControl<Button>("EconomyCloseButton") is Button closeBtn)
             {
                 closeBtn.Click -= EconomyCloseButton_Click;
@@ -3380,6 +3396,7 @@ namespace Economy_sim
         private void PrivateSectorTabButton_Click(object? sender, RoutedEventArgs e) => SwitchEconomyTab("PrivateSector");
         private void BudgetTabButton_Click(object? sender, RoutedEventArgs e) => SwitchEconomyTab("Budget");
         private void PopulationTabButton_Click(object? sender, RoutedEventArgs e) => SwitchEconomyTab("Population");
+        private void GoodsTabButton_Click(object? sender, RoutedEventArgs e) => SwitchEconomyTab("Goods");
 
         private void HideEconomyOverlay()
         {
@@ -3392,18 +3409,22 @@ namespace Economy_sim
             var privatePanel = this.FindControl<Grid>("PrivateSectorPanel");
             var budgetPanel = this.FindControl<Grid>("BudgetPanel");
             var populationPanel = this.FindControl<Grid>("PopulationPanel");
+            var goodsPanel = this.FindControl<Grid>("GoodsPanel");
             var privateBtn = this.FindControl<Button>("PrivateSectorTabButton");
             var budgetBtn = this.FindControl<Button>("BudgetTabButton");
             var popBtn = this.FindControl<Button>("PopulationTabButton");
+            var goodsBtn = this.FindControl<Button>("GoodsTabButton");
 
             void HideAll()
             {
                 if (privatePanel != null) privatePanel.IsVisible = false;
                 if (budgetPanel != null) budgetPanel.IsVisible = false;
                 if (populationPanel != null) populationPanel.IsVisible = false;
+                if (goodsPanel != null) goodsPanel.IsVisible = false;
                 if (privateBtn != null) privateBtn.Background = new SolidColorBrush(Color.Parse("#555555"));
                 if (budgetBtn != null) budgetBtn.Background = new SolidColorBrush(Color.Parse("#555555"));
                 if (popBtn != null) popBtn.Background = new SolidColorBrush(Color.Parse("#555555"));
+                if (goodsBtn != null) goodsBtn.Background = new SolidColorBrush(Color.Parse("#555555"));
             }
             HideAll();
 
@@ -3423,6 +3444,11 @@ namespace Economy_sim
                     if (populationPanel != null) populationPanel.IsVisible = true;
                     if (popBtn != null) popBtn.Background = new SolidColorBrush(Color.Parse("#1A4A1A"));
                     UpdatePopulationTab();
+                    break;
+                case "Goods":
+                    if (goodsPanel != null) goodsPanel.IsVisible = true;
+                    if (goodsBtn != null) goodsBtn.Background = new SolidColorBrush(Color.Parse("#1A4A1A"));
+                    UpdateGoodsTab();
                     break;
             }
         }
@@ -3542,6 +3568,178 @@ namespace Economy_sim
                     double happiness = gp.Average(p => p.Happiness);
                     pcl.Items.Add($"{gp.Key} ({pct:F1}%)\n   Pop: {FormatCurrency(size)} | Avg Income: ${income:F0} | Happiness: {happiness:F0}%");
                 }
+            }
+        }
+
+        private void UpdateGoodsTab()
+        {
+            if (_playerCountry == null) return;
+
+            // Gather all cities in the player's country
+            var allCities = _playerCountry.States.SelectMany(s => s.Cities).ToList();
+
+            // Calculate goods data
+            var goodsDataMap = new Dictionary<string, GoodMarketData>();
+
+            // Initialize with all goods from Market.GoodDefinitions
+            foreach (var kvp in Market.GoodDefinitions)
+            {
+                goodsDataMap[kvp.Key] = new GoodMarketData
+                {
+                    Name = kvp.Key,
+                    Category = kvp.Value.Category.ToString(),
+                    BasePrice = kvp.Value.BasePrice,
+                    TotalSupply = 0,
+                    TotalDemand = 0,
+                    AveragePrice = kvp.Value.BasePrice
+                };
+            }
+
+            // Calculate supply from stockpiles
+            foreach (var city in allCities)
+            {
+                foreach (var kvp in city.Stockpile)
+                {
+                    if (goodsDataMap.ContainsKey(kvp.Key))
+                    {
+                        goodsDataMap[kvp.Key].TotalSupply += kvp.Value.Quantity;
+                    }
+                }
+            }
+
+            // Calculate demand from import needs
+            foreach (var city in allCities)
+            {
+                foreach (var kvp in city.ImportNeeds)
+                {
+                    if (goodsDataMap.ContainsKey(kvp.Key))
+                    {
+                        goodsDataMap[kvp.Key].TotalDemand += kvp.Value;
+                    }
+                }
+            }
+
+            // Calculate average prices from local prices
+            foreach (var city in allCities)
+            {
+                foreach (var kvp in city.LocalPrices)
+                {
+                    if (goodsDataMap.ContainsKey(kvp.Key))
+                    {
+                        // Simple average (could be weighted by city population)
+                        if (goodsDataMap[kvp.Key].AveragePrice == goodsDataMap[kvp.Key].BasePrice)
+                        {
+                            goodsDataMap[kvp.Key].AveragePrice = kvp.Value;
+                        }
+                        else
+                        {
+                            goodsDataMap[kvp.Key].AveragePrice = (goodsDataMap[kvp.Key].AveragePrice + kvp.Value) / 2.0;
+                        }
+                    }
+                }
+            }
+
+            // Convert to list
+            var goodsList = goodsDataMap.Values.ToList();
+
+            // Update summary stats
+            int activeGoods = goodsList.Count(g => g.TotalSupply > 0 || g.TotalDemand > 0);
+            double totalMarketValue = goodsList.Sum(g => g.TotalSupply * g.AveragePrice);
+            int totalGoodsTraded = (int)goodsList.Sum(g => g.TotalSupply);
+
+            if (this.FindControl<TextBlock>("TotalGoodsTradedText") is TextBlock tradedText)
+                tradedText.Text = FormatPopulation(totalGoodsTraded);
+            
+            if (this.FindControl<TextBlock>("TotalMarketValueText") is TextBlock valueText)
+                valueText.Text = $"${FormatCurrency(totalMarketValue)}";
+            
+            if (this.FindControl<TextBlock>("ActiveGoodsCountText") is TextBlock activeText)
+                activeText.Text = activeGoods.ToString();
+
+            // Update goods list
+            if (this.FindControl<ListBox>("GoodsMarketList") is ListBox goodsListBox)
+            {
+                // Default sort by price (descending)
+                var sortedGoods = goodsList.OrderByDescending(g => g.AveragePrice).ToList();
+                
+                goodsListBox.Items.Clear();
+                foreach (var good in sortedGoods)
+                {
+                    goodsListBox.Items.Add(good);
+                }
+            }
+
+            // Attach sort handler if not already attached
+            if (this.FindControl<ComboBox>("GoodsSortComboBox") is ComboBox sortCombo)
+            {
+                sortCombo.SelectionChanged -= GoodsSortComboBox_SelectionChanged;
+                sortCombo.SelectionChanged += GoodsSortComboBox_SelectionChanged;
+            }
+        }
+
+        private void GoodsSortComboBox_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (this.FindControl<ComboBox>("GoodsSortComboBox") is not ComboBox combo) return;
+            if (this.FindControl<ListBox>("GoodsMarketList") is not ListBox listBox) return;
+            if (_playerCountry == null) return;
+
+            var allCities = _playerCountry.States.SelectMany(s => s.Cities).ToList();
+            var goodsDataMap = new Dictionary<string, GoodMarketData>();
+
+            // Recalculate goods data (could be optimized by caching)
+            foreach (var kvp in Market.GoodDefinitions)
+            {
+                goodsDataMap[kvp.Key] = new GoodMarketData
+                {
+                    Name = kvp.Key,
+                    Category = kvp.Value.Category.ToString(),
+                    BasePrice = kvp.Value.BasePrice,
+                    TotalSupply = 0,
+                    TotalDemand = 0,
+                    AveragePrice = kvp.Value.BasePrice
+                };
+            }
+
+            foreach (var city in allCities)
+            {
+                foreach (var kvp in city.Stockpile)
+                {
+                    if (goodsDataMap.ContainsKey(kvp.Key))
+                        goodsDataMap[kvp.Key].TotalSupply += kvp.Value.Quantity;
+                }
+                foreach (var kvp in city.ImportNeeds)
+                {
+                    if (goodsDataMap.ContainsKey(kvp.Key))
+                        goodsDataMap[kvp.Key].TotalDemand += kvp.Value;
+                }
+                foreach (var kvp in city.LocalPrices)
+                {
+                    if (goodsDataMap.ContainsKey(kvp.Key))
+                    {
+                        if (goodsDataMap[kvp.Key].AveragePrice == goodsDataMap[kvp.Key].BasePrice)
+                            goodsDataMap[kvp.Key].AveragePrice = kvp.Value;
+                        else
+                            goodsDataMap[kvp.Key].AveragePrice = (goodsDataMap[kvp.Key].AveragePrice + kvp.Value) / 2.0;
+                    }
+                }
+            }
+
+            var goodsList = goodsDataMap.Values.ToList();
+
+            // Sort based on selection
+            IEnumerable<GoodMarketData> sortedGoods = combo.SelectedIndex switch
+            {
+                0 => goodsList.OrderByDescending(g => g.AveragePrice), // Sort by Price
+                1 => goodsList.OrderByDescending(g => g.TotalSupply),  // Sort by Supply
+                2 => goodsList.OrderByDescending(g => g.TotalDemand),  // Sort by Demand
+                3 => goodsList.OrderBy(g => g.Name),                   // Sort by Name
+                _ => goodsList.OrderByDescending(g => g.AveragePrice)
+            };
+
+            listBox.Items.Clear();
+            foreach (var good in sortedGoods)
+            {
+                listBox.Items.Add(good);
             }
         }
 

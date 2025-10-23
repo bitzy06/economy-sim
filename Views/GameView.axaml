@@ -147,8 +147,9 @@
 							Padding="8,4"
 							Margin="15,0,0,0"
 							BorderBrush="#555555"
-							BorderThickness="1">
-						<StackPanel Orientation="Horizontal" Spacing="8">
+							BorderThickness="1"
+							IsHitTestVisible="True">
+						<StackPanel Orientation="Horizontal" Spacing="8" IsHitTestVisible="True">
 							<!-- Pause/Resume Button -->
 							<Button x:Name="PauseResumeButton"
 									Content="⏸"
@@ -159,11 +160,12 @@
 									Foreground="White"
 									FontSize="16"
 									Padding="0"
-									ToolTip.Tip="Pause/Resume Simulation"/>
+									ToolTip.Tip="Pause/Resume Simulation"
+									IsHitTestVisible="True"/>
 							
 							<!-- Speed Control Buttons -->
-							<Border BorderBrush="#444444" BorderThickness="1,0,0,0" Padding="8,0,0,0">
-								<StackPanel Orientation="Horizontal" Spacing="4">
+							<Border BorderBrush="#444444" BorderThickness="1,0,0,0" Padding="8,0,0,0" IsHitTestVisible="True">
+								<StackPanel Orientation="Horizontal" Spacing="4" IsHitTestVisible="True">
 									<Button x:Name="Speed05xButton"
 											Content="0.5x"
 											Width="42"
@@ -173,7 +175,8 @@
 											Foreground="#AAAAAA"
 											FontSize="11"
 											Padding="2"
-											ToolTip.Tip="Slow Speed"/>
+											ToolTip.Tip="Slow Speed"
+											IsHitTestVisible="True"/>
 									<Button x:Name="Speed1xButton"
 											Content="1x"
 											Width="38"
@@ -184,7 +187,8 @@
 											FontSize="11"
 											FontWeight="Bold"
 											Padding="2"
-											ToolTip.Tip="Normal Speed"/>
+											ToolTip.Tip="Normal Speed"
+											IsHitTestVisible="True"/>
 									<Button x:Name="Speed2xButton"
 											Content="2x"
 											Width="38"
@@ -194,7 +198,8 @@
 											Foreground="#AAAAAA"
 											FontSize="11"
 											Padding="2"
-											ToolTip.Tip="Fast Speed"/>
+											ToolTip.Tip="Fast Speed"
+											IsHitTestVisible="True"/>
 									<Button x:Name="Speed5xButton"
 											Content="5x"
 											Width="38"
@@ -204,7 +209,8 @@
 											Foreground="#AAAAAA"
 											FontSize="11"
 											Padding="2"
-											ToolTip.Tip="Very Fast Speed"/>
+											ToolTip.Tip="Very Fast Speed"
+											IsHitTestVisible="True"/>
 									<Button x:Name="Speed10xButton"
 											Content="10x"
 											Width="42"
@@ -214,7 +220,8 @@
 											Foreground="#AAAAAA"
 											FontSize="11"
 											Padding="2"
-											ToolTip.Tip="Ultra Fast Speed"/>
+											ToolTip.Tip="Ultra Fast Speed"
+											IsHitTestVisible="True"/>
 								</StackPanel>
 							</Border>
 							
@@ -1009,6 +1016,12 @@
 									Height="40"
 									Background="#555555"
 									Foreground="White"/>
+							<Button x:Name="GoodsTabButton"
+									Content="📦 Goods Market"
+									Width="180"
+									Height="40"
+									Background="#555555"
+									Foreground="White"/>
 						</StackPanel>
 
 						<!-- Content Area -->
@@ -1259,6 +1272,133 @@
 											Height="40"
 											Background="#1A4A1A"
 											Foreground="White"/>
+								</StackPanel>
+							</Grid>
+
+							<!-- GOODS MARKET TAB -->
+							<Grid x:Name="GoodsPanel" IsVisible="False">
+								<Grid.RowDefinitions>
+									<RowDefinition Height="Auto"/>
+									<RowDefinition Height="*"/>
+								</Grid.RowDefinitions>
+
+								<!-- Header with Summary Stats -->
+								<Grid Grid.Row="0" Margin="0,0,0,20">
+									<Grid.ColumnDefinitions>
+										<ColumnDefinition Width="*"/>
+										<ColumnDefinition Width="*"/>
+										<ColumnDefinition Width="*"/>
+									</Grid.ColumnDefinitions>
+
+									<Border Grid.Column="0" Background="#1A4A1A" Padding="15" Margin="0,0,5,0" CornerRadius="3">
+										<StackPanel>
+											<TextBlock Text="Total Goods Traded" Foreground="#90EE90" FontWeight="Bold" FontSize="14"/>
+											<TextBlock x:Name="TotalGoodsTradedText" Text="0" Foreground="White" FontSize="20" FontWeight="Bold"/>
+											<TextBlock Text="All Markets" Foreground="#AAAAAA" FontSize="12"/>
+										</StackPanel>
+									</Border>
+
+									<Border Grid.Column="1" Background="#1A1A4A" Padding="15" Margin="5,0" CornerRadius="3">
+										<StackPanel>
+											<TextBlock Text="Total Market Value" Foreground="#ADD8E6" FontWeight="Bold" FontSize="14"/>
+											<TextBlock x:Name="TotalMarketValueText" Text="$0" Foreground="White" FontSize="20" FontWeight="Bold"/>
+											<TextBlock Text="Combined Value" Foreground="#AAAAAA" FontSize="12"/>
+										</StackPanel>
+									</Border>
+
+									<Border Grid.Column="2" Background="#4A1A1A" Padding="15" Margin="5,0,0,0" CornerRadius="3">
+										<StackPanel>
+											<TextBlock Text="Active Goods" Foreground="#F0E68C" FontWeight="Bold" FontSize="14"/>
+											<TextBlock x:Name="ActiveGoodsCountText" Text="0" Foreground="White" FontSize="20" FontWeight="Bold"/>
+											<TextBlock Text="In Circulation" Foreground="#AAAAAA" FontSize="12"/>
+										</StackPanel>
+									</Border>
+								</Grid>
+
+								<!-- Goods List -->
+								<StackPanel Grid.Row="1">
+									<Grid Margin="0,0,0,10">
+										<Grid.ColumnDefinitions>
+											<ColumnDefinition Width="*"/>
+											<ColumnDefinition Width="Auto"/>
+										</Grid.ColumnDefinitions>
+										<TextBlock Text="Goods Market Overview" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16"/>
+										<ComboBox x:Name="GoodsSortComboBox"
+												  Grid.Column="1"
+												  Width="150"
+												  SelectedIndex="0">
+											<ComboBoxItem Content="Sort by Price"/>
+											<ComboBoxItem Content="Sort by Supply"/>
+											<ComboBoxItem Content="Sort by Demand"/>
+											<ComboBoxItem Content="Sort by Name"/>
+										</ComboBox>
+									</Grid>
+									
+									<ScrollViewer Height="300" VerticalScrollBarVisibility="Auto">
+										<ListBox x:Name="GoodsMarketList"
+												 Background="#1A1A1A"
+												 BorderBrush="#444444">
+											<ListBox.ItemTemplate>
+												<DataTemplate>
+													<Border Background="#2A2A2A" 
+															Padding="12" 
+															Margin="0,2"
+															CornerRadius="3"
+															BorderBrush="#444444"
+															BorderThickness="1">
+														<Grid>
+															<Grid.ColumnDefinitions>
+																<ColumnDefinition Width="200"/>
+																<ColumnDefinition Width="*"/>
+																<ColumnDefinition Width="120"/>
+																<ColumnDefinition Width="120"/>
+																<ColumnDefinition Width="120"/>
+															</Grid.ColumnDefinitions>
+
+															<StackPanel Grid.Column="0">
+																<TextBlock Text="{Binding Name}" 
+																		   Foreground="#FFD700" 
+																		   FontWeight="Bold" 
+																		   FontSize="14"/>
+																<TextBlock Text="{Binding Category}" 
+																		   Foreground="#AAAAAA" 
+																		   FontSize="11"/>
+															</StackPanel>
+
+															<StackPanel Grid.Column="1" Margin="10,0">
+																<TextBlock Foreground="#DDDDDD" FontSize="11">
+																	<Run Text="Base Price: $"/>
+																	<Run Text="{Binding BasePrice, StringFormat=F2}"/>
+																</TextBlock>
+															</StackPanel>
+
+															<StackPanel Grid.Column="2">
+																<TextBlock Text="Supply" Foreground="#90EE90" FontSize="11" FontWeight="Bold"/>
+																<TextBlock Text="{Binding TotalSupply, StringFormat=N0}" 
+																		   Foreground="White" 
+																		   FontSize="13"/>
+															</StackPanel>
+
+															<StackPanel Grid.Column="3">
+																<TextBlock Text="Demand" Foreground="#F08080" FontSize="11" FontWeight="Bold"/>
+																<TextBlock Text="{Binding TotalDemand, StringFormat=N0}" 
+																		   Foreground="White" 
+																		   FontSize="13"/>
+															</StackPanel>
+
+															<StackPanel Grid.Column="4">
+																<TextBlock Text="Avg Price" Foreground="#F0E68C" FontSize="11" FontWeight="Bold"/>
+																<TextBlock Foreground="White" FontSize="13">
+																	<Run Text="$"/>
+																	<Run Text="{Binding AveragePrice, StringFormat=F2}"/>
+																</TextBlock>
+															</StackPanel>
+														</Grid>
+													</Border>
+												</DataTemplate>
+											</ListBox.ItemTemplate>
+										</ListBox>
+									</ScrollViewer>
 								</StackPanel>
 							</Grid>
 
