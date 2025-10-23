@@ -4257,16 +4257,35 @@ namespace Economy_sim
                 {
                     if (this.FindControl<Border>("CityInfoPopup") is Border popup)
                     {
-                        // Update city info
+                        // Update city info - Name and location
                         if (this.FindControl<TextBlock>("CityInfoNameText") is TextBlock nameText)
                             nameText.Text = city.Name;
                         
+                        // Try to find the state and country this city belongs to
+                        string stateName = "Unknown State";
+                        string countryName = "Unknown Country";
+                        
+                        foreach (var country in _allCountries)
+                        {
+                            foreach (var state in country.States)
+                            {
+                                if (state.Cities.Any(c => c.Name == city.Name))
+                                {
+                                    stateName = state.Name;
+                                    countryName = country.Name;
+                                    break;
+                                }
+                            }
+                            if (stateName != "Unknown State") break;
+                        }
+                        
                         if (this.FindControl<TextBlock>("CityInfoStateText") is TextBlock stateText)
-                            stateText.Text = "State Info"; // City doesn't have a State reference
+                            stateText.Text = stateName;
                         
                         if (this.FindControl<TextBlock>("CityInfoCountryText") is TextBlock countryText)
-                            countryText.Text = "Country Info"; // Will be filled from state later
+                            countryText.Text = countryName;
                         
+                        // Economic data
                         if (this.FindControl<TextBlock>("CityInfoBudgetText") is TextBlock budgetText)
                             budgetText.Text = $"${FormatCurrency(city.Budget)}";
                         
@@ -4278,13 +4297,84 @@ namespace Economy_sim
                         
                         if (this.FindControl<TextBlock>("CityInfoGdpText") is TextBlock gdpText)
                         {
-                            // Calculate GDP as an estimate
+                            // Calculate GDP as an estimate based on factories and population
                             double gdp = city.Budget * 10; // Simple estimate
                             gdpText.Text = $"${FormatCurrency(gdp)}";
                         }
                         
                         if (this.FindControl<TextBlock>("CityInfoPopulationText") is TextBlock popText)
                             popText.Text = FormatPopulation(city.Population);
+
+                        // Social indicators
+                        if (this.FindControl<TextBlock>("CityInfoEmploymentText") is TextBlock employmentText)
+                        {
+                            // Calculate employment rate
+                            int totalWorkers = city.Factories.Sum(f => f.WorkersEmployed);
+                            int totalPopulation = city.Population;
+                            double employmentRate = totalPopulation > 0 ? (totalWorkers / (double)totalPopulation * 100) : 0;
+                            employmentRate = Math.Min(employmentRate, 100); // Cap at 100%
+                            employmentText.Text = $"{employmentRate:F1}%";
+                        }
+
+                        if (this.FindControl<TextBlock>("CityInfoQualityText") is TextBlock qualityText)
+                        {
+                            // Calculate quality of life based on various factors
+                            double quality = 5.0; // Base quality
+                            
+                            // Adjust based on budget per capita
+                            double budgetPerCapita = city.Population > 0 ? city.Budget / city.Population : 0;
+                            if (budgetPerCapita > 100) quality += 2.0;
+                            else if (budgetPerCapita > 50) quality += 1.0;
+                            else if (budgetPerCapita < 10) quality -= 1.0;
+                            
+                            // Adjust based on expenses (infrastructure spending)
+                            if (city.CityExpenses > city.Budget * 0.5) quality += 1.0;
+                            
+                            quality = Math.Clamp(quality, 0, 10);
+                            qualityText.Text = $"{quality:F1}";
+                        }
+
+                        if (this.FindControl<TextBlock>("CityInfoHappinessText") is TextBlock happinessText)
+                        {
+                            // Calculate happiness based on employment and quality
+                            double happiness = 50.0; // Base happiness
+                            
+                            // Calculate employment rate
+                            int totalWorkers = city.Factories.Sum(f => f.WorkersEmployed);
+                            int totalPopulation = city.Population;
+                            double employmentRate = totalPopulation > 0 ? (totalWorkers / (double)totalPopulation * 100) : 0;
+                            
+                            // Adjust based on employment
+                            if (employmentRate > 90) happiness += 20;
+                            else if (employmentRate > 70) happiness += 10;
+                            else if (employmentRate < 30) happiness -= 20;
+                            
+                            // Adjust based on tax rate
+                            if (city.TaxRate < 0.10) happiness += 10;
+                            else if (city.TaxRate > 0.25) happiness -= 10;
+                            
+                            happiness = Math.Clamp(happiness, 0, 100);
+                            happinessText.Text = $"{happiness:F0}%";
+                        }
+
+                        if (this.FindControl<TextBlock>("CityInfoGrowthText") is TextBlock growthText)
+                        {
+                            // Calculate growth rate (simplified)
+                            double growthRate = 1.5; // Base growth
+                            
+                            // Adjust based on budget surplus
+                            if (city.Budget > city.CityExpenses * 2) growthRate += 1.0;
+                            else if (city.Budget < city.CityExpenses) growthRate -= 1.0;
+                            
+                            // Adjust based on factories (economic activity)
+                            int factoryCount = city.Factories.Count;
+                            if (factoryCount > 5) growthRate += 0.5;
+                            else if (factoryCount == 0) growthRate -= 0.5;
+                            
+                            growthRate = Math.Clamp(growthRate, -5, 10);
+                            string sign = growthRate >= 0 ? "+" : "";
+                            growthText.Text = $"{sign}{growthRate:F1}%";
+                        }
 
                         popup.IsVisible = true;
                     }

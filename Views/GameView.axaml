@@ -433,34 +433,15 @@
                                                 </Grid>
                                         </Border>
 
-                                        <!-- Content Area with Left Reserved Space -->
+                                        <!-- Content Area with Right Reserved Space -->
                                         <Grid Grid.Row="1" Margin="8">
                                                 <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="200"/>
                                                         <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="200"/>
                                                 </Grid.ColumnDefinitions>
 
-                                                <!-- Reserved Space on Left (for future use) -->
-                                                <Border Grid.Column="0"
-                                                        Background="#22000000"
-                                                        CornerRadius="4"
-                                                        Margin="0,0,8,0"
-                                                        BorderBrush="#444444"
-                                                        BorderThickness="1">
-                                                        <StackPanel Margin="12" Spacing="8">
-                                                                <TextBlock Text="Reserved Area"
-                                                                           Foreground="#666666"
-                                                                           FontSize="12"
-                                                                           TextAlignment="Center"/>
-                                                                <TextBlock Text="(Future Use)"
-                                                                           Foreground="#555555"
-                                                                           FontSize="10"
-                                                                           TextAlignment="Center"/>
-                                                        </StackPanel>
-                                                </Border>
-
-                                                <!-- City Details on Right -->
-                                                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                                                <!-- City Details on Left -->
+                                                <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
                                                         <StackPanel Spacing="12" Margin="8">
                                                                 <!-- Economic Stats Section -->
                                                                 <Border Background="#1A1A2E" CornerRadius="4" Padding="12" BorderBrush="#444444" BorderThickness="1">
@@ -510,6 +491,25 @@
                                                                 </Border>
                                                         </StackPanel>
                                                 </ScrollViewer>
+
+                                                <!-- Reserved Space on Right (for future use) -->
+                                                <Border Grid.Column="1"
+                                                        Background="#22000000"
+                                                        CornerRadius="4"
+                                                        Margin="8,0,0,0"
+                                                        BorderBrush="#444444"
+                                                        BorderThickness="1">
+                                                        <StackPanel Margin="12" Spacing="8">
+                                                                <TextBlock Text="Reserved Area"
+                                                                           Foreground="#666666"
+                                                                           FontSize="12"
+                                                                           TextAlignment="Center"/>
+                                                                <TextBlock Text="(Future Use)"
+                                                                           Foreground="#555555"
+                                                                           FontSize="10"
+                                                                           TextAlignment="Center"/>
+                                                        </StackPanel>
+                                                </Border>
                                         </Grid>
                                 </Grid>
                         </Border>
