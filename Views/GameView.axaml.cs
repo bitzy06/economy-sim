@@ -2197,17 +2197,44 @@ namespace Economy_sim
                     var convertedBounds = bounds.Select(b => 
                     {
                         City? cityObj = null;
+                        
+                        // Try multiple matching strategies to find the City object
                         if (b.CityObject is HybridMapManager.EconomyCityInfo economyCity)
                         {
-                            // Try to find the actual City object from our countries
+                            // Strategy 1: Exact name match
                             cityObj = _allCountries
                                 .SelectMany(c => c.States)
                                 .SelectMany(s => s.Cities)
                                 .FirstOrDefault(city => city.Name == economyCity.CityName);
+                            
+                            if (cityObj == null)
+                            {
+                                // Strategy 2: Case-insensitive match
+                                cityObj = _allCountries
+                                    .SelectMany(c => c.States)
+                                    .SelectMany(s => s.Cities)
+                                    .FirstOrDefault(city => string.Equals(city.Name, economyCity.CityName, StringComparison.OrdinalIgnoreCase));
+                            }
                         }
+                        else
+                        {
+                            // Direct lookup by city name if no economy info
+                            cityObj = _allCountries
+                                .SelectMany(c => c.States)
+                                .SelectMany(s => s.Cities)
+                                .FirstOrDefault(city => city.Name == b.CityName || 
+                                                       string.Equals(city.Name, b.CityName, StringComparison.OrdinalIgnoreCase));
+                        }
+                        
+                        if (cityObj == null)
+                        {
+                            Debug.WriteLine($"[City Bounds] Could not find City object for label: {b.CityName}");
+                        }
+                        
                         return new CityLabelBounds(b.CityName, b.Bounds, cityObj);
                     }).ToList();
                     
+                    Debug.WriteLine($"[City Bounds] Updated {convertedBounds.Count} city label bounds, {convertedBounds.Count(c => c.CityObject != null)} with City objects");
                     RegisterCityLabelBounds(convertedBounds);
                 }
             }
