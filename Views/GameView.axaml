@@ -40,7 +40,7 @@
 					VerticalAlignment="Top"
 					HorizontalAlignment="Stretch"
 					Margin="0"
-					IsHitTestVisible="False"
+					IsHitTestVisible="True"
 					ZIndex="1000">
 				<StackPanel Orientation="Horizontal"
 							HorizontalAlignment="Stretch"
@@ -54,7 +54,8 @@
 							Padding="12,6"
 							Margin="0,0,15,0"
 							BorderBrush="#555555"
-							BorderThickness="1">
+							BorderThickness="1"
+							IsHitTestVisible="False">
 						<StackPanel Orientation="Horizontal">
 							<TextBlock x:Name="PlayerRoleText"
 									   Text="Prime Minister"
@@ -82,7 +83,8 @@
 							Padding="12,6"
 							Margin="0,0,15,0"
 							BorderBrush="#2A6A2A"
-							BorderThickness="1">
+							BorderThickness="1"
+							IsHitTestVisible="False">
 						<StackPanel Orientation="Horizontal">
 							<TextBlock Text="💰"
 									   FontSize="16"
@@ -103,7 +105,8 @@
 							Padding="12,6"
 							Margin="0,0,15,0"
 							BorderBrush="#2A2A6A"
-							BorderThickness="1">
+							BorderThickness="1"
+							IsHitTestVisible="False">
 						<StackPanel Orientation="Horizontal">
 							<TextBlock Text="👥"
 									   FontSize="16"
@@ -119,14 +122,15 @@
 					</Border>
 
 					<!-- Spacer -->
-					<Border HorizontalAlignment="Stretch"/>
+					<Border HorizontalAlignment="Stretch" IsHitTestVisible="False"/>
 
 					<!-- Date/Time Section -->
 					<Border Background="#4A1A1A"
 							CornerRadius="3"
 							Padding="12,6"
 							BorderBrush="#6A2A2A"
-							BorderThickness="1">
+							BorderThickness="1"
+							IsHitTestVisible="False">
 						<StackPanel Orientation="Horizontal">
 							<TextBlock Text="📅"
 									   FontSize="16"
@@ -233,7 +237,8 @@
 									   FontSize="13"
 									   VerticalAlignment="Center"
 									   Margin="4,0,0,0"
-									   MinWidth="35"/>
+									   MinWidth="35"
+									   IsHitTestVisible="False"/>
 						</StackPanel>
 					</Border>
 				</StackPanel>
@@ -1224,7 +1229,7 @@
 										<ColumnDefinition Width="*"/>
 									</Grid.ColumnDefinitions>
 
-									<Border Grid.Column="0" Background="#1A1A4A" Padding="15" Margin="0,0,5,0" CornerRadius="3">
+									<Border Grid.Column="0" Background="#1A4A1A" Padding="15" Margin="0,0,5,0" CornerRadius="3">
 										<StackPanel>
 											<TextBlock Text="Avg Quality of Life" Foreground="#ADD8E6" FontWeight="Bold" FontSize="14"/>
 											<TextBlock x:Name="AvgQoLText" Text="72%" Foreground="White" FontSize="20" FontWeight="Bold"/>
@@ -1232,7 +1237,7 @@
 										</StackPanel>
 									</Border>
 
-									<Border Grid.Column="1" Background="#1A1A4A" Padding="15" Margin="5,0" CornerRadius="3">
+									<Border Grid.Column="1" Background="#1A4A1A" Padding="15" Margin="5,0" CornerRadius="3">
 										<StackPanel>
 											<TextBlock Text="Avg Happiness" Foreground="#90EE90" FontWeight="Bold" FontSize="14"/>
 											<TextBlock x:Name="AvgHappinessText" Text="68%" Foreground="White" FontSize="20" FontWeight="Bold"/>
@@ -1298,7 +1303,7 @@
 										</StackPanel>
 									</Border>
 
-									<Border Grid.Column="1" Background="#1A1A4A" Padding="15" Margin="5,0" CornerRadius="3">
+									<Border Grid.Column="1" Background="#1A4A1A" Padding="15" Margin="5,0" CornerRadius="3">
 										<StackPanel>
 											<TextBlock Text="Total Market Value" Foreground="#ADD8E6" FontWeight="Bold" FontSize="14"/>
 											<TextBlock x:Name="TotalMarketValueText" Text="$0" Foreground="White" FontSize="20" FontWeight="Bold"/>
@@ -1306,7 +1311,7 @@
 										</StackPanel>
 									</Border>
 
-									<Border Grid.Column="2" Background="#4A1A1A" Padding="15" Margin="5,0,0,0" CornerRadius="3">
+									<Border Grid.Column="2" Background="#4A1A4A" Padding="15" Margin="5,0,0,0" CornerRadius="3">
 										<StackPanel>
 											<TextBlock Text="Active Goods" Foreground="#F0E68C" FontWeight="Bold" FontSize="14"/>
 											<TextBlock x:Name="ActiveGoodsCountText" Text="0" Foreground="White" FontSize="20" FontWeight="Bold"/>
