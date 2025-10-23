@@ -82,6 +82,12 @@ namespace Economy_sim
         private readonly double[] _speedOptions = new[] { 0.5, 1.0, 2.0, 5.0, 10.0 };
         private int _currentSpeedIndex = 1; // Start at 1.0x
 
+        // === City Hover and Click Tracking ===
+        public record CityLabelBounds(string CityName, SKRect Bounds, City? CityObject);
+        private List<CityLabelBounds> _cityLabelBounds = new();
+        private CityLabelBounds? _hoveredCityLabel = null;
+        private Point _lastMousePosition;
+
         private static readonly string[] _sampleTradeGoods = new[]
         {
             "Machinery",
@@ -535,9 +541,16 @@ namespace Economy_sim
 
         private void OnPointerMoved(object? sender, PointerEventArgs e)
         {
-            if (!_isPanning) return;
-
             var currentPoint = e.GetPosition(this.MapImage);
+            _lastMousePosition = currentPoint;
+
+            // Check for city hover if not panning
+            if (!_isPanning)
+            {
+                CheckCityHover(currentPoint);
+                return;
+            }
+
             var delta = _panStartPoint - currentPoint;
 
             // Check if movement is significant enough to be considered panning
@@ -562,11 +575,28 @@ namespace Economy_sim
                 _isPanning = false;
                 this.Cursor = new Cursor(StandardCursorType.Arrow);
 
-                // If user didn't pan (just clicked), select country at click position
-                if (!_hasPanned && _mapManager.CurrentViewType == MapViewType.Political)
+                // If user didn't pan (just clicked), check for city click first, then country/state selection
+                if (!_hasPanned)
                 {
                     var mousePos = e.GetPosition(this.MapImage);
-                    HandleSelectionAtPosition((int)mousePos.X, (int)mousePos.Y);
+                    
+                    // Check if clicked on a city label
+                    bool cityClicked = false;
+                    foreach (var cityLabel in _cityLabelBounds)
+                    {
+                        if (cityLabel.Bounds.Contains((float)mousePos.X, (float)mousePos.Y))
+                        {
+                            HandleCityLabelClick(cityLabel);
+                            cityClicked = true;
+                            break;
+                        }
+                    }
+
+                    // Only do country/state selection if didn't click a city
+                    if (!cityClicked && _mapManager.CurrentViewType == MapViewType.Political)
+                    {
+                        HandleSelectionAtPosition((int)mousePos.X, (int)mousePos.Y);
+                    }
                 }
 
                 _hasPanned = false;
@@ -2139,11 +2169,46 @@ namespace Economy_sim
 
                     // Reset the frame ready flag
                     _frameReady = false;
+
+                    // Update city label bounds for hover/click detection
+                    UpdateCityLabelBounds();
                 }
                 catch (Exception)
                 {
                     _frameReady = false; // Ensure we don't loop on a bad frame
                 }
+            }
+        }
+
+        private void UpdateCityLabelBounds()
+        {
+            try
+            {
+                if (_mapManager != null)
+                {
+                    var bounds = _mapManager.GetCityLabelBounds();
+                    
+                    // Convert HybridMapManager.CityLabelBounds to GameView.CityLabelBounds
+                    var convertedBounds = bounds.Select(b => 
+                    {
+                        City? cityObj = null;
+                        if (b.CityObject is HybridMapManager.EconomyCityInfo economyCity)
+                        {
+                            // Try to find the actual City object from our countries
+                            cityObj = _allCountries
+                                .SelectMany(c => c.States)
+                                .SelectMany(s => s.Cities)
+                                .FirstOrDefault(city => city.Name == economyCity.CityName);
+                        }
+                        return new CityLabelBounds(b.CityName, b.Bounds, cityObj);
+                    }).ToList();
+                    
+                    RegisterCityLabelBounds(convertedBounds);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[City Bounds] Error updating city label bounds: {ex.Message}");
             }
         }
 
@@ -4023,6 +4088,241 @@ namespace Economy_sim
             }
         }
         
+        #endregion
+
+        #region City Hover and Click Handling
+
+        private void CheckCityHover(Point mousePosition)
+        {
+            CityLabelBounds? hoveredCity = null;
+
+            // Check if mouse is over any city label
+            foreach (var cityLabel in _cityLabelBounds)
+            {
+                if (cityLabel.Bounds.Contains((float)mousePosition.X, (float)mousePosition.Y))
+                {
+                    hoveredCity = cityLabel;
+                    break;
+                }
+            }
+
+            // Update hover state if changed
+            if (hoveredCity != _hoveredCityLabel)
+            {
+                _hoveredCityLabel = hoveredCity;
+                
+                if (_hoveredCityLabel != null)
+                {
+                    ShowCityHoverTooltip(_hoveredCityLabel, mousePosition);
+                }
+                else
+                {
+                    HideCityHoverTooltip();
+                }
+            }
+            else if (_hoveredCityLabel != null)
+            {
+                // Update tooltip position if still hovering
+                UpdateCityHoverTooltipPosition(mousePosition);
+            }
+        }
+
+        private void ShowCityHoverTooltip(CityLabelBounds cityLabel, Point mousePosition)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (this.FindControl<Border>("CityHoverTooltip") is Border tooltip)
+                    {
+                        // Update tooltip content
+                        if (this.FindControl<TextBlock>("CityHoverNameText") is TextBlock nameText)
+                        {
+                            nameText.Text = cityLabel.CityName;
+                        }
+
+                        if (this.FindControl<TextBlock>("CityHoverInfoText") is TextBlock infoText)
+                        {
+                            if (cityLabel.CityObject != null)
+                            {
+                                infoText.Text = $"Population: {FormatPopulation(cityLabel.CityObject.Population)}\nClick for details";
+                            }
+                            else
+                            {
+                                infoText.Text = "Click for details";
+                            }
+                        }
+
+                        // Position tooltip near mouse
+                        tooltip.Margin = new Thickness(
+                            Math.Min(mousePosition.X + 15, this.Bounds.Width - 270),
+                            Math.Min(mousePosition.Y + 15, this.Bounds.Height - 100),
+                            0,
+                            0
+                        );
+
+                        tooltip.IsVisible = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[City Hover] Error showing tooltip: {ex.Message}");
+                }
+            });
+        }
+
+        private void UpdateCityHoverTooltipPosition(Point mousePosition)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (this.FindControl<Border>("CityHoverTooltip") is Border tooltip && tooltip.IsVisible)
+                    {
+                        tooltip.Margin = new Thickness(
+                            Math.Min(mousePosition.X + 15, this.Bounds.Width - 270),
+                            Math.Min(mousePosition.Y + 15, this.Bounds.Height - 100),
+                            0,
+                            0
+                        );
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[City Hover] Error updating tooltip position: {ex.Message}");
+                }
+            });
+        }
+
+        private void HideCityHoverTooltip()
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (this.FindControl<Border>("CityHoverTooltip") is Border tooltip)
+                    {
+                        tooltip.IsVisible = false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[City Hover] Error hiding tooltip: {ex.Message}");
+                }
+            });
+        }
+
+        public void RegisterCityLabelBounds(List<CityLabelBounds> bounds)
+        {
+            _cityLabelBounds = bounds;
+        }
+
+        private void HandleCityLabelClick(CityLabelBounds cityLabel)
+        {
+            Debug.WriteLine($"[City Click] Clicked on city: {cityLabel.CityName}");
+            
+            // Hide hover tooltip
+            HideCityHoverTooltip();
+
+            // Show city popup
+            if (cityLabel.CityObject != null)
+            {
+                ShowCityPopup(cityLabel.CityObject);
+            }
+            else
+            {
+                // If we don't have the city object, show a basic popup
+                ShowBasicCityPopup(cityLabel.CityName);
+            }
+        }
+
+        private void ShowCityPopup(City city)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (this.FindControl<Border>("CityInfoPopup") is Border popup)
+                    {
+                        // Update city info
+                        if (this.FindControl<TextBlock>("CityInfoNameText") is TextBlock nameText)
+                            nameText.Text = city.Name;
+                        
+                        if (this.FindControl<TextBlock>("CityInfoStateText") is TextBlock stateText)
+                            stateText.Text = "State Info"; // City doesn't have a State reference
+                        
+                        if (this.FindControl<TextBlock>("CityInfoCountryText") is TextBlock countryText)
+                            countryText.Text = "Country Info"; // Will be filled from state later
+                        
+                        if (this.FindControl<TextBlock>("CityInfoBudgetText") is TextBlock budgetText)
+                            budgetText.Text = $"${FormatCurrency(city.Budget)}";
+                        
+                        if (this.FindControl<TextBlock>("CityInfoExpensesText") is TextBlock expensesText)
+                            expensesText.Text = $"${FormatCurrency(city.CityExpenses)}";
+                        
+                        if (this.FindControl<TextBlock>("CityInfoTaxText") is TextBlock taxText)
+                            taxText.Text = $"{(city.TaxRate * 100):F1}%";
+                        
+                        if (this.FindControl<TextBlock>("CityInfoGdpText") is TextBlock gdpText)
+                        {
+                            // Calculate GDP as an estimate
+                            double gdp = city.Budget * 10; // Simple estimate
+                            gdpText.Text = $"${FormatCurrency(gdp)}";
+                        }
+                        
+                        if (this.FindControl<TextBlock>("CityInfoPopulationText") is TextBlock popText)
+                            popText.Text = FormatPopulation(city.Population);
+
+                        popup.IsVisible = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[City Popup] Error showing city popup: {ex.Message}");
+                }
+            });
+        }
+
+        private void ShowBasicCityPopup(string cityName)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (this.FindControl<Border>("CityInfoPopup") is Border popup)
+                    {
+                        // Update with basic info
+                        if (this.FindControl<TextBlock>("CityInfoNameText") is TextBlock nameText)
+                            nameText.Text = cityName;
+                        
+                        if (this.FindControl<TextBlock>("CityInfoStateText") is TextBlock stateText)
+                            stateText.Text = "Information loading...";
+                        
+                        if (this.FindControl<TextBlock>("CityInfoCountryText") is TextBlock countryText)
+                            countryText.Text = "";
+
+                        // Clear other fields
+                        if (this.FindControl<TextBlock>("CityInfoBudgetText") is TextBlock budgetText)
+                            budgetText.Text = "N/A";
+                        if (this.FindControl<TextBlock>("CityInfoExpensesText") is TextBlock expensesText)
+                            expensesText.Text = "N/A";
+                        if (this.FindControl<TextBlock>("CityInfoTaxText") is TextBlock taxText)
+                            taxText.Text = "N/A";
+                        if (this.FindControl<TextBlock>("CityInfoGdpText") is TextBlock gdpText)
+                            gdpText.Text = "N/A";
+                        if (this.FindControl<TextBlock>("CityInfoPopulationText") is TextBlock popText)
+                            popText.Text = "N/A";
+
+                        popup.IsVisible = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[City Popup] Error showing basic city popup: {ex.Message}");
+                }
+            });
+        }
+
         #endregion
 
         private void OnMapViewTypeChanged(object? sender, MapViewType type)

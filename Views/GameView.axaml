@@ -244,6 +244,32 @@
 				</StackPanel>
                         </Border>
 
+			<!-- City Hover Tooltip -->
+			<Border x:Name="CityHoverTooltip"
+					Background="#E0000000"
+					BorderBrush="#FFD700"
+					BorderThickness="2"
+					CornerRadius="4"
+					Padding="10,6"
+					MaxWidth="250"
+					HorizontalAlignment="Left"
+					VerticalAlignment="Top"
+					ZIndex="2000"
+					IsVisible="False"
+					IsHitTestVisible="False">
+				<StackPanel Spacing="2">
+					<TextBlock x:Name="CityHoverNameText"
+							   Text="City Name"
+							   Foreground="#FFD700"
+							   FontWeight="Bold"
+							   FontSize="14"/>
+					<TextBlock x:Name="CityHoverInfoText"
+							   Text="Population: 0"
+							   Foreground="#DDDDDD"
+							   FontSize="11"
+							   TextWrapping="Wrap"/>
+				</StackPanel>
+			</Border>
 
                         <!-- State Context Popup (appears near right-click position) -->
                         <Border x:Name="StateInfoPopup"

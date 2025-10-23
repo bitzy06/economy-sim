@@ -1599,6 +1599,18 @@ namespace Economy_sim
         private bool _citiesLoadAttempted = false;
         private readonly object _cityLock = new();
         private List<EconomyCityInfo> _economyCityInfos = new();
+        
+        // Store city label bounds for hover/click detection
+        public record CityLabelBounds(string CityName, SKRect Bounds, object? CityObject);
+        private List<CityLabelBounds> _lastRenderedCityLabels = new();
+
+        public List<CityLabelBounds> GetCityLabelBounds()
+        {
+            lock (_cityLock)
+            {
+                return new List<CityLabelBounds>(_lastRenderedCityLabels);
+            }
+        }
 
         private record CityPoint(string IsoCode, float Lon, float Lat, int PopMax, int ScaleRank, int PixelX, int PixelY, int RasterCode, string Name);
 
@@ -1640,6 +1652,9 @@ namespace Economy_sim
 
                 // Simple collision list for labels
                 List<SKRect> placedLabels = new();
+                
+                // Clear and prepare to store new city label bounds
+                var newCityLabelBounds = new List<CityLabelBounds>();
 
                 foreach (var city in _cityPoints)
                 {
@@ -1741,6 +1756,11 @@ namespace Economy_sim
                             canvas.DrawText(city.Name, labelX, labelY, textPaint);
                             placedLabels.Add(bgRect);
                             labeled++;
+
+                            // Store label bounds for hover/click detection
+                            // Try to find the corresponding economy city object
+                            object? cityObj = _economyCityInfos.FirstOrDefault(c => c.CityName == city.Name);
+                            newCityLabelBounds.Add(new CityLabelBounds(city.Name, bgRect, cityObj));
                         }
                     }
                 }
@@ -1752,6 +1772,12 @@ namespace Economy_sim
                 else if (drawn > 0)
                 {
                     Debug.WriteLine($"[CITIES] Drew {drawn} city dots (+{labeled} labels) for {iso} at zoom {zoomLevel}.");
+                }
+
+                // Store the city label bounds for this render
+                lock (_cityLock)
+                {
+                    _lastRenderedCityLabels = newCityLabelBounds;
                 }
             }
             catch (Exception ex)
