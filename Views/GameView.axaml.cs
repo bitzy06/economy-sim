@@ -88,6 +88,11 @@ namespace Economy_sim
         private CityLabelBounds? _hoveredCityLabel = null;
         private Point _lastMousePosition;
 
+        // === City Popup Drag Support ===
+        private bool _isDraggingCityPopup = false;
+        private Point _cityPopupDragStart;
+        private Thickness _cityPopupOriginalMargin;
+
         private static readonly string[] _sampleTradeGoods = new[]
         {
             "Machinery",
@@ -3027,6 +3032,14 @@ namespace Economy_sim
                     HideCityInfoOverlay();
                 };
 
+            // Setup city popup drag functionality
+            if (this.FindControl<Border>("CityInfoTitleBar") is Border titleBar)
+            {
+                titleBar.PointerPressed += OnCityPopupTitleBarPressed;
+                titleBar.PointerMoved += OnCityPopupTitleBarMoved;
+                titleBar.PointerReleased += OnCityPopupTitleBarReleased;
+            }
+
             // Overlay click handlers to close popups when clicking outside
             if (this.FindControl<Border>("DiplomacyMenuOverlay") is Border diplomacyOverlay)
                 diplomacyOverlay.PointerPressed += OnOverlayClicked;
@@ -4321,6 +4334,47 @@ namespace Economy_sim
                     Debug.WriteLine($"[City Popup] Error showing basic city popup: {ex.Message}");
                 }
             });
+        }
+
+        private void OnCityPopupTitleBarPressed(object? sender, PointerPressedEventArgs e)
+        {
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+            {
+                _isDraggingCityPopup = true;
+                _cityPopupDragStart = e.GetPosition(this);
+                
+                if (this.FindControl<Border>("CityInfoPopup") is Border popup)
+                {
+                    _cityPopupOriginalMargin = popup.Margin;
+                }
+                
+                e.Handled = true;
+            }
+        }
+
+        private void OnCityPopupTitleBarMoved(object? sender, PointerEventArgs e)
+        {
+            if (_isDraggingCityPopup && this.FindControl<Border>("CityInfoPopup") is Border popup)
+            {
+                var currentPos = e.GetPosition(this);
+                var delta = currentPos - _cityPopupDragStart;
+                
+                var newMargin = new Thickness(
+                    _cityPopupOriginalMargin.Left + delta.X,
+                    _cityPopupOriginalMargin.Top + delta.Y,
+                    0,
+                    0
+                );
+                
+                popup.Margin = newMargin;
+                e.Handled = true;
+            }
+        }
+
+        private void OnCityPopupTitleBarReleased(object? sender, PointerReleasedEventArgs e)
+        {
+            _isDraggingCityPopup = false;
+            e.Handled = true;
         }
 
         #endregion
