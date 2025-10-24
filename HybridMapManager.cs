@@ -1796,6 +1796,67 @@ namespace Economy_sim
             }
         }
 
+        /// <summary>
+        /// Gets geographic cities from the shapefile, grouped by country and state.
+        /// Returns cities with their names, populations, and coordinates.
+        /// </summary>
+        public List<GeographicCityInfo> GetGeographicCities()
+        {
+            EnsureCitiesLoaded();
+            
+            var result = new List<GeographicCityInfo>();
+            if (_cityPoints == null || _cityPoints.Count == 0)
+            {
+                Debug.WriteLine("[MAP] No geographic cities loaded from shapefile");
+                return result;
+            }
+
+            // Get all states to map cities to them
+            var allStates = GetAllStates();
+            var statesByRasterCode = allStates?
+                .Where(s => s.RasterCode > 0)
+                .ToDictionary(s => s.RasterCode, s => s.StateName);
+            
+            foreach (var cityPoint in _cityPoints)
+            {
+                // Try to find state name from raster code
+                string? stateName = null;
+                if (statesByRasterCode != null && cityPoint.RasterCode > 0)
+                {
+                    statesByRasterCode.TryGetValue(cityPoint.RasterCode, out stateName);
+                }
+                
+                // Use ISO code as country identifier
+                string countryName = cityPoint.IsoCode;
+                
+                result.Add(new GeographicCityInfo(
+                    cityPoint.Name,
+                    cityPoint.PopMax,
+                    cityPoint.Lat,
+                    cityPoint.Lon,
+                    stateName,
+                    countryName,
+                    cityPoint.ScaleRank
+                ));
+            }
+            
+            Debug.WriteLine($"[MAP] Retrieved {result.Count} geographic cities from shapefile");
+            return result;
+        }
+
+        /// <summary>
+        /// Represents a city from geographic data (shapefile)
+        /// </summary>
+        public record GeographicCityInfo(
+            string CityName,
+            int Population,
+            float Latitude,
+            float Longitude,
+            string? StateName,
+            string? CountryName,
+            int Importance  // ScaleRank: lower is more important
+        );
+
         private void EnsureCitiesLoaded()
         {
             if (_citiesLoadAttempted) return;

@@ -210,6 +210,7 @@ namespace Economy_sim
         public static (List<Country> countries, List<Corporation> corporations) GenerateWorldEconomyFromMapData(
             IReadOnlyList<IndexedCountryFeature> mapCountries,
             List<StateBorderManager.StateFeature> mapStates,
+            List<HybridMapManager.GeographicCityInfo>? geographicCities = null,
             int? seed = null)
         {
             Console.WriteLine($"[Economy Init] Generating world economy from map data...");
@@ -309,21 +310,59 @@ namespace Economy_sim
 
                         Console.WriteLine($"[Economy Init]    Generating state: {state.Name}");
 
-                        // Generate 3-8 cities per state
-                        int numCities = random.Next(3, 9);
-                        var cityTypes = CityTemplateManager.DetermineStateCityTypes(numCities, random, hasCapital: isFirstState && stateIndex == 0);
+                        // Get cities for this state from geographic data
+                        List<HybridMapManager.GeographicCityInfo> stateCities = new List<HybridMapManager.GeographicCityInfo>();
+                        if (geographicCities != null && geographicCities.Count > 0)
+                        {
+                            // Find cities that belong to this state
+                            stateCities = geographicCities
+                                .Where(c => !string.IsNullOrWhiteSpace(c.StateName) && 
+                                           string.Equals(c.StateName, mapState.StateName, StringComparison.OrdinalIgnoreCase))
+                                .OrderBy(c => c.Importance)  // Lower ScaleRank = more important cities first
+                                .ToList();
+                            
+                            Console.WriteLine($"[Economy Init]     Found {stateCities.Count} geographic cities for state {state.Name}");
+                        }
 
-                        // Generate more realistic city names based on state name
-                        var cityNames = GenerateCityNamesForState(mapState.StateName, numCities, random);
+                        // Determine number of cities to generate
+                        int numCities;
+                        if (stateCities.Count > 0)
+                        {
+                            // Use geographic cities, but cap at reasonable number
+                            numCities = Math.Min(stateCities.Count, 12);  // Take top 12 most important cities
+                        }
+                        else
+                        {
+                            // Fallback: generate 3-8 cities if no geographic data
+                            numCities = random.Next(3, 9);
+                        }
+
+                        var cityTypes = CityTemplateManager.DetermineStateCityTypes(numCities, random, hasCapital: isFirstState && stateIndex == 0);
 
                         for (int i = 0; i < numCities; i++)
                         {
                             var cityType = i < cityTypes.Count ? cityTypes[i] : CityType.MixedIndustrial;
                             var template = CityTemplateManager.GetTemplate(cityType);
                             
-                            // Use generated city name instead of generic one
-                            string cityName = i < cityNames.Count ? cityNames[i] : $"{state.Name} City {i + 1}";
-                            int population = random.Next(50000, 2000000);
+                            // Use geographic city data if available
+                            string cityName;
+                            int population;
+                            
+                            if (i < stateCities.Count)
+                            {
+                                var geoCity = stateCities[i];
+                                cityName = geoCity.CityName;
+                                // Use geographic population as base, with some variation
+                                population = geoCity.Population > 0 
+                                    ? Math.Max(50000, geoCity.Population + random.Next(-10000, 10000))
+                                    : random.Next(50000, 2000000);
+                            }
+                            else
+                            {
+                                // Fallback: generate procedural name
+                                cityName = $"{state.Name} City {i + 1}";
+                                population = random.Next(50000, 2000000);
+                            }
                             
                             var city = new City(cityName)
                             {

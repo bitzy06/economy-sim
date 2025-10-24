@@ -2636,7 +2636,12 @@ namespace Economy_sim
                         }
                         
                         Debug.WriteLine($"[Economy Init] Using map data: {mapCountries.Count} countries, {statesWithCountry.Count} states");
-                        var (countries, corporations) = Economy.GenerateWorldEconomyFromMapData(mapCountries, statesWithCountry);
+                        
+                        // Get geographic cities from shapefile
+                        var geographicCities = _mapManager.GetGeographicCities();
+                        Debug.WriteLine($"[Economy Init] Retrieved {geographicCities.Count} geographic cities from shapefile");
+                        
+                        var (countries, corporations) = Economy.GenerateWorldEconomyFromMapData(mapCountries, statesWithCountry, geographicCities);
                         
                         _allCountries = countries;
                         _allCorporations = corporations;
