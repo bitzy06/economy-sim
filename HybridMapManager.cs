@@ -1819,15 +1819,29 @@ namespace Economy_sim
             
             foreach (var cityPoint in _cityPoints)
             {
-                // Try to find state name from raster code
+                // Try to find state name from grid position (most accurate)
                 string? stateName = null;
-                if (statesByRasterCode != null && cityPoint.RasterCode > 0)
+                string? countryName = null;
+                
+                // First try: Get state from actual grid position using border data
+                var stateAtPosition = _stateManager?.GetStateAtGrid(cityPoint.PixelX, cityPoint.PixelY);
+                if (stateAtPosition != null)
+                {
+                    stateName = stateAtPosition.StateName;
+                    countryName = stateAtPosition.CountryName;
+                }
+                
+                // Second try: Use raster code if grid lookup failed
+                if (string.IsNullOrWhiteSpace(stateName) && statesByRasterCode != null && cityPoint.RasterCode > 0)
                 {
                     statesByRasterCode.TryGetValue(cityPoint.RasterCode, out stateName);
                 }
                 
-                // Use ISO code as country identifier
-                string countryName = cityPoint.IsoCode;
+                // Fallback for country: Use ISO code if we don't have country from state
+                if (string.IsNullOrWhiteSpace(countryName))
+                {
+                    countryName = cityPoint.IsoCode;
+                }
                 
                 result.Add(new GeographicCityInfo(
                     cityPoint.Name,

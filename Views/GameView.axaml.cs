@@ -1347,7 +1347,18 @@ namespace Economy_sim
             var resolved = ResolveCityData(cityFeature, stateFeature);
             if (resolved.HasValue)
             {
-                return BuildCitySnapshotFromCity(resolved.Value.country, resolved.Value.state, resolved.Value.city);
+                // Use geographic location info from stateFeature (actual location on map)
+                // instead of economy data which might have wrong state assignment
+                var snapshot = BuildCitySnapshotFromCity(resolved.Value.country, resolved.Value.state, resolved.Value.city);
+                
+                // Override location info with actual geographic location from map
+                if (stateFeature != null)
+                {
+                    snapshot.StateName = stateFeature.StateName ?? resolved.Value.state.Name;
+                    snapshot.CountryName = stateFeature.CountryName ?? resolved.Value.country.Name;
+                }
+                
+                return snapshot;
             }
 
             // Log when we can't find data instead of showing placeholder
