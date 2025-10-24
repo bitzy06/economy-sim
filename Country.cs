@@ -119,6 +119,9 @@ namespace Economy_sim
             Population = States?.Sum(s => s.Population) ?? 0;
             Budget = States?.Sum(s => s.Budget) ?? 0;
             
+            // Note: GDP is calculated dynamically via CalculateCountryGdp() 
+            // in GameView, not stored as a property
+            
             // Update financial system with new budget
             if (FinancialSystem != null)
             {

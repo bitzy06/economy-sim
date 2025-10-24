@@ -1539,29 +1539,8 @@ namespace Economy_sim
                 snapshot.Population = popFromClasses;
             }
 
-            decimal gdp = 0m;
-            foreach (var pop in popClasses)
-            {
-                gdp += (decimal)(pop.Size * pop.IncomePerPerson);
-            }
-
-            var factories = city.Factories ?? new List<Factory>();
-            foreach (var factory in factories)
-            {
-                double factoryValue = 0.0;
-                if (factory.OutputGoods != null)
-                {
-                    foreach (var output in factory.OutputGoods)
-                    {
-                        double basePrice = output.BasePrice > 0
-                            ? output.BasePrice
-                            : (Market.GoodDefinitions.TryGetValue(output.Name, out var def) ? def.BasePrice : 10.0);
-                        factoryValue += basePrice * output.Quantity * factory.ProductionCapacity;
-                    }
-                }
-                gdp += (decimal)factoryValue;
-            }
-            snapshot.Gdp = gdp;
+            // Use unified GDP calculation
+            snapshot.Gdp = CalculateCityGdp(city);
 
             long workingPopulation = popFromClasses > 0 ? popFromClasses : snapshot.Population;
             int totalEmployed = popClasses.Sum(p => p.Employed);
@@ -1862,6 +1841,22 @@ namespace Economy_sim
 
             return totalGdp;
         }
+        
+        private decimal CalculateCityGdp(City city)
+        {
+            if (city == null)
+            {
+                return 0m;
+            }
+
+            decimal totalGdp = 0m;
+            foreach (var pop in city.PopClasses)
+            {
+                totalGdp += (decimal)(pop.Size * pop.IncomePerPerson);
+            }
+
+            return totalGdp;
+        }
 
 
         private CountrySnapshot BuildCountrySnapshot(IndexedCountryFeature feature)
@@ -1899,7 +1894,7 @@ namespace Economy_sim
                 DisplayName = country.Name,
                 CountryCode = feature.CountryCode ?? string.Empty,
                 Budget = country.Budget,
-                Gdp = CalculateCountryGdp(country, ReferenceEquals(country, _currentCountry) ? _allCorporations : null),
+                Gdp = CalculateCountryGdp(country, _allCorporations),  // Always use same calculation
                 InflationRate = (double)(country.FinancialSystem.InflationRate * 100m),
                 IsPlaceholder = false
             };
@@ -2915,18 +2910,15 @@ namespace Economy_sim
 
             decimal totalGDP = 0;
 
+            // Sum GDP from all states
             foreach (var state in country.States)
             {
-                foreach (var city in state.Cities)
-                {
-                    foreach (var pop in city.PopClasses)
-                    {
-                        totalGDP += (decimal)(pop.Size * pop.IncomePerPerson);
-                    }
-                }
+                totalGDP += CalculateStateGdp(state);
             }
 
-            if (corporations != null)
+            // Only add corporation contribution for the current country being played
+            // This ensures fair comparison between countries
+            if (corporations != null && ReferenceEquals(country, _currentCountry))
             {
                 foreach (var corp in corporations)
                 {
