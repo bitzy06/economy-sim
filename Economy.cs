@@ -328,8 +328,10 @@ namespace Economy_sim
                         int numCities;
                         if (stateCities.Count > 0)
                         {
-                            // Use geographic cities, but cap at reasonable number
-                            numCities = Math.Min(stateCities.Count, 12);  // Take top 12 most important cities
+                            // Generate economy data for all geographic cities (no cap)
+                            // This ensures all cities on the map have economic stats
+                            numCities = stateCities.Count;
+                            Console.WriteLine($"[Economy Init]     Generating economy for all {numCities} geographic cities");
                         }
                         else
                         {
