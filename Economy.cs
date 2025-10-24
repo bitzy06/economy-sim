@@ -447,10 +447,13 @@ namespace Economy_sim
                         Console.WriteLine($"[Economy Init]    ✓ State aggregates updated: Budget=${state.Budget:N0}, Pop={state.Population:N0}");
                         
                         country.States.Add(state);
-                        country.Population += state.Population;
                         isFirstState = false;
                         stateIndex++;
                     }
+                    
+                    // Update country aggregates from states (budget, population)
+                    country.UpdateAggregatesFromStates();
+                    Console.WriteLine($"[Economy Init]   ✓ Country aggregates updated: {country.Name} - Budget=${country.Budget:N0}, Pop={country.Population:N0}");
                 }
                 else
                 {

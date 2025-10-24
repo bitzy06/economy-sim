@@ -543,31 +543,31 @@ namespace Economy_sim
             {
                 var mousePos = e.GetPosition(this.MapImage);
                 
-                // In political mode, right-click toggles showing all state borders for selected country
+                // In political mode with a selected country: first right-click shows borders, subsequent ones select states
                 if (_mapManager.CurrentViewType == MapViewType.Political && _mapManager.SelectedCountry != null)
                 {
-                    _showAllStateBordersInCountry = !_showAllStateBordersInCountry;
-                    _mapManager.ShowAllStateBordersInCountry = _showAllStateBordersInCountry; // Sync with map manager
-                    
+                    // If state borders are already showing, allow selecting individual states
                     if (_showAllStateBordersInCountry)
                     {
-                        Debug.WriteLine($"[STATE BORDERS] Showing all state borders for {_mapManager.SelectedCountry.CountryName}");
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            this.Title = $"Economy Sim - {_mapManager.SelectedCountry.CountryName} - Showing State Borders (right-click to hide)";
-                        });
+                        Debug.WriteLine($"[STATE SELECTION] Right-click in Political mode with state borders visible - selecting state");
+                        HandleStatePopupAtPosition((int)mousePos.X, (int)mousePos.Y);
+                        e.Handled = true;
                     }
                     else
                     {
-                        Debug.WriteLine($"[STATE BORDERS] Hiding state borders");
+                        // First right-click: show state borders
+                        _showAllStateBordersInCountry = true;
+                        _mapManager.ShowAllStateBordersInCountry = true;
+                        
+                        Debug.WriteLine($"[STATE BORDERS] Showing all state borders for {_mapManager.SelectedCountry.CountryName}");
                         Dispatcher.UIThread.Post(() =>
                         {
-                            this.Title = $"Economy Sim - {_mapManager.SelectedCountry.CountryName}";
+                            this.Title = $"Economy Sim - {_mapManager.SelectedCountry.CountryName} - Showing State Borders (right-click states for info)";
                         });
+                        
+                        QueueRender(immediate: true);
+                        e.Handled = true;
                     }
-                    
-                    QueueRender(immediate: true);
-                    e.Handled = true;
                 }
                 else
                 {
@@ -866,6 +866,8 @@ namespace Economy_sim
 
                             // Update UI feedback for state selection
                             ShowStateSelectionFeedback(state, screenX, screenY);
+                            // Show state info popup in Political mode (same as States mode)
+                            UpdateStateInfoPopup(state, new Point(screenX, screenY));
                             HandleCitySelectionAtPosition(screenX, screenY, state);
                         }
                         else
