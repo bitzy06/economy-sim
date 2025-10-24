@@ -1055,14 +1055,24 @@ namespace Economy_sim
                 canvas.ClipRect(viewportClip);
 
                 // Filter states by country code and render all of them
+                int statesRendered = 0;
+                int statesSkipped = 0;
+                
                 foreach (var state in _stateFeatures)
                 {
                     if (state.Geometry == null || state.Geometry.Count == 0)
                         continue;
 
                     // Only render states from the specified country
-                    if (!string.Equals(state.CountryCode, countryCode, StringComparison.OrdinalIgnoreCase))
+                    // Use trim and case-insensitive comparison for robustness
+                    string stateCountry = (state.CountryCode ?? "").Trim();
+                    string filterCountry = (countryCode ?? "").Trim();
+                    
+                    if (!string.Equals(stateCountry, filterCountry, StringComparison.OrdinalIgnoreCase))
+                    {
+                        statesSkipped++;
                         continue;
+                    }
 
                     if (!RectsIntersect(state.Bounds, baseViewport))
                         continue;
@@ -1074,7 +1084,11 @@ namespace Economy_sim
 
                         canvas.DrawPath(path, borderPaint);
                     }
+                    
+                    statesRendered++;
                 }
+                
+                Debug.WriteLine($"[STATE BORDERS] Rendered {statesRendered} state borders for country '{countryCode}' (skipped {statesSkipped} states from other countries)");
             }
             finally
             {
