@@ -93,6 +93,9 @@ namespace Economy_sim
         private Point _cityPopupDragStart;
         private Thickness _cityPopupOriginalMargin;
 
+        // === State Border Display Toggle ===
+        private bool _showAllStateBordersInCountry = false;
+
         private static readonly string[] _sampleTradeGoods = new[]
         {
             "Machinery",
@@ -539,8 +542,39 @@ namespace Economy_sim
             else if (currentPoint.Properties.IsRightButtonPressed)
             {
                 var mousePos = e.GetPosition(this.MapImage);
-                HandleStatePopupAtPosition((int)mousePos.X, (int)mousePos.Y);
-                e.Handled = true;
+                
+                // In political mode, right-click toggles showing all state borders for selected country
+                if (_mapManager.CurrentViewType == MapViewType.Political && _mapManager.SelectedCountry != null)
+                {
+                    _showAllStateBordersInCountry = !_showAllStateBordersInCountry;
+                    _mapManager.ShowAllStateBordersInCountry = _showAllStateBordersInCountry; // Sync with map manager
+                    
+                    if (_showAllStateBordersInCountry)
+                    {
+                        Debug.WriteLine($"[STATE BORDERS] Showing all state borders for {_mapManager.SelectedCountry.CountryName}");
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            this.Title = $"Economy Sim - {_mapManager.SelectedCountry.CountryName} - Showing State Borders (right-click to hide)";
+                        });
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"[STATE BORDERS] Hiding state borders");
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            this.Title = $"Economy Sim - {_mapManager.SelectedCountry.CountryName}";
+                        });
+                    }
+                    
+                    QueueRender(immediate: true);
+                    e.Handled = true;
+                }
+                else
+                {
+                    // Fall back to state popup for other modes or when no country selected
+                    HandleStatePopupAtPosition((int)mousePos.X, (int)mousePos.Y);
+                    e.Handled = true;
+                }
             }
         }
 

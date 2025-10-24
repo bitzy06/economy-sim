@@ -35,6 +35,7 @@ namespace Economy_sim
         private CitySelection? _selectedCity = null;
         private bool _stateSplittingProcessed = false;
         private bool _mergeSmallStatesWithCities = false;
+        private bool _showAllStateBordersInCountry = false; // Toggle for showing all state borders in selected country
         
         public MapViewType CurrentViewType => _currentViewType;
         public DateTime PoliticalMapDate => _politicalMapDate;
@@ -46,6 +47,13 @@ namespace Economy_sim
             get => _mergeSmallStatesWithCities;
             set => _mergeSmallStatesWithCities = value;
         }
+        
+        public bool ShowAllStateBordersInCountry
+        {
+            get => _showAllStateBordersInCountry;
+            set => _showAllStateBordersInCountry = value;
+        }
+        
         public bool UsePersistedStateMap
         {
             get => _stateManager.UsePersistedStateMap;
@@ -233,15 +241,28 @@ namespace Economy_sim
                     if (polBmp != null)
                     {
                         // Removed state fill overlay (was producing blocky square artifacts).
-                        // Optionally draw thin state borders only if a state is selected for context.
+                        // Draw state borders if:
+                        // 1. A specific state is selected, OR
+                        // 2. Showing all state borders in selected country
                         try
                         {
                             using var canvas = new SKCanvas(polBmp);
-                            if (_selectedState != null)
+                            
+                            if (_selectedState != null || (_showAllStateBordersInCountry && _selectedCountry != null))
                             {
                                 int cellSize = GetCellSizeForZoom(zoomLevel);
                                 var politicalPixelSize = new SKSizeI(PoliticalBaseWidth * cellSize, PoliticalBaseHeight * cellSize);
-                                _stateManager.RenderStateBorders(canvas, polView, politicalPixelSize, 1.0f, new SKColor(0, 0, 0, 160));
+                                
+                                if (_showAllStateBordersInCountry && _selectedCountry != null)
+                                {
+                                    // Render ALL state borders within the selected country
+                                    _stateManager.RenderStateBordersForCountry(canvas, polView, politicalPixelSize, _selectedCountry.CountryCode, 2.0f, new SKColor(0, 0, 0, 200));
+                                }
+                                else if (_selectedState != null)
+                                {
+                                    // Render borders for selected state only
+                                    _stateManager.RenderStateBorders(canvas, polView, politicalPixelSize, 1.0f, new SKColor(0, 0, 0, 160));
+                                }
                             }
 
                             RenderCitiesOverlay(canvas, viewArea, new SKSizeI(polBmp.Width, polBmp.Height), zoomLevel);

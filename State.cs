@@ -16,8 +16,8 @@ namespace Economy_sim
         {
             Name = name;
             Cities = new List<City>();
-            Budget = 100000; // Example starting budget
-            Population = 1000000; // Example starting population
+            Budget = 0; // Will be calculated from cities
+            Population = 0; // Will be calculated from cities
         }
 
         public void DistributeFunds()
@@ -32,11 +32,28 @@ namespace Economy_sim
         }
 
         /// <summary>
-        /// Update state population based on cities
+        /// Update state population and budget based on cities
         /// </summary>
         public void UpdatePopulationFromCities()
         {
             Population = Cities?.Sum(c => c.Population) ?? 0;
+        }
+
+        /// <summary>
+        /// Update state budget based on cities
+        /// </summary>
+        public void UpdateBudgetFromCities()
+        {
+            Budget = Cities?.Sum(c => c.Budget) ?? 0;
+        }
+
+        /// <summary>
+        /// Update all state aggregates from cities (population, budget, etc.)
+        /// </summary>
+        public void UpdateAggregatesFromCities()
+        {
+            Population = Cities?.Sum(c => c.Population) ?? 0;
+            Budget = Cities?.Sum(c => c.Budget) ?? 0;
         }
     }
 } 

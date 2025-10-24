@@ -441,6 +441,11 @@ namespace Economy_sim
                         }
 
                         Console.WriteLine($"[Economy Init]    ✓ Completed state: {state.Name} - {state.Cities.Count} cities, pop: {state.Population:N0}");
+                        
+                        // Update state aggregates from cities (budget, population)
+                        state.UpdateAggregatesFromCities();
+                        Console.WriteLine($"[Economy Init]    ✓ State aggregates updated: Budget=${state.Budget:N0}, Pop={state.Population:N0}");
+                        
                         country.States.Add(state);
                         country.Population += state.Population;
                         isFirstState = false;
