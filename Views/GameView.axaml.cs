@@ -1831,16 +1831,8 @@ namespace Economy_sim
                 return 0m;
             }
 
-            decimal totalGdp = 0m;
-            foreach (var city in state.Cities)
-            {
-                foreach (var pop in city.PopClasses)
-                {
-                    totalGdp += (decimal)(pop.Size * pop.IncomePerPerson);
-                }
-            }
-
-            return totalGdp;
+            // Use the stored GDP value that was calculated from factory output
+            return state.GDP;
         }
         
         private decimal CalculateCityGdp(City city)
@@ -1850,10 +1842,22 @@ namespace Economy_sim
                 return 0m;
             }
 
+            // Calculate GDP from factory production output
             decimal totalGdp = 0m;
-            foreach (var pop in city.PopClasses)
+            var factories = city.Factories;
+            foreach (var factory in factories)
             {
-                totalGdp += (decimal)(pop.Size * pop.IncomePerPerson);
+                // Calculate production value based on factory output capacity
+                if (factory.OutputGoods != null && factory.OutputGoods.Count > 0)
+                {
+                    foreach (var output in factory.OutputGoods)
+                    {
+                        // Use production capacity and base price to estimate output value
+                        int capacity = factory.ProductionCapacity;
+                        decimal outputValue = (decimal)(output.Quantity * capacity * output.BasePrice);
+                        totalGdp += outputValue;
+                    }
+                }
             }
 
             return totalGdp;
@@ -2909,25 +2913,8 @@ namespace Economy_sim
         {
             if (country == null) return 0;
 
-            decimal totalGDP = 0;
-
-            // Sum GDP from all states
-            foreach (var state in country.States)
-            {
-                totalGDP += CalculateStateGdp(state);
-            }
-
-            // Only add corporation contribution for the current country being played
-            // This ensures fair comparison between countries
-            if (corporations != null && ReferenceEquals(country, _currentCountry))
-            {
-                foreach (var corp in corporations)
-                {
-                    totalGDP += (decimal)(corp.Budget * 0.1);
-                }
-            }
-
-            return totalGDP;
+            // Use the stored GDP value that was calculated from factory output
+            return country.GDP;
         }
 
         private void UpdateEconomyDisplay()

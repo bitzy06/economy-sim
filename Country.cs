@@ -10,6 +10,7 @@ namespace Economy_sim
         // Budget now reflects the treasury, managed more closely with FinancialSystem
         public double Budget { get; set; }
         public int Population { get; set; }
+        public decimal GDP { get; set; } // Gross Domestic Product calculated from factory output
         // public double TaxRate { get; set; } // Replaced by FinancialSystem.TaxPolicies
         public double NationalExpenses { get; set; } // General national expenses
         public Dictionary<string, double> Resources { get; private set; }
@@ -106,21 +107,20 @@ namespace Economy_sim
         }
 
         /// <summary>
-        /// Update country population and budget based on states
+        /// Update country population, budget, and GDP based on states
+        /// GDP is aggregated from state GDPs which are calculated from factory output
         /// </summary>
         public void UpdateAggregatesFromStates()
         {
-            // First update all state populations and budgets from their cities
+            // First update all state populations, budgets, and GDPs from their cities
             foreach (var state in States)
             {
                 state.UpdateAggregatesFromCities();
             }
-            // Then sum up all state populations and budgets
+            // Then sum up all state populations, budgets, and GDPs
             Population = States?.Sum(s => s.Population) ?? 0;
             Budget = States?.Sum(s => s.Budget) ?? 0;
-            
-            // Note: GDP is calculated dynamically via CalculateCountryGdp() 
-            // in GameView, not stored as a property
+            GDP = States?.Sum(s => s.GDP) ?? 0m;
             
             // Update financial system with new budget
             if (FinancialSystem != null)
