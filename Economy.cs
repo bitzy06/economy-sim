@@ -1334,6 +1334,19 @@ namespace Economy_sim
                     {
                         city.Stockpile[input.Name] = new Good(input.Name, input.BasePrice, input.Category, 0);
                     }
+                    
+                    // Calculate import needs - what factories need to produce
+                    int inputNeeded = input.Quantity * factory.ProductionCapacity;
+                    int currentStock = city.Stockpile.ContainsKey(input.Name) ? city.Stockpile[input.Name].Quantity : 0;
+                    int shortage = Math.Max(0, inputNeeded - currentStock);
+                    
+                    if (shortage > 0)
+                    {
+                        if (city.ImportNeeds.ContainsKey(input.Name))
+                            city.ImportNeeds[input.Name] += shortage;
+                        else
+                            city.ImportNeeds[input.Name] = shortage;
+                    }
                 }
 
                 foreach (var output in factory.OutputGoods)

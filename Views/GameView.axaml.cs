@@ -1853,8 +1853,9 @@ namespace Economy_sim
                     foreach (var output in factory.OutputGoods)
                     {
                         // Use production capacity and base price to estimate output value
+                        // GDP = production capacity × base price (simpler, more accurate)
                         int capacity = factory.ProductionCapacity;
-                        decimal outputValue = (decimal)(output.Quantity * capacity * output.BasePrice);
+                        decimal outputValue = (decimal)(capacity * output.BasePrice);
                         totalGdp += outputValue;
                     }
                 }
