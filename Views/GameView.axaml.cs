@@ -1572,7 +1572,8 @@ namespace Economy_sim
                 }
             }
 
-            foreach (var factory in factories.OrderByDescending(f => f.ProductionCapacity).Take(4))
+            var cityFactories = city.Factories ?? new List<Factory>();
+            foreach (var factory in cityFactories.OrderByDescending(f => f.ProductionCapacity).Take(4))
             {
                 string outputs = factory.OutputGoods != null && factory.OutputGoods.Count > 0
                     ? string.Join(", ", factory.OutputGoods.Select(o => $"{o.Name} x{o.Quantity * factory.ProductionCapacity}"))
