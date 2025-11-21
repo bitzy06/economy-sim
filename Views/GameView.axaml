@@ -1872,5 +1872,71 @@
                 </ScrollViewer>
             </Grid>
         </Border>
+
+		<!-- Debug Console (hidden by default, shown with backtick key) -->
+		<Border x:Name="DebugConsolePanel"
+				Grid.Column="0"
+				Background="#DD000000"
+				VerticalAlignment="Bottom"
+				HorizontalAlignment="Stretch"
+				Height="200"
+				Margin="0,0,0,0"
+				IsVisible="False"
+				ZIndex="9999">
+			<Grid>
+				<Grid.RowDefinitions>
+					<RowDefinition Height="30"/>
+					<RowDefinition Height="*"/>
+					<RowDefinition Height="30"/>
+				</Grid.RowDefinitions>
+
+				<!-- Console Header -->
+				<Border Grid.Row="0" Background="#222222" BorderBrush="#555555" BorderThickness="0,0,0,1">
+					<TextBlock Text="Debug Console (Press ` to close, type 'help' for commands)"
+							   Foreground="#FFD700"
+							   FontWeight="Bold"
+							   FontSize="12"
+							   VerticalAlignment="Center"
+							   Margin="10,0"/>
+				</Border>
+
+				<!-- Console Output -->
+				<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10">
+					<TextBlock x:Name="ConsoleOutput"
+							   Text=""
+							   Foreground="#00FF00"
+							   FontFamily="Courier New"
+							   FontSize="12"
+							   TextWrapping="Wrap"/>
+				</ScrollViewer>
+
+				<!-- Console Input -->
+				<Border Grid.Row="2" Background="#1A1A1A" BorderBrush="#555555" BorderThickness="0,1,0,0">
+					<Grid>
+						<Grid.ColumnDefinitions>
+							<ColumnDefinition Width="Auto"/>
+							<ColumnDefinition Width="*"/>
+						</Grid.ColumnDefinitions>
+						<TextBlock Grid.Column="0"
+								   Text=">"
+								   Foreground="#00FF00"
+								   FontFamily="Courier New"
+								   FontSize="14"
+								   VerticalAlignment="Center"
+								   Margin="10,0,5,0"/>
+						<TextBox x:Name="ConsoleInput"
+								 Grid.Column="1"
+								 Background="Transparent"
+								 Foreground="#00FF00"
+								 FontFamily="Courier New"
+								 FontSize="12"
+								 BorderThickness="0"
+								 VerticalAlignment="Center"
+								 Watermark="Enter command..."/>
+					</Grid>
+				</Border>
+			</Grid>
+		</Border>
+
 	</Grid>
 </Window>

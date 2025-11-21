@@ -96,6 +96,10 @@ namespace Economy_sim
         // === State Border Display Toggle ===
         private bool _showAllStateBordersInCountry = false;
 
+        // === Debug Console ===
+        private DebugConsole? _debugConsole;
+        private bool _isConsoleVisible = false;
+
         private static readonly string[] _sampleTradeGoods = new[]
         {
             "Machinery",
@@ -208,6 +212,10 @@ namespace Economy_sim
             }
 
             Economy.ConstructionProgressed += OnConstructionProgressed;
+
+            // Initialize debug console
+            _debugConsole = new DebugConsole(this);
+            InitializeDebugConsole();
 
             int baseW = ParseEnvOrDefault("ES_BASE_WIDTH", _baselineWidth);
             int baseH = ParseEnvOrDefault("ES_BASE_HEIGHT", _baselineHeight);
@@ -4551,6 +4559,103 @@ namespace Economy_sim
             var mapSize = _mapManager.GetMapSize(_currentZoomLevel);
             _viewOffset = new SKPointI(Math.Max(0, (mapSize.Width - (int)size.Width) / 2), Math.Max(0, (mapSize.Height - (int)size.Height) / 2));
         }
+
+        // ===== Debug Console Methods =====
+
+        private void InitializeDebugConsole()
+        {
+            // Set up key down handler for the window to toggle console
+            this.KeyDown += OnWindowKeyDown;
+
+            // Set up console input handler
+            if (this.FindControl<TextBox>("ConsoleInput") is TextBox consoleInput)
+            {
+                consoleInput.KeyDown += OnConsoleInputKeyDown;
+            }
+        }
+
+        private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+        {
+            // Toggle console with backtick key
+            if (e.Key == Key.OemTilde || e.Key == Key.Oem3)
+            {
+                ToggleConsole();
+                e.Handled = true;
+            }
+        }
+
+        private async void OnConsoleInputKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && sender is TextBox consoleInput)
+            {
+                var command = consoleInput.Text ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(command))
+                {
+                    await ExecuteConsoleCommand(command);
+                    consoleInput.Text = string.Empty;
+                }
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                ToggleConsole();
+                e.Handled = true;
+            }
+        }
+
+        private void ToggleConsole()
+        {
+            if (this.FindControl<Border>("DebugConsolePanel") is Border consolePanel)
+            {
+                _isConsoleVisible = !_isConsoleVisible;
+                consolePanel.IsVisible = _isConsoleVisible;
+
+                if (_isConsoleVisible)
+                {
+                    // Focus the input when opening
+                    if (this.FindControl<TextBox>("ConsoleInput") is TextBox consoleInput)
+                    {
+                        consoleInput.Focus();
+                    }
+                }
+            }
+        }
+
+        private async Task ExecuteConsoleCommand(string command)
+        {
+            if (_debugConsole == null) return;
+
+            // Add command to output
+            AppendConsoleOutput($"> {command}");
+
+            // Execute command
+            var result = await _debugConsole.ExecuteCommand(command);
+
+            // Add result to output
+            AppendConsoleOutput(result);
+        }
+
+        private void AppendConsoleOutput(string text)
+        {
+            if (this.FindControl<TextBlock>("ConsoleOutput") is TextBlock output)
+            {
+                if (string.IsNullOrEmpty(output.Text))
+                {
+                    output.Text = text;
+                }
+                else
+                {
+                    output.Text += "\n" + text;
+                }
+
+                // Auto-scroll to bottom
+                if (output.Parent?.Parent is ScrollViewer scrollViewer)
+                {
+                    scrollViewer.ScrollToEnd();
+                }
+            }
+        }
+
         // ===== End added handlers =====
 
         #endregion
