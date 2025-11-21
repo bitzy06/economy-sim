@@ -281,7 +281,7 @@ namespace Economy_sim
                 
                 var factory = CreateFactoryFromBlueprint(blueprint, corporation, capacity, city);
                 
-                city.Factories.Add(factory);
+                city.AddFactory(factory);
                 corporation.AddFactory(factory);
             }
         }

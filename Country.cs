@@ -10,6 +10,7 @@ namespace Economy_sim
         // Budget now reflects the treasury, managed more closely with FinancialSystem
         public double Budget { get; set; }
         public int Population { get; set; }
+        public decimal GDP { get; set; } // Gross Domestic Product calculated from factory output
         // public double TaxRate { get; set; } // Replaced by FinancialSystem.TaxPolicies
         public double NationalExpenses { get; set; } // General national expenses
         public Dictionary<string, double> Resources { get; private set; }
@@ -20,11 +21,11 @@ namespace Economy_sim
         {
             Name = name;
             States = new List<State>();
-            Budget = 1000000; // Initial treasury balance
-            Population = 10000000;
+            Budget = 0; // Will be calculated from states after generation
+            Population = 0; // Will be calculated from states after generation
             Resources = new Dictionary<string, double>();
             // Initialize the financial system for the country
-            FinancialSystem = new NationalFinancialSystem(name, (decimal)Budget, 50000m, CurrencyStandard.Fiat);
+            FinancialSystem = new NationalFinancialSystem(name, 0m, 50000m, CurrencyStandard.Fiat);
             // Initialize basic government structure
             Government = new Government();
             Government.Parties.Add(new PoliticalParty { Name = $"{name} Conservative Party", ShareOfGovernment = 0.5 });
@@ -105,6 +106,29 @@ namespace Economy_sim
             }
         }
 
+        /// <summary>
+        /// Update country population, budget, and GDP based on states
+        /// GDP is aggregated from state GDPs which are calculated from factory output
+        /// </summary>
+        public void UpdateAggregatesFromStates()
+        {
+            // First update all state populations, budgets, and GDPs from their cities
+            foreach (var state in States)
+            {
+                state.UpdateAggregatesFromCities();
+            }
+            // Then sum up all state populations, budgets, and GDPs
+            Population = States?.Sum(s => s.Population) ?? 0;
+            Budget = States?.Sum(s => s.Budget) ?? 0;
+            GDP = States?.Sum(s => s.GDP) ?? 0m;
+            
+            // Update financial system with new budget
+            if (FinancialSystem != null)
+            {
+                FinancialSystem = new NationalFinancialSystem(Name, (decimal)Budget, 50000m, CurrencyStandard.Fiat);
+            }
+        }
+        
         /// <summary>
         /// Update country population based on states
         /// </summary>

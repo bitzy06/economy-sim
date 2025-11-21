@@ -210,6 +210,7 @@ namespace Economy_sim
         public static (List<Country> countries, List<Corporation> corporations) GenerateWorldEconomyFromMapData(
             IReadOnlyList<IndexedCountryFeature> mapCountries,
             List<StateBorderManager.StateFeature> mapStates,
+            List<HybridMapManager.GeographicCityInfo>? geographicCities = null,
             int? seed = null)
         {
             Console.WriteLine($"[Economy Init] Generating world economy from map data...");
@@ -309,21 +310,61 @@ namespace Economy_sim
 
                         Console.WriteLine($"[Economy Init]    Generating state: {state.Name}");
 
-                        // Generate 3-8 cities per state
-                        int numCities = random.Next(3, 9);
-                        var cityTypes = CityTemplateManager.DetermineStateCityTypes(numCities, random, hasCapital: isFirstState && stateIndex == 0);
+                        // Get cities for this state from geographic data
+                        List<HybridMapManager.GeographicCityInfo> stateCities = new List<HybridMapManager.GeographicCityInfo>();
+                        if (geographicCities != null && geographicCities.Count > 0)
+                        {
+                            // Find cities that belong to this state
+                            stateCities = geographicCities
+                                .Where(c => !string.IsNullOrWhiteSpace(c.StateName) && 
+                                           string.Equals(c.StateName, mapState.StateName, StringComparison.OrdinalIgnoreCase))
+                                .OrderBy(c => c.Importance)  // Lower ScaleRank = more important cities first
+                                .ToList();
+                            
+                            Console.WriteLine($"[Economy Init]     Found {stateCities.Count} geographic cities for state {state.Name}");
+                        }
 
-                        // Generate more realistic city names based on state name
-                        var cityNames = GenerateCityNamesForState(mapState.StateName, numCities, random);
+                        // Determine number of cities to generate
+                        int numCities;
+                        if (stateCities.Count > 0)
+                        {
+                            // Generate economy data for all geographic cities (no cap)
+                            // This ensures all cities on the map have economic stats
+                            numCities = stateCities.Count;
+                            Console.WriteLine($"[Economy Init]     Generating economy for all {numCities} geographic cities");
+                        }
+                        else
+                        {
+                            // Fallback: generate 3-8 cities if no geographic data
+                            numCities = random.Next(3, 9);
+                        }
+
+                        var cityTypes = CityTemplateManager.DetermineStateCityTypes(numCities, random, hasCapital: isFirstState && stateIndex == 0);
 
                         for (int i = 0; i < numCities; i++)
                         {
                             var cityType = i < cityTypes.Count ? cityTypes[i] : CityType.MixedIndustrial;
                             var template = CityTemplateManager.GetTemplate(cityType);
                             
-                            // Use generated city name instead of generic one
-                            string cityName = i < cityNames.Count ? cityNames[i] : $"{state.Name} City {i + 1}";
-                            int population = random.Next(50000, 2000000);
+                            // Use geographic city data if available
+                            string cityName;
+                            int population;
+                            
+                            if (i < stateCities.Count)
+                            {
+                                var geoCity = stateCities[i];
+                                cityName = geoCity.CityName;
+                                // Use geographic population as base, with some variation
+                                population = geoCity.Population > 0 
+                                    ? Math.Max(50000, geoCity.Population + random.Next(-10000, 10000))
+                                    : random.Next(50000, 2000000);
+                            }
+                            else
+                            {
+                                // Fallback: generate procedural name
+                                cityName = $"{state.Name} City {i + 1}";
+                                population = random.Next(50000, 2000000);
+                            }
                             
                             var city = new City(cityName)
                             {
@@ -383,7 +424,7 @@ namespace Economy_sim
                                     var corporation = ProceduralWorldGenerator.FindOrCreateCorporation(blueprint, city, allCorporations, random);
                                     var factory = ProceduralWorldGenerator.CreateFactoryFromBlueprint(blueprint, corporation, random.Next(2, 6), city);
                                     
-                                    city.Factories.Add(factory);
+                                    city.AddFactory(factory);
                                     corporation.AddFactory(factory);
                                 }
                             }
@@ -400,11 +441,19 @@ namespace Economy_sim
                         }
 
                         Console.WriteLine($"[Economy Init]    ✓ Completed state: {state.Name} - {state.Cities.Count} cities, pop: {state.Population:N0}");
+                        
+                        // Update state aggregates from cities (budget, population)
+                        state.UpdateAggregatesFromCities();
+                        Console.WriteLine($"[Economy Init]    ✓ State aggregates updated: Budget=${state.Budget:N0}, Pop={state.Population:N0}");
+                        
                         country.States.Add(state);
-                        country.Population += state.Population;
                         isFirstState = false;
                         stateIndex++;
                     }
+                    
+                    // Update country aggregates from states (budget, population)
+                    country.UpdateAggregatesFromStates();
+                    Console.WriteLine($"[Economy Init]   ✓ Country aggregates updated: {country.Name} - Budget=${country.Budget:N0}, Pop={country.Population:N0}");
                 }
                 else
                 {
@@ -1232,14 +1281,14 @@ namespace Economy_sim
 
                     newFactory.OwnerCorporation = this;
 
-                    targetCity.Factories.Add(newFactory);
+                    targetCity.AddFactory(newFactory);
                     this.AddFactory(newFactory);
 
                     if (targetCity.ProceduralData != null)
                     {
                         var newParcel = new Parcel { LandUse = LandUseType.Industrial };
                         var newBuilding = new Building { LandUse = LandUseType.Industrial };
-                        targetCity.ProceduralData.Parcels.Add(newParcel);
+                        targetCity.ProceduralData.AddParcel(newParcel);
                         targetCity.ProceduralData.SetBuilding(newParcel, newBuilding);
                         newFactory.BuildingData = newBuilding;
 
@@ -1284,6 +1333,19 @@ namespace Economy_sim
                     if (!city.Stockpile.ContainsKey(input.Name))
                     {
                         city.Stockpile[input.Name] = new Good(input.Name, input.BasePrice, input.Category, 0);
+                    }
+                    
+                    // Calculate import needs - what factories need to produce
+                    int inputNeeded = input.Quantity * factory.ProductionCapacity;
+                    int currentStock = city.Stockpile.ContainsKey(input.Name) ? city.Stockpile[input.Name].Quantity : 0;
+                    int shortage = Math.Max(0, inputNeeded - currentStock);
+                    
+                    if (shortage > 0)
+                    {
+                        if (city.ImportNeeds.ContainsKey(input.Name))
+                            city.ImportNeeds[input.Name] += shortage;
+                        else
+                            city.ImportNeeds[input.Name] = shortage;
                     }
                 }
 

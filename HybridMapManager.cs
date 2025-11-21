@@ -35,6 +35,7 @@ namespace Economy_sim
         private CitySelection? _selectedCity = null;
         private bool _stateSplittingProcessed = false;
         private bool _mergeSmallStatesWithCities = false;
+        private bool _showAllStateBordersInCountry = false; // Toggle for showing all state borders in selected country
         
         public MapViewType CurrentViewType => _currentViewType;
         public DateTime PoliticalMapDate => _politicalMapDate;
@@ -46,6 +47,13 @@ namespace Economy_sim
             get => _mergeSmallStatesWithCities;
             set => _mergeSmallStatesWithCities = value;
         }
+        
+        public bool ShowAllStateBordersInCountry
+        {
+            get => _showAllStateBordersInCountry;
+            set => _showAllStateBordersInCountry = value;
+        }
+        
         public bool UsePersistedStateMap
         {
             get => _stateManager.UsePersistedStateMap;
@@ -233,15 +241,28 @@ namespace Economy_sim
                     if (polBmp != null)
                     {
                         // Removed state fill overlay (was producing blocky square artifacts).
-                        // Optionally draw thin state borders only if a state is selected for context.
+                        // Draw state borders if:
+                        // 1. A specific state is selected, OR
+                        // 2. Showing all state borders in selected country
                         try
                         {
                             using var canvas = new SKCanvas(polBmp);
-                            if (_selectedState != null)
+                            
+                            if (_selectedState != null || (_showAllStateBordersInCountry && _selectedCountry != null))
                             {
                                 int cellSize = GetCellSizeForZoom(zoomLevel);
                                 var politicalPixelSize = new SKSizeI(PoliticalBaseWidth * cellSize, PoliticalBaseHeight * cellSize);
-                                _stateManager.RenderStateBorders(canvas, polView, politicalPixelSize, 1.0f, new SKColor(0, 0, 0, 160));
+                                
+                                if (_showAllStateBordersInCountry && _selectedCountry != null)
+                                {
+                                    // Render ALL state borders within the selected country
+                                    _stateManager.RenderStateBordersForCountry(canvas, polView, politicalPixelSize, _selectedCountry.CountryCode, 2.0f, new SKColor(0, 0, 0, 200));
+                                }
+                                else if (_selectedState != null)
+                                {
+                                    // Render borders for selected state only
+                                    _stateManager.RenderStateBorders(canvas, polView, politicalPixelSize, 1.0f, new SKColor(0, 0, 0, 160));
+                                }
                             }
 
                             RenderCitiesOverlay(canvas, viewArea, new SKSizeI(polBmp.Width, polBmp.Height), zoomLevel);
@@ -1599,6 +1620,18 @@ namespace Economy_sim
         private bool _citiesLoadAttempted = false;
         private readonly object _cityLock = new();
         private List<EconomyCityInfo> _economyCityInfos = new();
+        
+        // Store city label bounds for hover/click detection
+        public record CityLabelBounds(string CityName, SKRect Bounds, object? CityObject);
+        private List<CityLabelBounds> _lastRenderedCityLabels = new();
+
+        public List<CityLabelBounds> GetCityLabelBounds()
+        {
+            lock (_cityLock)
+            {
+                return new List<CityLabelBounds>(_lastRenderedCityLabels);
+            }
+        }
 
         private record CityPoint(string IsoCode, float Lon, float Lat, int PopMax, int ScaleRank, int PixelX, int PixelY, int RasterCode, string Name);
 
@@ -1640,6 +1673,9 @@ namespace Economy_sim
 
                 // Simple collision list for labels
                 List<SKRect> placedLabels = new();
+                
+                // Clear and prepare to store new city label bounds
+                var newCityLabelBounds = new List<CityLabelBounds>();
 
                 foreach (var city in _cityPoints)
                 {
@@ -1741,6 +1777,11 @@ namespace Economy_sim
                             canvas.DrawText(city.Name, labelX, labelY, textPaint);
                             placedLabels.Add(bgRect);
                             labeled++;
+
+                            // Store label bounds for hover/click detection
+                            // Try to find the corresponding economy city object
+                            object? cityObj = _economyCityInfos.FirstOrDefault(c => c.CityName == city.Name);
+                            newCityLabelBounds.Add(new CityLabelBounds(city.Name, bgRect, cityObj));
                         }
                     }
                 }
@@ -1752,6 +1793,12 @@ namespace Economy_sim
                 else if (drawn > 0)
                 {
                     Debug.WriteLine($"[CITIES] Drew {drawn} city dots (+{labeled} labels) for {iso} at zoom {zoomLevel}.");
+                }
+
+                // Store the city label bounds for this render
+                lock (_cityLock)
+                {
+                    _lastRenderedCityLabels = newCityLabelBounds;
                 }
             }
             catch (Exception ex)
@@ -1769,6 +1816,81 @@ namespace Economy_sim
                 _citiesLoadAttempted = false;
             }
         }
+
+        /// <summary>
+        /// Gets geographic cities from the shapefile, grouped by country and state.
+        /// Returns cities with their names, populations, and coordinates.
+        /// </summary>
+        public List<GeographicCityInfo> GetGeographicCities()
+        {
+            EnsureCitiesLoaded();
+            
+            var result = new List<GeographicCityInfo>();
+            if (_cityPoints == null || _cityPoints.Count == 0)
+            {
+                Debug.WriteLine("[MAP] No geographic cities loaded from shapefile");
+                return result;
+            }
+
+            // Get all states to map cities to them
+            var allStates = GetAllStates();
+            var statesByRasterCode = allStates?
+                .Where(s => s.RasterCode > 0)
+                .ToDictionary(s => s.RasterCode, s => s.StateName);
+            
+            foreach (var cityPoint in _cityPoints)
+            {
+                // Try to find state name from grid position (most accurate)
+                string? stateName = null;
+                string? countryName = null;
+                
+                // First try: Get state from actual grid position using border data
+                var stateAtPosition = _stateManager?.GetStateAtGrid(cityPoint.PixelX, cityPoint.PixelY);
+                if (stateAtPosition != null)
+                {
+                    stateName = stateAtPosition.StateName;
+                    countryName = stateAtPosition.CountryName;
+                }
+                
+                // Second try: Use raster code if grid lookup failed
+                if (string.IsNullOrWhiteSpace(stateName) && statesByRasterCode != null && cityPoint.RasterCode > 0)
+                {
+                    statesByRasterCode.TryGetValue(cityPoint.RasterCode, out stateName);
+                }
+                
+                // Fallback for country: Use ISO code if we don't have country from state
+                if (string.IsNullOrWhiteSpace(countryName))
+                {
+                    countryName = cityPoint.IsoCode;
+                }
+                
+                result.Add(new GeographicCityInfo(
+                    cityPoint.Name,
+                    cityPoint.PopMax,
+                    cityPoint.Lat,
+                    cityPoint.Lon,
+                    stateName,
+                    countryName,
+                    cityPoint.ScaleRank
+                ));
+            }
+            
+            Debug.WriteLine($"[MAP] Retrieved {result.Count} geographic cities from shapefile");
+            return result;
+        }
+
+        /// <summary>
+        /// Represents a city from geographic data (shapefile)
+        /// </summary>
+        public record GeographicCityInfo(
+            string CityName,
+            int Population,
+            float Latitude,
+            float Longitude,
+            string? StateName,
+            string? CountryName,
+            int Importance  // ScaleRank: lower is more important
+        );
 
         private void EnsureCitiesLoaded()
         {

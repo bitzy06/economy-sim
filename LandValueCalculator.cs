@@ -24,7 +24,9 @@ namespace Economy_sim
             double wealthFactor = Math.Clamp(city.Budget / Math.Max(1, city.Population + 1), -25, 45);
             double happinessFactor = city.Happiness * 0.35;
 
-            foreach (var parcel in proceduralData.Parcels)
+            // Materialize the collection to a list to avoid "collection was modified" exceptions
+            // if the underlying list is modified during iteration
+            foreach (var parcel in proceduralData.Parcels.ToList())
             {
                 double baseValue = 25 + populationPressure + wealthFactor;
 

@@ -1001,6 +1001,101 @@ namespace Economy_sim
             }
         }
 
+        /// <summary>
+        /// Renders state borders for all states within a specific country
+        /// </summary>
+        public void RenderStateBordersForCountry(SKCanvas canvas, SKRect viewport, SKSizeI mapPixelSize, string countryCode, float borderWidth = 1.0f, SKColor? borderColor = null)
+        {
+            if (!_dataLoaded) LoadStateData();
+            EnsureStateGridBuilt();
+            if (_stateFeatures.Count == 0) return;
+
+            float scaleX = mapPixelSize.Width / (float)_baseWidth;
+            float scaleY = mapPixelSize.Height / (float)_baseHeight;
+            if (scaleX <= 0 || scaleY <= 0)
+                return;
+
+            var baseViewport = new SKRect(viewport.Left / scaleX, viewport.Top / scaleY, viewport.Right / scaleX, viewport.Bottom / scaleY);
+            if (baseViewport.Width <= 0 || baseViewport.Height <= 0)
+                return;
+
+            var clip = canvas.DeviceClipBounds;
+            if (clip.Width <= 0 || clip.Height <= 0)
+                return;
+
+            float viewWidth = clip.Width;
+            float viewHeight = clip.Height;
+            float scaleToViewX = viewWidth / baseViewport.Width;
+            float scaleToViewY = viewHeight / baseViewport.Height;
+            float avgScale = Math.Max(0.0001f, (scaleToViewX + scaleToViewY) * 0.5f);
+
+            float desiredScreenWidth = Math.Max(1f, borderWidth);
+            float strokeInBase = desiredScreenWidth / avgScale;
+
+            using var borderPaint = new SKPaint
+            {
+                Style = SKPaintStyle.Stroke,
+                Color = (borderColor ?? SKColors.Black).WithAlpha(255),
+                StrokeWidth = strokeInBase,
+                IsAntialias = true,
+                StrokeJoin = SKStrokeJoin.Round,
+                StrokeCap = SKStrokeCap.Round
+            };
+
+            var translate = SKMatrix.CreateTranslation(-baseViewport.Left, -baseViewport.Top);
+            var scale = SKMatrix.CreateScale(scaleToViewX, scaleToViewY);
+            var matrix = SKMatrix.Concat(scale, translate);
+
+            canvas.Save();
+            canvas.Concat(ref matrix);
+
+            try
+            {
+                var viewportClip = new SKRect(baseViewport.Left, baseViewport.Top, baseViewport.Right, baseViewport.Bottom);
+                canvas.ClipRect(viewportClip);
+
+                // Filter states by country code and render all of them
+                int statesRendered = 0;
+                int statesSkipped = 0;
+                
+                foreach (var state in _stateFeatures)
+                {
+                    if (state.Geometry == null || state.Geometry.Count == 0)
+                        continue;
+
+                    // Only render states from the specified country
+                    // Use trim and case-insensitive comparison for robustness
+                    string stateCountry = (state.CountryCode ?? "").Trim();
+                    string filterCountry = (countryCode ?? "").Trim();
+                    
+                    if (!string.Equals(stateCountry, filterCountry, StringComparison.OrdinalIgnoreCase))
+                    {
+                        statesSkipped++;
+                        continue;
+                    }
+
+                    if (!RectsIntersect(state.Bounds, baseViewport))
+                        continue;
+
+                    foreach (var path in state.Geometry)
+                    {
+                        if (path == null || path.IsEmpty)
+                            continue;
+
+                        canvas.DrawPath(path, borderPaint);
+                    }
+                    
+                    statesRendered++;
+                }
+                
+                Debug.WriteLine($"[STATE BORDERS] Rendered {statesRendered} state borders for country '{countryCode}' (skipped {statesSkipped} states from other countries)");
+            }
+            finally
+            {
+                canvas.Restore();
+            }
+        }
+
         // --- Quick lookup helpers for selection ---
         private static bool RectsIntersect(SKRect a, SKRect b)
         {

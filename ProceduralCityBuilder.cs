@@ -44,34 +44,34 @@ namespace Economy_sim
             foreach (var parcel in CreateParcels(residentialParcels, LandUseType.Residential))
             {
                 var building = new Building { LandUse = LandUseType.Residential };
-                proceduralData.Parcels.Add(parcel);
+                proceduralData.AddParcel(parcel);
                 proceduralData.SetBuilding(parcel, building);
             }
 
             foreach (var parcel in CreateParcels(commercialParcels, LandUseType.Commercial))
             {
                 var building = new Building { LandUse = LandUseType.Commercial };
-                proceduralData.Parcels.Add(parcel);
+                proceduralData.AddParcel(parcel);
                 proceduralData.SetBuilding(parcel, building);
             }
 
             foreach (var parcel in CreateParcels(industrialParcels, LandUseType.Industrial))
             {
                 var building = new Building { LandUse = LandUseType.Industrial };
-                proceduralData.Parcels.Add(parcel);
+                proceduralData.AddParcel(parcel);
                 proceduralData.SetBuilding(parcel, building);
             }
 
             foreach (var parcel in CreateParcels(parkParcels, LandUseType.Park))
             {
                 var building = new Building { LandUse = LandUseType.Park };
-                proceduralData.Parcels.Add(parcel);
+                proceduralData.AddParcel(parcel);
                 proceduralData.SetBuilding(parcel, building);
             }
 
             foreach (var parcel in CreateParcels(flexibleParcels, random.NextDouble() > 0.5 ? LandUseType.Commercial : LandUseType.Park))
             {
-                proceduralData.Parcels.Add(parcel);
+                proceduralData.AddParcel(parcel);
                 // Leave these parcels without buildings initially so the simulator can claim them.
             }
         }
@@ -106,7 +106,7 @@ namespace Economy_sim
                 {
                     var extraParcel = new Parcel { LandUse = LandUseType.Industrial };
                     var extraBuilding = new Building { LandUse = LandUseType.Industrial };
-                    data.Parcels.Add(extraParcel);
+                    data.AddParcel(extraParcel);
                     data.SetBuilding(extraParcel, extraBuilding);
                     industrialBuildings.Add(extraBuilding);
                 }

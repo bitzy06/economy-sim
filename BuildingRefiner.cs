@@ -22,7 +22,9 @@ namespace Economy_sim
             int currentPopulation = Math.Max(1, city.PopClasses.Sum(p => p.Size));
             int baselineResidentialCapacity = Math.Max(1500, currentPopulation / residentialParcels);
 
-            foreach (var (parcel, building) in proceduralData.ParcelBuildingPairs)
+            // Materialize the collection to a list to avoid "collection was modified" exceptions
+            // if the underlying dictionary is modified during iteration
+            foreach (var (parcel, building) in proceduralData.ParcelBuildingPairs.ToList())
             {
                 if (building == null)
                 {
