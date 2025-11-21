@@ -4612,10 +4612,10 @@ namespace Economy_sim
 
                 if (_isConsoleVisible)
                 {
-                    // Focus the input when opening
+                    // Focus the input when opening (use Dispatcher to ensure it happens after visibility change)
                     if (this.FindControl<TextBox>("ConsoleInput") is TextBox consoleInput)
                     {
-                        consoleInput.Focus();
+                        Dispatcher.UIThread.Post(() => consoleInput.Focus());
                     }
                 }
             }
@@ -4649,9 +4649,10 @@ namespace Economy_sim
                 }
 
                 // Auto-scroll to bottom
-                if (output.Parent?.Parent is ScrollViewer scrollViewer)
+                if (this.FindControl<ScrollViewer>("ConsoleOutputScrollViewer") is ScrollViewer scrollViewer)
                 {
-                    scrollViewer.ScrollToEnd();
+                    // Use Dispatcher to ensure scroll happens after text is updated
+                    Dispatcher.UIThread.Post(() => scrollViewer.ScrollToEnd());
                 }
             }
         }

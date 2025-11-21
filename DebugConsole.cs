@@ -18,6 +18,8 @@ namespace Economy_sim
         private readonly Window _parentWindow;
         private readonly Dictionary<string, Type> _menuTypes;
         private const string ScreenshotsFolder = "screenshots";
+        private const int WindowRenderDelayMs = 500;
+        private const int ScreenshotRenderDelayMs = 100;
 
         public DebugConsole(Window parentWindow)
         {
@@ -161,7 +163,7 @@ Examples:
                 window.Show();
 
                 // Wait for window to render
-                await Task.Delay(500);
+                await Task.Delay(WindowRenderDelayMs);
 
                 // Capture screenshot
                 var screenshotResult = await CaptureScreenshot(window, menuName);
@@ -179,7 +181,7 @@ Examples:
             try
             {
                 // Wait a bit to ensure the window is fully rendered
-                await Task.Delay(100);
+                await Task.Delay(ScreenshotRenderDelayMs);
 
                 var pixelSize = new PixelSize((int)window.Bounds.Width, (int)window.Bounds.Height);
                 var size = new Size(window.Bounds.Width, window.Bounds.Height);

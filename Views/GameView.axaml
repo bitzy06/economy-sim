@@ -1901,7 +1901,7 @@
 				</Border>
 
 				<!-- Console Output -->
-				<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10">
+				<ScrollViewer x:Name="ConsoleOutputScrollViewer" Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="10">
 					<TextBlock x:Name="ConsoleOutput"
 							   Text=""
 							   Foreground="#00FF00"
