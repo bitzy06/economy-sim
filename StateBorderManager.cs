@@ -1535,6 +1535,10 @@ namespace Economy_sim
             int width = Math.Min(_stateGrid.GetLength(1), countryGrid.GetLength(1));
             bool anyChange = false;
 
+            // Move stackalloc outside all loops to prevent potential stack overflow
+            Span<int> neighborStates = stackalloc int[8];
+            Span<int> neighborCounts = stackalloc int[8];
+
             for (int iter = 0; iter < iterations; iter++)
             {
                 bool iterationChanged = false;
@@ -1549,8 +1553,9 @@ namespace Economy_sim
                             continue;
 
                         int currentState = _stateGrid[y, x];
-                        Span<int> neighborStates = stackalloc int[8];
-                        Span<int> neighborCounts = stackalloc int[8];
+                        // Clear the spans for reuse
+                        neighborStates.Clear();
+                        neighborCounts.Clear();
                         int trackedStates = 0;
                         int bestState = currentState;
                         int bestCount = 0;
