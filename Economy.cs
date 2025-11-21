@@ -526,10 +526,21 @@ namespace Economy_sim
                 totalCorporateProfits += (decimal)(corp.Budget * 0.1); // Simple profit approximation
             }
 
-            decimal totalLandValue = (decimal)country.States
-                .SelectMany(s => s.Cities)
-                .SelectMany(c => c.ProceduralData?.Parcels ?? Enumerable.Empty<Parcel>())
-                .Sum(p => p.LandValue);
+            // Calculate total land value - optimized to avoid nested SelectMany
+            decimal totalLandValue = 0m;
+            foreach (var state in country.States)
+            {
+                foreach (var city in state.Cities)
+                {
+                    if (city.ProceduralData?.Parcels != null)
+                    {
+                        foreach (var parcel in city.ProceduralData.Parcels)
+                        {
+                            totalLandValue += (decimal)parcel.LandValue;
+                        }
+                    }
+                }
+            }
             decimal totalConsumptionValue = totalAssessablePopIncome * 0.6m; // Assume 60% consumed
 
             decimal taxRevenue = fs.CalculateTaxRevenue(popIncomeMap, totalCorporateProfits, totalLandValue, totalConsumptionValue, totalPopulation);
@@ -1325,6 +1336,9 @@ namespace Economy_sim
             city.BuyOrders.Clear();
             city.SellOrders.Clear();
 
+            // Cache factories list to avoid multiple copies from thread-safe property
+            var cityFactories = city.Factories;
+
             // Clear/Reset trade-related dictionaries for the current turn
             if (Market.GoodDefinitions != null)
             {
@@ -1338,7 +1352,7 @@ namespace Economy_sim
             foreach (var goodKey in city.ExportableSurplus.Keys) city.ExportableSurplus[goodKey] = 0;
             foreach (var goodKey in city.ImportNeeds.Keys) city.ImportNeeds[goodKey] = 0;
 
-            foreach (var factory in city.Factories)
+            foreach (var factory in cityFactories)
             {
                 foreach (var input in factory.InputGoods)
                 {
@@ -1370,7 +1384,7 @@ namespace Economy_sim
                 }
             }
 
-            foreach (var factory in city.Factories)
+            foreach (var factory in cityFactories)
             {
                 factory.Produce(city.Stockpile, city);
             }
@@ -1386,7 +1400,7 @@ namespace Economy_sim
                 pop.Employed = 0;
             }
 
-            foreach (var factory in city.Factories)
+            foreach (var factory in cityFactories)
             {
                 if (factory.JobSlots == null || factory.JobSlots.Count == 0)
                 {
@@ -1400,7 +1414,7 @@ namespace Economy_sim
             }
 
             Dictionary<string, int> totalAvailableSlots = new Dictionary<string, int>();
-            foreach (var factory in city.Factories)
+            foreach (var factory in cityFactories)
             {
                 foreach (var slotEntry in factory.JobSlots)
                 {
@@ -1432,7 +1446,7 @@ namespace Economy_sim
                     DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Newly Employed: {canBeEmployed}, Total Employed: {pop.Employed}", DebugLogger.LogCategory.Pop);
                     remainingSlotsForJobType -= canBeEmployed;
                     int assignedToFactories = canBeEmployed;
-                    foreach (var factory in city.Factories.Where(f => f.JobSlots.ContainsKey(jobType)))
+                    foreach (var factory in cityFactories.Where(f => f.JobSlots.ContainsKey(jobType)))
                     {
                         if (assignedToFactories == 0) break;
                         int factoryActualEmployedForType = factory.ActualEmployed.TryGetValue(jobType, out var actualEmployed) ? actualEmployed : 0;
@@ -1612,7 +1626,7 @@ namespace Economy_sim
             }
 
             // Generate sell orders for factories (for intended output, not just stockpile)
-            foreach (var factory in city.Factories)
+            foreach (var factory in cityFactories)
             {
                 foreach (var output in factory.OutputGoods)
                 {
