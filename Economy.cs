@@ -508,14 +508,7 @@ namespace Economy_sim
                         decimal income = (decimal)pop.Size * (decimal)pop.IncomePerPerson;
                         totalAssessablePopIncome += income;
                         totalPopulation += pop.Size;
-                        if (!popIncomeMap.TryGetValue(pop.Name, out var existingIncome))
-                        {
-                            popIncomeMap[pop.Name] = income;
-                        }
-                        else
-                        {
-                            popIncomeMap[pop.Name] = existingIncome + income;
-                        }
+                        popIncomeMap[pop.Name] = (popIncomeMap.TryGetValue(pop.Name, out var existingIncome) ? existingIncome : 0m) + income;
                     }
                 }
             }
