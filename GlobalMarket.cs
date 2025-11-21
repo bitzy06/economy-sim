@@ -29,6 +29,7 @@ namespace Economy_sim // Reverted from EconomySim
         public double GlobalTradeValue { get; private set; } // Total value of all trade this turn
         public static GlobalMarket Instance { get; private set; }
         private bool _turnPrepared;
+        private readonly Random _random = new Random(); // Reusable Random instance for performance
         
         public GlobalMarket()
         {
@@ -98,7 +99,7 @@ namespace Economy_sim // Reverted from EconomySim
             }
 
             // Reset demand and supply
-            foreach (var goodName in GlobalDemand.Keys.ToList())
+            foreach (var goodName in GlobalDemand.Keys)
             {
                 GlobalDemand[goodName] = 0;
                 GlobalSupply[goodName] = 0;
@@ -109,32 +110,31 @@ namespace Economy_sim // Reverted from EconomySim
             {
                 foreach (var kvp in city.LocalDemand)
                 {
-                    if (GlobalDemand.ContainsKey(kvp.Key))
+                    if (GlobalDemand.TryGetValue(kvp.Key, out var currentDemand))
                     {
-                        GlobalDemand[kvp.Key] += kvp.Value;
+                        GlobalDemand[kvp.Key] = currentDemand + kvp.Value;
                     }
                 }
                 
                 foreach (var kvp in city.LocalSupply)
                 {
-                    if (GlobalSupply.ContainsKey(kvp.Key))
+                    if (GlobalSupply.TryGetValue(kvp.Key, out var currentSupply))
                     {
-                        GlobalSupply[kvp.Key] += kvp.Value;
+                        GlobalSupply[kvp.Key] = currentSupply + kvp.Value;
                     }
                 }
             }
             
             // Calculate new global prices based on supply and demand
-            foreach (var goodName in GlobalPrices.Keys.ToList())
+            foreach (var goodName in GlobalPrices.Keys)
             {
                 // Record the old price for trend calculation
                 double oldPrice = GlobalPrices[goodName];
                 
                 // Calculate new price based on supply/demand balance
-                if (GlobalDemand.ContainsKey(goodName) && GlobalSupply.ContainsKey(goodName))
+                if (GlobalDemand.TryGetValue(goodName, out int demand) && 
+                    GlobalSupply.TryGetValue(goodName, out int supply))
                 {
-                    int demand = GlobalDemand[goodName];
-                    int supply = GlobalSupply[goodName];
                     
                     if (demand > 0 && supply > 0)
                     {
@@ -148,8 +148,7 @@ namespace Economy_sim // Reverted from EconomySim
                         newPrice *= SpeculationMultiplier[goodName];
                         
                         // Apply random noise based on volatility
-                        Random rand = new Random();
-                        double noise = 1.0 + ((rand.NextDouble() * 2.0 - 1.0) * PriceVolatility[goodName]);
+                        double noise = 1.0 + ((_random.NextDouble() * 2.0 - 1.0) * PriceVolatility[goodName]);
                         newPrice *= noise;
                         
                         // Cap extreme price changes
@@ -166,9 +165,9 @@ namespace Economy_sim // Reverted from EconomySim
                 }
                 
                 // Record price trend
-                if (PriceTrends.ContainsKey(goodName))
+                if (PriceTrends.TryGetValue(goodName, out var trendList))
                 {
-                    PriceTrends[goodName].Add(new MarketTrend 
+                    trendList.Add(new MarketTrend 
                     { 
                         Price = GlobalPrices[goodName],
                         Change = GlobalPrices[goodName] - oldPrice,
@@ -177,9 +176,9 @@ namespace Economy_sim // Reverted from EconomySim
                     });
                     
                     // Keep only the most recent trends (e.g., last 20 turns)
-                    if (PriceTrends[goodName].Count > 20)
+                    if (trendList.Count > 20)
                     {
-                        PriceTrends[goodName].RemoveAt(0);
+                        trendList.RemoveAt(0);
                     }
                 }
             }
@@ -193,7 +192,7 @@ namespace Economy_sim // Reverted from EconomySim
             // Apply effects of trade agreements and embargoes
             if (tradeManager != null)
             {
-                foreach (var goodName in GlobalPrices.Keys.ToList())
+                foreach (var goodName in GlobalPrices.Keys)
                 {
                     // Simple approach: decreased trade = increased prices
                     int embargoes = tradeManager.EnhancedTradeAgreements

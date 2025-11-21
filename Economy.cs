@@ -508,10 +508,14 @@ namespace Economy_sim
                         decimal income = (decimal)pop.Size * (decimal)pop.IncomePerPerson;
                         totalAssessablePopIncome += income;
                         totalPopulation += pop.Size;
-                        if (popIncomeMap.ContainsKey(pop.Name))
-                            popIncomeMap[pop.Name] += income;
-                        else
+                        if (!popIncomeMap.TryGetValue(pop.Name, out var existingIncome))
+                        {
                             popIncomeMap[pop.Name] = income;
+                        }
+                        else
+                        {
+                            popIncomeMap[pop.Name] = existingIncome + income;
+                        }
                     }
                 }
             }
@@ -777,13 +781,14 @@ namespace Economy_sim
             bool allInputsAvailableInStockpile = true;
             foreach (var input in InputGoods)
             {
-                if (!cityStockpile.ContainsKey(input.Name) || cityStockpile[input.Name].Quantity < input.Quantity * currentProductionCapacity)
+                if (!cityStockpile.TryGetValue(input.Name, out var stockItem) || stockItem.Quantity < input.Quantity * currentProductionCapacity)
                 {
                     allInputsAvailableInStockpile = false;
                     break;
                 }
                 // Use city.LocalPrices for input cost calculation
-                totalInputCost += (input.Quantity * currentProductionCapacity) * (city.LocalPrices.ContainsKey(input.Name) ? city.LocalPrices[input.Name] : input.BasePrice);
+                double inputPrice = city.LocalPrices.TryGetValue(input.Name, out var localPrice) ? localPrice : input.BasePrice;
+                totalInputCost += (input.Quantity * currentProductionCapacity) * inputPrice;
             }
 
             if (!allInputsAvailableInStockpile) return;
@@ -796,10 +801,14 @@ namespace Economy_sim
             {
                 cityStockpile[input.Name].Quantity -= input.Quantity * currentProductionCapacity;
                 // Update city.LocalDemand
-                if (city.LocalDemand.ContainsKey(input.Name))
-                    city.LocalDemand[input.Name] += input.Quantity * currentProductionCapacity;
-                else
+                if (!city.LocalDemand.TryGetValue(input.Name, out var currentDemand))
+                {
                     city.LocalDemand[input.Name] = input.Quantity * currentProductionCapacity;
+                }
+                else
+                {
+                    city.LocalDemand[input.Name] = currentDemand + input.Quantity * currentProductionCapacity;
+                }
             }
 
             double totalOutputValue = 0;
@@ -810,14 +819,18 @@ namespace Economy_sim
 
                 cityStockpile[output.Name].Quantity += output.Quantity * currentProductionCapacity;
                 // Use city.LocalPrices for output value calculation
-                double currentMarketPrice = city.LocalPrices.ContainsKey(output.Name) ? city.LocalPrices[output.Name] : output.BasePrice;
+                double currentMarketPrice = city.LocalPrices.TryGetValue(output.Name, out var localPrice) ? localPrice : output.BasePrice;
                 totalOutputValue += (output.Quantity * currentProductionCapacity) * currentMarketPrice;
 
                 // Update city.LocalSupply
-                if (city.LocalSupply.ContainsKey(output.Name))
-                    city.LocalSupply[output.Name] += output.Quantity * currentProductionCapacity;
-                else
+                if (!city.LocalSupply.TryGetValue(output.Name, out var currentSupply))
+                {
                     city.LocalSupply[output.Name] = output.Quantity * currentProductionCapacity;
+                }
+                else
+                {
+                    city.LocalSupply[output.Name] = currentSupply + output.Quantity * currentProductionCapacity;
+                }
             }
 
             this.OwnerCorporation.Budget += totalOutputValue;
@@ -850,13 +863,12 @@ namespace Economy_sim
         {
             if (city == null || city.LocalSupply == null || city.LocalDemand == null) return;
 
-            List<string> goodKeys = city.LocalSupply.Keys.ToList(); // Iterate over a copy of keys
-            foreach (var key in goodKeys)
+            // Reset values without creating copies - we're only setting to 0, not modifying the collection
+            foreach (var key in city.LocalSupply.Keys)
             {
                 city.LocalSupply[key] = 0;
             }
-            goodKeys = city.LocalDemand.Keys.ToList();
-            foreach (var key in goodKeys)
+            foreach (var key in city.LocalDemand.Keys)
             {
                 city.LocalDemand[key] = 0;
             }
@@ -1323,8 +1335,8 @@ namespace Economy_sim
                 }
             }
             // Also ensure any goods in stockpile but not in GoodDefinitions (should not happen) are reset
-            foreach (var goodKey in city.ExportableSurplus.Keys.ToList()) city.ExportableSurplus[goodKey] = 0;
-            foreach (var goodKey in city.ImportNeeds.Keys.ToList()) city.ImportNeeds[goodKey] = 0;
+            foreach (var goodKey in city.ExportableSurplus.Keys) city.ExportableSurplus[goodKey] = 0;
+            foreach (var goodKey in city.ImportNeeds.Keys) city.ImportNeeds[goodKey] = 0;
 
             foreach (var factory in city.Factories)
             {
@@ -1392,9 +1404,14 @@ namespace Economy_sim
             {
                 foreach (var slotEntry in factory.JobSlots)
                 {
-                    if (!totalAvailableSlots.ContainsKey(slotEntry.Key))
-                        totalAvailableSlots[slotEntry.Key] = 0;
-                    totalAvailableSlots[slotEntry.Key] += slotEntry.Value;
+                    if (!totalAvailableSlots.TryGetValue(slotEntry.Key, out var currentSlots))
+                    {
+                        totalAvailableSlots[slotEntry.Key] = slotEntry.Value;
+                    }
+                    else
+                    {
+                        totalAvailableSlots[slotEntry.Key] = currentSlots + slotEntry.Value;
+                    }
                 }
             }
 
@@ -1418,14 +1435,19 @@ namespace Economy_sim
                     foreach (var factory in city.Factories.Where(f => f.JobSlots.ContainsKey(jobType)))
                     {
                         if (assignedToFactories == 0) break;
-                        int factoryActualEmployedForType = factory.ActualEmployed.ContainsKey(jobType) ? factory.ActualEmployed[jobType] : 0;
+                        int factoryActualEmployedForType = factory.ActualEmployed.TryGetValue(jobType, out var actualEmployed) ? actualEmployed : 0;
                         int slotsInFactoryForType = factory.JobSlots[jobType];
                         int canAssignToFactory = Math.Min(assignedToFactories, slotsInFactoryForType - factoryActualEmployedForType);
                         if (canAssignToFactory > 0)
                         {
-                            if (!factory.ActualEmployed.ContainsKey(jobType))
-                                factory.ActualEmployed[jobType] = 0;
-                            factory.ActualEmployed[jobType] += canAssignToFactory;
+                            if (!factory.ActualEmployed.TryGetValue(jobType, out var currentActual))
+                            {
+                                factory.ActualEmployed[jobType] = canAssignToFactory;
+                            }
+                            else
+                            {
+                                factory.ActualEmployed[jobType] = currentActual + canAssignToFactory;
+                            }
                             factory.WorkersEmployed += canAssignToFactory; 
                             DebugLogger.Log($"[Employment Debug] Factory: {factory.Name}, Job Type: {jobType}, Newly Assigned: {canAssignToFactory}, Total Workers Employed: {factory.WorkersEmployed}", DebugLogger.LogCategory.Building);
                             assignedToFactories -= canAssignToFactory;
@@ -1575,10 +1597,14 @@ namespace Economy_sim
                 if (city.Stockpile[good].Quantity > buffer)
                 {
                     int surplusAmount = city.Stockpile[good].Quantity - buffer;
-                    if (city.ExportableSurplus.ContainsKey(good))
-                        city.ExportableSurplus[good] += surplusAmount;
-                    else
+                    if (!city.ExportableSurplus.TryGetValue(good, out var currentSurplus))
+                    {
                         city.ExportableSurplus[good] = surplusAmount;
+                    }
+                    else
+                    {
+                        city.ExportableSurplus[good] = currentSurplus + surplusAmount;
+                    }
                     
                     // REMOVED: Market.SellToCityMarket(city, good, surplusAmount, null); 
                     // The surplus is now earmarked for export, not sold back to local market immediately.
@@ -1597,7 +1623,9 @@ namespace Economy_sim
                     int offeredQuantity = output.Quantity * possible; 
                     if (offeredQuantity > 0) 
                     {
-                        double currentPrice = city.LocalPrices.ContainsKey(good) ? city.LocalPrices[good] : (Market.GoodDefinitions.ContainsKey(good) ? Market.GoodDefinitions[good].BasePrice : 5.0);
+                        double currentPrice = city.LocalPrices.TryGetValue(good, out var localPrice) 
+                            ? localPrice 
+                            : (Market.GoodDefinitions.TryGetValue(good, out var goodDef) ? goodDef.BasePrice : 5.0);
                         double minPrice = currentPrice * 0.8; 
                         city.SellOrders.Add(new SellOrder(factory, good, offeredQuantity, minPrice));
                     }
