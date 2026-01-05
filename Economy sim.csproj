@@ -12,6 +12,7 @@
     <!-- Ensure assembly name has no spaces so XAML lookup works -->
     <AssemblyName>Economy_sim</AssemblyName>
     <RootNamespace>Economy_sim</RootNamespace>
+    <StartupObject></StartupObject>
   </PropertyGroup>
 
   <ItemGroup>

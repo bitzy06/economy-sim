@@ -7,14 +7,12 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using SkiaSharp;
-using Economy_sim;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Linq;
 
 namespace Economy_sim
 {
@@ -96,31 +94,7 @@ namespace Economy_sim
         // === State Border Display Toggle ===
         private bool _showAllStateBordersInCountry = false;
 
-        private static readonly string[] _sampleTradeGoods = new[]
-        {
-            "Machinery",
-            "Electronics",
-            "Oil",
-            "Automobiles",
-            "Textiles",
-            "Pharmaceuticals",
-            "Steel",
-            "Timber",
-            "Agricultural Goods",
-            "Tourism Services"
-        };
-
-        private static readonly string[] _samplePopulationGroups = new[]
-        {
-            "Laborers",
-            "Engineers",
-            "Farmers",
-            "Artisans",
-            "Clerks",
-            "Merchants",
-            "Administrators",
-            "Students"
-        };
+        
 
         private sealed class CountrySnapshot
         {
@@ -181,6 +155,53 @@ namespace Economy_sim
             public List<string> PopulationBreakdown { get; } = new();
             public bool IsPlaceholder { get; set; }
         }
+
+        private sealed class BuildingListItem
+        {
+            public string Name { get; set; } = string.Empty;
+            public string Location { get; set; } = string.Empty;
+            public string OutputSummary { get; set; } = string.Empty;
+            public string EmploymentSummary { get; set; } = string.Empty;
+            public string Owner { get; set; } = "Private";
+            public string Type { get; set; } = string.Empty;
+            public string Category { get; set; } = string.Empty;
+            public string Status { get; set; } = "Operational";
+            public string Condition { get; set; } = "Standard";
+            public double Throughput { get; set; }
+            public double ProfitEstimate { get; set; }
+            public double OutputValue { get; set; }
+            public int Employment { get; set; }
+            public List<string> Inputs { get; } = new();
+            public List<string> Outputs { get; } = new();
+            public Factory? FactoryRef { get; set; }
+            public ResourceExtractionBuilding? RebRef { get; set; }
+        }
+
+        private sealed class BuildingTypeListItem
+        {
+            public string Name { get; set; } = string.Empty;
+            public int Count { get; set; }
+            public string Subtitle { get; set; } = string.Empty;
+
+            public override string ToString()
+            {
+                if (!string.IsNullOrWhiteSpace(Subtitle))
+                {
+                    return $"{Name} ({Count}) - {Subtitle}";
+                }
+
+                return $"{Name} ({Count})";
+            }
+        }
+
+        private List<BuildingListItem> _factoryItems = new();
+        private List<BuildingListItem> _rebItems = new();
+
+        private List<BuildingTypeListItem> _factoryTypeItems = new();
+        private List<BuildingTypeListItem> _rebTypeItems = new();
+
+        private string? _selectedFactoryCategory;
+        private string? _selectedRebCategory;
 
         private void HideStateInfoPopup() => HideStateInfoOverlay();
         public GameView()
@@ -514,8 +535,8 @@ namespace Economy_sim
             int oldCellSize = _mapManager.GetCellSizeForZoom(oldZoomLevel);
             int newCellSize = _mapManager.GetCellSizeForZoom(_currentZoomLevel);
 
-            int newOffsetX = (int)Math.Round((_viewOffset.X + mousePos.X) * (double)newCellSize / oldCellSize) - (int)mousePos.X;
-            int newOffsetY = (int)Math.Round((_viewOffset.Y + mousePos.Y) * (double)newCellSize / oldCellSize) - (int)mousePos.Y;
+            int newOffsetX = (int)Math.Round((_viewOffset.X + mousePos.X) * newCellSize / oldCellSize) - (int)mousePos.X;
+            int newOffsetY = (int)Math.Round((_viewOffset.Y + mousePos.Y) * newCellSize / oldCellSize) - (int)mousePos.Y;
 
             _viewOffset = new SKPointI(newOffsetX, newOffsetY);
 
@@ -542,7 +563,7 @@ namespace Economy_sim
             else if (currentPoint.Properties.IsRightButtonPressed)
             {
                 var mousePos = e.GetPosition(this.MapImage);
-                
+
                 // In political mode with a selected country: first right-click shows borders, subsequent ones select states
                 if (_mapManager.CurrentViewType == MapViewType.Political && _mapManager.SelectedCountry != null)
                 {
@@ -558,13 +579,13 @@ namespace Economy_sim
                         // First right-click: show state borders
                         _showAllStateBordersInCountry = true;
                         _mapManager.ShowAllStateBordersInCountry = true;
-                        
+
                         Debug.WriteLine($"[STATE BORDERS] Showing all state borders for {_mapManager.SelectedCountry.CountryName}");
                         Dispatcher.UIThread.Post(() =>
                         {
                             this.Title = $"Economy Sim - {_mapManager.SelectedCountry.CountryName} - Showing State Borders (right-click states for info)";
                         });
-                        
+
                         QueueRender(immediate: true);
                         e.Handled = true;
                     }
@@ -618,7 +639,7 @@ namespace Economy_sim
                 if (!_hasPanned)
                 {
                     var mousePos = e.GetPosition(this.MapImage);
-                    
+
                     // Check if clicked on a city label
                     bool cityClicked = false;
                     foreach (var cityLabel in _cityLabelBounds)
@@ -697,98 +718,7 @@ namespace Economy_sim
             }
         }
 
-        /// <summary>
-        /// Detects which country is at the specified screen position
-        /// </summary>
-        private void DetectCountryAtPosition(int screenX, int screenY)
-        {
-            try
-            {
-                // Validate inputs
-                if (screenX < 0 || screenY < 0 || _mapManager == null)
-                {
-                    Debug.WriteLine($"[COUNTRY DETECTION] Invalid input: screenX={screenX}, screenY={screenY}, mapManager={_mapManager != null}");
-                    return;
-                }
-
-                // Only detect countries when in political view mode
-                if (_mapManager.CurrentViewType != MapViewType.Political)
-                {
-                    Debug.WriteLine($"[COUNTRY DETECTION] Country detection only available in political view mode (current: {_mapManager.CurrentViewType})");
-                    ShowCountryDetectionFeedback(null, screenX, screenY, "Switch to Political View to detect countries");
-                    return;
-                }
-
-                var country = _mapManager.GetCountryAtPixel(screenX, screenY, _currentZoomLevel, _viewOffset);
-
-                if (country != null)
-                {
-                    // Show country information
-                    string message = $"Country: {country.CountryName} ({country.CountryCode})";
-                    Debug.WriteLine($"[COUNTRY DETECTED] {message}");
-
-                    // You could add visual feedback here, such as:
-                    // - Highlighting the country border
-                    // - Showing a tooltip
-                    // - Opening a country information panel
-                    ShowCountryDetectionFeedback(country, screenX, screenY);
-                }
-                else
-                {
-                    Debug.WriteLine($"[COUNTRY DETECTED] No country found at position ({screenX}, {screenY})");
-                    // Could show "Ocean" or "No country" message
-                    ShowCountryDetectionFeedback(null, screenX, screenY);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[COUNTRY DETECTION ERROR] {ex.Message}");
-                Debug.WriteLine($"[COUNTRY DETECTION ERROR] Stack trace: {ex.StackTrace}");
-                ShowCountryDetectionFeedback(null, screenX, screenY, "Error detecting country");
-            }
-        }
-
-        /// <summary>
-        /// Shows visual feedback for country detection (placeholder implementation)
-        /// </summary>
-        private void ShowCountryDetectionFeedback(IndexedCountryFeature? country, int screenX, int screenY, string? customMessage = null)
-        {
-            // For now, just update a text display or create a simple notification
-            // In a full implementation, this could:
-            // 1. Highlight the country borders
-            // 2. Show a tooltip near the mouse cursor
-            // 3. Update a country information panel
-            // 4. Play a sound effect
-
-            string message = customMessage ?? (country != null
-                ? $"Selected: {country.CountryName}"
-                : "No country selected (ocean or outside map bounds)");
-
-            // Update the HUD or show temporary feedback
-            Dispatcher.UIThread.Post(() =>
-            {
-                try
-                {
-                    // You could update a label in the UI here
-                    Debug.WriteLine($"[UI FEEDBACK] {message}");
-
-                    // Example: Update window title to show selected country (temporary solution)
-                    this.Title = country != null
-                        ? $"Economy Sim - {country.CountryName} ({country.CountryCode})"
-                        : customMessage != null
-                        ? $"Economy Sim - {customMessage}"
-                        : "Economy Sim";
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[UI FEEDBACK ERROR] {ex.Message}");
-                }
-            });
-        }
-
-        /// <summary>
-        /// Shows instructions for the country detection feature
-        /// </summary>
+   
         private void ShowCountryDetectionInstructions()
         {
             Dispatcher.UIThread.Post(() =>
@@ -1092,7 +1022,7 @@ namespace Economy_sim
                 (this.FindControl<TextBlock>("StateInfoPopulationText"))?.Let(t => t.Text = "No Data");
                 (this.FindControl<TextBlock>("StateInfoUrbanizationText"))?.Let(t => t.Text = "No Data");
                 (this.FindControl<TextBlock>("StateInfoPopGrowthText"))?.Let(t => t.Text = "No Data");
-                
+
                 PopulateListBox("StateInfoHighlightsList", new[] { "⚠️ No economy data available for this state" }, string.Empty);
                 PopulateListBox("StateInfoExportsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
                 PopulateListBox("StateInfoImportsList", Array.Empty<string>(), string.Empty, suppressFallback: true);
@@ -1181,7 +1111,7 @@ namespace Economy_sim
             popup.Margin = new Thickness(left, top, 0, 0);
             popup.IsVisible = true;
 
-            (this.FindControl<TextBlock>("CityInfoNameText"))?.Let(t => t.Text = snapshot.DisplayName);
+            (this.FindControl<TextBlock>("CityInfoNameText"))?.Let(t => t.Text = "test");
             (this.FindControl<TextBlock>("CityInfoStateText"))?.Let(t => t.Text = snapshot.StateName);
             (this.FindControl<TextBlock>("CityInfoCountryText"))?.Let(t => t.Text = snapshot.CountryName);
 
@@ -1191,10 +1121,10 @@ namespace Economy_sim
 
             if (this.FindControl<TextBlock>("CityInfoGdpText") is TextBlock gdpText)
             {
-                string formattedGdp = snapshot.Gdp >= 1_000_000_000_000m
-                    ? $"${snapshot.Gdp / 1_000_000_000_000m:F2}T"
-                    : $"${FormatCurrency((double)snapshot.Gdp)}";
-                gdpText.Text = formattedGdp;
+                //string formattedGdp = snapshot.Gdp >= 1_000_000_000_000m
+                //    ? $"${snapshot.Gdp / 1_000_000_000_000m:F2}T"
+                //    : $"${FormatCurrency((double)snapshot.Gdp)}";
+                gdpText.Text = "0";
             }
 
             (this.FindControl<TextBlock>("CityInfoEmploymentText"))?.Let(t => t.Text = $"{snapshot.EmploymentRate:F1}%");
@@ -1359,7 +1289,7 @@ namespace Economy_sim
 
             // Log when we can't find data instead of showing placeholder
             Debug.WriteLine($"[State Data] No economy data found for state: {stateFeature.StateName} ({stateFeature.CountryName})");
-            
+
             // Return minimal error state
             return new StateSnapshot
             {
@@ -1386,20 +1316,20 @@ namespace Economy_sim
                 // Use geographic location info from stateFeature (actual location on map)
                 // instead of economy data which might have wrong state assignment
                 var snapshot = BuildCitySnapshotFromCity(resolved.Value.country, resolved.Value.state, resolved.Value.city);
-                
+
                 // Override location info with actual geographic location from map
                 if (stateFeature != null)
                 {
                     snapshot.StateName = stateFeature.StateName ?? resolved.Value.state.Name;
                     snapshot.CountryName = stateFeature.CountryName ?? resolved.Value.country.Name;
                 }
-                
+
                 return snapshot;
             }
 
             // Log when we can't find data instead of showing placeholder
             Debug.WriteLine($"[City Data] No economy data found for city: {cityFeature.Name} in {stateFeature?.StateName ?? "Unknown State"} ({stateFeature?.CountryName ?? cityFeature.CountryCode})");
-            
+
             // Return minimal error state
             return new CitySnapshot
             {
@@ -1540,8 +1470,8 @@ namespace Economy_sim
             }
 
             // Use unified GDP calculation
-            snapshot.Gdp = CalculateCityGdp(city);
-
+            //Gdp = CalculateCityGdp(city);
+           
             long workingPopulation = popFromClasses > 0 ? popFromClasses : snapshot.Population;
             int totalEmployed = popClasses.Sum(p => p.Employed);
             if (workingPopulation > 0)
@@ -1623,13 +1553,13 @@ namespace Economy_sim
             if (pairs.Count == 0)
             {
                 Debug.WriteLine($"[ResolveStateData] ERROR: No states found in any country");
-                
+
                 // Debug: Print country information
                 foreach (var country in _allCountries.Where(c => c != null))
                 {
                     Debug.WriteLine($"[ResolveStateData]   Country: {country.Name}, States: {country.States?.Count ?? 0}");
                 }
-                
+
                 return null;
             }
 
@@ -1645,11 +1575,11 @@ namespace Economy_sim
             if (!string.IsNullOrWhiteSpace(stateFeature.CountryName) && !string.IsNullOrWhiteSpace(stateFeature.StateName))
             {
                 Debug.WriteLine($"[ResolveStateData] Attempting exact match: Country='{stateFeature.CountryName}', State='{stateFeature.StateName}'");
-                
-                var exactMatch = pairs.FirstOrDefault(p => 
+
+                var exactMatch = pairs.FirstOrDefault(p =>
                     p.country.Name.Equals(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase) &&
                     p.state.Name.Equals(stateFeature.StateName, StringComparison.OrdinalIgnoreCase));
-                
+
                 if (exactMatch.country != null && exactMatch.state != null)
                 {
                     Debug.WriteLine($"[ResolveStateData] ✓ Found exact match: {exactMatch.country.Name} -> {exactMatch.state.Name}");
@@ -1665,13 +1595,13 @@ namespace Economy_sim
             if (!string.IsNullOrWhiteSpace(stateFeature.StateName))
             {
                 Debug.WriteLine($"[ResolveStateData] Attempting state name match: '{stateFeature.StateName}'");
-                
-                var stateMatches = pairs.Where(p => 
+
+                var stateMatches = pairs.Where(p =>
                     p.state.Name.Equals(stateFeature.StateName, StringComparison.OrdinalIgnoreCase))
                     .ToList();
-                
+
                 Debug.WriteLine($"[ResolveStateData] Found {stateMatches.Count} state(s) with matching name");
-                
+
                 if (stateMatches.Count == 1)
                 {
                     // Unique state name found
@@ -1681,7 +1611,7 @@ namespace Economy_sim
                 else if (stateMatches.Count > 1 && !string.IsNullOrWhiteSpace(stateFeature.CountryName))
                 {
                     Debug.WriteLine($"[ResolveStateData] Multiple states found, using country as tiebreaker");
-                    
+
                     // Multiple states with same name, use country as tiebreaker
                     var match = stateMatches.FirstOrDefault(p =>
                         p.country.Name.Equals(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase));
@@ -1706,14 +1636,14 @@ namespace Economy_sim
             if (!string.IsNullOrWhiteSpace(stateFeature.StateName))
             {
                 Debug.WriteLine($"[ResolveStateData] Attempting partial state name match");
-                
-                var partialMatches = pairs.Where(p => 
+
+                var partialMatches = pairs.Where(p =>
                     p.state.Name.Contains(stateFeature.StateName, StringComparison.OrdinalIgnoreCase) ||
                     stateFeature.StateName.Contains(p.state.Name, StringComparison.OrdinalIgnoreCase))
                     .ToList();
-                
+
                 Debug.WriteLine($"[ResolveStateData] Found {partialMatches.Count} partial match(es)");
-                
+
                 if (partialMatches.Count == 1)
                 {
                     Debug.WriteLine($"[ResolveStateData] ✓ Found single partial match: {partialMatches[0].country.Name} -> {partialMatches[0].state.Name}");
@@ -1722,7 +1652,7 @@ namespace Economy_sim
                 else if (partialMatches.Count > 1 && !string.IsNullOrWhiteSpace(stateFeature.CountryName))
                 {
                     Debug.WriteLine($"[ResolveStateData] Multiple partial matches, using country as tiebreaker");
-                    
+
                     // Use country as tiebreaker
                     var match = partialMatches.FirstOrDefault(p =>
                         p.country.Name.Contains(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase) ||
@@ -1746,12 +1676,12 @@ namespace Economy_sim
             if (!string.IsNullOrWhiteSpace(stateFeature.CountryName))
             {
                 Debug.WriteLine($"[ResolveStateData] Attempting country match fallback");
-                
+
                 var countryMatch = pairs.FirstOrDefault(p =>
                     p.country.Name.Equals(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase) ||
                     p.country.Name.Contains(stateFeature.CountryName, StringComparison.OrdinalIgnoreCase) ||
                     stateFeature.CountryName.Contains(p.country.Name, StringComparison.OrdinalIgnoreCase));
-                
+
                 if (countryMatch.country != null && countryMatch.state != null)
                 {
                     Debug.WriteLine($"[ResolveStateData] ⚠ Using country fallback (first state): {countryMatch.country.Name} -> {countryMatch.state.Name}");
@@ -1834,7 +1764,7 @@ namespace Economy_sim
             // Use the stored GDP value that was calculated from factory output
             return state.GDP;
         }
-        
+
         private decimal CalculateCityGdp(City city)
         {
             if (city == null)
@@ -1861,7 +1791,7 @@ namespace Economy_sim
                 }
             }
 
-            return totalGdp;
+            return 0;
         }
 
 
@@ -1875,7 +1805,7 @@ namespace Economy_sim
 
             // Log when we can't find data instead of showing placeholder
             Debug.WriteLine($"[Country Data] No economy data found for country: {feature.CountryName} ({feature.CountryCode})");
-            
+
             // Return minimal error state
             return new CountrySnapshot
             {
@@ -1900,7 +1830,8 @@ namespace Economy_sim
                 DisplayName = country.Name,
                 CountryCode = feature.CountryCode ?? string.Empty,
                 Budget = country.Budget,
-                Gdp = CalculateCountryGdp(country, _allCorporations),  // Always use same calculation
+                // Gdp = CalculateCountryGdp(country, _allCorporations),  // Always use same calculation
+                Gdp = 0,
                 InflationRate = (double)(country.FinancialSystem.InflationRate * 100m),
                 IsPlaceholder = false
             };
@@ -2151,7 +2082,7 @@ namespace Economy_sim
                         }, immediate ? DispatcherPriority.Render : DispatcherPriority.Background);
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                 }
                 finally
@@ -2240,12 +2171,12 @@ namespace Economy_sim
                 if (_mapManager != null)
                 {
                     var bounds = _mapManager.GetCityLabelBounds();
-                    
+
                     // Convert HybridMapManager.CityLabelBounds to GameView.CityLabelBounds
-                    var convertedBounds = bounds.Select(b => 
+                    var convertedBounds = bounds.Select(b =>
                     {
                         City? cityObj = null;
-                        
+
                         // Try multiple matching strategies to find the City object
                         if (b.CityObject is HybridMapManager.EconomyCityInfo economyCity)
                         {
@@ -2254,7 +2185,7 @@ namespace Economy_sim
                                 .SelectMany(c => c.States)
                                 .SelectMany(s => s.Cities)
                                 .FirstOrDefault(city => city.Name == economyCity.CityName);
-                            
+
                             if (cityObj == null)
                             {
                                 // Strategy 2: Case-insensitive match
@@ -2270,18 +2201,18 @@ namespace Economy_sim
                             cityObj = _allCountries
                                 .SelectMany(c => c.States)
                                 .SelectMany(s => s.Cities)
-                                .FirstOrDefault(city => city.Name == b.CityName || 
+                                .FirstOrDefault(city => city.Name == b.CityName ||
                                                        string.Equals(city.Name, b.CityName, StringComparison.OrdinalIgnoreCase));
                         }
-                        
+
                         if (cityObj == null)
                         {
                             Debug.WriteLine($"[City Bounds] Could not find City object for label: {b.CityName}");
                         }
-                        
+
                         return new CityLabelBounds(b.CityName, b.Bounds, cityObj);
                     }).ToList();
-                    
+
                     Debug.WriteLine($"[City Bounds] Updated {convertedBounds.Count} city label bounds, {convertedBounds.Count(c => c.CityObject != null)} with City objects");
                     RegisterCityLabelBounds(convertedBounds);
                 }
@@ -2361,11 +2292,7 @@ namespace Economy_sim
                 : Math.Clamp(_viewOffset.Y, 0, mapSize.Height - (int)effectiveSize.Height);
         }
 
-        private void ClampViewOffset()
-        {
-            var effectiveSize = GetEffectiveRenderSize();
-            ClampViewOffset(effectiveSize);
-        }
+      
 
         #endregion
 
@@ -2630,30 +2557,30 @@ namespace Economy_sim
             {
                 var mapStates = _mapManager.GetAllStates();
                 Debug.WriteLine($"[Economy Init] Found {mapStates?.Count ?? 0} states from map");
-                
+
                 if (mapStates != null && mapStates.Count > 0)
                 {
                     // Filter: Keep states that have EITHER CountryName OR CountryCode
                     var statesWithCountry = mapStates
                         .Where(s => !string.IsNullOrWhiteSpace(s.CountryName) || !string.IsNullOrWhiteSpace(s.CountryCode))
                         .ToList();
-                    
+
                     Debug.WriteLine($"[Economy Init] Found {statesWithCountry.Count} states with country information");
-                    
+
                     // Sample first few states for debugging
                     foreach (var state in statesWithCountry.Take(5))
                     {
                         Debug.WriteLine($"[Economy Init]   Sample state: '{state.StateName}' in country '{state.CountryName}' (code: '{state.CountryCode}')");
                     }
-                    
+
                     // Group by country, using either CountryName or CountryCode as the key
                     var countryGroups = statesWithCountry
                         .GroupBy(s => !string.IsNullOrWhiteSpace(s.CountryName) ? s.CountryName : s.CountryCode)
                         .Where(g => !string.IsNullOrWhiteSpace(g.Key))
                         .ToList();
-                    
+
                     Debug.WriteLine($"[Economy Init] Found {countryGroups.Count} unique countries from states");
-                    
+
                     if (countryGroups.Count > 0)
                     {
                         // Build country features list from state data
@@ -2661,16 +2588,16 @@ namespace Economy_sim
                         foreach (var group in countryGroups)
                         {
                             var firstState = group.First();
-                            
+
                             // Use CountryName if available, otherwise use CountryCode
-                            string countryName = !string.IsNullOrWhiteSpace(firstState.CountryName) 
-                                ? firstState.CountryName 
+                            string countryName = !string.IsNullOrWhiteSpace(firstState.CountryName)
+                                ? firstState.CountryName
                                 : firstState.CountryCode ?? $"Country_{group.Key}";
-                            
+
                             string countryCode = !string.IsNullOrWhiteSpace(firstState.CountryCode)
                                 ? firstState.CountryCode
                                 : countryName.Substring(0, Math.Min(3, countryName.Length)).ToUpper();
-                            
+
 
                             mapCountries.Add(new IndexedCountryFeature
                             {
@@ -2678,22 +2605,22 @@ namespace Economy_sim
                                 CountryCode = countryCode,
                                 RasterCode = firstState.RasterCode
                             });
-                            
+
 
                             Debug.WriteLine($"[Economy Init]   Country: '{countryName}' (code: '{countryCode}') with {group.Count()} states");
                         }
-                        
+
                         Debug.WriteLine($"[Economy Init] Using map data: {mapCountries.Count} countries, {statesWithCountry.Count} states");
-                        
+
                         // Get geographic cities from shapefile
                         var geographicCities = _mapManager.GetGeographicCities();
                         Debug.WriteLine($"[Economy Init] Retrieved {geographicCities.Count} geographic cities from shapefile");
-                        
+
                         var (countries, corporations) = Economy.GenerateWorldEconomyFromMapData(mapCountries, statesWithCountry, geographicCities);
-                        
+
                         _allCountries = countries;
                         _allCorporations = corporations;
-                        _currentCountry = countries.FirstOrDefault();
+                        _currentCountry = countries.Find(x => x.Name.Contains("Australia"));
                         _playerCountry = _currentCountry;
                         useMapData = true;
                     }
@@ -2703,33 +2630,22 @@ namespace Economy_sim
                     }
                 }
             }
-            
-            // Fall back to procedural generation if map data not available
-            if (!useMapData)
-            {
-                Debug.WriteLine($"[Economy Init] No map data available, using procedural generation");
-                var (countries, corporations) = Economy.InitializeWorldEconomy();
-                
-                _allCountries = countries;
-                _allCorporations = corporations;
-                _currentCountry = countries.FirstOrDefault();
-                _playerCountry = _currentCountry;
-            }
+
 
             RegisterEconomyCityAnchors();
             _playerRoleManager = new PlayerRoleManager();
             _playerRoleManager.AssumeRolePrimeMinister(_currentCountry);
             InitializeTradeSystems();
             _economyInitialized = true;
-            
+
             Debug.WriteLine($"[Economy Init] Economy initialization complete!");
-            
+
             // Use safe calculations to prevent overflow
             try
             {
                 int totalStates = _allCountries.Sum(c => c.States.Count);
                 int totalCities = _allCountries.SelectMany(c => c.States).Sum(s => s.Cities.Count);
-                
+
                 // Use long for population to prevent overflow
                 long totalPopulation = 0;
                 foreach (var country in _allCountries)
@@ -2742,7 +2658,7 @@ namespace Economy_sim
                         }
                     }
                 }
-                
+
                 Debug.WriteLine($"[Economy Init] Total: {_allCountries.Count} countries, {totalStates} states, {totalCities} cities");
                 Debug.WriteLine($"[Economy Init] Total: {_allCorporations.Count} corporations");
                 Debug.WriteLine($"[Economy Init] Total population: {totalPopulation:N0}");
@@ -2927,7 +2843,7 @@ namespace Economy_sim
                 try
                 {
                     // Update GDP display
-                    decimal gdp = CalculateGDP();
+                    decimal gdp = 0;
                     if (this.FindControl<TextBlock>("GDPText") is TextBlock gdpText)
                     {
                         gdpText.Text = $"${gdp / 1000000000m:F2}T";
@@ -3047,19 +2963,19 @@ namespace Economy_sim
             // Time Control buttons
             if (this.FindControl<Button>("PauseResumeButton") is Button pauseBtn)
                 pauseBtn.Click += OnPauseResumeClicked;
-            
+
             if (this.FindControl<Button>("Speed05xButton") is Button speed05Btn)
                 speed05Btn.Click += (s, e) => SetSimulationSpeed(0.5);
-            
+
             if (this.FindControl<Button>("Speed1xButton") is Button speed1Btn)
                 speed1Btn.Click += (s, e) => SetSimulationSpeed(1.0);
-            
+
             if (this.FindControl<Button>("Speed2xButton") is Button speed2Btn)
                 speed2Btn.Click += (s, e) => SetSimulationSpeed(2.0);
-            
+
             if (this.FindControl<Button>("Speed5xButton") is Button speed5Btn)
                 speed5Btn.Click += (s, e) => SetSimulationSpeed(5.0);
-            
+
             if (this.FindControl<Button>("Speed10xButton") is Button speed10Btn)
                 speed10Btn.Click += (s, e) => SetSimulationSpeed(10.0);
 
@@ -3593,47 +3509,519 @@ namespace Economy_sim
 
         private void UpdatePrivateSectorTab()
         {
-            if (!_economyInitialized) return;
-            var corpList = this.FindControl<ListBox>("CorporationsList");
-            var industriesList = this.FindControl<ListBox>("IndustriesList");
-            var stockIdx = this.FindControl<TextBlock>("StockMarketIndexText");
-            if (stockIdx != null)
+            if (!_economyInitialized || _currentCountry == null) return;
+
+            var factoryTypesList = this.FindControl<ListBox>("FactoryTypesList");
+            var factoriesList = this.FindControl<ListBox>("FactoriesList");
+            var rebTypesList = this.FindControl<ListBox>("RebTypesList");
+            var rebList = this.FindControl<ListBox>("RebList");
+
+            // Indicators
+            if (this.FindControl<TextBlock>("GDPText") is TextBlock gdpText)
             {
-                var r = new Random();
-                stockIdx.Text = $"{15000 + r.Next(-400, 400):N0} pts";
+                var gdp = _currentCountry.GDP;
+                gdpText.Text = gdp >= 1_000_000_000m
+                    ? $"${gdp / 1_000_000_000m:F2}B"
+                    : $"${FormatCurrency((double)gdp)}";
             }
-            if (corpList != null)
+
+            var allCities = _currentCountry.States.SelectMany(s => s.Cities).ToList();
+            int totalWorkers = allCities.SelectMany(c => c.PopClasses).Sum(p => p.Size);
+            int employed = allCities.SelectMany(c => c.PopClasses).Sum(p => p.Employed);
+            double employmentRate = totalWorkers > 0 ? employed / (double)totalWorkers * 100 : 0;
+            if (this.FindControl<TextBlock>("UnemploymentText") is TextBlock unempText)
             {
-                corpList.Items.Clear();
-                foreach (var corp in _allCorporations.OrderByDescending(c => c.Budget))
+                unempText.Text = $"{employmentRate:F1}%";
+            }
+
+            _factoryItems = new List<BuildingListItem>();
+            _rebItems = new List<BuildingListItem>();
+
+            foreach (var state in _currentCountry.States)
+            {
+                foreach (var city in state.Cities)
                 {
-                    var factories = corp.OwnedFactories;
-                    double revenue = factories.Sum(f => f.ProductionCapacity * 1000.0);
-                    double costs = factories.Sum(f => f.ProductionCapacity * 500.0);
-                    double profit = revenue - costs;
-                    double stockPrice = 50 + profit / 100000.0;
-                    corpList.Items.Add($"🏢 {corp.Name}\n   Revenue: ${FormatCurrency(revenue)} | Profit: ${FormatCurrency(profit)}\n   Stock: ${stockPrice:F2} | Factories: {factories.Count}");
+                    foreach (var factory in city.Factories)
+                    {
+                        _factoryItems.Add(BuildFactoryListItem(factory, city, state));
+                    }
+
+                    foreach (var reb in city.ResourceExtractionBuildings)
+                    {
+                        _rebItems.Add(BuildRebListItem(reb, city, state));
+                    }
+                }
+
+            BuildAndBindBuildingTypeLists(factoryTypesList, factoriesList, rebTypesList, rebList);
+            }
+
+            if (this.FindControl<TextBlock>("FactoryCountText") is TextBlock factoryCountText)
+            {
+                factoryCountText.Text = $"{_factoryItems.Count} active";
+            }
+
+            if (this.FindControl<TextBlock>("RebCountText") is TextBlock rebCountText)
+            {
+                rebCountText.Text = $"{_rebItems.Count} active";
+            }
+
+            if (this.FindControl<TextBlock>("GlobalTradeText") is TextBlock tradeText)
+            {
+                double totalValue = _factoryItems.Sum(f => f.OutputValue) + _rebItems.Sum(r => r.OutputValue);
+                tradeText.Text = $"${FormatCurrency(totalValue)}";
+            }
+
+            // Clear details until user selects an instance.
+            ShowBuildingDetails(null);
+        }
+
+        private void BuildAndBindBuildingTypeLists(
+            ListBox? factoryTypesList,
+            ListBox? factoriesList,
+            ListBox? rebTypesList,
+            ListBox? rebList)
+        {
+            // Factory types
+            _factoryTypeItems = _factoryItems
+                .GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "Unknown" : i.Category)
+                .Select(g => new BuildingTypeListItem
+                {
+                    Name = g.Key,
+                    Count = g.Count(),
+                    Subtitle = g.Select(x => x.OutputSummary).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)) ?? string.Empty
+                })
+                .OrderByDescending(x => x.Count)
+                .ThenBy(x => x.Name)
+                .ToList();
+
+            // REB types
+            _rebTypeItems = _rebItems
+                .GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "Unknown" : i.Category)
+                .Select(g => new BuildingTypeListItem
+                {
+                    Name = g.Key,
+                    Count = g.Count(),
+                    Subtitle = g.Select(x => x.OutputSummary).FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)) ?? string.Empty
+                })
+                .OrderByDescending(x => x.Count)
+                .ThenBy(x => x.Name)
+                .ToList();
+
+            if (factoryTypesList != null)
+            {
+                factoryTypesList.SelectionChanged -= FactoryTypesList_SelectionChanged;
+                factoryTypesList.ItemsSource = _factoryTypeItems;
+                factoryTypesList.SelectionChanged += FactoryTypesList_SelectionChanged;
+            }
+
+            if (rebTypesList != null)
+            {
+                rebTypesList.SelectionChanged -= RebTypesList_SelectionChanged;
+                rebTypesList.ItemsSource = _rebTypeItems;
+                rebTypesList.SelectionChanged += RebTypesList_SelectionChanged;
+            }
+
+            // Choose defaults if there is no selection.
+            if (_factoryTypeItems.Count > 0)
+            {
+                if (string.IsNullOrWhiteSpace(_selectedFactoryCategory))
+                {
+                    _selectedFactoryCategory = _factoryTypeItems[0].Name;
+                }
+
+                SelectTypeItemByName(factoryTypesList, _selectedFactoryCategory);
+                ApplyFactoryTypeFilter(_selectedFactoryCategory, factoriesList);
+            }
+            else
+            {
+                _selectedFactoryCategory = null;
+                ApplyFactoryTypeFilter(null, factoriesList);
+            }
+
+            if (_rebTypeItems.Count > 0)
+            {
+                if (string.IsNullOrWhiteSpace(_selectedRebCategory))
+                {
+                    _selectedRebCategory = _rebTypeItems[0].Name;
+                }
+
+                SelectTypeItemByName(rebTypesList, _selectedRebCategory);
+                ApplyRebTypeFilter(_selectedRebCategory, rebList);
+            }
+            else
+            {
+                _selectedRebCategory = null;
+                ApplyRebTypeFilter(null, rebList);
+            }
+        }
+
+        private static void SelectTypeItemByName(ListBox? list, string? name)
+        {
+            if (list == null || string.IsNullOrWhiteSpace(name))
+            {
+                return;
+            }
+
+            if (list.ItemsSource is IEnumerable<BuildingTypeListItem> items)
+            {
+                var match = items.FirstOrDefault(i => string.Equals(i.Name, name, StringComparison.OrdinalIgnoreCase));
+                if (match != null)
+                {
+                    list.SelectedItem = match;
                 }
             }
-            if (industriesList != null && _currentCountry != null)
+        }
+
+        private void FactoryTypesList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (sender is not ListBox list || list.SelectedItem is not BuildingTypeListItem selected)
             {
-                industriesList.Items.Clear();
-                var factoriesByType = _currentCountry.States.SelectMany(s => s.Cities).SelectMany(c => c.Factories)
-                    .GroupBy(f => f.OutputGoods.FirstOrDefault()?.Name ?? "Unknown")
-                    .OrderByDescending(g => g.Count()).Take(6);
-                foreach (var g in factoriesByType)
+                _selectedFactoryCategory = null;
+                ApplyFactoryTypeFilter(null, this.FindControl<ListBox>("FactoriesList"));
+                ShowBuildingDetails(null);
+                return;
+            }
+
+            _selectedFactoryCategory = selected.Name;
+            ApplyFactoryTypeFilter(_selectedFactoryCategory, this.FindControl<ListBox>("FactoriesList"));
+            ShowBuildingDetails(null);
+        }
+
+        private void RebTypesList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (sender is not ListBox list || list.SelectedItem is not BuildingTypeListItem selected)
+            {
+                _selectedRebCategory = null;
+                ApplyRebTypeFilter(null, this.FindControl<ListBox>("RebList"));
+                ShowBuildingDetails(null);
+                return;
+            }
+
+            _selectedRebCategory = selected.Name;
+            ApplyRebTypeFilter(_selectedRebCategory, this.FindControl<ListBox>("RebList"));
+            ShowBuildingDetails(null);
+        }
+
+        private void ApplyFactoryTypeFilter(string? category, ListBox? factoriesList)
+        {
+            if (factoriesList == null)
+            {
+                return;
+            }
+
+            factoriesList.SelectionChanged -= FactoriesList_SelectionChanged;
+
+            var filtered = string.IsNullOrWhiteSpace(category)
+                ? _factoryItems
+                : _factoryItems.Where(i => string.Equals(i.Category, category, StringComparison.OrdinalIgnoreCase));
+
+            factoriesList.ItemsSource = filtered
+                .OrderBy(i => ExtractCityName(i.Location), StringComparer.OrdinalIgnoreCase)
+                .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            factoriesList.SelectionChanged += FactoriesList_SelectionChanged;
+            factoriesList.SelectedIndex = -1;
+        }
+
+        private void ApplyRebTypeFilter(string? category, ListBox? rebList)
+        {
+            if (rebList == null)
+            {
+                return;
+            }
+
+            rebList.SelectionChanged -= RebList_SelectionChanged;
+
+            var filtered = string.IsNullOrWhiteSpace(category)
+                ? _rebItems
+                : _rebItems.Where(i => string.Equals(i.Category, category, StringComparison.OrdinalIgnoreCase));
+
+            rebList.ItemsSource = filtered
+                .OrderBy(i => ExtractCityName(i.Location), StringComparer.OrdinalIgnoreCase)
+                .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            rebList.SelectionChanged += RebList_SelectionChanged;
+            rebList.SelectedIndex = -1;
+        }
+
+        private static string ExtractCityName(string? location)
+        {
+            if (string.IsNullOrWhiteSpace(location)) return string.Empty;
+            var idx = location.IndexOf(',');
+            return idx >= 0 ? location[..idx].Trim() : location.Trim();
+        }
+
+        private BuildingListItem BuildFactoryListItem(Factory factory, City city, State state)
+        {
+            double outputValue = 0;
+            double throughputUnits = 0;
+            foreach (var output in factory.OutputGoods)
+            {
+                double price = GetLocalPrice(city, output.Name, output.BasePrice);
+                double quantity = output.Quantity * factory.ProductionCapacity;
+                throughputUnits += quantity;
+                outputValue += quantity * price;
+            }
+
+            double inputCost = 0;
+            foreach (var input in factory.InputGoods)
+            {
+                double price = GetLocalPrice(city, input.Name, input.BasePrice);
+                inputCost += input.Quantity * factory.ProductionCapacity * price;
+            }
+
+            int jobsTotal = factory.JobSlots?.Values.Sum() ?? 0;
+            int employed = factory.ActualEmployed?.Values.Sum() ?? factory.WorkersEmployed;
+
+            var item = new BuildingListItem
+            {
+                Name = factory.Name,
+                Location = $"{city.Name}, {state.Name}",
+                Owner = factory.OwnerCorporation?.Name ?? "Private",
+                Type = "Factory",
+                Category = factory.OutputGoods?.FirstOrDefault()?.Name ?? "Unknown",
+                Status = "Operational",
+                Condition = "Standard",
+                Throughput = throughputUnits,
+                ProfitEstimate = outputValue - inputCost,
+                OutputValue = outputValue,
+                Employment = employed,
+                FactoryRef = factory
+            };
+
+            var primaryOutput = factory.OutputGoods.FirstOrDefault();
+            item.OutputSummary = primaryOutput != null
+                ? $"{primaryOutput.Name} x{primaryOutput.Quantity * factory.ProductionCapacity}"
+                : "No output";
+
+            item.EmploymentSummary = jobsTotal > 0
+                ? $"{employed}/{jobsTotal} workers"
+                : $"{employed} workers";
+
+            foreach (var input in factory.InputGoods)
+            {
+                item.Inputs.Add($"{input.Name}: {input.Quantity * factory.ProductionCapacity} @ {GetLocalPrice(city, input.Name, input.BasePrice):N2}");
+            }
+            foreach (var output in factory.OutputGoods)
+            {
+                item.Outputs.Add($"{output.Name}: {output.Quantity * factory.ProductionCapacity} @ {GetLocalPrice(city, output.Name, output.BasePrice):N2}");
+            }
+
+            return item;
+        }
+
+        private BuildingListItem BuildRebListItem(ResourceExtractionBuilding reb, City city, State state)
+        {
+            double outputValue = 0;
+            double throughputUnits = 0;
+
+            foreach (var output in reb.OutputGoods)
+            {
+                double price = GetLocalPrice(city, output.Name, output.BasePrice);
+                double quantity = output.Quantity * reb.ExtractionCapacity * reb.ExtractionMultiplier;
+                throughputUnits += quantity;
+                outputValue += quantity * price;
+            }
+
+            int jobsTotal = reb.JobSlots?.Values.Sum() ?? 0;
+            int employed = reb.ActualEmployed?.Values.Sum() ?? 0;
+
+            var item = new BuildingListItem
+            {
+                Name = reb.Name,
+                Location = $"{city.Name}, {state.Name}",
+                Owner = reb.OwnerCorporation?.Name ?? "Private",
+                Type = "REB",
+                Category = reb.OutputGoods?.FirstOrDefault()?.Name ?? "Unknown",
+                Status = "Operational",
+                Condition = "Standard",
+                Throughput = throughputUnits,
+                ProfitEstimate = outputValue,
+                OutputValue = outputValue,
+                Employment = employed,
+                RebRef = reb
+            };
+
+            var primaryOutput = reb.OutputGoods.FirstOrDefault();
+            item.OutputSummary = primaryOutput != null
+                ? $"{primaryOutput.Name} x{primaryOutput.Quantity * reb.ExtractionCapacity}"
+                : "No output";
+
+            item.EmploymentSummary = jobsTotal > 0
+                ? $"{employed}/{jobsTotal} workers"
+                : $"{employed} workers";
+
+            foreach (var output in reb.OutputGoods)
+            {
+                item.Outputs.Add($"{output.Name}: {output.Quantity * reb.ExtractionCapacity} @ {GetLocalPrice(city, output.Name, output.BasePrice):N2}");
+            }
+
+            return item;
+        }
+
+        private void FactoriesList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (sender is not ListBox list || list.SelectedItem is not BuildingListItem item) return;
+
+            if (this.FindControl<ListBox>("RebList") is ListBox rebList)
+            {
+                rebList.SelectionChanged -= RebList_SelectionChanged;
+                rebList.SelectedIndex = -1;
+                rebList.SelectionChanged += RebList_SelectionChanged;
+            }
+
+            ShowBuildingDetails(item);
+        }
+
+        private void RebList_SelectionChanged(object? sender, SelectionChangedEventArgs e)
+        {
+            if (sender is not ListBox list || list.SelectedItem is not BuildingListItem item) return;
+
+            if (this.FindControl<ListBox>("FactoriesList") is ListBox factoryList)
+            {
+                factoryList.SelectionChanged -= FactoriesList_SelectionChanged;
+                factoryList.SelectedIndex = -1;
+                factoryList.SelectionChanged += FactoriesList_SelectionChanged;
+            }
+
+            ShowBuildingDetails(item);
+        }
+
+        private void ShowBuildingDetails(BuildingListItem? item)
+        {
+            if (this.FindControl<TextBlock>("BuildingNameText") is TextBlock nameText)
+                nameText.Text = item?.Name ?? "Select a building";
+
+            if (this.FindControl<TextBlock>("BuildingTypeText") is TextBlock typeText)
+                typeText.Text = item?.Type ?? string.Empty;
+
+            if (this.FindControl<TextBlock>("BuildingLocationText") is TextBlock locText)
+                locText.Text = item?.Location ?? "-";
+
+            if (this.FindControl<TextBlock>("BuildingOwnerText") is TextBlock ownerText)
+                ownerText.Text = item?.Owner ?? "-";
+
+            if (this.FindControl<TextBlock>("BuildingStatusText") is TextBlock statusText)
+                statusText.Text = item?.Status ?? "-";
+
+            if (this.FindControl<TextBlock>("BuildingConditionText") is TextBlock conditionText)
+                conditionText.Text = item?.Condition ?? "-";
+
+            if (this.FindControl<TextBlock>("BuildingThroughputText") is TextBlock throughputText)
+                throughputText.Text = item != null ? $"{FormatCurrency(item.Throughput)} units" : "-";
+
+            if (this.FindControl<TextBlock>("BuildingEmploymentText") is TextBlock empText)
+                empText.Text = item?.EmploymentSummary ?? "-";
+
+            if (this.FindControl<TextBlock>("BuildingProfitText") is TextBlock profitText)
+            {
+                if (item == null)
                 {
-                    int count = g.Count();
-                    double totalOutput = g.Sum(f => f.ProductionCapacity * f.OutputGoods.Sum(o => o.Quantity));
-                    string goodName = g.Key;
-                    industriesList.Items.Add($"🏭 {goodName} - {count} factories (Output: {totalOutput:N0} units)");
+                    profitText.Text = "-";
+                    profitText.Foreground = new SolidColorBrush(Colors.White);
+                }
+                else
+                {
+                    profitText.Text = $"{(item.ProfitEstimate >= 0 ? "+" : "-")}${FormatCurrency(Math.Abs(item.ProfitEstimate))}";
+                    profitText.Foreground = new SolidColorBrush(Color.Parse(item.ProfitEstimate >= 0 ? "#90EE90" : "#F08080"));
                 }
             }
-            if (corpList != null)
+
+            if (this.FindControl<ListBox>("BuildingFlowsList") is ListBox flowsList)
             {
-                corpList.SelectionChanged -= CorporationsList_SelectionChanged;
-                corpList.SelectionChanged += CorporationsList_SelectionChanged;
+                var flows = new List<string>();
+                if (item != null)
+                {
+                    flows.AddRange(item.Inputs.Select(i => $"Input • {i}"));
+                    flows.AddRange(item.Outputs.Select(o => $"Output • {o}"));
+                    if (flows.Count == 0)
+                    {
+                        flows.Add("No flow data available");
+                    }
+                }
+                flowsList.ItemsSource = flows;
             }
+
+            if (this.FindControl<ListBox>("BuildingQueueList") is ListBox queueList)
+            {
+                queueList.ItemsSource = BuildOrderHistoryRows(item);
+            }
+        }
+
+        private List<string> BuildOrderHistoryRows(BuildingListItem? item)
+        {
+            if (item == null)
+            {
+                return new List<string> { "No building selected" };
+            }
+
+            object? buildingRef = item.FactoryRef ?? (object?)item.RebRef;
+            if (buildingRef == null)
+            {
+                return new List<string> { "No order history" };
+            }
+
+            // Resolve city from the item's location (best-effort) so we can access the stored order history.
+            var (city, _) = ResolveCityFromLocation(item.Location);
+            if (city == null)
+            {
+                return new List<string> { "No order history" };
+            }
+
+            var rows = city
+                .GetOrderHistoryForBuilding(buildingRef)
+                .Take(20)
+                .Select(r =>
+                {
+                    var localTime = r.Timestamp.ToLocalTime();
+                    var kind = r.Kind == City.TradeOrderKind.Buy ? "BUY" : "SELL";
+                    var counterparty = string.IsNullOrWhiteSpace(r.Counterparty) ? string.Empty : $" • {r.Counterparty}";
+                    return $"{localTime:HH:mm:ss} {kind} {r.Good} x{r.Quantity} @ {r.Price:N2}{counterparty}";
+                })
+                .ToList();
+
+            return rows.Count > 0 ? rows : new List<string> { "No orders yet" };
+        }
+
+        private (City? city, State? state) ResolveCityFromLocation(string? location)
+        {
+            if (string.IsNullOrWhiteSpace(location) || _currentCountry == null)
+            {
+                return (null, null);
+            }
+
+            // Location format: "City, State"
+            var parts = location.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var cityName = parts.Length > 0 ? parts[0] : string.Empty;
+            var stateName = parts.Length > 1 ? parts[1] : string.Empty;
+
+            foreach (var state in _currentCountry.States)
+            {
+                if (!string.IsNullOrWhiteSpace(stateName) &&
+                    !string.Equals(state.Name, stateName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var city = state.Cities.FirstOrDefault(c => string.Equals(c.Name, cityName, StringComparison.OrdinalIgnoreCase));
+                if (city != null)
+                {
+                    return (city, state);
+                }
+            }
+
+            return (null, null);
+        }
+
+        private static double GetLocalPrice(City city, string goodName, double fallback)
+        {
+            if (city.LocalPrices != null && city.LocalPrices.TryGetValue(goodName, out var price) && price > 0)
+            {
+                return price;
+            }
+            return fallback;
         }
 
         private void UpdateBudgetTab()
@@ -3658,7 +4046,7 @@ namespace Economy_sim
                 var infra = state.Cities.Count * 100000.0;
                 expenseList.Add(($"Infrastructure - {state.Name}", infra)); totalExpenses += infra;
             }
-            var military = (double)_playerCountry.Population * 0.05; expenseList.Add(("Military", military)); totalExpenses += military;
+            var military = _playerCountry.Population * 0.05; expenseList.Add(("Military", military)); totalExpenses += military;
 
             if (this.FindControl<TextBlock>("TotalRevenueText") is TextBlock tr) tr.Text = $"${FormatCurrency(totalRevenue)}";
             if (this.FindControl<TextBlock>("TotalExpensesText") is TextBlock te) te.Text = $"${FormatCurrency(totalExpenses)}";
@@ -3787,10 +4175,10 @@ namespace Economy_sim
 
             if (this.FindControl<TextBlock>("TotalGoodsTradedText") is TextBlock tradedText)
                 tradedText.Text = FormatPopulation(totalGoodsTraded);
-            
+
             if (this.FindControl<TextBlock>("TotalMarketValueText") is TextBlock valueText)
                 valueText.Text = $"${FormatCurrency(totalMarketValue)}";
-            
+
             if (this.FindControl<TextBlock>("ActiveGoodsCountText") is TextBlock activeText)
                 activeText.Text = activeGoods.ToString();
 
@@ -3799,7 +4187,7 @@ namespace Economy_sim
             {
                 // Default sort by price (descending)
                 var sortedGoods = goodsList.OrderByDescending(g => g.AveragePrice).ToList();
-                
+
                 goodsListBox.Items.Clear();
                 foreach (var good in sortedGoods)
                 {
@@ -3960,9 +4348,7 @@ namespace Economy_sim
             if (population >= 1_000L) return $"{population / 1_000d:F0}K";
             return population.ToString("N0");
         }
-        // ================================================
-
-        // ===== Added missing handler implementations (map & menu) =====
+       
         private void OnDebugClicked(object? sender, RoutedEventArgs e)
         {
             Debug.WriteLine("Debug button clicked - showing debug menu");
@@ -4035,13 +4421,13 @@ namespace Economy_sim
                 if (progressPanel != null) progressPanel.IsVisible = false;
             }
         }
-        
+
         #region Time Control Methods
-        
+
         private void OnPauseResumeClicked(object? sender, RoutedEventArgs e)
         {
             _isSimulationPaused = !_isSimulationPaused;
-            
+
             if (_isSimulationPaused)
             {
                 _economyUpdateTimer?.Stop();
@@ -4052,32 +4438,32 @@ namespace Economy_sim
                 _economyUpdateTimer?.Start();
                 Debug.WriteLine($"[Time Control] Simulation RESUMED at {_simulationSpeedMultiplier}x speed");
             }
-            
+
             UpdateTimeControlUI();
         }
-        
+
         private void SetSimulationSpeed(double speedMultiplier)
         {
             _simulationSpeedMultiplier = speedMultiplier;
-            
+
             // Update the timer interval based on speed multiplier
             if (_economyUpdateTimer != null)
             {
                 // Calculate new interval: base interval / speed multiplier
                 // e.g., 5 seconds at 2x speed = 2.5 seconds
                 double intervalSeconds = _baseEconomyUpdateInterval.TotalSeconds / _simulationSpeedMultiplier;
-                
+
                 // Clamp to reasonable limits (min 0.1 seconds, max 60 seconds)
                 intervalSeconds = Math.Clamp(intervalSeconds, 0.1, 60.0);
-                
+
                 _economyUpdateTimer.Interval = TimeSpan.FromSeconds(intervalSeconds);
-                
+
                 Debug.WriteLine($"[Time Control] Speed set to {_simulationSpeedMultiplier}x (interval: {intervalSeconds:F2}s)");
             }
-            
+
             UpdateTimeControlUI();
         }
-        
+
         private void UpdateTimeControlUI()
         {
             Dispatcher.UIThread.Post(() =>
@@ -4088,11 +4474,11 @@ namespace Economy_sim
                     if (this.FindControl<Button>("PauseResumeButton") is Button pauseBtn)
                     {
                         pauseBtn.Content = _isSimulationPaused ? "▶" : "⏸";
-                        pauseBtn.Background = _isSimulationPaused 
+                        pauseBtn.Background = _isSimulationPaused
                             ? new SolidColorBrush(Color.Parse("#4A1A1A"))  // Red when paused
                             : new SolidColorBrush(Color.Parse("#1A4A1A")); // Green when running
                     }
-                    
+
                     // Update speed indicator
                     if (this.FindControl<TextBlock>("SpeedIndicatorText") is TextBlock speedText)
                     {
@@ -4107,7 +4493,7 @@ namespace Economy_sim
                             speedText.Foreground = new SolidColorBrush(Color.Parse("#90EE90"));
                         }
                     }
-                    
+
                     // Update speed button styles to highlight active speed and disable when paused
                     UpdateSpeedButtonStyle("Speed05xButton", 0.5);
                     UpdateSpeedButtonStyle("Speed1xButton", 1.0);
@@ -4121,16 +4507,16 @@ namespace Economy_sim
                 }
             });
         }
-        
+
         private void UpdateSpeedButtonStyle(string buttonName, double speed)
         {
             if (this.FindControl<Button>(buttonName) is Button btn)
             {
                 // Disable speed buttons when simulation is paused
                 btn.IsEnabled = !_isSimulationPaused;
-                
+
                 bool isActive = !_isSimulationPaused && Math.Abs(_simulationSpeedMultiplier - speed) < 0.01;
-                
+
                 if (_isSimulationPaused)
                 {
                     // Grayed out when paused
@@ -4160,7 +4546,7 @@ namespace Economy_sim
                 }
             }
         }
-        
+
         #endregion
 
         #region City Hover and Click Handling
@@ -4183,7 +4569,7 @@ namespace Economy_sim
             if (hoveredCity != _hoveredCityLabel)
             {
                 _hoveredCityLabel = hoveredCity;
-                
+
                 if (_hoveredCityLabel != null)
                 {
                     ShowCityHoverTooltip(_hoveredCityLabel, mousePosition);
@@ -4293,7 +4679,7 @@ namespace Economy_sim
         private void HandleCityLabelClick(CityLabelBounds cityLabel)
         {
             Debug.WriteLine($"[City Click] Clicked on city: {cityLabel.CityName}");
-            
+
             // Hide hover tooltip
             HideCityHoverTooltip();
 
@@ -4320,11 +4706,11 @@ namespace Economy_sim
                         // Update city info - Name and location
                         if (this.FindControl<TextBlock>("CityInfoNameText") is TextBlock nameText)
                             nameText.Text = city.Name;
-                        
+
                         // Try to find the state and country this city belongs to
                         string stateName = "Unknown State";
                         string countryName = "Unknown Country";
-                        
+
                         foreach (var country in _allCountries)
                         {
                             foreach (var state in country.States)
@@ -4338,30 +4724,30 @@ namespace Economy_sim
                             }
                             if (stateName != "Unknown State") break;
                         }
-                        
+
                         if (this.FindControl<TextBlock>("CityInfoStateText") is TextBlock stateText)
                             stateText.Text = stateName;
-                        
+
                         if (this.FindControl<TextBlock>("CityInfoCountryText") is TextBlock countryText)
                             countryText.Text = countryName;
-                        
+
                         // Economic data
                         if (this.FindControl<TextBlock>("CityInfoBudgetText") is TextBlock budgetText)
                             budgetText.Text = $"${FormatCurrency(city.Budget)}";
-                        
+
                         if (this.FindControl<TextBlock>("CityInfoExpensesText") is TextBlock expensesText)
                             expensesText.Text = $"${FormatCurrency(city.CityExpenses)}";
-                        
+
                         if (this.FindControl<TextBlock>("CityInfoTaxText") is TextBlock taxText)
                             taxText.Text = $"{(city.TaxRate * 100):F1}%";
-                        
+
                         if (this.FindControl<TextBlock>("CityInfoGdpText") is TextBlock gdpText)
                         {
                             // Calculate GDP as an estimate based on factories and population
-                            double gdp = city.Budget * 10; // Simple estimate
+                            double gdp = 0; // Simple estimate
                             gdpText.Text = $"${FormatCurrency(gdp)}";
                         }
-                        
+
                         if (this.FindControl<TextBlock>("CityInfoPopulationText") is TextBlock popText)
                             popText.Text = FormatPopulation(city.Population);
 
@@ -4380,16 +4766,16 @@ namespace Economy_sim
                         {
                             // Calculate quality of life based on various factors
                             double quality = 5.0; // Base quality
-                            
+
                             // Adjust based on budget per capita
                             double budgetPerCapita = city.Population > 0 ? city.Budget / city.Population : 0;
                             if (budgetPerCapita > 100) quality += 2.0;
                             else if (budgetPerCapita > 50) quality += 1.0;
                             else if (budgetPerCapita < 10) quality -= 1.0;
-                            
+
                             // Adjust based on expenses (infrastructure spending)
                             if (city.CityExpenses > city.Budget * 0.5) quality += 1.0;
-                            
+
                             quality = Math.Clamp(quality, 0, 10);
                             qualityText.Text = $"{quality:F1}";
                         }
@@ -4398,21 +4784,21 @@ namespace Economy_sim
                         {
                             // Calculate happiness based on employment and quality
                             double happiness = 50.0; // Base happiness
-                            
+
                             // Calculate employment rate
                             int totalWorkers = city.Factories.Sum(f => f.WorkersEmployed);
                             int totalPopulation = city.Population;
                             double employmentRate = totalPopulation > 0 ? (totalWorkers / (double)totalPopulation * 100) : 0;
-                            
+
                             // Adjust based on employment
                             if (employmentRate > 90) happiness += 20;
                             else if (employmentRate > 70) happiness += 10;
                             else if (employmentRate < 30) happiness -= 20;
-                            
+
                             // Adjust based on tax rate
                             if (city.TaxRate < 0.10) happiness += 10;
                             else if (city.TaxRate > 0.25) happiness -= 10;
-                            
+
                             happiness = Math.Clamp(happiness, 0, 100);
                             happinessText.Text = $"{happiness:F0}%";
                         }
@@ -4421,16 +4807,16 @@ namespace Economy_sim
                         {
                             // Calculate growth rate (simplified)
                             double growthRate = 1.5; // Base growth
-                            
+
                             // Adjust based on budget surplus
                             if (city.Budget > city.CityExpenses * 2) growthRate += 1.0;
                             else if (city.Budget < city.CityExpenses) growthRate -= 1.0;
-                            
+
                             // Adjust based on factories (economic activity)
                             int factoryCount = city.Factories.Count;
                             if (factoryCount > 5) growthRate += 0.5;
                             else if (factoryCount == 0) growthRate -= 0.5;
-                            
+
                             growthRate = Math.Clamp(growthRate, -5, 10);
                             string sign = growthRate >= 0 ? "+" : "";
                             growthText.Text = $"{sign}{growthRate:F1}%";
@@ -4457,10 +4843,10 @@ namespace Economy_sim
                         // Update with basic info
                         if (this.FindControl<TextBlock>("CityInfoNameText") is TextBlock nameText)
                             nameText.Text = cityName;
-                        
+
                         if (this.FindControl<TextBlock>("CityInfoStateText") is TextBlock stateText)
                             stateText.Text = "Information loading...";
-                        
+
                         if (this.FindControl<TextBlock>("CityInfoCountryText") is TextBlock countryText)
                             countryText.Text = "";
 
@@ -4492,12 +4878,12 @@ namespace Economy_sim
             {
                 _isDraggingCityPopup = true;
                 _cityPopupDragStart = e.GetPosition(this);
-                
+
                 if (this.FindControl<Border>("CityInfoPopup") is Border popup)
                 {
                     _cityPopupOriginalMargin = popup.Margin;
                 }
-                
+
                 e.Handled = true;
             }
         }
@@ -4508,14 +4894,14 @@ namespace Economy_sim
             {
                 var currentPos = e.GetPosition(this);
                 var delta = currentPos - _cityPopupDragStart;
-                
+
                 var newMargin = new Thickness(
                     _cityPopupOriginalMargin.Left + delta.X,
                     _cityPopupOriginalMargin.Top + delta.Y,
                     0,
                     0
                 );
-                
+
                 popup.Margin = newMargin;
                 e.Handled = true;
             }

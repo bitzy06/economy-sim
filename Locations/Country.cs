@@ -65,46 +65,7 @@ namespace Economy_sim
             return 0; // Resource not found
         }
 
-        public void DistributeFunds()
-        {
-            if (States.Count == 0) return;
-            // This distribution is a form of government spending.
-            double totalToDistribute = Budget * 0.1; // Example: 10% of current liquid budget
-            if (totalToDistribute <= 0) return;
 
-            // Ensure the country has enough budget to distribute
-            if (Budget < totalToDistribute)
-            {
-                // Optionally handle this case, e.g., log a warning or distribute less
-                totalToDistribute = Budget; 
-            }
-
-            if (totalToDistribute <= 0) return;
-
-            double perState = totalToDistribute / States.Count;
-            foreach (var state in States)
-            {
-                state.Budget += perState;
-            }
-            
-            // This spending reduces the central treasury (Budget).
-            Budget -= totalToDistribute;
-            // This could also be recorded as a specific type of government expenditure in the financial system if desired,
-            // for now, direct adjustment to Budget which the FinancialSystem might read or be updated with.
-        }
-
-        public void SimulateTurn()
-        {
-            foreach (var state in States)
-            {
-                foreach (var city in state.Cities)
-                {
-                    Market.ResetCitySupplyDemand(city);
-                    Market.SimulateCityEconomy(city);
-                    Market.UpdateCityPrices(city);
-                }
-            }
-        }
 
         /// <summary>
         /// Update country population, budget, and GDP based on states

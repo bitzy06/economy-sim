@@ -1,7 +1,7 @@
-using System.Collections.Generic;
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 
 namespace Economy_sim
@@ -17,12 +17,12 @@ namespace Economy_sim
 
     public enum CorporationSpecialization
     {
-        None, 
-        Agriculture, 
-        Mining,      
-        HeavyIndustry, 
-        LightIndustry, 
-        Diversified    
+        None,
+        Agriculture,
+        Mining,
+        HeavyIndustry,
+        LightIndustry,
+        Diversified
     }
 
     public static class Economy
@@ -42,163 +42,50 @@ namespace Economy_sim
         /// <param name="numCitiesPerState">Base number of cities per state</param>
         /// <param name="seed">Random seed for reproducible generation (null for random)</param>
         /// <returns>Tuple of (countries, corporations) lists</returns>
-        public static (List<Country> countries, List<Corporation> corporations) InitializeWorldEconomy(
-            int numCountries = 10,
-            int numStatesPerCountry = 5,
-            int numCitiesPerState = 3,
-            int? seed = null)
+        public static void InitializeWorldEconomy(int? seed = null)
         {
             Console.WriteLine("[Economy Init] Starting procedural world economy initialization...");
-            Console.WriteLine($"[Economy Init] Parameters: {numCountries} countries, {numStatesPerCountry} states each, ~{numCitiesPerState} cities per state");
+            
 
             // Initialize factory blueprints and goods
             if (!Market.GoodDefinitions.Any())
             {
                 FactoryBlueprints.InitializeBlueprints();
-                Console.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods and {FactoryBlueprints.AllBlueprints.Count} factory blueprints");
+                ResourceExtractionBuildingBlueprints.InitializeBlueprints();
+                Console.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods, {FactoryBlueprints.AllBlueprints.Count} factory blueprints, and {ResourceExtractionBuildingBlueprints.AllBlueprints.Count} REB blueprints");
+            }
+            else if (ResourceExtractionBuildingBlueprints.AllBlueprints.Count == 0)
+            {
+                ResourceExtractionBuildingBlueprints.InitializeBlueprints();
+                Console.WriteLine($"[Economy Init] Initialized {ResourceExtractionBuildingBlueprints.AllBlueprints.Count} REB blueprints (goods already loaded)");
             }
 
             // Generate world structure data
             var random = seed.HasValue ? new Random(seed.Value) : new Random();
-            var worldData = WorldDataGenerator.GenerateWorldData(numCountries, numStatesPerCountry, numCitiesPerState);
-            
-            Console.WriteLine($"[Economy Init] Generated world structure with {worldData.Countries.Count} countries");
+        
+
+           
 
             // Use procedural generation with templates to create the actual world
-            var (countries, corporations) = ProceduralWorldGenerator.GenerateWorld(worldData, random);
+           
 
             // Set up construction companies
             var constructionCompanies = new List<ConstructionCompany>();
-            foreach (var companyData in worldData.ConstructionCompanies)
-            {
-                var homeCity = countries
-                    .SelectMany(c => c.States)
-                    .SelectMany(s => s.Cities)
-                    .FirstOrDefault(city => city.Name == companyData.HomeCity);
-
-                if (homeCity != null)
-                {
-                    var company = new ConstructionCompany(
-                        companyData.Name,
-                        companyData.Workers,
-                        (decimal)companyData.InitialBudget)
-                    {
-                        HomeCity = homeCity
-                    };
-                    
-                    constructionCompanies.Add(company);
-                    homeCity.RegisterConstructionCompany(company);
-                    corporations.Add(company);
-                }
-            }
+           
 
             // Register corporations in global market
             Market.AllCorporations.Clear();
-            Market.AllCorporations.AddRange(corporations);
+           
 
             Market.AllConstructionCompanies.Clear();
             Market.AllConstructionCompanies.AddRange(constructionCompanies);
 
             Console.WriteLine($"[Economy Init] Economy initialization complete!");
-            Console.WriteLine($"[Economy Init] Total: {countries.Count} countries, {countries.Sum(c => c.States.Count)} states, {countries.SelectMany(c => c.States).Sum(s => s.Cities.Count)} cities");
-            Console.WriteLine($"[Economy Init] Total: {corporations.Count} corporations ({constructionCompanies.Count} construction companies)");
-            Console.WriteLine($"[Economy Init] Total population: {countries.Sum(c => c.Population):N0}");
 
-            return (countries, corporations);
+           
+           
         }
 
-        /// <summary>
-        /// Load the world economy from world_setup.json file
-        /// </summary>
-        /// <param name="filePath">Path to the world_setup.json file (defaults to world_setup.json in current directory)</param>
-        /// <param name="seed">Random seed for reproducible generation (null for random)</param>
-        /// <returns>Tuple of (countries, corporations) lists</returns>
-        public static (List<Country> countries, List<Corporation> corporations) LoadWorldEconomyFromJson(
-            string filePath = "world_setup.json",
-            int? seed = null)
-        {
-            Console.WriteLine($"[Economy Init] Loading world economy from {filePath}...");
-
-            // Initialize factory blueprints and goods
-            if (!Market.GoodDefinitions.Any())
-            {
-                FactoryBlueprints.InitializeBlueprints();
-                Console.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods and {FactoryBlueprints.AllBlueprints.Count} factory blueprints");
-            }
-
-            // Load world data from JSON
-            WorldSetupData worldData;
-            try
-            {
-                string jsonText = File.ReadAllText(filePath);
-                worldData = JsonSerializer.Deserialize<WorldSetupData>(jsonText, new JsonSerializerOptions 
-                { 
-                    PropertyNameCaseInsensitive = true 
-                });
-                
-                if (worldData == null || worldData.Countries == null)
-                {
-                    Console.WriteLine($"[Economy Init] ERROR: Failed to deserialize world data from {filePath}");
-                    // Fallback to procedural generation
-                    return InitializeWorldEconomy();
-                }
-                
-                Console.WriteLine($"[Economy Init] Loaded world structure with {worldData.Countries.Count} countries from JSON");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[Economy Init] ERROR loading {filePath}: {ex.Message}");
-                Console.WriteLine($"[Economy Init] Falling back to procedural generation");
-                // Fallback to procedural generation
-                return InitializeWorldEconomy();
-            }
-
-            // Use procedural generation with the loaded data
-            var random = seed.HasValue ? new Random(seed.Value) : new Random();
-            var (countries, corporations) = ProceduralWorldGenerator.GenerateWorld(worldData, random);
-
-            // Set up construction companies
-            var constructionCompanies = new List<ConstructionCompany>();
-            if (worldData.ConstructionCompanies != null)
-            {
-                foreach (var companyData in worldData.ConstructionCompanies)
-                {
-                    var homeCity = countries
-                        .SelectMany(c => c.States)
-                        .SelectMany(s => s.Cities)
-                        .FirstOrDefault(city => city.Name == companyData.HomeCity);
-
-                    if (homeCity != null)
-                    {
-                        var company = new ConstructionCompany(
-                            companyData.Name,
-                            companyData.Workers,
-                            (decimal)companyData.InitialBudget)
-                        {
-                            HomeCity = homeCity
-                        };
-                        
-                        constructionCompanies.Add(company);
-                        homeCity.RegisterConstructionCompany(company);
-                        corporations.Add(company);
-                    }
-                }
-            }
-
-            // Register corporations in global market
-            Market.AllCorporations.Clear();
-            Market.AllCorporations.AddRange(corporations);
-
-            Market.AllConstructionCompanies.Clear();
-            Market.AllConstructionCompanies.AddRange(constructionCompanies);
-
-            Console.WriteLine($"[Economy Init] Economy initialization complete from JSON!");
-            Console.WriteLine($"[Economy Init] Total: {countries.Count} countries, {countries.Sum(c => c.States.Count)} states, {countries.SelectMany(c => c.States).Sum(s => s.Cities.Count)} cities");
-            Console.WriteLine($"[Economy Init] Total: {corporations.Count} corporations ({constructionCompanies.Count} construction companies)");
-            Console.WriteLine($"[Economy Init] Total population: {countries.Sum(c => c.Population):N0}");
-
-            return (countries, corporations);
-        }
 
         /// <summary>
         /// Generate world economy from map data (countries and states from the political map rendering system)
@@ -220,7 +107,14 @@ namespace Economy_sim
             if (!Market.GoodDefinitions.Any())
             {
                 FactoryBlueprints.InitializeBlueprints();
-                Console.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods and {FactoryBlueprints.AllBlueprints.Count} factory blueprints");
+                ResourceExtractionBuildingBlueprints.InitializeBlueprints();
+                Console.WriteLine($"[Economy Init] Initialized {Market.GoodDefinitions.Count} goods, {FactoryBlueprints.AllBlueprints.Count} factory blueprints, and {ResourceExtractionBuildingBlueprints.AllBlueprints.Count} REB blueprints");
+            }
+            else if (ResourceExtractionBuildingBlueprints.AllBlueprints.Count == 0)
+            {
+                // Goods already loaded but REB blueprints not initialized
+                ResourceExtractionBuildingBlueprints.InitializeBlueprints();
+                Console.WriteLine($"[Economy Init] Initialized {ResourceExtractionBuildingBlueprints.AllBlueprints.Count} REB blueprints (goods already loaded)");
             }
 
             var random = seed.HasValue ? new Random(seed.Value) : new Random();
@@ -243,7 +137,7 @@ namespace Economy_sim
                     Console.WriteLine($"[Economy Init] Skipping state with no country name: {state.StateName}");
                     continue;
                 }
-                
+
                 if (!statesByCountry.ContainsKey(state.CountryName))
                 {
                     statesByCountry[state.CountryName] = new List<StateBorderManager.StateFeature>();
@@ -274,20 +168,20 @@ namespace Economy_sim
 
                 var country = new Country(countryName)
                 {
-                    Budget = random.Next(1000000, 100000000),
-                    NationalExpenses = random.Next(500000, 10000000),
+                    Budget = 0,
+                    NationalExpenses = 0,
                     Population = 0
                 };
 
                 // Set up tax policies
-                double baseTaxRate = 0.15 + random.NextDouble() * 0.15; // 15-30%
-                var incomeTax = new TaxPolicy(TaxType.IncomeTax, (decimal)baseTaxRate, TaxProgressivity.Progressive);
-                incomeTax.ProgressiveBrackets[20000m] = (decimal)(baseTaxRate * 0.6);
-                incomeTax.ProgressiveBrackets[50000m] = (decimal)baseTaxRate;
-                incomeTax.ProgressiveBrackets[100000m] = (decimal)(baseTaxRate * 1.5);
-                country.FinancialSystem.AddTaxPolicy(incomeTax);
-                country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.CorporateTax, (decimal)(baseTaxRate * 1.2)));
-                country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.ConsumptionTax, (decimal)(baseTaxRate * 0.4)));
+                //double baseTaxRate = 0.15 + random.NextDouble() * 0.15; // 15-30%
+                //var incomeTax = new TaxPolicy(TaxType.IncomeTax, (decimal)baseTaxRate, TaxProgressivity.Progressive);
+                //incomeTax.ProgressiveBrackets[20000m] = (decimal)(baseTaxRate * 0.6);
+                //incomeTax.ProgressiveBrackets[50000m] = (decimal)baseTaxRate;
+                //incomeTax.ProgressiveBrackets[100000m] = (decimal)(baseTaxRate * 1.5);
+                //country.FinancialSystem.AddTaxPolicy(incomeTax);
+                //country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.CorporateTax, (decimal)(baseTaxRate * 1.2)));
+                //country.FinancialSystem.AddTaxPolicy(new TaxPolicy(TaxType.ConsumptionTax, (decimal)(baseTaxRate * 0.4)));
 
                 Console.WriteLine($"[Economy Init] Generating country: {country.Name}");
 
@@ -295,16 +189,16 @@ namespace Economy_sim
                 if (statesByCountry.TryGetValue(countryName, out var countryStates))
                 {
                     Console.WriteLine($"[Economy Init]   Found {countryStates.Count} states for {country.Name}");
-                    
+
                     bool isFirstState = true;
                     int stateIndex = 0;
                     foreach (var mapState in countryStates)
                     {
                         var state = new State(mapState.StateName)
                         {
-                            Budget = random.Next(100000, 10000000),
-                            TaxRate = 0.03 + random.NextDouble() * 0.05, // 3-8%
-                            StateExpenses = random.Next(50000, 1000000),
+                            Budget = 0,
+                            TaxRate = 0,
+                            StateExpenses = 0,
                             Population = 0
                         };
 
@@ -316,11 +210,11 @@ namespace Economy_sim
                         {
                             // Find cities that belong to this state
                             stateCities = geographicCities
-                                .Where(c => !string.IsNullOrWhiteSpace(c.StateName) && 
+                                .Where(c => !string.IsNullOrWhiteSpace(c.StateName) &&
                                            string.Equals(c.StateName, mapState.StateName, StringComparison.OrdinalIgnoreCase))
                                 .OrderBy(c => c.Importance)  // Lower ScaleRank = more important cities first
                                 .ToList();
-                            
+
                             Console.WriteLine($"[Economy Init]     Found {stateCities.Count} geographic cities for state {state.Name}");
                         }
 
@@ -345,32 +239,33 @@ namespace Economy_sim
                         {
                             var cityType = i < cityTypes.Count ? cityTypes[i] : CityType.MixedIndustrial;
                             var template = CityTemplateManager.GetTemplate(cityType);
-                            
+
                             // Use geographic city data if available
                             string cityName;
                             int population;
-                            
+
                             if (i < stateCities.Count)
                             {
                                 var geoCity = stateCities[i];
                                 cityName = geoCity.CityName;
                                 // Use geographic population as base, with some variation
-                                population = geoCity.Population > 0 
-                                    ? Math.Max(50000, geoCity.Population + random.Next(-10000, 10000))
-                                    : random.Next(50000, 2000000);
+                                //population = geoCity.Population > 0
+                                //    ? Math.Max(50000, geoCity.Population + random.Next(-10000, 10000))
+                                //    : random.Next(50000, 2000000);
+                                population = geoCity.Population;
                             }
                             else
                             {
                                 // Fallback: generate procedural name
                                 cityName = $"{state.Name} City {i + 1}";
-                                population = random.Next(50000, 2000000);
+                                population = 0;
                             }
-                            
+
                             var city = new City(cityName)
                             {
-                                Budget = random.Next(100000, 5000000) * template.BudgetMultiplier,
+                                Budget = 0,
                                 TaxRate = 0.02 + random.NextDouble() * 0.04, // 2-6%
-                                CityExpenses = random.Next(50000, 500000) * template.ExpenseMultiplier,
+                                CityExpenses = 0,
                                 Population = population,
                                 Happiness = 50
                             };
@@ -383,7 +278,7 @@ namespace Economy_sim
                             {
                                 string className = popDist.Key;
                                 double percentage = popDist.Value;
-                                
+
                                 int classSize = (int)(population * percentage);
                                 if (classSize < 1) classSize = 1;
 
@@ -414,24 +309,40 @@ namespace Economy_sim
 
                             // Generate factories
                             int targetFactoryCount = random.Next(3, 8);
+                            int targetResourceBuildings = random.Next(1, 4);
+
                             for (int f = 0; f < targetFactoryCount; f++)
                             {
-                                var factoryType = ProceduralWorldGenerator.SelectWeightedFactoryType(template.FactoryWeights, random);
-                                var blueprint = FactoryBlueprints.AllBlueprints.FirstOrDefault(b => b.OutputGood.Name == factoryType || b.FactoryTypeName == factoryType);
-                                
+                                var randomFactoryTypeIndex = random.Next(FactoryBlueprints.AllBlueprints.Count);
+                                var blueprint = FactoryBlueprints.AllBlueprints[randomFactoryTypeIndex];
+
                                 if (blueprint != null)
                                 {
-                                    var corporation = ProceduralWorldGenerator.FindOrCreateCorporation(blueprint, city, allCorporations, random);
-                                    var factory = ProceduralWorldGenerator.CreateFactoryFromBlueprint(blueprint, corporation, random.Next(2, 6), city);
-                                    
-                                    city.AddFactory(factory);
-                                    corporation.AddFactory(factory);
+                                    var factory = blueprint.CreateFactory(city.Name, productionCapacity: random.Next(1, 4));
+                                    city.AddFactory(factory);  // Use AddFactory() method, not Factories.Add()
+                                    Console.WriteLine($"[Economy Init]       Added factory: {factory.Name} (Capacity: {factory.ProductionCapacity})");
+                                }
+                            }
+
+                            for (int f = 0; f < targetResourceBuildings; f++)
+                            {
+                                if (ResourceExtractionBuildingBlueprints.AllBlueprints.Count == 0)
+                                {
+                                    Console.WriteLine($"[Economy Init]       WARNING: No REB blueprints available, skipping REB generation");
+                                    break;
+                                }
+                                var randomREBTypeIndex = random.Next(ResourceExtractionBuildingBlueprints.AllBlueprints.Count);
+                                var blueprint = ResourceExtractionBuildingBlueprints.AllBlueprints[randomREBTypeIndex];
+                                if (blueprint != null)
+                                {
+                                    var reb = blueprint.CreateBuilding(city.Name, extractionCapacity: random.Next(1, 3));
+                                    city.AddResourceExtractionBuilding(reb);
+                                    Console.WriteLine($"[Economy Init]       Added REB: {reb.Name} (Capacity: {reb.ExtractionCapacity})");
                                 }
                             }
 
                             // Initialize stockpile and prices
-                            ProceduralWorldGenerator.InitializeStockpile(city, template, random);
-                            ProceduralWorldGenerator.InitializeLocalPrices(city);
+
                             ProceduralCityBuilder.InitializeCityData(city, template, random);
 
                             Console.WriteLine($"[Economy Init]     ✓ Completed city: {city.Name} - {city.PopClasses.Count} pop classes, {city.Factories.Count} factories");
@@ -441,16 +352,16 @@ namespace Economy_sim
                         }
 
                         Console.WriteLine($"[Economy Init]    ✓ Completed state: {state.Name} - {state.Cities.Count} cities, pop: {state.Population:N0}");
-                        
+
                         // Update state aggregates from cities (budget, population)
                         state.UpdateAggregatesFromCities();
                         Console.WriteLine($"[Economy Init]    ✓ State aggregates updated: Budget=${state.Budget:N0}, Pop={state.Population:N0}");
-                        
+
                         country.States.Add(state);
                         isFirstState = false;
                         stateIndex++;
                     }
-                    
+
                     // Update country aggregates from states (budget, population)
                     country.UpdateAggregatesFromStates();
                     Console.WriteLine($"[Economy Init]   ✓ Country aggregates updated: {country.Name} - Budget=${country.Budget:N0}, Pop={country.Population:N0}");
@@ -546,8 +457,9 @@ namespace Economy_sim
             fs.ProcessMaturingBonds(DateTime.UtcNow);
 
             // 5. Update other financial indicators
-            decimal currentGdp = totalAssessablePopIncome + totalCorporateProfits; // Highly simplified GDP
-            fs.UpdateFinancialIndicators(currentGdp);
+            // decimal currentGdp = totalAssessablePopIncome + totalCorporateProfits; // Highly simplified GDP
+            decimal currentGdp = 0;
+             fs.UpdateFinancialIndicators(currentGdp);
 
             // The old fund distribution to states is now in Country.DistributeFunds(), which can be called separately if needed.
             // country.DistributeFunds(); // This call can be made here or as part of a different game phase.
@@ -602,7 +514,7 @@ namespace Economy_sim
             city.SimulateGrowth();
 
             // Process detailed city economy including buy/sell order generation
-            CityEconomy.ProcessCityEconomy(city);
+            City.ProcessCityEconomy(city);
 
             var companiesToWork = new HashSet<ConstructionCompany>();
 
@@ -690,31 +602,7 @@ namespace Economy_sim
             }
         }
 
-        /// <summary>
-        /// Generate realistic city names for a state based on its name.
-        /// </summary>
-        /// <param name="stateName">The name of the state.</param>
-        /// <param name="numCities">The number of cities to generate names for.</param>
-        /// <param name="random">Random generator instance.</param>
-        /// <returns>List of generated city names.</returns>
-        private static List<string> GenerateCityNamesForState(string stateName, int numCities, Random random)
-        {
-            var cityNames = new List<string>();
-            var suffixes = new[] { "ville", "burg", "ton", "mouth", "port", "land", "haven", "field", "wood", "shire" };
-
-            for (int i = 0; i < numCities; i++)
-            {
-                // Randomly decide on a suffix or not
-                bool hasSuffix = random.Next(2) == 0;
-                string suffix = hasSuffix ? suffixes[random.Next(suffixes.Length)] : "";
-
-                // Combine state name fragment with suffix
-                string cityName = $"{stateName.Substring(0, Math.Min(3, stateName.Length)).ToLower()}-{i + 1}{suffix}";
-                cityNames.Add(cityName);
-            }
-
-            return cityNames;
-        }
+     
     }
 
     public class Good
@@ -733,6 +621,139 @@ namespace Economy_sim
         }
     }
 
+    public class ResourceExtractionBuilding // ResourceExtractionBuilding (REB)
+    {
+        public string Name { get; set; }
+        public Corporation OwnerCorporation { get; set; }
+        public List<Good> OutputGoods { get; set; }
+        public int ExtractionCapacity { get; set; }
+        public int BaseExtractionCapacity { get; }
+        public Dictionary<string, int> JobSlots { get; set; }
+        public Dictionary<string, int> ActualEmployed { get; set; }
+        public Building BuildingData { get; set; }
+        public string cityName { get; set; } // Name of the city where the resource extraction site is located
+        public string RequiredResourceDeposit { get; set; } // Type of resource deposit required
+        public double ExtractionMultiplier { get; set; } // Multiplier for extraction rate
+
+        public ResourceExtractionBuilding(string name, int extractionCapacity, string cityName)
+        {
+            Name = name;
+            ExtractionCapacity = extractionCapacity;
+            BaseExtractionCapacity = extractionCapacity;
+            OutputGoods = new List<Good>();
+            JobSlots = new Dictionary<string, int>();
+            ActualEmployed = new Dictionary<string, int>();
+            this.cityName = cityName;
+            ExtractionMultiplier = 1.0;
+        }
+
+        /// <summary>
+        /// Creates a new ResourceExtractionBuilding instance from a ResourceExtractionBuildingBlueprint.
+        /// </summary>
+        /// <param name="blueprint">The blueprint to use for creating the building.</param>
+        /// <param name="cityName">The name of the city where the building is located.</param>
+        /// <param name="extractionCapacity">The extraction capacity of the building (default: 2).</param>
+        /// <param name="owner">Optional corporation owner for the building.</param>
+        /// <param name="customName">Optional custom name for the building. If null, uses blueprint's BuildingTypeName.</param>
+        /// <returns>A new ResourceExtractionBuilding instance configured according to the blueprint.</returns>
+        public static ResourceExtractionBuilding FromBlueprint(
+            ResourceExtractionBuildingBlueprint blueprint,
+            string cityName,
+            int extractionCapacity = 2,
+            Corporation owner = null,
+            string customName = null)
+        {
+            if (blueprint == null)
+                throw new ArgumentNullException(nameof(blueprint));
+
+            string buildingName = customName ?? blueprint.BuildingTypeName;
+            var building = new ResourceExtractionBuilding(buildingName, extractionCapacity, cityName);
+
+            // Copy output good from blueprint
+            building.OutputGoods.Add(new Good(
+                blueprint.OutputGood.Name,
+                blueprint.OutputGood.BasePrice,
+                blueprint.OutputGood.Category,
+                blueprint.OutputGood.Quantity));
+
+            // Set resource deposit requirement and extraction multiplier
+            building.RequiredResourceDeposit = blueprint.RequiredResourceDeposit;
+            building.ExtractionMultiplier = blueprint.BaseExtractionMultiplier;
+
+            // Calculate and set job slots based on extraction capacity and blueprint distribution
+            int totalJobSlots = extractionCapacity * 5; // Base number of workers needed
+            foreach (var jobSlot in blueprint.DefaultJobSlotDistribution)
+            {
+                int slots = (int)Math.Ceiling(totalJobSlots * jobSlot.Value);
+                building.JobSlots[jobSlot.Key] = slots;
+                building.ActualEmployed[jobSlot.Key] = 0; // Initialize actual employed to 0
+            }
+
+            // Set owner if provided
+            if (owner != null)
+            {
+                building.OwnerCorporation = owner;
+            }
+
+            return building;
+        }
+
+        /// <summary>
+        /// Simulate resource extraction: produce outputs without consuming inputs.
+        /// </summary>
+        public void Extract(Dictionary<string, Good> cityStockpile, City city)
+        {
+            if (this.OwnerCorporation == null)
+            {
+                return;
+            }
+
+            if (BuildingData == null)
+            {
+                return;
+            }
+
+            int currentExtractionCapacity = CalculateCurrentCapacity();
+
+            double totalOutputValue = 0;
+            foreach (var output in OutputGoods)
+            {
+                if (!cityStockpile.ContainsKey(output.Name))
+                    cityStockpile[output.Name] = new Good(output.Name, output.BasePrice, output.Category);
+
+                int extractedQuantity = (int)(output.Quantity * currentExtractionCapacity * ExtractionMultiplier);
+                cityStockpile[output.Name].Quantity += extractedQuantity;
+
+                // Use city.LocalPrices for output value calculation
+                double currentMarketPrice = city.LocalPrices.ContainsKey(output.Name) ? city.LocalPrices[output.Name] : output.BasePrice;
+                totalOutputValue += extractedQuantity * currentMarketPrice;
+
+                // Update city.LocalSupply
+                if (city.LocalSupply.ContainsKey(output.Name))
+                    city.LocalSupply[output.Name] += extractedQuantity;
+                else
+                    city.LocalSupply[output.Name] = extractedQuantity;
+            }
+
+            this.OwnerCorporation.Budget += totalOutputValue;
+            city.Budget -= totalOutputValue;
+        }
+
+        private int CalculateCurrentCapacity()
+        {
+            if (BuildingData == null)
+            {
+                return ExtractionCapacity;
+            }
+
+            double levelFactor = 0.6 + BuildingData.Level * 0.5;
+            double outputFactor = 1.0 + BuildingData.EconomicOutput / 500.0;
+            int capacity = (int)Math.Round(BaseExtractionCapacity * levelFactor * outputFactor);
+            return Math.Max(1, capacity);
+        }
+    }
+
+
     public class Factory
     {
         public string Name { get; set; }
@@ -745,8 +766,9 @@ namespace Economy_sim
         public Dictionary<string, int> JobSlots { get; set; }
         public Dictionary<string, int> ActualEmployed { get; set; } // Tracks actual number employed in each slot type
         public Building BuildingData { get; set; }
+        public string cityName { get; set; } // Name of the city where the factory is located
 
-        public Factory(string name, int productionCapacity)
+        public Factory(string name, int productionCapacity, string cityName)
         {
             Name = name;
             ProductionCapacity = productionCapacity;
@@ -755,7 +777,57 @@ namespace Economy_sim
             OutputGoods = new List<Good>();
             JobSlots = new Dictionary<string, int>();
             ActualEmployed = new Dictionary<string, int>();
+            this.cityName = cityName;
+            
             // WorkersEmployed will be calculated or set based on ActualEmployed
+        }
+
+        /// <summary>
+        /// Creates a new Factory instance from a FactoryBlueprint.
+        /// </summary>
+        /// <param name="blueprint">The blueprint to use for creating the factory.</param>
+        /// <param name="cityName">The name of the city where the factory is located.</param>
+        /// <param name="productionCapacity">The production capacity of the factory (default: 2).</param>
+        /// <param name="owner">Optional corporation owner for the factory.</param>
+        /// <param name="customName">Optional custom name for the factory. If null, uses blueprint's FactoryTypeName.</param>
+        /// <returns>A new Factory instance configured according to the blueprint.</returns>
+        public static Factory FromBlueprint(FactoryBlueprint blueprint, string cityName, int productionCapacity = 2, Corporation owner = null, string customName = null)
+        {
+            if (blueprint == null)
+                throw new ArgumentNullException(nameof(blueprint));
+
+            string factoryName = customName ?? blueprint.FactoryTypeName;
+            var factory = new Factory(factoryName, productionCapacity, cityName);
+
+            // Copy input goods from blueprint
+            foreach (var inputGood in blueprint.InputGoods)
+            {
+                factory.InputGoods.Add(new Good(inputGood.Name, inputGood.BasePrice, inputGood.Category, inputGood.Quantity));
+            }
+
+            // Copy output good from blueprint
+            factory.OutputGoods.Add(new Good(
+                blueprint.OutputGood.Name,
+                blueprint.OutputGood.BasePrice,
+                blueprint.OutputGood.Category,
+                blueprint.OutputGood.Quantity));
+
+            // Calculate and set job slots based on production capacity and blueprint distribution
+            int totalJobSlots = productionCapacity * 5; // Base number of workers needed
+            foreach (var jobSlot in blueprint.DefaultJobSlotDistribution)
+            {
+                int slots = (int)Math.Ceiling(totalJobSlots * jobSlot.Value);
+                factory.JobSlots[jobSlot.Key] = slots;
+                factory.ActualEmployed[jobSlot.Key] = 0; // Initialize actual employed to 0
+            }
+
+            // Set owner if provided
+            if (owner != null)
+            {
+                factory.OwnerCorporation = owner;
+            }
+
+            return factory;
         }
 
         // Simulate production: consume inputs, produce outputs
@@ -800,8 +872,10 @@ namespace Economy_sim
                     city.LocalDemand[input.Name] += input.Quantity * currentProductionCapacity;
                 else
                     city.LocalDemand[input.Name] = input.Quantity * currentProductionCapacity;
-            }
 
+                Console.WriteLine("");
+            }
+            
             double totalOutputValue = 0;
             foreach (var output in OutputGoods)
             {
@@ -846,68 +920,11 @@ namespace Economy_sim
         public static List<ConstructionCompany> AllConstructionCompanies { get; private set; } = new List<ConstructionCompany>();
 
         // Call this at the start of each turn for each city to reset its local supply/demand
-        public static void ResetCitySupplyDemand(City city)
-        {
-            if (city == null || city.LocalSupply == null || city.LocalDemand == null) return;
-
-            List<string> goodKeys = city.LocalSupply.Keys.ToList(); // Iterate over a copy of keys
-            foreach (var key in goodKeys)
-            {
-                city.LocalSupply[key] = 0;
-            }
-            goodKeys = city.LocalDemand.Keys.ToList();
-            foreach (var key in goodKeys)
-            {
-                city.LocalDemand[key] = 0;
-            }
-            // Ensure all defined goods have an entry, even if 0
-            foreach (var goodDefKey in GoodDefinitions.Keys)
-            {
-                if (!city.LocalSupply.ContainsKey(goodDefKey)) city.LocalSupply[goodDefKey] = 0;
-                if (!city.LocalDemand.ContainsKey(goodDefKey)) city.LocalDemand[goodDefKey] = 0;
-            }
-        }
+  
 
         // Call this for each city after all its local buy/sell actions to update its local prices
-        public static void UpdateCityPrices(City city)
-        {
-            if (city == null || city.LocalPrices == null || city.LocalSupply == null || city.LocalDemand == null) return;
-
-            foreach (var goodName in new List<string>(city.LocalPrices.Keys)) // Iterate over goods present in the city's price list
-            {
-                int supply = city.LocalSupply.ContainsKey(goodName) ? city.LocalSupply[goodName] : 0;
-                int demand = city.LocalDemand.ContainsKey(goodName) ? city.LocalDemand[goodName] : 0;
-                
-                double basePrice = 10.0; // Default base price if not in GoodDefinitions
-                if (GoodDefinitions.ContainsKey(goodName))
-                {
-                    basePrice = GoodDefinitions[goodName].BasePrice;
-                }
-                else
-                {
-                    // This case should ideally not happen if all goods are defined
-                    Console.WriteLine($"Warning: Good '{goodName}' not found in GoodDefinitions during price update for city {city.Name}.");
-                }
-
-                if (supply == 0 && demand == 0) 
-                {
-                    // city.LocalPrices[goodName] = basePrice; // Option 1: Reset to base if no activity
-                                                       // Option 2: Keep previous price (current behavior if no change)
-                    continue; // Or let it drift based on previous state / small random factor if desired
-                }
-                
-                // Prevent extreme swings if supply or demand is zero but the other is not.
-                int effectiveSupply = Math.Max(1, supply); // Avoid division by zero, ensure some base for calculation
-                int effectiveDemand = Math.Max(1, demand);
-                double denominator = effectiveSupply + effectiveDemand; // Simplified, can add +1 to soften further
-
-                double priceAdjustmentFactor = 0.5; // How much prices react
-                double newPrice = basePrice * (1 + priceAdjustmentFactor * (demand - supply) / denominator);
-                
-                city.LocalPrices[goodName] = Math.Max(0.1 * basePrice, Math.Min(5.0 * basePrice, newPrice)); // Clamp price to avoid extremes
-            }
-        }
-
+   
+        
         // Method for entities (pops, factories via corps) to buy from the city market
         // Buyer pays, goods move from city stockpile to buyer (implicit for pops, or could be explicit for factories)
         public static bool BuyFromCityMarket(City city, string goodName, int quantity, PopClass buyerPop = null, Corporation buyerCorp = null)
@@ -941,10 +958,11 @@ namespace Economy_sim
             }
             else // If no specific buyer, maybe it's the city itself procuring (e.g. for construction - future use)
             {
-                 if (city.Budget >= totalCost) {
+                if (city.Budget >= totalCost)
+                {
                     city.Budget -= totalCost; // City pays itself, effectively writing off the cost for internal use
                     transactionMade = true;
-                 }
+                }
             }
 
             if (transactionMade)
@@ -961,213 +979,20 @@ namespace Economy_sim
 
         // Method for entities (factories via corps) to sell to the city market
         // Seller gets paid, goods move from seller (implicit) to city stockpile
-        public static void SellToCityMarket(City city, string goodName, int quantity, Corporation sellerCorp = null)
-        {
-            if (city == null || quantity <= 0) return;
+      
 
-            if (!city.LocalPrices.ContainsKey(goodName))
-            {
-                // If good has no price yet in city, use base price from definitions
-                if (GoodDefinitions.ContainsKey(goodName))
-                {
-                    city.LocalPrices[goodName] = GoodDefinitions[goodName].BasePrice;
-                }
-                else
-                {
-                    Console.WriteLine($"Warning: Good '{goodName}' has no price definition. Cannot sell to city {city.Name}.");
-                    return; // Cannot determine price
-                }
-            }
-            double pricePerUnit = city.LocalPrices[goodName];
-            double totalValue = pricePerUnit * quantity;
-
-            if (sellerCorp != null)
-            {
-                 // Corporation sells to the city. City must be able to afford it.
-                if (city.Budget < totalValue)
-                {
-                    // Console.WriteLine($"Warning: City {city.Name} cannot afford to buy {quantity} of {goodName} from {sellerCorp.Name}. Needs {totalValue:C}, Has {city.Budget:C}.");
-                    // Decide if partial sale is allowed or fail. For now, fail the whole sale.
-                    return; 
-                }
-                sellerCorp.Budget += totalValue;
-                city.Budget -= totalValue;
-            }
-            // Else: If no sellerCorp, implies goods are appearing in city stockpile from non-corporate source (e.g. player spawning, aid - future)
-            // In this case, city budget isn't directly affected by paying a corp, but goods still increase supply.
-
-            if (!city.Stockpile.ContainsKey(goodName))
-            {
-                GoodCategory category = GoodCategory.ConsumerProduct; // Default, should ideally come from the good being sold
-                if (GoodDefinitions.ContainsKey(goodName)) category = GoodDefinitions[goodName].Category;
-                city.Stockpile[goodName] = new Good(goodName, city.LocalPrices[goodName], category, 0);
-            }
-            city.Stockpile[goodName].Quantity += quantity;
-            
-            if (city.LocalSupply.ContainsKey(goodName))
-                city.LocalSupply[goodName] += quantity; // Record supply provided
-            else
-                city.LocalSupply[goodName] = quantity;
-        }
-
-        public static void ResolveInterCityTrade(List<City> allCities, List<Country> allCountries, double baseTradeCostPerUnit = 0.1)
-        {
-            if (allCities == null || allCities.Count < 2) return; // Need at least two cities for trade
-            if (allCountries == null || allCountries.Count == 0) return;
-
-            foreach (var goodName in GoodDefinitions.Keys) // Iterate over all defined goods
-            {
-                List<City> potentialExporters = allCities
-                    .Where(c => c.ExportableSurplus.ContainsKey(goodName) && c.ExportableSurplus[goodName] > 0 && c.LocalPrices.ContainsKey(goodName))
-                    .OrderBy(c => c.LocalPrices[goodName]) // Cheapest sellers first
-                    .ToList();
-
-                List<City> potentialImporters = allCities
-                    .Where(c => c.ImportNeeds.ContainsKey(goodName) && c.ImportNeeds[goodName] > 0 && c.LocalPrices.ContainsKey(goodName))
-                    .OrderByDescending(c => c.LocalPrices[goodName]) // Buyers willing to pay most first
-                    .ToList();
-
-                if (!potentialExporters.Any() || !potentialImporters.Any()) continue; // No one to trade this good
-
-                foreach (var exporter in potentialExporters)
-                {
-                    if (exporter.ExportableSurplus[goodName] <= 0) continue; // No more of this good to export from this city
-
-                    foreach (var importer in potentialImporters)
-                    {
-                        if (importer.ImportNeeds[goodName] <= 0) continue; // This city no longer needs this good
-                        if (exporter == importer) continue; // Cannot trade with oneself
-
-                        double priceAtExporter = exporter.LocalPrices[goodName];
-                        double priceAtImporter = importer.LocalPrices[goodName];
-                        double effectiveExportPrice = priceAtExporter + baseTradeCostPerUnit;
-
-                        if (effectiveExportPrice < priceAtImporter) // Trade is profitable for the system / importer is willing
-                        {
-                            int maxCanTrade = Math.Min(exporter.ExportableSurplus[goodName], importer.ImportNeeds[goodName]);
-                            if (maxCanTrade <= 0) continue;
-
-                            // Check importer budget
-                            double costForImporter = maxCanTrade * effectiveExportPrice;
-                            if (importer.Budget < costForImporter)
-                            {
-                                // Importer cannot afford the full amount, calculate how much they can afford
-                                if (effectiveExportPrice <= 0) continue; // Avoid division by zero if price is weird
-                                maxCanTrade = (int)Math.Floor(importer.Budget / effectiveExportPrice);
-                                if (maxCanTrade <= 0) continue; // Cannot afford any
-                                costForImporter = maxCanTrade * effectiveExportPrice; // Recalculate cost
-                            }
-                            
-                            int quantityTraded = maxCanTrade;
-                            if (quantityTraded <= 0) continue;
-
-                            // --- Perform Transaction ---
-                            // Exporter side
-                            exporter.Stockpile[goodName].Quantity -= quantityTraded;
-                            exporter.ExportableSurplus[goodName] -= quantityTraded;
-                            exporter.Budget += quantityTraded * priceAtExporter;
-                            if (exporter.LocalDemand.ContainsKey(goodName)) exporter.LocalDemand[goodName] += quantityTraded;
-                            else exporter.LocalDemand[goodName] = quantityTraded;
-
-                            // Importer side
-                            if (!importer.Stockpile.ContainsKey(goodName)) 
-                            {
-                                GoodCategory category = GoodDefinitions.ContainsKey(goodName) ? GoodDefinitions[goodName].Category : GoodCategory.ConsumerProduct;
-                                importer.Stockpile[goodName] = new Good(goodName, priceAtImporter, category, 0);
-                            }
-                            importer.Stockpile[goodName].Quantity += quantityTraded;
-                            importer.ImportNeeds[goodName] -= quantityTraded;
-                            importer.Budget -= costForImporter;
-                            if (importer.LocalSupply.ContainsKey(goodName)) importer.LocalSupply[goodName] += quantityTraded;
-                            else importer.LocalSupply[goodName] = quantityTraded;
-                            
-                            // Record the trade in the global market if available
-                            // Record the trade in the global market if available
-                            if (Economy_sim.GlobalMarket.Instance != null)
-                            {
-                                string exporterCountry = GetCountryNameForCity(exporter, allCountries);
-                                string importerCountry = GetCountryNameForCity(importer, allCountries);
-                                Economy_sim.GlobalMarket.Instance.RecordTrade(
-                                    goodName,
-                                    exporterCountry,
-                                    importerCountry,
-                                    quantityTraded,
-                                    quantityTraded * effectiveExportPrice);
-                            }
-                            
-                            // Console.WriteLine($"TRADE: {exporter.Name} exported {quantityTraded} of {goodName} to {importer.Name} at effective price {effectiveExportPrice:F2} (Exporter got {priceAtExporter:F2})");
-                        }
-                        else
-                        {
-                            // If this importer won't pay enough for this exporter's goods, 
-                            // they likely won't for subsequent (more expensive) exporters of this good either, so break inner loop.
-                            break; 
-                        }
-                        if (exporter.ExportableSurplus[goodName] <= 0) break; // Exporter has run out
-                    }
-                }
-            }
-        }
+   
 
         /// <summary>
         /// Helper method to get country name from a city by looking up its ownership in the world state
         /// </summary>
-        private static string GetCountryNameForCity(City city, List<Country> countries)
-        {
-            if (city == null || countries == null)
-                return "Unknown";
-                
-            // Check each country to find which one owns this city
-            foreach (var country in countries)
-            {
-                foreach (var state in country.States)
-                {
-                    if (state.Cities.Contains(city))
-                    {
-                        return country.Name;
-                    }
-                }
-            }
-            
-            return "Unknown";
-        }
+       
 
-        public static void SimulateCityEconomy(City city)
-        {
-            if (city == null) return;
-
-            // Simulate production of goods
-            foreach (var good in Market.GoodDefinitions.Keys)
-            {
-                if (!city.LocalSupply.ContainsKey(good)) city.LocalSupply[good] = 0;
-                city.LocalSupply[good] += 100; // Example: produce 100 units of each good
-            }
-
-            // Simulate consumption of goods by population
-            foreach (var pop in city.PopClasses)
-            {
-                foreach (var need in pop.Needs)
-                {
-                    string good = need.Key;
-                    double perCapitaConsumption = need.Value;
-                    int totalConsumption = (int)(pop.Size * perCapitaConsumption);
-
-                    if (!city.LocalDemand.ContainsKey(good)) city.LocalDemand[good] = 0;
-                    city.LocalDemand[good] += totalConsumption;
-
-                    if (city.LocalSupply.ContainsKey(good))
-                    {
-                        int available = city.LocalSupply[good];
-                        int consumed = Math.Min(available, totalConsumption);
-                        city.LocalSupply[good] -= consumed;
-                    }
-                }
-            }
-        }
+      
     }
 
     // Define Corporation class if it doesn't exist, or add to it
-    public class Corporation 
+    public class Corporation
     {
         public string Name { get; set; }
         public List<Factory> OwnedFactories { get; set; }
@@ -1195,21 +1020,22 @@ namespace Economy_sim
 
         public void UpdateAI(List<City> allCities, List<Good> goodPrototypes, Random randomizer)
         {
-            if (IsPlayerControlled) return; 
+            if (IsPlayerControlled) return;
 
-            double investmentThreshold = 200000; 
+            double investmentThreshold = 200000;
             double factoryBuildCost = 100000;
-            int newFactoryBaseCapacity = 2; 
+            int newFactoryBaseCapacity = 2;
             int maxFactoriesOfSameTypeInCityForCorp = 1; // AI Corp won't build more than this of the same type in one city
             int maxFactoriesOfSameTypeInCityTotal = 3;   // AI Corp hesitant if city already has this many of same type total
 
-            if (Budget > investmentThreshold && randomizer.Next(100) < 10 && FactoryBlueprints.AllBlueprints.Any()) 
+            if (Budget > investmentThreshold && randomizer.Next(100) < 10 && FactoryBlueprints.AllBlueprints.Any())
             {
                 // 1. Select a FactoryBlueprint based on Specialization
                 // For diversified, we might not pass a category hint, or pick one randomly
                 GoodCategory hintForDiversified = (GoodCategory)randomizer.Next(Enum.GetValues(typeof(GoodCategory)).Length);
                 FactoryBlueprint chosenBlueprint = FactoryBlueprints.AllBlueprints
-                    .Where(b => {
+                    .Where(b =>
+                    {
                         switch (this.Specialization)
                         {
                             case CorporationSpecialization.Agriculture:
@@ -1228,17 +1054,17 @@ namespace Economy_sim
                     .OrderBy(_ => randomizer.Next())
                     .FirstOrDefault();
 
-                if (chosenBlueprint == null) 
+                if (chosenBlueprint == null)
                 {
                     // Console.WriteLine($"AI Corp '{Name}': Could not find a suitable factory blueprint for specialization {Specialization}.");
-                    return; 
+                    return;
                 }
 
                 if (!allCities.Any()) return;
                 City targetCity = allCities[randomizer.Next(allCities.Count)];
 
                 // 2. Check for existing factories / oversupply
-                int corpOwnedOfTypeInCity = this.OwnedFactories.Count(f => f.OutputGoods.Any(og => og.Name == chosenBlueprint.OutputGood.Name) && 
+                int corpOwnedOfTypeInCity = this.OwnedFactories.Count(f => f.OutputGoods.Any(og => og.Name == chosenBlueprint.OutputGood.Name) &&
                                                                        targetCity.Factories.Contains(f)); // A bit simplistic, assumes factory is in city's list if owned by corp and in that city
                 int totalOfTypeInCity = targetCity.Factories.Count(f => f.OutputGoods.Any(og => og.Name == chosenBlueprint.OutputGood.Name));
 
@@ -1261,8 +1087,8 @@ namespace Economy_sim
 
                     string newFactoryName = $"{this.Name}'s {chosenBlueprint.FactoryTypeName} #{OwnedFactories.Count(f => f.Name.StartsWith(this.Name + "'s " + chosenBlueprint.FactoryTypeName)) + 1}";
 
-                    Factory newFactory = new Factory(newFactoryName, newFactoryBaseCapacity);
-                    
+                    Factory newFactory = new Factory(newFactoryName, newFactoryBaseCapacity,targetCity.Name);
+
                     // Calculate actual job slots based on production capacity
                     int totalJobSlots = newFactoryBaseCapacity * 5; // Base number of workers needed
                     foreach (var jobSlot in chosenBlueprint.DefaultJobSlotDistribution)
@@ -1306,323 +1132,7 @@ namespace Economy_sim
         // TODO: Add methods for corporate actions: CollectProfits, Invest, etc.
     }
 
-    public static class CityEconomy
-    {
-        public static void ProcessCityEconomy(City city)
-        {
-            city.BuyOrders.Clear();
-            city.SellOrders.Clear();
-
-            // Clear/Reset trade-related dictionaries for the current turn
-            if (Market.GoodDefinitions != null)
-            {
-                foreach (var goodKey in Market.GoodDefinitions.Keys)
-                {
-                    city.ExportableSurplus[goodKey] = 0;
-                    city.ImportNeeds[goodKey] = 0;
-                }
-            }
-            // Also ensure any goods in stockpile but not in GoodDefinitions (should not happen) are reset
-            foreach (var goodKey in city.ExportableSurplus.Keys.ToList()) city.ExportableSurplus[goodKey] = 0;
-            foreach (var goodKey in city.ImportNeeds.Keys.ToList()) city.ImportNeeds[goodKey] = 0;
-
-            foreach (var factory in city.Factories)
-            {
-                foreach (var input in factory.InputGoods)
-                {
-                    if (!city.Stockpile.ContainsKey(input.Name))
-                    {
-                        city.Stockpile[input.Name] = new Good(input.Name, input.BasePrice, input.Category, 0);
-                    }
-                    
-                    // Calculate import needs - what factories need to produce
-                    int inputNeeded = input.Quantity * factory.ProductionCapacity;
-                    int currentStock = city.Stockpile.ContainsKey(input.Name) ? city.Stockpile[input.Name].Quantity : 0;
-                    int shortage = Math.Max(0, inputNeeded - currentStock);
-                    
-                    if (shortage > 0)
-                    {
-                        if (city.ImportNeeds.ContainsKey(input.Name))
-                            city.ImportNeeds[input.Name] += shortage;
-                        else
-                            city.ImportNeeds[input.Name] = shortage;
-                    }
-                }
-
-                foreach (var output in factory.OutputGoods)
-                {
-                    if (!city.Stockpile.ContainsKey(output.Name))
-                    {
-                        city.Stockpile[output.Name] = new Good(output.Name, output.BasePrice, output.Category, 0);
-                    }
-                }
-            }
-
-            foreach (var factory in city.Factories)
-            {
-                factory.Produce(city.Stockpile, city);
-            }
-
-            var baseIncomeByPop = new Dictionary<PopClass, double>();
-
-            foreach (var pop in city.PopClasses)
-            {
-                DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Size: {pop.Size}, Initial Employed: {pop.Employed}", DebugLogger.LogCategory.Pop);
-                pop.Size = Math.Max(1, pop.Size);
-                pop.IncomePerPerson = Math.Max(0.01, pop.IncomePerPerson);
-                baseIncomeByPop[pop] = pop.IncomePerPerson;
-                pop.Employed = 0;
-            }
-
-            foreach (var factory in city.Factories)
-            {
-                if (factory.JobSlots == null || factory.JobSlots.Count == 0)
-                {
-                    DebugLogger.Log($"[Warning] Factory '{factory.Name}' has no job slots defined.", DebugLogger.LogCategory.Building);
-                    continue;
-                }
-
-                DebugLogger.Log($"[Employment Debug] Factory: {factory.Name}, Job Slots: {string.Join(", ", factory.JobSlots.Select(kvp => $"{kvp.Key}: {kvp.Value}"))}", DebugLogger.LogCategory.Building);
-                factory.ActualEmployed.Clear();
-                factory.WorkersEmployed = 0; 
-            }
-
-            Dictionary<string, int> totalAvailableSlots = new Dictionary<string, int>();
-            foreach (var factory in city.Factories)
-            {
-                foreach (var slotEntry in factory.JobSlots)
-                {
-                    if (!totalAvailableSlots.ContainsKey(slotEntry.Key))
-                        totalAvailableSlots[slotEntry.Key] = 0;
-                    totalAvailableSlots[slotEntry.Key] += slotEntry.Value;
-                }
-            }
-
-            foreach (var jobType in totalAvailableSlots.Keys)
-            {
-                DebugLogger.Log($"[Employment Debug] Job Type: {jobType}, Total Available Slots: {totalAvailableSlots[jobType]}", DebugLogger.LogCategory.Building);
-            }
-
-            foreach (string jobType in new List<string>(totalAvailableSlots.Keys))
-            {
-                if (!totalAvailableSlots.ContainsKey(jobType) || totalAvailableSlots[jobType] == 0) continue;
-                int remainingSlotsForJobType = totalAvailableSlots[jobType];
-                foreach (var pop in city.PopClasses.Where(p => p.Name == jobType))
-                {
-                    if (remainingSlotsForJobType == 0) break; 
-                    int canBeEmployed = Math.Min(pop.Size - pop.Employed, remainingSlotsForJobType); 
-                    pop.Employed += canBeEmployed;
-                    DebugLogger.Log($"[Employment Debug] Population Class: {pop.Name}, Newly Employed: {canBeEmployed}, Total Employed: {pop.Employed}", DebugLogger.LogCategory.Pop);
-                    remainingSlotsForJobType -= canBeEmployed;
-                    int assignedToFactories = canBeEmployed;
-                    foreach (var factory in city.Factories.Where(f => f.JobSlots.ContainsKey(jobType)))
-                    {
-                        if (assignedToFactories == 0) break;
-                        int factoryActualEmployedForType = factory.ActualEmployed.ContainsKey(jobType) ? factory.ActualEmployed[jobType] : 0;
-                        int slotsInFactoryForType = factory.JobSlots[jobType];
-                        int canAssignToFactory = Math.Min(assignedToFactories, slotsInFactoryForType - factoryActualEmployedForType);
-                        if (canAssignToFactory > 0)
-                        {
-                            if (!factory.ActualEmployed.ContainsKey(jobType))
-                                factory.ActualEmployed[jobType] = 0;
-                            factory.ActualEmployed[jobType] += canAssignToFactory;
-                            factory.WorkersEmployed += canAssignToFactory; 
-                            DebugLogger.Log($"[Employment Debug] Factory: {factory.Name}, Job Type: {jobType}, Newly Assigned: {canAssignToFactory}, Total Workers Employed: {factory.WorkersEmployed}", DebugLogger.LogCategory.Building);
-                            assignedToFactories -= canAssignToFactory;
-                        }
-                    }
-                }
-
-                if (!city.PopClasses.Any(p => p.Name == jobType))
-                {
-                    DebugLogger.Log($"[Warning] No population class matches job type '{jobType}'.", DebugLogger.LogCategory.Building);
-                }
-            }
-
-            foreach (var pop in city.PopClasses)
-            {
-                double baseIncome = baseIncomeByPop.TryGetValue(pop, out double recordedIncome)
-                    ? recordedIncome
-                    : Math.Max(0.01, pop.IncomePerPerson);
-
-                double employedIncome = baseIncome;
-                double unemployedIncome = baseIncome * 0.3;
-                double avgIncome = (pop.Employed * employedIncome + pop.Unemployed * unemployedIncome) / Math.Max(1, pop.Size);
-                pop.IncomePerPerson = avgIncome;
-                pop.UpdateQualityOfLife();
-            }
-
-            foreach (var pop in city.PopClasses)
-            {
-                double popBudget = pop.Size * pop.IncomePerPerson; // This is spending power for the turn
-                int unmet = 0;
-                foreach (var needEntry in pop.Needs) 
-                {
-                    string good = needEntry.Key;
-                    double needPer1000 = needEntry.Value; 
-                    int needed = (int)(Math.Max(1, pop.Size) * needPer1000 / 1000.0);
-                    needed = Math.Max(0, needed); 
-                    int available = city.Stockpile.ContainsKey(good) ? city.Stockpile[good].Quantity : 0;
-                    int shortfall = Math.Max(0, needed - available);
-                    
-                    if (shortfall > 0)
-                    {
-                        // Use city.LocalPrices for buy order max price
-                        double currentPrice = city.LocalPrices.ContainsKey(good) ? city.LocalPrices[good] : (Market.GoodDefinitions.ContainsKey(good) ? Market.GoodDefinitions[good].BasePrice : 10.0);
-                        double maxPrice = currentPrice * 1.2; 
-                        city.BuyOrders.Add(new BuyOrder(pop, good, shortfall, maxPrice));
-                    }
-                    
-                    int consumed = Math.Min(needed, available);
-                    if (consumed > 0)
-                    {
-                        // Market.BuyFromCityMarket handles stockpile reduction and demand recording.
-                        // For pop consumption, who is the buyer for budget purposes?
-                        // Let's assume for now that direct pop consumption affects city.LocalDemand but not city/corp budgets directly, handled by general pop spending power.
-                        // If we were to model pop budgets, this would change.
-                        city.Stockpile[good].Quantity -= consumed; // Manually reduce stockpile here for direct consumption
-                        if (city.LocalDemand.ContainsKey(good))
-                            city.LocalDemand[good] += consumed;
-                        else
-                            city.LocalDemand[good] = consumed;
-                    }
-
-                    // Try to buy the shortfall from the market (simulates pops trying to fulfill remaining needs)
-                    // This is a simplified representation. A more complex system might use the BuyOrders list.
-                    if (shortfall > 0 && city.LocalPrices.ContainsKey(good)) 
-                    {
-                        double price = city.LocalPrices[good];
-                        if (price > 0) // Ensure price is not zero to avoid division by zero or infinite affordable quantity
-                        {
-                            int affordable = (int)(popBudget / price);
-                            int toBuy = Math.Min(shortfall, affordable);
-                            if (toBuy > 0)
-                            {
-                                // Here, we simulate pops buying. We need to decide if this affects the city budget or a pop-specific budget.
-                                // For now, let's assume pops are buying from the city stockpile. The city budget isn't directly credited here for simplicity,
-                                // as the goods are already in its stockpile. The demand is the key signal.
-                                // If we were to model pop budgets, this would change.
-                                
-                                // If we assume the city is the seller, and the pop is the buyer with abstract budget:
-                                if(city.Stockpile.ContainsKey(good) && city.Stockpile[good].Quantity >= toBuy)
-                                {
-                                     city.Stockpile[good].Quantity -= toBuy;
-                                     popBudget -= toBuy * price; // Pop's spending power reduced
-                                     if (city.LocalDemand.ContainsKey(good))
-                                         city.LocalDemand[good] += toBuy;
-                                     else
-                                         city.LocalDemand[good] = toBuy;
-                                     shortfall -= toBuy;
-                                }
-                            }
-                        }
-                    }
-                    unmet += shortfall;
-                }
-                pop.UnmetNeeds = unmet;
-                // Adjust happiness for this class
-                if (unmet == 0)
-                    pop.Happiness = Math.Min(100, pop.Happiness + 2);
-                else if (unmet < pop.Size / 10)
-                    pop.Happiness = Math.Max(0, pop.Happiness - 1);
-                else
-                    pop.Happiness = Math.Max(0, pop.Happiness - 4);
-
-                // Adjust happiness for unemployment
-                if (pop.Unemployed > 0)
-                    pop.Happiness = Math.Max(0, pop.Happiness - pop.Unemployed * 2 / Math.Max(1, pop.Size));
-            }
-
-            // Pop class mobility
-            for (int i = 0; i < city.PopClasses.Count; i++)
-            {
-                var pop = city.PopClasses[i];
-                // Move up if happy and needs met
-                if (pop.Happiness > 80 && pop.UnmetNeeds == 0 && pop.Size > 100)
-                {
-                    if (i < city.PopClasses.Count - 1)
-                    {
-                        int move = pop.Size / 50;
-                        pop.Size -= move;
-                        city.PopClasses[i + 1].Size += move;
-                    }
-                }
-                // Move down if unhappy and many needs unmet
-                if (pop.Happiness < 30 && pop.UnmetNeeds > pop.Size / 10 && pop.Size > 100)
-                {
-                    if (i > 0)
-                    {
-                        int move = pop.Size / 50;
-                        pop.Size -= move;
-                        city.PopClasses[i - 1].Size += move;
-                    }
-                }
-            }
-
-            // Sell surplus from city stockpile (now becomes ExportableSurplus)
-            foreach (var good in new List<string>(city.Stockpile.Keys))
-            {
-                int buffer = 0;
-                foreach (var pop in city.PopClasses)
-                {
-                    if (pop.Needs.ContainsKey(good))
-                    {
-                        double needPer1000 = pop.Needs[good];
-                        buffer += (int)(Math.Max(1, pop.Size) * needPer1000 / 1000.0 * 2.0); // 2x needs as buffer
-                        buffer = Math.Max(0, buffer);
-                    }
-                }
-                if (city.Stockpile[good].Quantity > buffer)
-                {
-                    int surplusAmount = city.Stockpile[good].Quantity - buffer;
-                    if (city.ExportableSurplus.ContainsKey(good))
-                        city.ExportableSurplus[good] += surplusAmount;
-                    else
-                        city.ExportableSurplus[good] = surplusAmount;
-                    
-                    // REMOVED: Market.SellToCityMarket(city, good, surplusAmount, null); 
-                    // The surplus is now earmarked for export, not sold back to local market immediately.
-                }
-            }
-
-            // Generate sell orders for factories (for intended output, not just stockpile)
-            foreach (var factory in city.Factories)
-            {
-                foreach (var output in factory.OutputGoods)
-                {
-                    string good = output.Name;
-                    int possible = factory.ProductionCapacity; // Simplified: assume full capacity can be offered
-                    // More complex: check inputs available to the factory owner corp (not city stockpile for this offer)
-
-                    int offeredQuantity = output.Quantity * possible; 
-                    if (offeredQuantity > 0) 
-                    {
-                        double currentPrice = city.LocalPrices.ContainsKey(good) ? city.LocalPrices[good] : (Market.GoodDefinitions.ContainsKey(good) ? Market.GoodDefinitions[good].BasePrice : 5.0);
-                        double minPrice = currentPrice * 0.8; 
-                        city.SellOrders.Add(new SellOrder(factory, good, offeredQuantity, minPrice));
-                    }
-                }
-            }
-
-            // Adjust happiness and growth based on unmet needs
-            foreach (var pop in city.PopClasses)
-            {
-                if (pop.UnmetNeeds == 0 && pop.Happiness > 60)
-                {
-                    pop.Size += (int)(pop.Size * 0.002); // 0.2% growth
-                }
-                else if (pop.UnmetNeeds < pop.Size / 10 && pop.Happiness > 40)
-                {
-                    pop.Size += (int)(pop.Size * 0.0005); // 0.05% growth
-                }
-                else if (pop.Happiness < 30 && pop.UnmetNeeds > pop.Size / 10)
-                {
-                    pop.Size -= (int)(pop.Size * 0.001); // 0.1% decline
-                    if (pop.Size < 0) pop.Size = 0;
-                }
-            }
-        }
-    }
+  
 
     public class PopClass
     {
@@ -1630,29 +1140,36 @@ namespace Economy_sim
         public int Size { get; set; }
         public double IncomePerPerson { get; set; }
         public Dictionary<string, double> Needs { get; set; }
-        public int UnmetNeeds { get; set; }
+        public string[] PreferredGoods { get; set; }
         public int Happiness { get; set; } // 0-100
         public int Employed { get; set; }
         public int Unemployed { get { return Size - Employed; } }
-
+        public string Strata { get; set; }
+        
         // New QualityOfLife property
         public double QualityOfLife { get; private set; }
 
-        public PopClass(string name, int size, double incomePerPerson)
+        private static readonly Dictionary<string, double> DefaultNeeds = new Dictionary<string, double>
+        {
+            ["Grain"] = 1.0,
+            ["Bread"] = 0.8,
+            ["Cloth"] = 0.3
+        };
+        public PopClass(string name, int size, double incomePerPerson, string strata = "", Dictionary<string, double>? needs = null)
         {
             Name = name;
             Size = size;
             IncomePerPerson = incomePerPerson;
-            Needs = new Dictionary<string, double>();
-            UnmetNeeds = 0;
-            Happiness = 50;
+            Strata = strata;
+            Needs = needs ?? new Dictionary<string, double>(DefaultNeeds);  // Use provided needs or default
+            Happiness = 100;
             QualityOfLife = CalculateQualityOfLife();
         }
 
         // Method to calculate Quality of Life based on constant factors
         private double CalculateQualityOfLife()
         {
-            double healthcare = 0.8; // Example constant value (0-1 scale)
+            /*double healthcare = 0.8; // Example constant value (0-1 scale)
             double education = 0.7;
             double housing = 1.0 - (UnmetNeeds / (Needs.Count > 0 ? Needs.Count : 1)); // Penalize unmet needs
             double employment = Size > 0 ? Employed / (double)Size : 0; // Employment rate, avoid division by zero
@@ -1662,8 +1179,9 @@ namespace Economy_sim
             // Weighted average of factors
             double qualityOfLife = (healthcare * 0.3) + (education * 0.3) + (housing * 0.2) + (employment * 0.2);
             DebugLogger.Log($"[CalculateQualityOfLife] Calculated QoL: {qualityOfLife}", DebugLogger.LogCategory.Pop);
+*/
 
-            return qualityOfLife;
+            return 100;
         }
 
         // Method to update Quality of Life dynamically
@@ -1703,30 +1221,142 @@ namespace Economy_sim
         }
     }
 
-    public class FactoryBlueprint
+    /// <summary>
+    /// Base class for all building blueprints. Provides common properties and functionality
+    /// for creating buildings from blueprints.
+    /// </summary>
+    public abstract class Blueprint
     {
-        public string FactoryTypeName { get; set; } 
-        public Good OutputGood { get; set; } 
+        /// <summary>
+        /// The name/type of the building this blueprint creates.
+        /// </summary>
+        public string TypeName { get; set; }
+
+        /// <summary>
+        /// The primary output good produced by this building.
+        /// </summary>
+        public Good OutputGood { get; set; }
+
+        /// <summary>
+        /// The category of goods this building produces.
+        /// </summary>
+        public GoodCategory ProducedGoodCategory { get; set; }
+
+        /// <summary>
+        /// Default job slot distribution for workers in this building type.
+        /// Key is job type name, value is percentage (0.0 to 1.0).
+        /// </summary>
+        public Dictionary<string, double> DefaultJobSlotDistribution { get; set; }
+
+        /// <summary>
+        /// Default job slots with a comprehensive distribution.
+        /// </summary>
+        protected static readonly Dictionary<string, double> StandardJobSlots = new Dictionary<string, double>
+        {
+            { "Laborers", 0.5 },
+            { "Craftsmen", 0.2 },
+            { "Engineers", 0.15 },
+            { "Managers", 0.1 },
+            { "Clerks", 0.05 }
+        };
+
+        protected Blueprint(string typeName, Good outputGood, GoodCategory producedGoodCategory, Dictionary<string, double> jobSlots = null)
+        {
+            TypeName = typeName;
+            OutputGood = outputGood;
+            ProducedGoodCategory = producedGoodCategory;
+            DefaultJobSlotDistribution = jobSlots ?? new Dictionary<string, double>(StandardJobSlots);
+        }
+    }
+
+    /// <summary>
+    /// Blueprint for creating Factory instances. Factories transform input goods into output goods.
+    /// </summary>
+    public class FactoryBlueprint : Blueprint
+    {
+        /// <summary>
+        /// Alias for TypeName for backwards compatibility.
+        /// </summary>
+        public string FactoryTypeName
+        {
+            get => TypeName;
+            set => TypeName = value;
+        }
+
+        /// <summary>
+        /// List of input goods required for production.
+        /// </summary>
         public List<Good> InputGoods { get; set; }
-        public Dictionary<string, double> DefaultJobSlotDistribution { get; set; } 
-        public GoodCategory ProducedGoodCategory { get; set; } 
 
         public FactoryBlueprint(string typeName, Good output, List<Good> inputs, GoodCategory producedGoodCategory, Dictionary<string, double> jobSlots = null)
+            : base(typeName, output, producedGoodCategory, jobSlots)
         {
-            FactoryTypeName = typeName;
-            OutputGood = output;
             InputGoods = inputs ?? new List<Good>();
-            ProducedGoodCategory = producedGoodCategory;
-            
-            // Updated default job slots with a more comprehensive distribution
-            DefaultJobSlotDistribution = jobSlots ?? new Dictionary<string, double> 
-            { 
-                { "Laborers", 0.5 },
-                { "Craftsmen", 0.2 },
-                { "Engineers", 0.15 },
-                { "Managers", 0.1 },
-                { "Clerks", 0.05 }
-            };
+        }
+
+        /// <summary>
+        /// Creates a new Factory instance from this blueprint.
+        /// </summary>
+        /// <param name="cityName">The name of the city where the factory is located.</param>
+        /// <param name="productionCapacity">The production capacity of the factory (default: 2).</param>
+        /// <param name="owner">Optional corporation owner for the factory.</param>
+        /// <param name="customName">Optional custom name for the factory. If null, uses FactoryTypeName.</param>
+        /// <returns>A new Factory instance configured according to this blueprint.</returns>
+        public Factory CreateFactory(string cityName, int productionCapacity = 2, Corporation owner = null, string customName = null)
+        {
+            return Factory.FromBlueprint(this, cityName, productionCapacity, owner, customName);
+        }
+    }
+
+    /// <summary>
+    /// Blueprint for creating ResourceExtractionBuilding instances. REBs extract raw materials without requiring inputs.
+    /// </summary>
+    public class ResourceExtractionBuildingBlueprint : Blueprint
+    {
+        /// <summary>
+        /// Alias for TypeName for consistency with FactoryBlueprint.
+        /// </summary>
+        public string BuildingTypeName
+        {
+            get => TypeName;
+            set => TypeName = value;
+        }
+
+        /// <summary>
+        /// The type of resource deposit required for this building (e.g., "Coal Deposit", "Iron Vein").
+        /// Null if no specific deposit is required (e.g., farms, fishing wharves).
+        /// </summary>
+        public string RequiredResourceDeposit { get; set; }
+
+        /// <summary>
+        /// Base extraction rate multiplier for this building type.
+        /// </summary>
+        public double BaseExtractionMultiplier { get; set; }
+
+        public ResourceExtractionBuildingBlueprint(
+            string typeName,
+            Good output,
+            GoodCategory producedGoodCategory,
+            Dictionary<string, double> jobSlots = null,
+            string requiredResourceDeposit = null,
+            double baseExtractionMultiplier = 1.0)
+            : base(typeName, output, producedGoodCategory, jobSlots)
+        {
+            RequiredResourceDeposit = requiredResourceDeposit;
+            BaseExtractionMultiplier = baseExtractionMultiplier;
+        }
+
+        /// <summary>
+        /// Creates a new ResourceExtractionBuilding instance from this blueprint.
+        /// </summary>
+        /// <param name="cityName">The name of the city where the building is located.</param>
+        /// <param name="extractionCapacity">The extraction capacity of the building (default: 2).</param>
+        /// <param name="owner">Optional corporation owner for the building.</param>
+        /// <param name="customName">Optional custom name for the building. If null, uses BuildingTypeName.</param>
+        /// <returns>A new ResourceExtractionBuilding instance configured according to this blueprint.</returns>
+        public ResourceExtractionBuilding CreateBuilding(string cityName, int extractionCapacity = 2, Corporation owner = null, string customName = null)
+        {
+            return ResourceExtractionBuilding.FromBlueprint(this, cityName, extractionCapacity, owner, customName);
         }
     }
 
@@ -1734,29 +1364,29 @@ namespace Economy_sim
     {
         public static List<FactoryBlueprint> AllBlueprints { get; private set; } = new List<FactoryBlueprint>();
 
-        public static void InitializeBlueprints() 
+        public static void InitializeBlueprints()
         {
             AllBlueprints.Clear();
 
             // Define standard job distributions
-            var basicResourceJobSlots = new Dictionary<string, double> 
-            { 
+            var basicResourceJobSlots = new Dictionary<string, double>
+            {
                 { "Laborers", 0.7 },
                 { "Craftsmen", 0.15 },
                 { "Engineers", 0.1 },
                 { "Managers", 0.05 }
             };
 
-            var advancedResourceJobSlots = new Dictionary<string, double> 
-            { 
+            var advancedResourceJobSlots = new Dictionary<string, double>
+            {
                 { "Laborers", 0.5 },
                 { "Craftsmen", 0.25 },
                 { "Engineers", 0.15 },
                 { "Managers", 0.1 }
             };
 
-            var industrialJobSlots = new Dictionary<string, double> 
-            { 
+            var industrialJobSlots = new Dictionary<string, double>
+            {
                 { "Laborers", 0.4 },
                 { "Craftsmen", 0.3 },
                 { "Engineers", 0.2 },
@@ -1787,13 +1417,13 @@ namespace Economy_sim
             Market.GoodDefinitions["Lead Ore"] = new Good("Lead Ore", 9.0, GoodCategory.RawMaterial);
             Market.GoodDefinitions["Zinc Ore"] = new Good("Zinc Ore", 9.5, GoodCategory.RawMaterial);
             Market.GoodDefinitions["Limestone"] = new Good("Limestone", 2.0, GoodCategory.RawMaterial);
-            Market.GoodDefinitions["Salt"] = new Good("Salt", 2.5, GoodCategory.RawMaterial); 
+            Market.GoodDefinitions["Salt"] = new Good("Salt", 2.5, GoodCategory.RawMaterial);
 
             // Existing Industrial Inputs (assuming these are already here)
-            Market.GoodDefinitions["Steel"] = new Good("Steel", 25.0, GoodCategory.IndustrialInput); 
-            Market.GoodDefinitions["Fabric"] = new Good("Fabric", 18.0, GoodCategory.IndustrialInput); 
-            Market.GoodDefinitions["Lumber"] = new Good("Lumber", 10.0, GoodCategory.IndustrialInput); 
-            Market.GoodDefinitions["Paper"] = new Good("Paper", 12.0, GoodCategory.IndustrialInput); 
+            Market.GoodDefinitions["Steel"] = new Good("Steel", 25.0, GoodCategory.IndustrialInput);
+            Market.GoodDefinitions["Fabric"] = new Good("Fabric", 18.0, GoodCategory.IndustrialInput);
+            Market.GoodDefinitions["Lumber"] = new Good("Lumber", 10.0, GoodCategory.IndustrialInput);
+            Market.GoodDefinitions["Paper"] = new Good("Paper", 12.0, GoodCategory.IndustrialInput);
 
             // Chunk 2: New Industrial Inputs Definitions
             Market.GoodDefinitions["Refined Oil"] = new Good("Refined Oil", 40.0, GoodCategory.IndustrialInput); // Fuel, Kerosene
@@ -1810,7 +1440,7 @@ namespace Economy_sim
             Market.GoodDefinitions["Basic Chemicals"] = new Good("Basic Chemicals", 20.0, GoodCategory.IndustrialInput);
 
             // Existing Capital Goods (assuming these are already here)
-            Market.GoodDefinitions["Tools"] = new Good("Tools", 40.0, GoodCategory.CapitalGood); 
+            Market.GoodDefinitions["Tools"] = new Good("Tools", 40.0, GoodCategory.CapitalGood);
             Market.GoodDefinitions["Machine Parts"] = new Good("Machine Parts", 70.0, GoodCategory.CapitalGood);
 
             // Existing Processed Food (assuming this is already here)
@@ -1824,7 +1454,7 @@ namespace Economy_sim
             Market.GoodDefinitions["Refined Sugar"] = new Good("Refined Sugar", 10.0, GoodCategory.ProcessedFood); // Also IndustrialInput
 
             // Existing Consumer Products (assuming these are already here)
-            Market.GoodDefinitions["Cloth"] = new Good("Cloth", 25.0, GoodCategory.ConsumerProduct); 
+            Market.GoodDefinitions["Cloth"] = new Good("Cloth", 25.0, GoodCategory.ConsumerProduct);
             Market.GoodDefinitions["Furniture"] = new Good("Furniture", 70.0, GoodCategory.ConsumerProduct);
             Market.GoodDefinitions["Books"] = new Good("Books", 30.0, GoodCategory.ConsumerProduct);
             Market.GoodDefinitions["Luxury Clothes"] = new Good("Luxury Clothes", 100.0, GoodCategory.ConsumerProduct);
@@ -1841,43 +1471,20 @@ namespace Economy_sim
 
             // == 2. Define Factory Blueprints ==
 
-            // --- Existing/Refined Basic Resource Extraction (from previous refactoring) ---
-            AllBlueprints.Add(new FactoryBlueprint("Grain Farm", new Good("Grain", Market.GoodDefinitions["Grain"].BasePrice, GoodCategory.RawMaterial, 3), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Coal Mine", new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Iron Mine", new Good("Iron", Market.GoodDefinitions["Iron"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Cotton Plantation", new Good("Cotton", Market.GoodDefinitions["Cotton"].BasePrice, GoodCategory.RawMaterial, 3), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Logging Camp", new Good("Timber", Market.GoodDefinitions["Timber"].BasePrice, GoodCategory.RawMaterial, 4), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Dye Collection Post", new Good("Dyes", Market.GoodDefinitions["Dyes"].BasePrice, GoodCategory.RawMaterial, 1), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Sulphur Mine", new Good("Sulphur", Market.GoodDefinitions["Sulphur"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-
-            // Chunk 1: New Basic Resource Extraction Facility Blueprints
-            AllBlueprints.Add(new FactoryBlueprint("Limestone Quarry", new Good("Limestone", Market.GoodDefinitions["Limestone"].BasePrice, GoodCategory.RawMaterial, 3), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Salt Mine", new Good("Salt", Market.GoodDefinitions["Salt"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Oil Derrick", new Good("Crude Oil", Market.GoodDefinitions["Crude Oil"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, advancedResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Rubber Plantation", new Good("Raw Rubber", Market.GoodDefinitions["Raw Rubber"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Fishing Wharf", new Good("Fish", Market.GoodDefinitions["Fish"].BasePrice, GoodCategory.RawMaterial, 4), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Cattle Ranch", new Good("Livestock", Market.GoodDefinitions["Livestock"].BasePrice, GoodCategory.RawMaterial, 1), new List<Good> {new Good("Grain", Market.GoodDefinitions["Grain"].BasePrice,GoodCategory.RawMaterial, 2)}, GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Tea Plantation", new Good("Tea Leaves", Market.GoodDefinitions["Tea Leaves"].BasePrice, GoodCategory.RawMaterial, 3), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Coffee Plantation", new Good("Coffee Beans", Market.GoodDefinitions["Coffee Beans"].BasePrice, GoodCategory.RawMaterial, 3), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Tobacco Plantation", new Good("Tobacco Leaf", Market.GoodDefinitions["Tobacco Leaf"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Sugar Plantation", new Good("Sugar Cane", Market.GoodDefinitions["Sugar Cane"].BasePrice, GoodCategory.RawMaterial, 4), new List<Good>(), GoodCategory.RawMaterial, basicResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Copper Mine", new Good("Copper Ore", Market.GoodDefinitions["Copper Ore"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, advancedResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Tin Mine", new Good("Tin Ore", Market.GoodDefinitions["Tin Ore"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, advancedResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Lead Mine", new Good("Lead Ore", Market.GoodDefinitions["Lead Ore"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, advancedResourceJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Zinc Mine", new Good("Zinc Ore", Market.GoodDefinitions["Zinc Ore"].BasePrice, GoodCategory.RawMaterial, 2), new List<Good>(), GoodCategory.RawMaterial, advancedResourceJobSlots));
+            
 
             // --- Existing/Refined Intermediate Goods (from previous refactoring) --- 
-            AllBlueprints.Add(new FactoryBlueprint("Steel Mill", new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 1), new List<Good> { new Good("Iron", Market.GoodDefinitions["Iron"].BasePrice, GoodCategory.RawMaterial, 2), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1)}, GoodCategory.IndustrialInput, industrialJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Sawmill", new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 2), new List<Good> {new Good("Timber", Market.GoodDefinitions["Timber"].BasePrice, GoodCategory.RawMaterial, 1), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
+            AllBlueprints.Add(new FactoryBlueprint("Steel Mill", new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 1), new List<Good> { new Good("Iron", Market.GoodDefinitions["Iron"].BasePrice, GoodCategory.RawMaterial, 2), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
+            AllBlueprints.Add(new FactoryBlueprint("Sawmill", new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 2), new List<Good> { new Good("Timber", Market.GoodDefinitions["Timber"].BasePrice, GoodCategory.RawMaterial, 1), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Textile Mill", new Good("Fabric", Market.GoodDefinitions["Fabric"].BasePrice, GoodCategory.IndustrialInput, 2), new List<Good> { new Good("Cotton", Market.GoodDefinitions["Cotton"].BasePrice, GoodCategory.RawMaterial, 3), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Paper Mill", new Good("Paper", Market.GoodDefinitions["Paper"].BasePrice, GoodCategory.IndustrialInput, 2), new List<Good> { new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1)}, GoodCategory.IndustrialInput, industrialJobSlots));
+            AllBlueprints.Add(new FactoryBlueprint("Paper Mill", new Good("Paper", Market.GoodDefinitions["Paper"].BasePrice, GoodCategory.IndustrialInput, 2), new List<Good> { new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
 
             // --- More goods and blueprints will be added in subsequent chunks ---
             // Placeholder for the rest of the existing/refined blueprints from previous step
             AllBlueprints.Add(new FactoryBlueprint("Tool Factory", new Good("Tools", Market.GoodDefinitions["Tools"].BasePrice, GoodCategory.CapitalGood, 2), new List<Good> { new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 1) }, GoodCategory.CapitalGood, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Machine Parts Factory", new Good("Machine Parts", Market.GoodDefinitions["Machine Parts"].BasePrice, GoodCategory.CapitalGood, 1), new List<Good> { new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.CapitalGood, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Bakery", new Good("Bread", Market.GoodDefinitions["Bread"].BasePrice, GoodCategory.ProcessedFood, 3), new List<Good> { new Good("Grain", Market.GoodDefinitions["Grain"].BasePrice, GoodCategory.RawMaterial, 2) }, GoodCategory.ProcessedFood, industrialJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Clothing Factory", new Good("Cloth", Market.GoodDefinitions["Cloth"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Fabric", Market.GoodDefinitions["Fabric"].BasePrice, GoodCategory.IndustrialInput, 2)}, GoodCategory.ConsumerProduct, industrialJobSlots));
+            AllBlueprints.Add(new FactoryBlueprint("Clothing Factory", new Good("Cloth", Market.GoodDefinitions["Cloth"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Fabric", Market.GoodDefinitions["Fabric"].BasePrice, GoodCategory.IndustrialInput, 2) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Furniture Factory", new Good("Furniture", Market.GoodDefinitions["Furniture"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 3), new Good("Tools", Market.GoodDefinitions["Tools"].BasePrice, GoodCategory.CapitalGood, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Printing Press", new Good("Books", Market.GoodDefinitions["Books"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Paper", Market.GoodDefinitions["Paper"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Tools", Market.GoodDefinitions["Tools"].BasePrice, GoodCategory.CapitalGood, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Luxury Tailor", new Good("Luxury Clothes", Market.GoodDefinitions["Luxury Clothes"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Fabric", Market.GoodDefinitions["Fabric"].BasePrice, GoodCategory.IndustrialInput, 3), new Good("Dyes", Market.GoodDefinitions["Dyes"].BasePrice, GoodCategory.RawMaterial, 1), new Good("Tools", Market.GoodDefinitions["Tools"].BasePrice, GoodCategory.CapitalGood, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
@@ -1904,14 +1511,14 @@ namespace Economy_sim
             AllBlueprints.Add(new FactoryBlueprint("Bakery", new Good("Bread", Market.GoodDefinitions["Bread"].BasePrice, GoodCategory.ProcessedFood, 3), new List<Good> { new Good("Grain", Market.GoodDefinitions["Grain"].BasePrice, GoodCategory.RawMaterial, 2) }, GoodCategory.ProcessedFood, industrialJobSlots));
 
             // Chunk 3: New Processed Food Factory Blueprints
-            AllBlueprints.Add(new FactoryBlueprint("Cannery", new Good("Canned Goods", Market.GoodDefinitions["Canned Goods"].BasePrice, GoodCategory.ProcessedFood, 2), new List<Good> { new Good("Fish", Market.GoodDefinitions["Fish"].BasePrice, GoodCategory.RawMaterial, 2), new Good("Tin Ingots", Market.GoodDefinitions["Tin Ingots"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1)}, GoodCategory.ProcessedFood, industrialJobSlots));
+            AllBlueprints.Add(new FactoryBlueprint("Cannery", new Good("Canned Goods", Market.GoodDefinitions["Canned Goods"].BasePrice, GoodCategory.ProcessedFood, 2), new List<Good> { new Good("Fish", Market.GoodDefinitions["Fish"].BasePrice, GoodCategory.RawMaterial, 2), new Good("Tin Ingots", Market.GoodDefinitions["Tin Ingots"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.ProcessedFood, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Meat Packing Plant", new Good("Processed Meat", Market.GoodDefinitions["Processed Meat"].BasePrice, GoodCategory.ProcessedFood, 1), new List<Good> { new Good("Livestock", Market.GoodDefinitions["Livestock"].BasePrice, GoodCategory.RawMaterial, 1), new Good("Salt", Market.GoodDefinitions["Salt"].BasePrice, GoodCategory.RawMaterial, 1), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.ProcessedFood, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Tea Factory", new Good("Tea", Market.GoodDefinitions["Tea"].BasePrice, GoodCategory.ConsumerProduct, 2), new List<Good> { new Good("Tea Leaves", Market.GoodDefinitions["Tea Leaves"].BasePrice, GoodCategory.RawMaterial, 3), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Coffee Roastery", new Good("Coffee", Market.GoodDefinitions["Coffee"].BasePrice, GoodCategory.ConsumerProduct, 2), new List<Good> { new Good("Coffee Beans", Market.GoodDefinitions["Coffee Beans"].BasePrice, GoodCategory.RawMaterial, 3), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Sugar Mill", new Good("Refined Sugar", Market.GoodDefinitions["Refined Sugar"].BasePrice, GoodCategory.ProcessedFood, 3), new List<Good> { new Good("Sugar Cane", Market.GoodDefinitions["Sugar Cane"].BasePrice, GoodCategory.RawMaterial, 4), new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 1) }, GoodCategory.ProcessedFood, industrialJobSlots));
 
             // --- Existing/Refined Consumer Goods (from previous refactoring) ---
-            AllBlueprints.Add(new FactoryBlueprint("Clothing Factory", new Good("Cloth", Market.GoodDefinitions["Cloth"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Fabric", Market.GoodDefinitions["Fabric"].BasePrice, GoodCategory.IndustrialInput, 2)}, GoodCategory.ConsumerProduct, industrialJobSlots));
+            AllBlueprints.Add(new FactoryBlueprint("Clothing Factory", new Good("Cloth", Market.GoodDefinitions["Cloth"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Fabric", Market.GoodDefinitions["Fabric"].BasePrice, GoodCategory.IndustrialInput, 2) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Furniture Factory", new Good("Furniture", Market.GoodDefinitions["Furniture"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 3), new Good("Tools", Market.GoodDefinitions["Tools"].BasePrice, GoodCategory.CapitalGood, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Printing Press", new Good("Books", Market.GoodDefinitions["Books"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Paper", Market.GoodDefinitions["Paper"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Tools", Market.GoodDefinitions["Tools"].BasePrice, GoodCategory.CapitalGood, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Luxury Tailor", new Good("Luxury Clothes", Market.GoodDefinitions["Luxury Clothes"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Fabric", Market.GoodDefinitions["Fabric"].BasePrice, GoodCategory.IndustrialInput, 3), new Good("Dyes", Market.GoodDefinitions["Dyes"].BasePrice, GoodCategory.RawMaterial, 1), new Good("Tools", Market.GoodDefinitions["Tools"].BasePrice, GoodCategory.CapitalGood, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
@@ -1920,11 +1527,258 @@ namespace Economy_sim
             AllBlueprints.Add(new FactoryBlueprint("Tobacco Factory", new Good("Cigars", Market.GoodDefinitions["Cigars"].BasePrice, GoodCategory.ConsumerProduct, 2), new List<Good> { new Good("Tobacco Leaf", Market.GoodDefinitions["Tobacco Leaf"].BasePrice, GoodCategory.RawMaterial, 2), new Good("Paper", Market.GoodDefinitions["Paper"].BasePrice, GoodCategory.IndustrialInput, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Automobile Plant", new Good("Automobiles", Market.GoodDefinitions["Automobiles"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 5), new Good("Machine Parts", Market.GoodDefinitions["Machine Parts"].BasePrice, GoodCategory.CapitalGood, 3), new Good("Processed Rubber", Market.GoodDefinitions["Processed Rubber"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Refined Oil", Market.GoodDefinitions["Refined Oil"].BasePrice, GoodCategory.IndustrialInput, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Electronics Plant", new Good("Telephones", Market.GoodDefinitions["Telephones"].BasePrice, GoodCategory.ConsumerProduct, 1), new List<Good> { new Good("Copper Ingots", Market.GoodDefinitions["Copper Ingots"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Processed Rubber", Market.GoodDefinitions["Processed Rubber"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Machine Parts", Market.GoodDefinitions["Machine Parts"].BasePrice, GoodCategory.CapitalGood, 1), new Good("Basic Chemicals", Market.GoodDefinitions["Basic Chemicals"].BasePrice, GoodCategory.IndustrialInput, 1) }, GoodCategory.ConsumerProduct, industrialJobSlots));
-            
+
             // Chunk 3: Military Goods Factory Blueprints
             AllBlueprints.Add(new FactoryBlueprint("Arms Factory", new Good("Small Arms", Market.GoodDefinitions["Small Arms"].BasePrice, GoodCategory.CapitalGood, 1), new List<Good> { new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Machine Parts", Market.GoodDefinitions["Machine Parts"].BasePrice, GoodCategory.CapitalGood, 1) }, GoodCategory.CapitalGood, industrialJobSlots));
             AllBlueprints.Add(new FactoryBlueprint("Munitions Plant", new Good("Ammunition", Market.GoodDefinitions["Ammunition"].BasePrice, GoodCategory.IndustrialInput, 5), new List<Good> { new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Explosives", Market.GoodDefinitions["Explosives"].BasePrice, GoodCategory.IndustrialInput, 1), new Good("Brass Ingots", Market.GoodDefinitions["Brass Ingots"].BasePrice, GoodCategory.IndustrialInput, 1) }, GoodCategory.IndustrialInput, industrialJobSlots));
-            AllBlueprints.Add(new FactoryBlueprint("Artillery Plant", new Good("Artillery", Market.GoodDefinitions["Artillery"].BasePrice, GoodCategory.CapitalGood, 1), new List<Good> { new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 10), new Good("Machine Parts", Market.GoodDefinitions["Machine Parts"].BasePrice, GoodCategory.CapitalGood, 5), new Good("Bronze Ingots", Market.GoodDefinitions["Bronze Ingots"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 2)}, GoodCategory.CapitalGood, industrialJobSlots));
+            AllBlueprints.Add(new FactoryBlueprint("Artillery Plant", new Good("Artillery", Market.GoodDefinitions["Artillery"].BasePrice, GoodCategory.CapitalGood, 1), new List<Good> { new Good("Steel", Market.GoodDefinitions["Steel"].BasePrice, GoodCategory.IndustrialInput, 10), new Good("Machine Parts", Market.GoodDefinitions["Machine Parts"].BasePrice, GoodCategory.CapitalGood, 5), new Good("Bronze Ingots", Market.GoodDefinitions["Bronze Ingots"].BasePrice, GoodCategory.IndustrialInput, 2), new Good("Lumber", Market.GoodDefinitions["Lumber"].BasePrice, GoodCategory.IndustrialInput, 2) }, GoodCategory.CapitalGood, industrialJobSlots));
+        }
+    }
+
+    /// <summary>
+    /// Static class for managing ResourceExtractionBuilding blueprints.
+    /// </summary>
+    public static class ResourceExtractionBuildingBlueprints
+    {
+        public static List<ResourceExtractionBuildingBlueprint> AllBlueprints { get; private set; } = new List<ResourceExtractionBuildingBlueprint>();
+
+        /// <summary>
+        /// Initialize all REB blueprints. Should be called after Market.GoodDefinitions is populated.
+        /// </summary>
+        public static void InitializeBlueprints()
+        {
+            AllBlueprints.Clear();
+
+            // Define standard job distributions for resource extraction
+            var miningJobSlots = new Dictionary<string, double>
+            {
+                { "Laborers", 0.7 },
+                { "Craftsmen", 0.15 },
+                { "Engineers", 0.1 },
+                { "Managers", 0.05 }
+            };
+
+            var farmingJobSlots = new Dictionary<string, double>
+            {
+                { "Laborers", 0.8 },
+                { "Craftsmen", 0.1 },
+                { "Engineers", 0.05 },
+                { "Managers", 0.05 }
+            };
+
+            var advancedExtractionJobSlots = new Dictionary<string, double>
+            {
+                { "Laborers", 0.5 },
+                { "Craftsmen", 0.25 },
+                { "Engineers", 0.15 },
+                { "Managers", 0.1 }
+            };
+
+            // === Mining Operations ===
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Coal Mine",
+                new Good("Coal", Market.GoodDefinitions["Coal"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                miningJobSlots,
+                "Coal Deposit",
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Iron Mine",
+                new Good("Iron", Market.GoodDefinitions["Iron"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                miningJobSlots,
+                "Iron Deposit",
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Copper Mine",
+                new Good("Copper Ore", Market.GoodDefinitions["Copper Ore"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                advancedExtractionJobSlots,
+                "Copper Deposit",
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Tin Mine",
+                new Good("Tin Ore", Market.GoodDefinitions["Tin Ore"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                advancedExtractionJobSlots,
+                "Tin Deposit",
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Lead Mine",
+                new Good("Lead Ore", Market.GoodDefinitions["Lead Ore"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                advancedExtractionJobSlots,
+                "Lead Deposit",
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Zinc Mine",
+                new Good("Zinc Ore", Market.GoodDefinitions["Zinc Ore"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                advancedExtractionJobSlots,
+                "Zinc Deposit",
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Sulphur Mine",
+                new Good("Sulphur", Market.GoodDefinitions["Sulphur"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                miningJobSlots,
+                "Sulphur Deposit",
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Salt Mine",
+                new Good("Salt", Market.GoodDefinitions["Salt"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                miningJobSlots,
+                "Salt Deposit",
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Limestone Quarry",
+                new Good("Limestone", Market.GoodDefinitions["Limestone"].BasePrice, GoodCategory.RawMaterial, 3),
+                GoodCategory.RawMaterial,
+                miningJobSlots,
+                "Limestone Deposit",
+                1.0));
+
+            // === Oil Extraction ===
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Oil Derrick",
+                new Good("Crude Oil", Market.GoodDefinitions["Crude Oil"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                advancedExtractionJobSlots,
+                "Oil Field",
+                1.0));
+
+            // === Forestry ===
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Logging Camp",
+                new Good("Timber", Market.GoodDefinitions["Timber"].BasePrice, GoodCategory.RawMaterial, 4),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null, // No specific deposit required - forests are common
+                1.0));
+
+            // === Agriculture (no deposit required) ===
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Grain Farm",
+                new Good("Grain", Market.GoodDefinitions["Grain"].BasePrice, GoodCategory.RawMaterial, 3),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Cotton Plantation",
+                new Good("Cotton", Market.GoodDefinitions["Cotton"].BasePrice, GoodCategory.RawMaterial, 3),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Rubber Plantation",
+                new Good("Raw Rubber", Market.GoodDefinitions["Raw Rubber"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Tea Plantation",
+                new Good("Tea Leaves", Market.GoodDefinitions["Tea Leaves"].BasePrice, GoodCategory.RawMaterial, 3),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Coffee Plantation",
+                new Good("Coffee Beans", Market.GoodDefinitions["Coffee Beans"].BasePrice, GoodCategory.RawMaterial, 3),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Tobacco Plantation",
+                new Good("Tobacco Leaf", Market.GoodDefinitions["Tobacco Leaf"].BasePrice, GoodCategory.RawMaterial, 2),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Sugar Plantation",
+                new Good("Sugar Cane", Market.GoodDefinitions["Sugar Cane"].BasePrice, GoodCategory.RawMaterial, 4),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Dye Collection Post",
+                new Good("Dyes", Market.GoodDefinitions["Dyes"].BasePrice, GoodCategory.RawMaterial, 1),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+
+            // === Fishing ===
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Fishing Wharf",
+                new Good("Fish", Market.GoodDefinitions["Fish"].BasePrice, GoodCategory.RawMaterial, 4),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null, // Requires coastal location but no deposit
+                1.0));
+
+            // === Ranching ===
+            AllBlueprints.Add(new ResourceExtractionBuildingBlueprint(
+                "Cattle Ranch",
+                new Good("Livestock", Market.GoodDefinitions["Livestock"].BasePrice, GoodCategory.RawMaterial, 1),
+                GoodCategory.RawMaterial,
+                farmingJobSlots,
+                null,
+                1.0));
+        }
+
+        /// <summary>
+        /// Gets a blueprint by its type name.
+        /// </summary>
+        public static ResourceExtractionBuildingBlueprint GetBlueprint(string typeName)
+        {
+            return AllBlueprints.FirstOrDefault(b => b.BuildingTypeName == typeName);
+        }
+
+        /// <summary>
+        /// Gets all blueprints that produce a specific good.
+        /// </summary>
+        public static IEnumerable<ResourceExtractionBuildingBlueprint> GetBlueprintsByOutput(string goodName)
+        {
+            return AllBlueprints.Where(b => b.OutputGood.Name == goodName);
+        }
+
+        /// <summary>
+        /// Gets all blueprints that require a specific resource deposit.
+        /// </summary>
+        public static IEnumerable<ResourceExtractionBuildingBlueprint> GetBlueprintsByDeposit(string depositType)
+        {
+            return AllBlueprints.Where(b => b.RequiredResourceDeposit == depositType);
+        }
+
+        /// <summary>
+        /// Gets all blueprints that don't require a specific resource deposit (farms, plantations, etc.).
+        /// </summary>
+        public static IEnumerable<ResourceExtractionBuildingBlueprint> GetNonDepositBlueprints()
+        {
+            return AllBlueprints.Where(b => string.IsNullOrEmpty(b.RequiredResourceDeposit));
         }
     }
 }

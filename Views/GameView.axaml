@@ -1088,7 +1088,7 @@
 						<!-- Sub-menu Tabs -->
 						<StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10" Margin="0,0,0,15">
 							<Button x:Name="PrivateSectorTabButton"
-									Content="🏢 Private Sector"
+									Content="Buildings"
 									Width="180"
 									Height="40"
 									Background="#1A4A1A"
@@ -1116,84 +1116,166 @@
 						<!-- Content Area -->
 						<Grid Grid.Row="2">
 							
-							<!-- PRIVATE SECTOR TAB -->
-							<Grid x:Name="PrivateSectorPanel" IsVisible="True">
-								<Grid.RowDefinitions>
-									<RowDefinition Height="Auto"/>
-									<RowDefinition Height="*"/>
-								</Grid.RowDefinitions>
+						<!-- PRIVATE SECTOR TAB -->
+						<Grid x:Name="PrivateSectorPanel" IsVisible="True">
+							<Grid.RowDefinitions>
+								<RowDefinition Height="Auto"/>
+								<RowDefinition Height="*"/>
+							</Grid.RowDefinitions>
 
-								<!-- Economic Indicators -->
-								<Grid Grid.Row="0" Margin="0,0,0,15">
-									<Grid.ColumnDefinitions>
-										<ColumnDefinition Width="*"/>
-										<ColumnDefinition Width="*"/>
-										<ColumnDefinition Width="*"/>
-									</Grid.ColumnDefinitions>
+							<!-- Economic + Building Indicators -->
+							<Grid Grid.Row="0" Margin="0,0,0,15">
+								<Grid.ColumnDefinitions>
+									<ColumnDefinition Width="*"/>
+									<ColumnDefinition Width="*"/>
+									<ColumnDefinition Width="*"/>
+									<ColumnDefinition Width="*"/>
+								</Grid.ColumnDefinitions>
 
-									<Border Grid.Column="0" Background="#1A4A1A" Padding="12" Margin="0,0,5,0" CornerRadius="3">
-										<StackPanel>
-											<TextBlock Text="GDP" Foreground="#90EE90" FontWeight="Bold" FontSize="13"/>
-											<TextBlock x:Name="GDPText" Text="$2.5T" Foreground="White" FontSize="18" FontWeight="Bold"/>
-											<TextBlock Text="Growth: +3.2%" Foreground="#90EE90" FontSize="11"/>
-										</StackPanel>
-									</Border>
-
-									<Border Grid.Column="1" Background="#4A1A1A" Padding="12" Margin="5,0" CornerRadius="3">
-										<StackPanel>
-											<TextBlock Text="Unemployment" Foreground="#F0E68C" FontWeight="Bold" FontSize="13"/>
-											<TextBlock x:Name="UnemploymentText" Text="4.2%" Foreground="White" FontSize="18" FontWeight="Bold"/>
-											<TextBlock Text="Change: -0.3%" Foreground="#90EE90" FontSize="11"/>
-										</StackPanel>
-									</Border>
-
-                                                                        <Border Grid.Column="2" Background="#1A1A4A" Padding="12" Margin="5,0,0,0" CornerRadius="3">
-                                                                                <StackPanel>
-                                                                                        <TextBlock Text="Global Trade" Foreground="#ADD8E6" FontWeight="Bold" FontSize="13"/>
-                                                                                        <TextBlock x:Name="GlobalTradeText" Text="$0" Foreground="White" FontSize="18" FontWeight="Bold"/>
-                                                                                        <TextBlock Text="Total value traded this turn" Foreground="#90EE90" FontSize="11"/>
-                                                                                </StackPanel>
-                                                                        </Border>
-								</Grid>
-
-								<!-- Companies List and Industries -->
-								<Grid Grid.Row="1">
-									<Grid.ColumnDefinitions>
-										<ColumnDefinition Width="2*"/>
-										<ColumnDefinition Width="*"/>
-									</Grid.ColumnDefinitions>
-
-									<!-- Companies List -->
-									<StackPanel Grid.Column="0" Margin="0,0,10,0">
-										<TextBlock Text="Major Corporations" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
-										<ListBox x:Name="CorporationsList"
-												 Background="#1A1A1A"
-												 BorderBrush="#444444"
-												 Height="320">
-										<ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding}" Foreground="#DDDDDD" TextWrapping="Wrap"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+								<Border Grid.Column="0" Background="#1A4A1A" Padding="12" Margin="0,0,5,0" CornerRadius="3">
+									<StackPanel>
+										<TextBlock Text="GDP" Foreground="#90EE90" FontWeight="Bold" FontSize="13"/>
+										<TextBlock x:Name="GDPText" Text="$0" Foreground="White" FontSize="18" FontWeight="Bold"/>
+										<TextBlock Text="Growth" Foreground="#90EE90" FontSize="11"/>
 									</StackPanel>
+								</Border>
 
-									<!-- Industries Summary -->
-									<StackPanel Grid.Column="1">
-										<TextBlock Text="Industries" Foreground="#DDDDDD" FontWeight="Bold" FontSize="16" Margin="0,0,0,10"/>
-										<ListBox x:Name="IndustriesList"
-												 Background="#1A1A1A"
-												 BorderBrush="#444444"
-												 Height="320">
-										<ListBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding}" Foreground="#DDDDDD" TextWrapping="Wrap"/>
-                                            </DataTemplate>
-                                        </ListBox.ItemTemplate>
-                                    </ListBox>
+								<Border Grid.Column="1" Background="#4A1A1A" Padding="12" Margin="5,0" CornerRadius="3">
+									<StackPanel>
+										<TextBlock Text="Employment" Foreground="#F0E68C" FontWeight="Bold" FontSize="13"/>
+										<TextBlock x:Name="UnemploymentText" Text="0%" Foreground="White" FontSize="18" FontWeight="Bold"/>
+										<TextBlock Text="Labor utilization" Foreground="#90EE90" FontSize="11"/>
 									</StackPanel>
-								</Grid>
+								</Border>
+
+								<Border Grid.Column="2" Background="#1A1A4A" Padding="12" Margin="5,0" CornerRadius="3">
+									<StackPanel>
+										<TextBlock Text="Factories" Foreground="#ADD8E6" FontWeight="Bold" FontSize="13"/>
+										<TextBlock x:Name="FactoryCountText" Text="0 active" Foreground="White" FontSize="18" FontWeight="Bold"/>
+										<TextBlock Text="Production sites" Foreground="#90EE90" FontSize="11"/>
+									</StackPanel>
+								</Border>
+
+								<Border Grid.Column="3" Background="#2A2A4A" Padding="12" Margin="5,0,0,0" CornerRadius="3">
+									<StackPanel>
+										<TextBlock Text="REBs" Foreground="#FFD38B" FontWeight="Bold" FontSize="13"/>
+										<TextBlock x:Name="RebCountText" Text="0 active" Foreground="White" FontSize="18" FontWeight="Bold"/>
+										<TextBlock x:Name="GlobalTradeText" Text="Tracked logistics" Foreground="#AAAAAA" FontSize="11"/>
+									</StackPanel>
+								</Border>
 							</Grid>
+
+							<!-- Building navigation -->
+							<Grid Grid.Row="1" ColumnDefinitions="2*,3*" ColumnSpacing="12">
+								<!-- Lists -->
+								<TabControl Grid.Column="0">
+									<TabItem Header="Factories">
+										<Grid RowDefinitions="Auto,*" RowSpacing="8" Margin="0,6,0,0">
+											<TextBlock Grid.Row="0" Text="Factory Types" Foreground="#DDDDDD" FontWeight="Bold" FontSize="15"/>
+											<Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10">
+												<StackPanel Grid.Column="0" Spacing="6">
+													<TextBlock Text="Types" Foreground="#AAAAAA" FontSize="12"/>
+													<ListBox x:Name="FactoryTypesList" Background="#1A1A1A" BorderBrush="#444444" Height="320"/>
+												</StackPanel>
+												<StackPanel Grid.Column="1" Spacing="6">
+													<TextBlock Text="Factories (sorted by city)" Foreground="#AAAAAA" FontSize="12"/>
+													<ListBox x:Name="FactoriesList" Background="#1A1A1A" BorderBrush="#444444" Height="320">
+														<ListBox.ItemTemplate>
+															<DataTemplate>
+																<Border BorderBrush="#333333" BorderThickness="1" Padding="8" Margin="0,0,0,6" Background="#202020">
+																	<StackPanel Spacing="4">
+																		<TextBlock Text="{Binding Name}" Foreground="#FFFFFF" FontWeight="Bold"/>
+																		<TextBlock Text="{Binding Location}" Foreground="#AAAAAA" FontSize="11"/>
+																		<StackPanel Orientation="Horizontal" Spacing="10">
+																			<TextBlock Text="{Binding OutputSummary}" Foreground="#90EE90" FontSize="11"/>
+																			<TextBlock Text="{Binding EmploymentSummary}" Foreground="#ADD8E6" FontSize="11"/>
+																		</StackPanel>
+																	</StackPanel>
+																</Border>
+														</DataTemplate>
+													</ListBox.ItemTemplate>
+													</ListBox>
+												</StackPanel>
+											</Grid>
+										</Grid>
+									</TabItem>
+
+									<TabItem Header="REBs">
+										<Grid RowDefinitions="Auto,*" RowSpacing="8" Margin="0,6,0,0">
+											<TextBlock Grid.Row="0" Text="REB Types" Foreground="#DDDDDD" FontWeight="Bold" FontSize="15"/>
+											<Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="10">
+												<StackPanel Grid.Column="0" Spacing="6">
+													<TextBlock Text="Types" Foreground="#AAAAAA" FontSize="12"/>
+													<ListBox x:Name="RebTypesList" Background="#1A1A1A" BorderBrush="#444444" Height="320"/>
+												</StackPanel>
+												<StackPanel Grid.Column="1" Spacing="6">
+													<TextBlock Text="REBs (sorted by city)" Foreground="#AAAAAA" FontSize="12"/>
+													<ListBox x:Name="RebList" Background="#1A1A1A" BorderBrush="#444444" Height="320">
+														<ListBox.ItemTemplate>
+															<DataTemplate>
+																<Border BorderBrush="#333333" BorderThickness="1" Padding="8" Margin="0,0,0,6" Background="#1E1E28">
+																	<StackPanel Spacing="4">
+																		<TextBlock Text="{Binding Name}" Foreground="#FFFFFF" FontWeight="Bold"/>
+																		<TextBlock Text="{Binding Location}" Foreground="#AAAAAA" FontSize="11"/>
+																		<StackPanel Orientation="Horizontal" Spacing="10">
+																			<TextBlock Text="{Binding OutputSummary}" Foreground="#90EE90" FontSize="11"/>
+																			<TextBlock Text="{Binding EmploymentSummary}" Foreground="#ADD8E6" FontSize="11"/>
+																		</StackPanel>
+																	</StackPanel>
+																</Border>
+														</DataTemplate>
+													</ListBox.ItemTemplate>
+													</ListBox>
+												</StackPanel>
+											</Grid>
+										</Grid>
+									</TabItem>
+							</TabControl>
+
+								<!-- Building Details -->
+								<Border Grid.Column="1" Background="#1A1A1A" BorderBrush="#444444" BorderThickness="1" CornerRadius="4" Padding="12">
+									<ScrollViewer VerticalScrollBarVisibility="Auto">
+										<StackPanel Spacing="10">
+											<TextBlock x:Name="BuildingNameText" Text="Select a building" Foreground="#FFD700" FontSize="18" FontWeight="Bold"/>
+											<TextBlock x:Name="BuildingTypeText" Text="Factory / REB" Foreground="#AAAAAA" FontSize="12"/>
+
+											<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="12">
+												<TextBlock Grid.Row="0" Text="Location" Foreground="#DDDDDD"/>
+												<TextBlock x:Name="BuildingLocationText" Grid.Row="0" Grid.Column="1" Text="-" Foreground="#FFFFFF"/>
+												<TextBlock Grid.Row="1" Text="Owner" Foreground="#DDDDDD"/>
+												<TextBlock x:Name="BuildingOwnerText" Grid.Row="1" Grid.Column="1" Text="-" Foreground="#FFFFFF"/>
+												<TextBlock Grid.Row="2" Text="Status" Foreground="#DDDDDD"/>
+												<TextBlock x:Name="BuildingStatusText" Grid.Row="2" Grid.Column="1" Text="-" Foreground="#90EE90"/>
+												<TextBlock Grid.Row="3" Text="Condition" Foreground="#DDDDDD"/>
+												<TextBlock x:Name="BuildingConditionText" Grid.Row="3" Grid.Column="1" Text="-" Foreground="#F0E68C"/>
+											</Grid>
+
+											<Border Background="#202020" Padding="10" CornerRadius="4" BorderBrush="#333333" BorderThickness="1">
+												<Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="6" ColumnSpacing="12">
+													<TextBlock Grid.Row="0" Text="Throughput" Foreground="#ADD8E6"/>
+													<TextBlock x:Name="BuildingThroughputText" Grid.Row="0" Grid.Column="1" Text="-" Foreground="#FFFFFF" FontWeight="Bold"/>
+													<TextBlock Grid.Row="1" Text="Employment" Foreground="#ADD8E6"/>
+													<TextBlock x:Name="BuildingEmploymentText" Grid.Row="1" Grid.Column="1" Text="-" Foreground="#FFFFFF" FontWeight="Bold"/>
+													<TextBlock Grid.Row="2" Text="Profit / Upkeep" Foreground="#ADD8E6"/>
+													<TextBlock x:Name="BuildingProfitText" Grid.Row="2" Grid.Column="1" Text="-" Foreground="#90EE90" FontWeight="Bold"/>
+												</Grid>
+											</Border>
+
+											<TextBlock Text="Inputs &amp; Outputs" Foreground="#DDDDDD" FontWeight="Bold" FontSize="15"/>
+											<ListBox x:Name="BuildingFlowsList" Height="120" Background="#1E1E1E" BorderBrush="#333333"/>
+
+															<TextBlock Text="Order history" Foreground="#DDDDDD" FontWeight="Bold" FontSize="15"/>
+															<ListBox x:Name="BuildingQueueList" Height="100" Background="#1E1E1E" BorderBrush="#333333"/>
+
+											<StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+												<Button x:Name="OpenBuildingDetailsButton" Content="Open full profile" Width="150"/>
+												<Button x:Name="PrioritizeBuildingButton" Content="Prioritize" Width="120" Background="#1A4A1A" Foreground="White"/>
+											</StackPanel>
+										</StackPanel>
+									</ScrollViewer>
+								</Border>
+							</Grid>
+						</Grid>
 
 							<!-- BUDGET TAB -->
 							<Grid x:Name="BudgetPanel" IsVisible="False">

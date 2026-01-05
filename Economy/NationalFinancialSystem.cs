@@ -103,11 +103,11 @@ namespace Economy_sim // Changed from EconomySim to StrategyGame
             MoneySupply = initialMoneySupply;
             NationalReserves = initialReserves;
             CurrentCurrencyStandard = standard;
-            BaseInterestRate = 0.05m; // Default 5%
-            CreditRating = 0.75f; // Default good rating
-            DebtToGdpRatio = 0.0m;
-            InflationRate = 0.02m; // Default 2%
-            TaxEfficiency = 0.85m; // Default 85%
+            BaseInterestRate = 0m; // Default 5%
+            CreditRating = 0f; // Default good rating
+            DebtToGdpRatio = 0m;
+            InflationRate = 0m; // Default 2%
+            TaxEfficiency = 0m; // Default 85%
         }
 
         #region Debt and Bonds

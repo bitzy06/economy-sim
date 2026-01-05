@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using System;
+using System.Runtime.InteropServices;
 
 namespace Economy_sim
 {
@@ -9,7 +10,10 @@ namespace Economy_sim
         public MainWindow()
         {
             InitializeComponent();
-
+            [DllImport("kernel32.dll", SetLastError = true)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            static extern bool AllocConsole();
+            AllocConsole();
             var newGameButton = this.FindControl<Button>("NewGameButton");
             if (newGameButton != null)
             {
